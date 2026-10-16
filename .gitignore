@@ -1,0 +1,14 @@
+.local/
+.cache/
+.env
+.env.*
+!.env.example
+**/bin/
+**/obj/
+**/node_modules/
+**/dist/
+**/coverage/
+**/__pycache__/
+*.user
+*.tsbuildinfo
+.DS_Store
