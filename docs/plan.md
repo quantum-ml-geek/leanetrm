@@ -1,7 +1,12 @@
 # Delivery plan and acceptance criteria
 
-Status: design baseline reviewed on 2026-10-16. Milestone 0 is complete; no
+Status: design baseline approved for implementation on 2026-10-16. Milestone 0 is complete; no
 application implementation milestones below are complete.
+
+The initial reference-data schema and disposable database checks are implemented.
+This baseline and the initial reference-data foundation were approved for
+publication on 2026-10-16. Future changes follow the publication discipline below.
+The intended eventual hosted domain is leanetrm.com.
 
 This plan separates the first runnable foundation from later product breadth.
 Each milestone produces a reviewable working result with tests and documented
@@ -38,13 +43,26 @@ Deliver:
 - Typed monetary amounts, prices, quantities, units and coefficients.
 - A documented bounded numerical policy, canonical decimal input/output,
   conversion rules, overflow/error behavior and explicit rounding boundaries.
-- Independent versioned side definitions, memberships, instruments and positions.
+- Independent versioned side definitions, memberships, instruments, portfolios, books and trades.
+- Common instrument/side behavior interfaces and abstract implementations. Each
+  side generates its schedule and computes its PV contribution; ordinary
+  instruments combine schedules and sum normalized signed side contributions.
 - A minimal explicit dated schedule/normalized-shape contract; automatic calendar
   breadth is not required to prove the core.
+- UTC instant storage with separate date/local-time types and versioned clock
+  provenance. User display zones do not affect economic results. Automatic TOU
+  and rate schedules require the gates in
+  [time-and-schedules.md](time-and-schedules.md) before being enabled.
 - Fixed/floating linear valuation against an explicit immutable market context.
+- A futures instrument/side contract and a synthetic fixed-lot futures valuation
+  convention, with explicit settled basis, realized/unsettled variation margin,
+  remaining risk and supported closeout policy. See
+  [reference-data.md](reference-data.md).
 - Quantity-scaling declarations and structured errors for unsupported behavior.
 - Versioned inspect/compose/preview/scenario request and response schemas, written
   for both human and agent clients from the beginning.
+- Explicit business/knowledge context contracts for resolved historical inputs;
+  fixture contexts can prove core behavior before the persistence resolver exists.
 
 Initial pricing conventions:
 
@@ -59,9 +77,9 @@ Initial pricing conventions:
 - Undiscounted valuation is an explicit named mode. Discounted valuation requires
   pinned discount inputs for the payment dates; it cannot silently use one when
   those inputs are absent.
-- Explicit versioned transformations normalize each side to the common position
+- Explicit versioned transformations normalize each side to the containing instrument
   quantity basis. Pay/receive labels do not add a sign beyond the signed
-  membership coefficient and position quantity.
+  membership coefficient and the trade's quantity for that instrument.
 - Reject unsupported pricing/lifecycle conventions until their semantics and
   tests exist; a linear product label is not evidence of complete coverage.
 
@@ -69,7 +87,7 @@ Acceptance:
 
 1. Construct a fixed/floating instrument from two independent sides.
 2. Reuse one side across multiple instruments without sharing membership weights
-   or position quantities.
+   or the quantities held by trades.
 3. Preserve correct units through price-times-quantity and heat-rate conversion.
 4. Reject incompatible currencies/units, unsupported precision, overflow and
    missing inputs.
@@ -81,6 +99,18 @@ Acceptance:
    execution scheduling under the documented reduction policy.
 10. Test future forwards, realized fixings, missing fixings, explicit discount
     modes, incompatible quantity bases and unsupported currency configurations.
+11. Verify schedule/PV polymorphism through the common interfaces, schedule reuse,
+    composite delegation and stable sibling bindings. Reject missing peers and
+    recursive instrument/side dependencies.
+12. Hold an option and a separate premium instrument directly in one Trade's
+    conceptual fixture; lifecycle contract tests preserve the premium's recorded
+    history when the option changes. Distinct obligation histories do not collapse
+    merely because a reusable definition is economically equivalent. This is a
+    domain-contract test, not an option-pricing product release.
+13. Reconcile synthetic futures execution-to-current P&L, settled variation,
+    unsettled amounts and outstanding risk without double counting. A settlement
+    can reset post-settlement value without removing market exposure. Reject
+    unsupported physical-delivery, margin and settlement conventions explicitly.
 
 Independent review focuses on numeric policy, identity and false quantity reuse.
 
@@ -101,7 +131,7 @@ Acceptance:
 1. Apply an absolute base-gas shock once in each scenario.
 2. Propagate through location gas, heat-rate-derived power and location power.
 3. Reprice different dependent contracts against that same scenario; do not
-   mutate or separately shock positions.
+   mutate or separately shock trades.
 4. Verify the synthetic 0.10 USD/MMBtu, 7 MMBtu/MWh and 10,000 MWh case produces
    7,000 USD undiscounted scenario P&L under the stated fixed inputs.
 5. Verify direct gas/basis and inherited power exposures use the right units.
@@ -128,18 +158,33 @@ cancellation, cache identity and missing dependencies.
 Deliver:
 
 - Reproducible stock-database setup and versioned additive migrations.
+- Relational reference tables for currencies, units/dimensions/conversions,
+  commodities, locations, exchanges/clearing houses, clocks/calendars, rate
+  conventions and futures product/series definitions. Exact-version foreign keys
+  constrain all core relationships; referenced data is retained.
+- Public placeholders/synthetic fixtures, source evidence and a qualified
+  installation-data import/approval path. No real data activation or distribution
+  is implied by a schema validation pass or storage seal.
 - Separate administrative/migration and unprivileged runtime connections.
 - Principal lifecycle, agent/service identities and a scoped capability matrix.
 - Explicit provisioning with no published default credentials.
 - Versioned domain records, application revisions and immutable input manifests.
+- Bitemporal facts/relationships and a qualified date-to-knowledge context resolver,
+  including market observations, later imports/corrections and coverage limits.
+- Consistent effective_from/effective_to and known_from/known_to columns, UTC
+  knowledge timestamps, documented half-open boundaries and a reserved finite
+  open-ended sentinel. Keep source observation/contract dates separate.
 - Typed read, compose, preview, book, amend, calculate and request-status operations.
 - Atomic idempotency records and append-only application audit.
 - Current-authorization checks across historical reads, results and exports.
+- Typed lifecycle commands/events with retained before/after bindings, validated
+  transitions and state owned by the trade for its instrument bindings and obligation occurrences. See
+  [Events and lifecycle](lifecycle.md).
 
 Acceptance:
 
 1. Provision a new isolated installation using only documented public artifacts.
-2. Book an instrument/position atomically through an authorized operation.
+2. Book a trade's instruments and quantities atomically through an authorized operation.
 3. Resolve a duplicate request to its original outcome; reject a reused request
    identity with a different payload.
 4. Recover after an uncertain response without creating another booking.
@@ -158,10 +203,43 @@ Acceptance:
 12. Restart the service and retain bookings, audit, request outcomes and run inputs.
 13. Test delegated scope intersection, expiry, revocation and disallowed
     redelegation, including attempts to inspect another principal's request status.
+14. Amend one trade using a shared definition and verify all other trades and
+    historical calculations retain their original terms/state.
+15. Distinguish a booking correction from an economic early termination; retain
+    existing deliveries, realized fixings and payable/receivable obligations.
+16. Replay business events into the same state without sending external actions,
+    repricing with current market data or reinterpreting events under new rules.
+    Verify event/schema upgrades using retained handlers or tested migrations;
+    unsupported reconstruction must fail explicitly.
+17. Recompute remaining schedules and quantity-scaling eligibility after partial
+    settlement/exercise/amendment. Preserve provenance while permitting reuse of
+    equal normalized remaining economics; ordinary risk freezes actual decisions
+    and realized fixings.
+18. Reproduce historical and corrected-past views of a backdated amendment and a
+    corrected quote. Retain historical portfolio/book/trade and curve/reference
+    relationships, while permitting future-delivery trades already known then.
+19. Qualify date-cutoff resolution under concurrent commits, lag, crashes, equal
+    timestamps, clock regressions and missing retained coverage. Freeze successful
+    context resolutions and reject unverifiable cutoffs without current fallback.
+20. Validate one consistent cross-scope cut and complete historical dependency
+    closure, including a trade referencing a concurrently published shared curve.
+    Historical book membership cannot bypass current record classification.
+21. Test exact shared boundaries, multiple same-day corrections, equal timestamp
+    handling, UTC/zone conversion and sentinel round trips. Queries must neither
+    double-count boundary versions nor treat the sentinel as a real business date.
+22. Reject orphan and cross-catalog/revision reference writes at the database,
+    incompatible unit/commodity dimensions, frozen-definition changes and seal/write
+    races. Initial storage checks exist; runtime authorization, publication and
+    activation integration remain incomplete.
+23. Reject activation of incomplete placeholders, candidate series with an
+    unqualified product, missing evidence/calendar coverage, conflicting dates
+    and missing/expired use permissions. Keep hosted data rights separate from
+    the public code license and installation-internal use.
 
-Historical reads initially select application revisions. Do not implement a
-wall-clock historical selector by pretending pre-commit row timestamps are
-permanent commit records.
+Application revision pins implement the knowledge coordinate behind the required
+historical date/time selector. Before accepting that selector, implement and test
+the knowledge-time contract in [Historical context and temporal data](context.md).
+Pre-commit row timestamps are not permanent commit/availability records.
 
 Independent review covers authorization, temporal behavior, transaction races,
 idempotency and migration/release boundaries.
@@ -174,13 +252,17 @@ Deliver:
   recovery over pinned inputs.
 - Progress, diagnostics, cooperative cancellation and request reconciliation.
 - Browser flows for identity, scoped reference selection, side/instrument
-  composition, positions, market recipes, risk results and administration.
+  composition, trades, market recipes, risk results and administration.
 - Calculation receipts with explainable dependency paths and input provenance.
+- A historical environment selector that propagates one resolved context through
+  navigation, tables, charts, schedules, risk and reports, with read-only defaults.
+- Due-event reconciliation over retained occurrence IDs, version checks and an
+  atomic outbox for committed lifecycle notifications/downstream work.
 
 Acceptance:
 
 1. Complete the first synthetic trading/risk workflow through the browser.
-2. Show base/up/down values, risk units and the path from factor to position.
+2. Show base/up/down values, risk units and the path from factor to instrument to trade.
 3. Show where unit computations were reused and how quantity was applied.
 4. Show errors and partial runs explicitly; do not present incomplete portfolio
    totals as successful complete risk.
@@ -194,6 +276,22 @@ Acceptance:
    between an earlier permission check and the attempted publication commit.
 9. Verify a schema/model upgrade does not rewrite old receipts or claim replay
    using a different engine. Report unsupported replay honestly.
+10. Race a manual amendment against a due event. Reject/reconcile stale work,
+    deduplicate repeated delivery and retain already-realized obligations.
+11. Verify expiry does not mean payment or physical settlement is complete, and
+    an unresolved fixing cannot become an automatic lapse or zero valuation.
+12. Restart and redeliver outbox work without repeating business effects; rebuilding
+    projections does not reissue notifications, payments or exercises.
+13. Allow distinct actions and reconsideration after missing facts on one stable
+    occurrence, while preventing another external effect under a new attempt key.
+14. Revoke recipients/delegation or change destination/automation policy between
+    outbox enqueue and dispatch; block unauthorized delivery and retain outstanding
+    obligations for separately authorized service/operator processing.
+15. Change context during pagination/navigation/running requests and discard stale
+    responses. All business panels use the same context; queued calculations keep
+    their pinned inputs, and historical views retain current authorization.
+    Include A-to-B-to-A context switching and reject unsupported lifecycle-roll or
+    hindsight coordinate combinations.
 
 Independent review covers asynchronous behavior, result publication, current
 authorization and retained-version boundaries.
@@ -220,9 +318,9 @@ Acceptance:
 2. It composes a linear instrument from reusable sides, previews the cashflows,
    resolves missing/ambiguous terms and proposes a booking.
 3. It obtains approval only where policy requires it and books exactly once.
-4. It shocks a shared factor, runs risk and explains position changes from
+4. It shocks a shared factor, runs risk and explains trade-value changes from
    retained calculation evidence.
-5. It answers why an unrelated position did not move without inventing inputs.
+5. It answers why an unrelated trade did not move without inventing inputs.
 6. A second provider/agent route completes the same deterministic business task;
    compare state/results, not wording.
 7. Denied permissions, stale proposals, malformed tool arguments, provider errors
@@ -232,6 +330,9 @@ Acceptance:
 9. Disconnect after a booking response is lost and reconcile the committed
    request outcome before attempting another mutation.
 10. The browser and direct API remain usable without a configured model provider.
+11. Agent tools honor the selected historical context across discovery, reads,
+    previews, calculations and exports. A missing/invalid context cannot silently
+    fall back to current business data.
 
 Independent review covers delegated authority, data routing, approvals, tool
 discovery and provider-failure/retry boundaries.
@@ -245,7 +346,7 @@ Publish a reproducible benchmark matrix with synthetic workloads:
 
 | Axis | Required cases |
 | --- | --- |
-| Positions and unique unit definitions | Many copies of a few contracts; many distinct contracts; mixed books |
+| Trades/instrument bindings and unique unit definitions | Many copies of a few contracts; many distinct contracts; mixed books |
 | Dependency topology | Chains, fan-out, shared children and unaffected branches |
 | Scenario breadth | Single-factor up/down, multiple factors and parallel runs |
 | Shape | Single period, multiple periods and distinct hourly profiles |
@@ -261,7 +362,7 @@ Acceptance:
 
 - Results match the independent full-repricing reference for the supported domain.
 - More copies of an eligible unit contract do not cause more unit-pricer calls;
-  position scaling/aggregation costs remain visible.
+  trade quantity scaling/aggregation costs remain visible.
 - A single-factor shock executes affected dependencies rather than every curve.
 - Resource bounds hold under concurrent requests and cancellation.
 - Required tests, independent reviews and public-content checks pass.
@@ -275,7 +376,11 @@ Extend only after the baseline contracts are demonstrated:
 
 - Broader calendars, delivery shapes and schedule authoring.
 - Options and exercise rules, volatility inputs and nonlinear model diagnostics.
-- Storage/dispatch optimization and capacity-dependent position behavior.
+- Option-side sibling dependencies, shared exercise groups and an explicit
+  contribution/allocation convention that does not double-count the underlying.
+- Physical/financial composite sides with typed gas/power delivery metadata and
+  explicit activity-to-payment quantity links.
+- Storage/dispatch optimization and capacity-dependent quantity behavior.
 - Advanced fees, quantity tiers and any justified scripting sandbox.
 - Multi-factor P&L explain, cross sensitivities and residual attribution.
 - Calibration, simulation, validated analytic/automatic differentiation paths.
@@ -297,6 +402,9 @@ Before publishing, inspect all staged files and generated artifacts, dependency
 sources/attribution, operational references, credentials, company/customer and
 competing product names, commit metadata and the actual diff against the public
 branch. Required technical identifiers and license notices stay accurate.
+
+Keep draft changes local until the user explicitly approves publication. Writing
+or reviewing an architecture proposal does not itself authorize pushing it.
 
 Tests use newly allocated disposable resources and neutral synthetic fixtures.
 No existing application, shared test workspace or production system is a test

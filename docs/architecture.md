@@ -1,6 +1,7 @@
 # Architecture and domain contracts
 
-Status: reviewed design baseline. No implementation is implied by this document.
+Status: baseline approved for implementation and publication on 2026-10-16.
+No implementation is implied by this document.
 See [decisions](decisions.md) for the distinction between agreed requirements,
 proposals and choices that still need evidence. See [the delivery plan](plan.md)
 for implementation scope and exit criteria.
@@ -17,12 +18,16 @@ validation, schedules, units, arithmetic, pricing, risk, permissions and durable
 workflows. A language model interprets intent, proposes structured actions and
 explains retained evidence. It does not become the authority for these rules.
 
-The initial product scope is linear products. The contracts must accommodate
+The initial product scope includes futures and fixed/floating linear products.
+Futures require explicit settlement/variation-margin state and outstanding risk,
+not only an ordinary forward formula. The contracts must accommodate
 future option pricers, physical operations, optimization and complex fees without
 replacing the scenario mechanism or collapsing the side architecture.
 
 The application must be self-hostable from public dependencies. Its foundation is
 an unmodified relational database, not a database fork or a private platform SDK.
+The intended eventual hosted domain is leanetrm.com; deployment is a later,
+separately approved operational step.
 
 ## 2. Application structure and deployment
 
@@ -49,7 +54,7 @@ Logical modules:
 | Identity and administration | Principals, scopes, grants, policy, provider configuration and audit |
 | Reference data | Units, currencies, locations, calendars and versioned conventions |
 | Instruments | Sides, compositions, templates and instrument memberships |
-| Trading | Portfolios, books, positions, bookings, amendments and lifecycle |
+| Trading | Portfolios, books, trades, instrument quantities, amendments and lifecycle |
 | Market data | Primitive factors, observations, curve definitions and snapshots |
 | Calculation | Schedules, pricer execution, scenarios, risk and calculation receipts |
 | Agent operations | Discoverable tools, task execution, provider adapters and execution limits |
@@ -58,7 +63,7 @@ Logical modules:
 Modules have explicit contracts. The domain and numerical core do not depend on
 web frameworks, persistence libraries, model-provider SDKs or browser state.
 
-The proposed implementation stack is a TypeScript browser client, a managed
+The approved implementation stack is a TypeScript browser client, a C#/.NET
 application service and standard PostgreSQL. Exact dependency versions are chosen
 and pinned during setup. A separate native calculation service is not required
 for the first slice. A measured bottleneck can justify moving an implementation
@@ -74,23 +79,36 @@ modular code.
 The contractual hierarchy is:
 
 ```text
-Deal
-  Position: instrument binding, signed quantity and quantity basis
-    Instrument
-      Instrument-side memberships: side, coefficient, role and order
-        Side definition
-          Optional ordered composition members
-          Schedule definitions and generated dated legs
+Portfolio
+  Books[]
+    Book
+      Trades[]
+        Trade
+          Instruments: immutable instrument references with signed quantities/bases
+          Lifecycle state and retained events
+
+Instrument
+  Side memberships[]: side reference, coefficient, role and order
+    Side definition
+      Optional ordered composition members
+      Schedule definitions and generated dated legs
 ```
 
 These are distinct concepts:
 
-- A side is an independent reusable definition, not a booked position.
+- A portfolio contains books; a book contains trades.
+- A trade directly owns its instrument-to-quantity bindings and lifecycle state.
+  It may contain more than one instrument, each with its own quantity/unit/basis.
+  No separate quantity-bearing domain class sits between trade and instrument.
+  Stable binding/obligation keys retained inside Trade can distinguish different
+  occurrences of the same definition; equivalence alone does not merge them.
+- A side is an independent reusable definition, not a booked trade.
 - An instrument contains one or more sides. A single-side instrument still
   retains an instrument identity and explicit membership.
 - Coefficients and ordering belong to instrument memberships. They do not make a
   new side definition merely because another instrument uses different weights.
-- Signed booked quantities belong to positions, with an explicit unit and basis.
+- Signed booked quantities belong to the trade's instrument bindings, with an
+  explicit unit and basis for each instrument.
 - Generated schedule legs are dated delivery, observation or payment events. A
   generated leg is not another side.
 - A composite side contains explicit members, coefficients, roles and ordering.
@@ -104,7 +122,24 @@ Physical activity and its financial payments remain distinguishable. Reusing a
 physical quantity as a payment basis must not count that quantity or cashflow
 twice. Operating constraints must not be disguised as linear financial sides.
 
+For example, one trade can directly bind an option instrument to its contract
+quantity and a cash instrument to a premium payment quantity. The trade coordinates
+booking and lifecycle across those bindings. An instrument's membership role or a
+trade's descriptive payment role does not apply an extra pay/receive sign.
+
+`Trade.PV(context)` aggregates the values of its instruments at their respective
+quantities and lifecycle states. Each instrument retains its common behavior
+contract and delegates to its sides. Currency conversion remains explicit.
+
 ### 3.1 Definition identity and versions
+
+Use **economic equivalence** to describe reuse: instrument definitions with the
+same canonical economic terms and supported conventions can be shared across
+trades within an authorized namespace. Instrument identity includes its economic
+type, side definitions, membership coefficients, relevant ordering and quantity
+transformations. A trade's quantity, booking identity and lifecycle state do not
+create different reusable instrument terms. Equivalence for definition/calculation
+reuse does not imply that separate booked trades or their obligations are merged.
 
 Canonical side identity includes applicable economic terms, normalized numeric
 values, exact typed reference bindings and schedule conventions. For future
@@ -129,17 +164,140 @@ selected binding. Other instruments and prior runs retain their bindings.
 
 Schedule definitions retain delivery intervals, observation rules, payment rules,
 calendars, time zones and source versions. Generated events retain their source
-definition and position/instrument/membership context.
+definition and trade/instrument/membership context.
 
 Distinguish total-period quantity, flow rate and quantity per occurrence. A total
 quantity must not be multiplied by schedule hours a second time. A flow rate must
 be integrated over the actual supported intervals. Date-only values remain dates;
 instants retain offsets/UTC identity and the relevant time-zone rules.
 
+Actual instants persist in UTC and render in the user's selected display zone.
+TOU definitions retain local recurring rules and explicit versioned market clocks,
+including fixed-offset and DST-following conventions. Compile them to UTC delivery
+intervals; never let a display preference change contractual operating dates,
+TOU membership or delivered energy. Source feeds can use a different clock from
+the contract. See [time-and-schedules.md](time-and-schedules.md) for clock types,
+mixed-clock predicates, DST policies, provenance and qualification gates.
+
 Normalized shapes used for quantity reuse are part of the reusable contract. Two
 equal total quantities with different hourly profiles are not equivalent inputs.
 
+### 3.3 Behavioral contracts on instruments and sides
+
+Every instrument exposes a common behavior contract. Every side owns the behavior
+for generating its schedule and computing its contribution to PV from that
+schedule. These are executable domain abstractions, not only data records.
+
+The proposed minimal interfaces are:
+
+```text
+Instrument
+  GenerateSchedule(scheduleContext) -> SchedulePlan
+  PV(valuationContext) -> ValuationResult
+  Dependencies(resolutionContext) -> DependencySet
+  Validate(resolutionContext) -> ValidationResult
+
+Side
+  GenerateSchedule(sideScheduleContext) -> SchedulePlan
+  PV(sideValuationContext) -> ValuationResult
+  Dependencies(sideResolutionContext) -> DependencySet
+  Validate(sideResolutionContext) -> ValidationResult
+```
+
+Use interfaces and abstract base classes to require the behavior. Provide shared
+base implementations where semantics agree: an ordinary instrument combines side
+event plans and sums normalized, signed side contributions; leaf sides implement
+their own schedule and PV behavior. A composite side delegates to its components.
+Different instrument business labels do not require different subclasses unless
+their behavior differs. Avoid a deep inheritance tree for combinations of terms.
+
+All evaluation receives an explicit pinned context, even if the public operation
+is informally called `PV()`. The context supplies resolved definitions, schedules,
+market/scenario inputs, numerical policy and approved model bindings. It does not
+expose an unrestricted database or mutable application state.
+
+A side can delegate numerical work to a registered pricing strategy. Contractual
+terms and model selection remain distinct, so comparing two approved models does
+not require changing the contract. The scenario engine invokes the common
+valuation contract without knowing the side's internal algorithm.
+
+Persist versioned definitions and type identifiers through explicit schemas,
+rather than serializing arbitrary runtime objects. Deriving a class does not
+permit loading tenant-provided executable code. Cache resolved schedules where
+their complete inputs agree instead of regenerating them for every `PV()` call.
+
+### 3.4 Explicit sibling-side references
+
+An instrument may have sibling sides in this form:
+
+```text
+Instrument
+  [0] OptionSide: references [1] and [2]
+  [1] FloatingFinancialSide
+  [2] FixedFinancialSide
+```
+
+The array indexes illustrate the relationship; persist stable typed references or
+semantic slots resolved to versioned memberships, never mutable array positions.
+An option side need not own or wrap the other sides structurally. It can consume
+their schedules, terms and permitted valuation inputs through its side context.
+
+Declare those references so validation, dependency propagation, authorization and
+calculation identity can see them. Resolve reusable slot-based definitions in the
+selected instrument context. Resolved sibling versions, membership coefficients
+and relevant quantity transformations are part of that calculation's identity;
+the same side definition in a different sibling context is not automatically the
+same calculation.
+
+References are directed. Validate their ordering and reject dependency cycles,
+including a side that calls the total instrument PV while that total is waiting
+for its own PV. Reading a peer's independent base schedule/value is distinct from
+recursively asking for a value already controlled by the requesting side.
+
+Expose peer base valuation and final contributed valuation through distinct typed
+evaluation modes or separate context operations. Do not make a generic `PV()`
+silently mean one or the other depending on call order. The resolved execution
+plan specifies which value a dependency consumes.
+
+For options, sibling visibility alone does not define exercise or PV accounting.
+The future option contract in section 5.4 must distinguish additional obligations
+from exercise control of existing obligations before that product is enabled.
+
+### 3.5 Physical and financial composition
+
+A composite side can combine a physical delivery side and a financial side to
+represent a physical swap. Keep each component's schedule and valuation behavior:
+
+```text
+CompositeSide
+  PhysicalSide: delivery events and commodity-specific delivery terms
+  FloatingFinancialSide: payments linked to the declared delivery quantity
+```
+
+Gas physical terms can include pipeline, zone, receipt/delivery point and gas-day
+conventions. Power physical terms can include market, node/zone, delivery profile
+and the applicable clock. These are typed commodity-specific references and
+conventions, not one unvalidated location string.
+
+The financial component explicitly binds the physical quantity/activity that it
+prices. Components declare whether their PV represents delivery's economic value,
+cash payments, fees or another supported obligation. Count commodity value once
+and keep it distinguishable from contractual payments. A physical movement does
+not silently imply an additional cash sale.
+
+Combine schedules by retaining event identity, type, source side/component and
+quantity/payment links. An instrument schedule is an aligned view of these events,
+not a date-only join that duplicates payments or forces all event types to have
+the same frequency. Valuation still delegates to the side implementations.
+
 ## 4. Market factors and curve dependencies
+
+Reference data includes relational currencies, units/dimensions, commodities,
+typed locations, exchanges, clearing houses, clocks/calendars, rate conventions,
+and futures product/series definitions. Use exact catalog/revision foreign keys
+for these relationships; no free-text or arbitrary JSON reference substitutes.
+See [reference-data.md](reference-data.md) for futures accuracy, public placeholders,
+settlement semantics, provenance and the initial immutable revision schema.
 
 A primitive risk factor is an independently shockable market input. Its identity
 includes the market definition, actual dated contract or delivery bucket, quote
@@ -169,8 +327,8 @@ electrical energy; prices and spreads must have compatible currency and units.
 The gas, power spread and locational basis inputs remain independently shockable.
 
 With a fixed heat rate of 7 MMBtu/MWh, an absolute gas shock of 0.10 USD/MMBtu
-changes the dependent power price by 0.70 USD/MWh. A receive-floating position of
-10,000 MWh changes by 7,000 USD before discounting, holding all other inputs fixed.
+changes the dependent power price by 0.70 USD/MWh. A trade holding a receive-floating quantity of
+10,000 MWh has scenario P&L of 7,000 USD before discounting, holding all other inputs fixed.
 This is a synthetic arithmetic acceptance case, not a claim about market pricing.
 
 A power curve inherits gas exposure only when its approved recipe specifies that
@@ -201,14 +359,14 @@ or count inherited risk twice.
 
 The fundamental operation is **shock market factors, then compute the affected
 valuations against the same scenario**. Never implement market shocks as
-individual mutations of positions or live quotes.
+individual mutations of trades or live quotes.
 
 A run pins:
 
 - Base market observations, selected revisions and availability context.
 - Actual factor identities and alias/delivery mappings.
 - Curve recipes, reference data, calendars and schedule versions.
-- Contract, membership and position versions.
+- Trade, instrument, membership and lifecycle versions.
 - Valuation date/time, output currency and explicit FX/discount conventions.
 - Pricer/model/operator versions and numerical policy.
 - Scenario definitions, including bump sizes, units and rebuild policy.
@@ -221,7 +379,7 @@ The execution sequence is:
 3. Construct the base scenario and sparse up/down overlays on primitive factors.
 4. Rebuild affected dependent values in dependency order under each scenario.
 5. Invoke each affected unique valuation computation against those values.
-6. Apply eligible position quantities and membership coefficients.
+6. Apply eligible instrument quantities held by trades and membership coefficients.
 7. Aggregate by authorized book/portfolio/currency and persist a result receipt.
 8. Recheck current access before returning or exporting results.
 
@@ -263,13 +421,17 @@ Keep three concepts separate:
 | --- | --- |
 | Dependency | A factor or derived input can affect a computation |
 | Market linearity | Value responds linearly to a specified market input under specified assumptions |
-| Quantity scalability | Changing position size scales the result without changing the unit computation |
+| Quantity scalability | Changing a trade's instrument quantity scales value without changing the unit computation |
 
 For an eligible composition:
 
 ```text
-PositionValue(scenario) = PositionQuantity
-                          * sum(MembershipCoefficient * UnitSideValue(scenario))
+InstrumentUnitValue(instrument, scenario) =
+    sum(MembershipCoefficient * UnitSideValue(scenario))
+
+TradeValue(scenario) = sum over Trade's bindings of
+    Quantity(binding) * InstrumentUnitValue(binding.instrument,
+                                            binding.lifecycleContext, scenario)
 ```
 
 The normalized shape, contractual terms and valuation context belong to the unit
@@ -277,7 +439,7 @@ calculation. Quantity is factored out only when the pricer's contract guarantees
 this relationship for the requested quantity basis and domain. Validate this
 property with tests; do not infer it from a product label.
 
-In this formula, every `UnitSideValue` is expressed per the same position
+For each instrument, every `UnitSideValue` is expressed per the same instrument
 quantity basis and in the same output currency. Sides may retain different native
 units and currencies; explicit versioned per-side quantity transformations and,
 where supported, pinned FX conversion normalize their contributions before the
@@ -286,8 +448,8 @@ A dimensionless membership coefficient cannot substitute for an undeclared unit
 conversion, heat rate, delivery shape or contract-lot multiplier.
 
 The baseline uses a positive-receipt orientation for unit side values. A signed
-membership coefficient defines the side's contribution and a signed position
-quantity defines position direction. The membership role is descriptive and
+membership coefficient defines the side's contribution and the trade's signed
+quantity for that instrument defines its direction. The membership role is descriptive and
 does not apply another sign. Nested composition coefficients obey the same rule;
 do not apply pay/receive direction again from a label or side kind.
 
@@ -331,6 +493,59 @@ full-revaluation P&L and the explain residual.
 Nonsmooth payoffs and optimization decisions may not have stable local Greeks.
 Retain the actual scenario results and diagnostics rather than claiming that a
 Greek approximation is exact for every future model.
+
+### 5.4 Future option sides with sibling visibility
+
+This is a proposed extension boundary, not an implemented option product or a
+settled accounting choice. Preserve the sibling topology in section 3.4.
+
+An option side retains explicit target-side bindings, payoff/strike terms,
+exercise opportunities, settlement rules and model requirements. Its event plan
+includes contingent obligations and their exercise group. It can consume the
+target sides' schedules without turning those obligations into a duplicate set
+of active instrument cashflows.
+
+Distinguish at least two meanings:
+
+- An additional option payoff over sibling observables, while the siblings remain
+  independent contractual obligations. The side contributes that extra payoff's
+  PV, and the instrument sums all contributions.
+- An exercise right controlling whether/how selected sibling obligations occur.
+  Value the controlled group jointly; do not add a full option-on-group PV on top
+  of the same underlying group's unconditional PV.
+
+One proposed representation for the second meaning is an adjustment contribution:
+
+```text
+OptionContribution = PV(group with exercise rights)
+                     - PV(the same unconditional target group)
+
+InstrumentPV = sum(target-side base contributions) + OptionContribution
+               + sum(other independent contributions)
+```
+
+Both group valuations use the same resolved weights, quantity basis, market
+context, currency and model conventions. In this representation the target-side
+base contributions are valuation attribution components; their event plans still
+show the actual contractual exercise contingency. They must not be presented as
+unconditional deliveries/payments merely because the attribution uses a base PV.
+
+A joint group evaluator with an explicit allocation back to side contributions is
+another possible representation. Settle and test this choice before enabling
+options. Do not combine overlapping control groups by summing independent
+adjustments unless that decomposition is proven valid.
+
+The contract must also define the option membership's own coefficient and the
+fraction/quantity of target obligations it controls. A coefficient on an
+adjustment is not permission to silently scale the controlled group a second
+time. This mapping belongs in the resolved valuation identity and tests.
+
+Shared versus independent exercise is a contractual distinction. An option over
+one net group differs from separate options on each component. Its pre-exercise
+PV uses a suitable model of future outcomes, not a maximum applied to today's
+aggregate PV. Automatic market shocks still operate on primitive inputs and all
+affected pricers consume the same scenario, including volatility/correlation
+inputs where required by a supported model.
 
 ## 6. Numerical values, units and rounding
 
@@ -413,11 +628,28 @@ at which information became known. A backdated correction does not rewrite a
 previously captured input manifest. Historical calculation inputs are pinned
 through all lazy/paged reads.
 
-Application revisions are the initial authoritative knowledge coordinate. A row
-timestamp assigned before commit is not a permanent database commit timestamp.
-Wall-clock knowledge-cutoff resolution needs a separately documented publication
-and visibility contract before it is offered. Do not claim physical commit-time
-semantics from an ordinary timestamp column.
+The baseline requires a bitemporal historical environment: business/effective
+time and a knowledge cutoff. A user can select a past context and see trades,
+market information and all their dependencies under that same selection. The
+server resolves the requested coordinates into an immutable context used by UI,
+API, agents, schedules, PV/risk, background jobs and exports.
+
+Use `effective_from` / `effective_to` and `known_from` / `known_to` for retained
+half-open intervals. Context point selectors are `effective_at` and `known_at`.
+Knowledge endpoints have UTC timestamp precision; reserved finite open ends and
+boundary predicates follow the shared context contract. Contract delivery/start
+attributes are separate fields, not historical interval endpoints.
+
+Committed application revisions provide the authoritative knowledge ordering.
+Mapping a user-selected date/time to those revisions is a required baseline
+capability, with an explicitly tested publication/commit-visibility contract.
+A row timestamp assigned before commit is not a permanent database commit
+timestamp. Do not claim physical commit-time semantics from an ordinary timestamp
+column or allow later imports/corrections to leak into earlier knowledge.
+
+See [Historical context and temporal data](context.md) for coordinates, retention,
+market-observation rules, UI switching, date resolution and qualification gates.
+The resolver implementation is an open decision; the product requirement is not.
 
 Saved calculations retain immutable input manifests, result schemas and operator
 versions. Historical replay either uses the retained implementation or reports
@@ -428,6 +660,19 @@ Historical data selection does not restore old permissions. Access is checked
 under current policy. Retention/deletion rules, including retained execution
 artifacts, must be explicit rather than assumed from versioning.
 
+### 7.1 Business events and lifecycle
+
+Instruments and sides define supported lifecycle behavior; the booked trade
+owns the resulting state for its instrument bindings and obligation occurrences. A reusable side or instrument
+definition does not acquire a global exercised/expired/cancelled status because
+one trade changes.
+
+The proposed command, event, transition and scheduling contracts are detailed in
+[Events and lifecycle](lifecycle.md). Keep scheduled obligations distinct from
+committed facts, preserve amendments as retained transitions and serialize
+automated lifecycle processing with manual commands. Lifecycle inputs and state
+versions are part of schedules, valuation manifests and result identities.
+
 ## 8. Performance and result reuse
 
 Optimize duplicate work and data movement before distributing services:
@@ -436,7 +681,7 @@ Optimize duplicate work and data movement before distributing services:
 - Compile curve and schedule definitions once for a compatible context.
 - Evaluate shared dependency nodes once per scenario.
 - Use dependency indexes to skip provably unrelated computations.
-- Reuse identical eligible unit valuations across memberships and positions.
+- Reuse identical eligible unit valuations across memberships and trades.
 - Apply quantity scaling and aggregate in batches.
 - Parallelize independent work with bounded resource use.
 - Keep database calls and provider calls outside pricing inner loops.
@@ -455,7 +700,7 @@ hidden definitions, private observations, book membership or inferred existence.
 Sharing immutable computational storage across scopes requires an independent
 security design; the initial cache boundary is the authorized workspace.
 
-Publish measurements for unique contracts, positions, affected dependency nodes,
+Publish measurements for unique contracts, trades/instrument bindings, affected dependency nodes,
 scenarios, actual pricer calls, database reads, cold/warm execution, latency,
 throughput and memory. A workload with many copies of one contract is different
 from one with the same number of unique contracts. No throughput claim precedes
