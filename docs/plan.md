@@ -4,8 +4,9 @@ Status: design baseline approved for implementation on 2026-10-16. Milestone 0 i
 application implementation milestones below are complete.
 
 The [verification workflow](verification.md) now defines a single local/CI command
-covering the existing managed, frontend, database and browser suites. Hosted
-execution must pass before that environment is described as qualified.
+covering the existing managed, frontend, database and browser suites. The complete
+command passed on the Ubuntu 24.04 hosted runner on 2026-10-17; verification
+records the exact run and environment. Production deployment remains unqualified.
 
 The standalone [power TOU preview](power-preview.md) now connects editable masks
 to actual selected curve contracts and synthetic flat settlements. It qualifies

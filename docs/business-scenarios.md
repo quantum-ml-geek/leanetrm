@@ -50,8 +50,9 @@ python3 tools/run_preview.py --pg-bin /path/to/postgresql/bin \
 
 The runner owns and cleans its database/application/browser resources. Browser
 checks accept no arbitrary application URL. Native database builds are unnecessary.
-The [CI workflow](verification.md) invokes these scenarios. A checked-in workflow
-alone does not establish a successful hosted run.
+The [CI workflow](verification.md) invokes these scenarios. Its complete command
+passed on the Ubuntu 24.04 hosted runner on 2026-10-17; verification records the
+run and environment separately from application capability claims.
 
 ## Next settlement/roll acceptance scenarios
 

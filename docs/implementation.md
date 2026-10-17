@@ -53,8 +53,9 @@ curve specifications and PWR01–04 scenarios cover intervals, shapes, MW/MWh,
 market clocks, partial fixings, components and explicit balancing semantics. No
 hourly power lifecycle, reusable shocker, OTC fixing operation, margin ledger or
 production authentication was added by these test/documentation changes.
-The [CI workflow and shared verification command](verification.md) are defined;
-successful execution on the selected hosted runner remains to be qualified.
+The [CI workflow and shared verification command](verification.md) passed the
+complete suite on the Ubuntu 24.04 hosted runner on 2026-10-17, including browser
+sandbox and owned-resource teardown checks. Production deployment remains work.
 
 ## Shared historical market view and administration
 

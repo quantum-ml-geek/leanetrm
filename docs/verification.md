@@ -51,13 +51,24 @@ dependency versions are pinned. The hosted image, PostgreSQL patch, browser,
 Python, ICU and time-zone data can change. Their versions are recorded in the job
 log, so this is a reproducible command and input set rather than a frozen OS image.
 
-A workflow definition is not evidence of a successful hosted run. The first actual
-Ubuntu run must qualify installation, timing, browser sandbox and teardown on the
-selected runner. Local results do not establish that qualification or production
+Hosted qualification passed on 2026-10-17 in
+[run 39064855342](https://github.com/zerodrift/leanetrm/actions/runs/39064855342)
+at commit `e7f9b4cafcd4855336cfbf8501d1122d5745339e`. The complete command passed
+on Ubuntu 24.04 image `20261012.334.1`, .NET 10.0.402, Node 24.22.0, stock
+PostgreSQL 16.15 and Chrome 155.0.8059.39 with its normal sandbox enabled. This
+included 198 standard and 24 mixed HTTP checks, 50 browser checks and the existing
+managed/frontend/schema/storage/adapter suites. Both disposable previews completed
+teardown. This qualifies the verification command on that runner, not production
 readiness.
+
+Browser profiles remain under the preview owner's temporary root until its owned
+process group has stopped. A regression checks that a live descendant can still
+finish writing after the browser parent exits; parent exit alone does not permit
+profile deletion.
 
 Local qualification on 2026-10-17 passed the complete command from a fresh macOS
 arm64 checkout with empty npm/NuGet caches, .NET 10.0.402, Node 24.22.0 and stock
 PostgreSQL 16.14. This included 198 standard and 24 mixed HTTP checks, 49 browser
 checks and the existing managed/schema suites. Workflow syntax and three runner
-behavior checks also passed. No hosted execution is claimed by these local results.
+behavior checks also passed. The subsequent profile-lifetime correction passed
+the standard preview and all 50 browser checks locally before the hosted rerun.
