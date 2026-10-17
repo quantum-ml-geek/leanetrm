@@ -1,6 +1,6 @@
 // Browser checks receive an owned target from run_preview.py, never an arbitrary URL.
 import {spawn} from 'node:child_process';
-import {mkdtemp,readFile,writeFile,rm,stat} from 'node:fs/promises';
+import {mkdtemp,readFile,writeFile,stat} from 'node:fs/promises';
 import {dirname,join,resolve} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 
@@ -51,6 +51,6 @@ export async function withOwnedBrowser(targetFile,browserPath,run){
     socket?.close();
     for(const p of pending.values()){clearTimeout(p.timeout);p.reject(Error('Browser check finished'));}pending.clear();
     if(chrome.exitCode===null&&chrome.pid){chrome.kill('SIGTERM');await new Promise((accept,reject)=>{const timeout=setTimeout(()=>{chrome.kill('SIGKILL');reject(Error('Browser shutdown timed out'));},5000);chrome.once('exit',()=>{clearTimeout(timeout);accept();});});}
-    await rm(directory,{recursive:true,force:true});
+    // run_preview.py removes profiles after stopping the entire owned process group.
   }
 }
