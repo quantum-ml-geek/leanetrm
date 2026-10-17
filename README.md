@@ -1,4 +1,4 @@
-# openetrm
+# LeanETRM
 
 Work in this standalone repository for the public application. The local
 **Power TOUs** page uses its native curve API and stock PostgreSQL preview;
