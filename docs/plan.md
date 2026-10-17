@@ -3,6 +3,10 @@
 Status: design baseline approved for implementation on 2026-10-16. Milestone 0 is complete; no
 application implementation milestones below are complete.
 
+The [verification workflow](verification.md) now defines a single local/CI command
+covering the existing managed, frontend, database and browser suites. Hosted
+execution must pass before that environment is described as qualified.
+
 The standalone [power TOU preview](power-preview.md) now connects editable masks
 to actual selected curve contracts and synthetic flat settlements. It qualifies
 current-input calculations, explicit clock captures and fixed-MW integration;

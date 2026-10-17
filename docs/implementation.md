@@ -52,7 +52,9 @@ independent all-in exposure and signed exact-money multiplication. Proposed powe
 curve specifications and PWR01–04 scenarios cover intervals, shapes, MW/MWh,
 market clocks, partial fixings, components and explicit balancing semantics. No
 hourly power lifecycle, reusable shocker, OTC fixing operation, margin ledger or
-production authentication was added by these test/documentation changes. CI integration remains work.
+production authentication was added by these test/documentation changes.
+The [CI workflow and shared verification command](verification.md) are defined;
+successful execution on the selected hosted runner remains to be qualified.
 
 ## Shared historical market view and administration
 

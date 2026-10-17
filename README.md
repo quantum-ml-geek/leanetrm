@@ -4,6 +4,8 @@ Work in this standalone repository for the public application. The local
 **Power TOUs** page uses its native curve API and stock PostgreSQL preview;
 see [the power example and its limits](docs/power-preview.md).
 Run `python3 tools/check_standalone.py` to check dependency boundaries.
+See [local verification and CI](docs/verification.md) for the complete check command
+and hosted-runner boundaries.
 
 Open Source Commodity Trading Risk Management
 

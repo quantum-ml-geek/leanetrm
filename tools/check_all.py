@@ -1,0 +1,72 @@
+#!/usr/bin/env python3
+"""Run the synthetic verification suites with explicitly supplied local tools."""
+import argparse
+import os
+from pathlib import Path
+import subprocess
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+CHECK_PROJECTS = (
+    ('tests/OpenEtrm.MarketData.Checks/OpenEtrm.MarketData.Checks.csproj', ()),
+    ('tests/OpenEtrm.Rates.Checks/OpenEtrm.Rates.Checks.csproj', ()),
+    ('tests/OpenEtrm.Shared.Checks/OpenEtrm.Shared.Checks.csproj', ()),
+    ('tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj', ('--schedules',)),
+)
+
+
+def run_checks(pg_bin, dotnet, browser, *, run=subprocess.run):
+    if not __debug__ or os.environ.get('PYTHONOPTIMIZE') not in (None, '', '0'):
+        raise ValueError('Python assertions must remain enabled for verification.')
+    environment = {**os.environ, 'DOTNET_CLI_TELEMETRY_OPTOUT': '1', 'DOTNET_NOLOGO': '1'}
+
+    def check(label, command):
+        print(f'CHECK {label}', flush=True)
+        run(command, cwd=ROOT, env=environment, check=True)
+
+    check('verification runner', [sys.executable, '-m', 'unittest', 'discover',
+                                  '-s', 'tests', '-p', 'test_check_all.py'])
+    check('standalone dependencies', [sys.executable, 'tools/check_standalone.py'])
+    check('owned process cleanup', [sys.executable, 'tools/check_owned_process.py'])
+    check('locked frontend install', ['npm', 'ci', '--prefix', 'web', '--ignore-scripts'])
+    check('frontend build and checks', ['npm', 'test', '--prefix', 'web'])
+    for project, _ in CHECK_PROJECTS:
+        check(f'locked restore: {Path(project).stem}', [str(dotnet), 'restore', project, '--locked-mode'])
+    for project, arguments in CHECK_PROJECTS:
+        command = [str(dotnet), 'run', '--no-restore', '--project', project]
+        check(Path(project).stem, [*command, '--', *arguments] if arguments else command)
+    check('stock database schema', [sys.executable, 'tools/check_reference_schema.py',
+                                   '--pg-bin', str(pg_bin), '--market', '--security'])
+    preview = [sys.executable, 'tools/run_preview.py', '--pg-bin', str(pg_bin),
+               '--dotnet', str(dotnet), '--no-build', '--check']
+    check('standard preview and browser', [*preview, '--browser-check', '--browser', str(browser)])
+    check('mixed-period preview', [*preview, '--example', 'mixed-gas'])
+    print('All synthetic verification suites passed.', flush=True)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--pg-bin', type=Path, required=True, help='Installed stock PostgreSQL binaries')
+    parser.add_argument('--dotnet', type=Path, required=True, help='Installed SDK matching global.json')
+    parser.add_argument('--browser', type=Path, required=True, help='Installed Chromium-compatible executable')
+    args = parser.parse_args()
+    pg_bin, dotnet, browser = (p.resolve() for p in (args.pg_bin, args.dotnet, args.browser))
+    for binary in (dotnet, browser, *(pg_bin / name for name in ('initdb', 'pg_ctl', 'psql'))):
+        if not binary.is_file():
+            parser.error(f'Missing installed binary: {binary}')
+    expected_node = 'v' + (ROOT / '.node-version').read_text().strip()
+    actual_node = subprocess.check_output(['node', '--version'], cwd=ROOT, text=True).strip()
+    if actual_node != expected_node:
+        parser.error(f'Use Node {expected_node} from .node-version; found {actual_node}')
+    try:
+        run_checks(pg_bin, dotnet, browser)
+    except ValueError as error:
+        parser.error(str(error))
+    except subprocess.CalledProcessError as error:
+        print(f'Verification stopped after exit status {error.returncode}.', file=sys.stderr)
+        return error.returncode
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())
