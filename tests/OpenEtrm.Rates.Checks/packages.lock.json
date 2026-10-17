@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net10.0": {
+      "openetrm.marketdata": {
+        "type": "Project"
+      },
+      "openetrm.rates": {
+        "type": "Project",
+        "dependencies": {
+          "OpenEtrm.MarketData": "[1.0.0, )"
+        }
+      }
+    }
+  }
+}

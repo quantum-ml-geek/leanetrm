@@ -3,17 +3,139 @@
 Status: design baseline approved for implementation on 2026-10-16. Milestone 0 is complete; no
 application implementation milestones below are complete.
 
+The standalone [power TOU preview](power-preview.md) now connects editable masks
+to actual selected curve contracts and synthetic flat settlements. It qualifies
+current-input calculations, explicit clock captures and fixed-MW integration;
+durable TOU/product publication and historical clock selection remain work.
+
 The initial reference-data schema and disposable database checks are implemented.
-This baseline and the initial reference-data foundation were approved for
-publication on 2026-10-16. Future changes follow the publication discipline below.
+The first local market-data slice now also implements commodity curve building,
+typed units/money, generic series histories, a dated zero-rate/discount-factor
+example, additive market/reference storage,
+common roles, persisted current authority and database RLS. See [implementation.md](implementation.md) and [security.md](security.md).
+This does not complete any application/service milestone. Changes follow the
+publication discipline below.
 The intended eventual hosted domain is leanetrm.com.
 
 This plan separates the first runnable foundation from later product breadth.
 Each milestone produces a reviewable working result with tests and documented
 limits. It is not a promise to deliver all future capabilities in one commit.
 
+The next settlement/roll/risk acceptance cases and current coverage are explicit in
+[business scenarios](business-scenarios.md). They distinguish existing expiry/roll
+primitives from unimplemented fixing selection, variation margin and a reusable
+scenario engine; planned cases are not counted as passing tests.
+
 Read [the architecture](architecture.md) and [decision record](decisions.md) for
 the contracts these milestones must preserve.
+
+The implemented bitemporal context now covers existing commodity/rate curves,
+observation histories, immutable definition/reference bundles, schedules and
+contract-date binding under current RLS. Scope, explicit revision selection and
+remaining limits are recorded in
+[implemented scope](implementation.md#shared-historical-market-view-and-administration).
+Workspace identity/role administration and atomic access audit are implemented
+in the loopback preview. Production credential integration, initial-admin bootstrap,
+durable curve activation, future trade/lifecycle history and failover/restore
+qualification remain work. Exact legacy input editing stays a separately labeled
+mode and does not claim timestamp certification.
+
+Current sequencing: the agreed curve structure is approved for a first bounded
+implementation. Establish dated contract histories, units/money and explicit pricing
+modes first, with the identity/authorization boundary implemented alongside them;
+instrument behavior follows. The next power design starts with hourly curves,
+with UTC intraday intervals, explicit market-clock
+labels, separate day-ahead/real-time identities and contractual fixing rules.
+Monthly/peak/off-peak aggregation and hourly price shaping are later qualified
+operators, not automatic conversions. See [power cases](business-scenarios.md#power-curves-and-settlement-acceptance-cases).
+The requirements in [market-data.md](market-data.md) distinguish the bounded
+implementation from broader planned service behavior.
+The first [market-model proposal](market-model.md) makes the required field/FK
+links and synthetic direct/dependent examples concrete for review. That model
+informed the local additive migration and managed core; broader shapes
+remain under review.
+Curve ownership, deep composition and the futures-to-forward boundary are now
+agreed in that document. The implemented subset has explicit mapping/transition
+and numerical contracts; broader policies and service integration remain work.
+
+The bounded preview implements typed series/observations and deterministic curve
+construction with exact revision pins and current scoped access. Credential
+verification and production API integration remain work. Cross-catalog activation, customizable
+policy languages, role hierarchies, book exceptions, VaR and broader curve operators
+remain later work. Certified timestamp selection covers the existing market,
+reference and schedule screens under the qualified primary's publication contract;
+trade/lifecycle history and operational recovery remain unimplemented. Per-contract diagrams and
+calculation tables expose actual evaluated dependency values under the selected
+input frame; they neither calculate browser prices nor infer risk allocations.
+
+Keep reference/setup scope justified by current consumers or executable baseline
+cases; retain a [table inventory](reference-data.md#current-table-consumers-and-implementation-policy).
+The interest-rate example consumes explicit Actual/365 Fixed and simple-compounding
+identifiers through a small project-owned implementation. It uses dated samples with histories;
+it does not implement bootstrapping, interpolation or discounted instrument PV.
+FX conversion, automatic rate-payment schedules, broader rate conventions and
+additional convention catalogs stay later scope until an implemented workflow
+requires them. The supported units and financial conventions remain project-owned;
+new breadth must preserve exact amount semantics and avoid silent defaults.
+
+The [mixed-resolution gas acceptance case](examples/mixed-resolution-gas.md) now
+runs 24 managed checks: daily near-period contracts and monthly tails, a separate
+BALMO benchmark/basis, eight retained dates from mid-month through following
+month-end, explicit mapping failures and replay. It corrects the earlier proposed
+monthly-future base: only a spread defined against that reference may consume it.
+The fixture is now persisted/adapted in an isolated `--example mixed-gas` preview,
+with 24 HTTP checks over all eight frames and the original preview's 56 HTTP
+and 10 adapter checks still passing. Qualified index fixings, source publication/knowledge eligibility,
+weighted aggregation and broader mappings remain work. The mixed monthly tail
+here uses forward marks; mixing futures and daily-index settlement conventions
+needs explicit specification support. No new reference catalog is justified
+merely by introducing another delivery frequency.
+
+The next example is under review in
+[separate source curves and rollover](examples/curve-composition-rollover.md):
+daily-only/monthly-only sources, explicit splice selection, named BALMO windows,
+and distinct tests for prompt rollover, new listing/eligibility and delivery
+progression. Do not describe the existing demo's hard-coded per-date request
+lists as an implemented roll engine. The month-end daily-window choice remains
+open; no financial default has been selected.
+
+The current-contract rule is now agreed: advance at recorded expiry through the
+retained sequence; far-end listing remains independent. The first bounded backend
+implementation is [the schedule-backed relative-contract resolver](schedules-and-contract-sequences.md)
+over supplied futures rows, reusing series/milestone references. Tests qualify
+explicit revision corrections, coverage, expiry boundaries and eligibility.
+Certified historical schedule resolution and bounded monthly generation now run
+in the preview; qualified futures-series generation and durable curve activation remain work.
+Do not build a broad date scripting language or duplicate holiday/expiry catalogs.
+The separate daily/BALMO month-end selection remains open.
+
+Monthly anchors, explicit calendar/adjustment choices, indexed date expressions
+and private curve contract date drafts now run in the browser preview. See
+[implemented scope](implementation.md#independent-schedules-publication-and-contract-dates).
+Schedule drafts and immutable publications now persist in PostgreSQL with certified
+effective/known resolution. Qualified futures-series generation and activation of
+priceable curves remain work.
+
+Shared immutable schedule payloads are agreed in D58. The first
+[shared utility](../src/OpenEtrm.Shared/README.md) passes 31 checks for date-set
+composition, adjustment collisions, canonical sharing and explicit UTC interval
+selections. Its microbenchmark separates payload construction from warm reuse.
+The browser now configures named symbolic date references such as `#ng1` over
+explicit contract schedules. Combine/compare/diff stay coding utilities. Kept
+shortcuts are immutable private preview artifacts, not published reference data.
+Current-input clock/TOU compilation and certified historical schedule/market
+selection are implemented within the documented preview boundaries. Durable
+clock/TOU publication remains work; broader performance budgets require application workloads.
+
+Next schedule work extends the existing start/end/last-trading bindings to typed
+custom fields and stable mappings across corrected definitions. Qualify
+effective/known selection and retained outputs before durable curve integration;
+reject cycles between source schedules, contract construction and relative
+selectors. The private preview implements indexed monthly references and
+`oe.ng + 1bd`; published schedule versions and explicit captured views are
+implemented. Backdated replay for future trading/lifecycle domains remains work.
+See [date-field bindings](schedules-and-contract-sequences.md#date-schedules-before-contract-construction).
+
 
 ## Milestone 0 — Record and review the design
 
@@ -149,6 +271,11 @@ Acceptance:
     not change a previously retained run.
 14. Reject zero/invalid bumps, incompatible shock units, unsupported percentage
     conventions and insufficient numerical resolution with structured errors.
+15. Distinguish explicit all-in inputs from base-plus-spread definitions. Reject
+    incompatible mark kinds and missing choices; no inferred implied spread,
+    dependency changes or silent fallback. Other declared pricer inputs remain.
+16. Prove base/up/down repricing determinism and obtain sensitivities from PV
+    outputs, without allocating risk from spread levels or price proportions.
 
 Independent review focuses on shock propagation, units, finite-difference
 cancellation, cache identity and missing dependencies.
@@ -254,6 +381,14 @@ Deliver:
 - Browser flows for identity, scoped reference selection, side/instrument
   composition, trades, market recipes, risk results and administration.
 - Calculation receipts with explainable dependency paths and input provenance.
+- Market data navigation by commodity or by futures/forward market type, plain
+  business labels and no visible internal identifiers.
+- Distinct business reference and market setup views; internal relationship and
+  revision tables stay behind the scenes. Typed locations support exact supplied
+  GPS points; pipeline routes, region boundaries and topology are later scope.
+- User profiles for time zone and extensible remembered presentation preferences;
+  compact minute-level context labels preserve exact selected versions. Browser-local
+  preview preferences do not complete authenticated account persistence.
 - A historical environment selector that propagates one resolved context through
   navigation, tables, charts, schedules, risk and reports, with read-only defaults.
 - Due-event reconciliation over retained occurrence IDs, version checks and an

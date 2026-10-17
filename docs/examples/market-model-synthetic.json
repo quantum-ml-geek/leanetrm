@@ -1,0 +1,738 @@
+{
+  "schema_version": "market-model-proposal-1",
+  "status": "non_executable_synthetic_design_example",
+  "reference_pin": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001" },
+  "market_catalog_id": "40000000-0000-0000-0000-000000000001",
+  "notes": [
+    "RefKey values target the typed table identified by their field; no name-based lookup or latest-version lookup is implied.",
+    "Proposed reference extensions below do not exist in migration 0001; existing references name only the synthetic reference fixture.",
+    "Fixture knowledge pins are explicit synthetic revision markers, not certified wall-clock knowledge.",
+    "Expected curve values are exact illustrative arithmetic, not instrument PV, an implemented curve engine or approval to activate these definitions.",
+    "This is a versioned projection: stable identity registry rows and production publication events are omitted. It is not SQL insert data."
+  ],
+  "proposed_reference_extensions": {
+    "measurement_bases": [
+      {
+        "key": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_gas_energy_basis" },
+        "commodity": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_gas" },
+        "dimension": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "energy" },
+        "basis_kind": "explicit_synthetic_energy_basis"
+      }
+    ],
+    "quantity_specifications": [
+      {
+        "key": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_gas_energy_a" },
+        "commodity": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_gas" },
+        "measurement_basis": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_gas_energy_basis" },
+        "unit": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "energy_a" },
+        "dimension": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "energy" }
+      }
+    ],
+    "quote_conventions": [
+      {
+        "key": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_gas_outright_quote" },
+        "quote_value_kind": "outright_price",
+        "quote_currency": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_currency_a" },
+        "denominator_quantity": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_gas_energy_a" },
+        "quote_multiplier": "1",
+        "price_domain_policy": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000021", "version_id": "60000000-0000-0000-0000-000000000211" },
+        "trading_tick_rule": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000022", "version_id": "60000000-0000-0000-0000-000000000221" },
+        "clearing_price_rule": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000023", "version_id": "60000000-0000-0000-0000-000000000231" }
+      },
+      {
+        "key": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_gas_spread_quote" },
+        "quote_value_kind": "spread",
+        "quote_currency": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_currency_a" },
+        "denominator_quantity": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_gas_energy_a" },
+        "quote_multiplier": "1",
+        "price_domain_policy": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000021", "version_id": "60000000-0000-0000-0000-000000000211" },
+        "trading_tick_rule": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000022", "version_id": "60000000-0000-0000-0000-000000000221" },
+        "clearing_price_rule": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000023", "version_id": "60000000-0000-0000-0000-000000000231" }
+      }
+    ],
+    "delivery_profiles": [
+      {
+        "key": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_dated_month" },
+        "kind": "explicit_dated_bucket",
+        "clock": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_utc" },
+        "calendar": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_business" },
+        "interval_rule": "explicit_month_bounds",
+        "quantity_integration": "not_requested_fixed_total_only"
+      }
+    ]
+  },
+  "policy_versions": [
+    {
+      "key": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000020", "version_id": "60000000-0000-0000-0000-000000000201" },
+      "kind": "selection",
+      "source": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "fixture" },
+      "missing_input": "error",
+      "ambiguous_input": "error",
+      "stale_input": "error",
+      "max_age_seconds": 0,
+      "clock": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_utc" },
+      "calendar": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_business" },
+      "carry_forward": "forbidden",
+      "substitute_source": "forbidden",
+      "required_publication_states": {
+        "daily_settlement": "final",
+        "trader_mark": "not_applicable"
+      }
+    },
+    {
+      "key": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000021", "version_id": "60000000-0000-0000-0000-000000000211" },
+      "kind": "price_domain",
+      "zero": "permitted",
+      "negative": "permitted",
+      "minimum_inclusive": "-1000",
+      "maximum_inclusive": "1000"
+    },
+    {
+      "key": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000022", "version_id": "60000000-0000-0000-0000-000000000221" },
+      "kind": "constant_trading_tick",
+      "increment": "0.025",
+      "quote_currency": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_currency_a" },
+      "quantity_specification": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_gas_energy_a" }
+    },
+    {
+      "key": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000023", "version_id": "60000000-0000-0000-0000-000000000231" },
+      "kind": "clearing_price_precision",
+      "increment": "0.025",
+      "quote_currency": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_currency_a" },
+      "quantity_specification": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_gas_energy_a" }
+    },
+    {
+      "key": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000024", "version_id": "60000000-0000-0000-0000-000000000241" },
+      "kind": "sampling",
+      "mode": "explicit_date_and_role",
+      "missing": "error",
+      "clock": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_utc" },
+      "calendar": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_business" }
+    },
+    {
+      "key": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000025", "version_id": "60000000-0000-0000-0000-000000000251" },
+      "kind": "numerical",
+      "status": "unqualified_proposal",
+      "calculation_mode": "exact_finite_decimal_arithmetic_for_this_example",
+      "cash_rounding": "not_requested"
+    },
+    {
+      "key": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000026", "version_id": "60000000-0000-0000-0000-000000000261" },
+      "kind": "interpolation",
+      "mode": "reject_unlisted_contracts"
+    },
+    {
+      "key": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000027", "version_id": "60000000-0000-0000-0000-000000000271" },
+      "kind": "extrapolation",
+      "mode": "reject_outside_coverage"
+    }
+  ],
+  "settlement_rule_versions": [
+    {
+      "key": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000028", "version_id": "60000000-0000-0000-0000-000000000281" },
+      "kind": "synthetic_index_target",
+      "index_definition": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_price" },
+      "fixing_schedule": {
+        "kind": "each_delivery_day",
+        "clock": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_utc" },
+        "calendar": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_business" },
+        "day_inclusion": "all_calendar_days"
+      },
+      "aggregation": "arithmetic_mean_of_one_explicit_daily_fixing_per_delivery_day",
+      "missing_fixing": "error",
+      "projected_future_fixing": "separately_selected_forward_rule_required",
+      "settlement_currency": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_currency_a" },
+      "fx_rule": "same_currency_no_conversion",
+      "payment_calendar": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_business" },
+      "payment_lag_business_days": 2,
+      "cash_rounding_rule": {
+        "status": "unknown_unqualified"
+      },
+      "finality_rule": {
+        "status": "unknown_unqualified"
+      },
+      "activation": "blocked",
+      "daily_valuation_method": "trader_mark_only_no_daily_cash_variation",
+      "final_settlement_method": "published_index_average"
+    }
+  ],
+  "market_contract_versions": [
+    {
+      "key": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000001", "version_id": "60000000-0000-0000-0000-000000000011" },
+      "display_code": "synthetic_base_gas_204101",
+      "kind": "future",
+      "future_terms": {
+        "series_specification": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_gas_204101" },
+        "product_specification": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_gas_future" },
+        "exchange": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_exchange" },
+        "clearing_house": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_clearing" },
+        "last_trading_milestone": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "series_code": "test_gas_204101", "milestone": "last_trading" }
+      },
+      "delivery_from": "2041-01-01",
+      "delivery_to": "2041-02-01",
+      "delivery_profile": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_dated_month" },
+      "activation": "blocked_pending_qualification"
+    },
+    {
+      "key": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000002", "version_id": "60000000-0000-0000-0000-000000000021" },
+      "display_code": "synthetic_location_gas_204101",
+      "kind": "forward_bucket",
+      "forward_terms": {
+        "commodity": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_gas" },
+        "location": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_hub_a" },
+        "quote_convention": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_gas_outright_quote" },
+        "settlement_rule": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000028", "version_id": "60000000-0000-0000-0000-000000000281" }
+      },
+      "delivery_from": "2041-01-01",
+      "delivery_to": "2041-02-01",
+      "delivery_profile": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_dated_month" },
+      "expiry": {
+        "state": "unknown",
+        "instant": null
+      },
+      "activation": "blocked_pending_qualification"
+    }
+  ],
+  "market_factor_versions": [
+    {
+      "key": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000003", "version_id": "60000000-0000-0000-0000-000000000031" },
+      "display_code": "base_all_in",
+      "subject_kind": "contract_measure",
+      "contract_version": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000001", "version_id": "60000000-0000-0000-0000-000000000011" },
+      "measure_kind": "outright_price",
+      "quote_convention": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_gas_outright_quote" }
+    },
+    {
+      "key": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000004", "version_id": "60000000-0000-0000-0000-000000000041" },
+      "display_code": "location_spread",
+      "subject_kind": "contract_measure",
+      "contract_version": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000002", "version_id": "60000000-0000-0000-0000-000000000021" },
+      "measure_kind": "spread",
+      "quote_convention": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_gas_spread_quote" },
+      "spread_specification": {
+        "base_contract_version": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000001", "version_id": "60000000-0000-0000-0000-000000000011" },
+        "direction": "location_minus_base",
+        "delivery_mapping": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000029", "version_id": "60000000-0000-0000-0000-000000000291" }
+      }
+    },
+    {
+      "key": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000005", "version_id": "60000000-0000-0000-0000-000000000051" },
+      "display_code": "location_all_in",
+      "subject_kind": "contract_measure",
+      "contract_version": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000002", "version_id": "60000000-0000-0000-0000-000000000021" },
+      "measure_kind": "outright_price",
+      "quote_convention": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_gas_outright_quote" }
+    }
+  ],
+  "delivery_mapping_versions": [
+    {
+      "key": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000029", "version_id": "60000000-0000-0000-0000-000000000291" },
+      "kind": "explicit_equal_delivery_bucket",
+      "target_contract_version": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000002", "version_id": "60000000-0000-0000-0000-000000000021" },
+      "source_contract_version": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000001", "version_id": "60000000-0000-0000-0000-000000000011" },
+      "source_profile": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_dated_month" },
+      "target_profile": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_dated_month" },
+      "from": "2041-01-01",
+      "to": "2041-02-01",
+      "quantity_basis": "fixed_total",
+      "weight": "1"
+    },
+    {
+      "key": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000032", "version_id": "60000000-0000-0000-0000-000000000321" },
+      "kind": "explicit_same_contract_bucket",
+      "target_contract_version": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000001", "version_id": "60000000-0000-0000-0000-000000000011" },
+      "source_contract_version": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000001", "version_id": "60000000-0000-0000-0000-000000000011" },
+      "source_profile": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_dated_month" },
+      "target_profile": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_dated_month" },
+      "from": "2041-01-01",
+      "to": "2041-02-01",
+      "quantity_basis": "fixed_total",
+      "weight": "1"
+    },
+    {
+      "key": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000033", "version_id": "60000000-0000-0000-0000-000000000331" },
+      "kind": "explicit_same_contract_bucket",
+      "target_contract_version": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000002", "version_id": "60000000-0000-0000-0000-000000000021" },
+      "source_contract_version": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000002", "version_id": "60000000-0000-0000-0000-000000000021" },
+      "source_profile": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_dated_month" },
+      "target_profile": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_dated_month" },
+      "from": "2041-01-01",
+      "to": "2041-02-01",
+      "quantity_basis": "fixed_total",
+      "weight": "1"
+    }
+  ],
+  "ingestion_batches": [
+    {
+      "key": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000030", "version_id": "60000000-0000-0000-0000-000000000301" },
+      "source_definition": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "fixture" },
+      "evidence": "Project-authored synthetic prior settlement",
+      "received_at": "2040-12-17T16:02:00Z"
+    },
+    {
+      "key": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000031", "version_id": "60000000-0000-0000-0000-000000000311" },
+      "source_definition": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "fixture" },
+      "evidence": "Project-authored synthetic current marks",
+      "received_at": "2040-12-18T16:02:00Z"
+    },
+    {
+      "key": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000034", "version_id": "60000000-0000-0000-0000-000000000341" },
+      "source_definition": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "fixture" },
+      "evidence": "Project-authored synthetic correction",
+      "received_at": "2040-12-19T16:02:00Z"
+    }
+  ],
+  "price_observation_revisions": [
+    {
+      "key": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "observation_id": "70000000-0000-0000-0000-000000000001", "revision_id": "80000000-0000-0000-0000-000000000011" },
+      "factor_version": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000003", "version_id": "60000000-0000-0000-0000-000000000031" },
+      "source_definition": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "fixture" },
+      "ingestion_batch": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000030", "version_id": "60000000-0000-0000-0000-000000000301" },
+      "source_event_identity": "synthetic-3-2040-12-17",
+      "source_revision_identity": "1",
+      "observation_role": "daily_settlement",
+      "market_business_date": "2040-12-17",
+      "observed_at": "2040-12-17T16:00:00Z",
+      "publication_state": "final",
+      "origin_classification": "synthetic",
+      "price_representation": "clearing_price",
+      "raw_value": "2.95",
+      "normalization": {
+        "mode": "none",
+        "typed_value": "2.95"
+      },
+      "source_published_at": "2040-12-17T16:01:00Z",
+      "received_at": "2040-12-17T16:02:00Z",
+      "corrects_revision": null,
+      "knowledge_evidence": {
+        "kind": "synthetic_fixture_pin",
+        "value": "fixture_k1",
+        "qualified_publication": false
+      },
+      "raw_value_type": {
+        "kind": "price",
+        "quote_convention": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_gas_outright_quote" }
+      }
+    },
+    {
+      "key": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "observation_id": "70000000-0000-0000-0000-000000000002", "revision_id": "80000000-0000-0000-0000-000000000021" },
+      "factor_version": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000003", "version_id": "60000000-0000-0000-0000-000000000031" },
+      "source_definition": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "fixture" },
+      "ingestion_batch": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000031", "version_id": "60000000-0000-0000-0000-000000000311" },
+      "source_event_identity": "synthetic-3-2040-12-18",
+      "source_revision_identity": "1",
+      "observation_role": "daily_settlement",
+      "market_business_date": "2040-12-18",
+      "observed_at": "2040-12-18T16:00:00Z",
+      "publication_state": "final",
+      "origin_classification": "synthetic",
+      "price_representation": "clearing_price",
+      "raw_value": "3.00",
+      "normalization": {
+        "mode": "none",
+        "typed_value": "3.00"
+      },
+      "source_published_at": "2040-12-18T16:01:00Z",
+      "received_at": "2040-12-18T16:02:00Z",
+      "corrects_revision": null,
+      "knowledge_evidence": {
+        "kind": "synthetic_fixture_pin",
+        "value": "fixture_k1",
+        "qualified_publication": false
+      },
+      "raw_value_type": {
+        "kind": "price",
+        "quote_convention": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_gas_outright_quote" }
+      }
+    },
+    {
+      "key": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "observation_id": "70000000-0000-0000-0000-000000000003", "revision_id": "80000000-0000-0000-0000-000000000031" },
+      "factor_version": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000004", "version_id": "60000000-0000-0000-0000-000000000041" },
+      "source_definition": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "fixture" },
+      "ingestion_batch": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000031", "version_id": "60000000-0000-0000-0000-000000000311" },
+      "source_event_identity": "synthetic-4-2040-12-18",
+      "source_revision_identity": "1",
+      "observation_role": "trader_mark",
+      "market_business_date": "2040-12-18",
+      "observed_at": "2040-12-18T16:00:00Z",
+      "publication_state": "not_applicable",
+      "origin_classification": "synthetic",
+      "price_representation": "native_quote",
+      "raw_value": "0.20",
+      "normalization": {
+        "mode": "none",
+        "typed_value": "0.20"
+      },
+      "source_published_at": "2040-12-18T16:01:00Z",
+      "received_at": "2040-12-18T16:02:00Z",
+      "corrects_revision": null,
+      "knowledge_evidence": {
+        "kind": "synthetic_fixture_pin",
+        "value": "fixture_k1",
+        "qualified_publication": false
+      },
+      "raw_value_type": {
+        "kind": "price",
+        "quote_convention": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_gas_spread_quote" }
+      }
+    },
+    {
+      "key": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "observation_id": "70000000-0000-0000-0000-000000000004", "revision_id": "80000000-0000-0000-0000-000000000041" },
+      "factor_version": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000005", "version_id": "60000000-0000-0000-0000-000000000051" },
+      "source_definition": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "fixture" },
+      "ingestion_batch": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000031", "version_id": "60000000-0000-0000-0000-000000000311" },
+      "source_event_identity": "synthetic-5-2040-12-18",
+      "source_revision_identity": "1",
+      "observation_role": "trader_mark",
+      "market_business_date": "2040-12-18",
+      "observed_at": "2040-12-18T16:00:00Z",
+      "publication_state": "not_applicable",
+      "origin_classification": "synthetic",
+      "price_representation": "native_quote",
+      "raw_value": "3.20",
+      "normalization": {
+        "mode": "none",
+        "typed_value": "3.20"
+      },
+      "source_published_at": "2040-12-18T16:01:00Z",
+      "received_at": "2040-12-18T16:02:00Z",
+      "corrects_revision": null,
+      "knowledge_evidence": {
+        "kind": "synthetic_fixture_pin",
+        "value": "fixture_k1",
+        "qualified_publication": false
+      },
+      "raw_value_type": {
+        "kind": "price",
+        "quote_convention": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_gas_outright_quote" }
+      }
+    },
+    {
+      "key": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "observation_id": "70000000-0000-0000-0000-000000000002", "revision_id": "80000000-0000-0000-0000-000000000022" },
+      "factor_version": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000003", "version_id": "60000000-0000-0000-0000-000000000031" },
+      "source_definition": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "fixture" },
+      "ingestion_batch": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000034", "version_id": "60000000-0000-0000-0000-000000000341" },
+      "source_event_identity": "synthetic-3-2040-12-18",
+      "source_revision_identity": "2",
+      "observation_role": "daily_settlement",
+      "market_business_date": "2040-12-18",
+      "observed_at": "2040-12-18T16:00:00Z",
+      "publication_state": "final",
+      "origin_classification": "synthetic",
+      "price_representation": "clearing_price",
+      "raw_value": "3.05",
+      "normalization": {
+        "mode": "none",
+        "typed_value": "3.05"
+      },
+      "source_published_at": "2040-12-19T16:01:00Z",
+      "received_at": "2040-12-19T16:02:00Z",
+      "corrects_revision": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "observation_id": "70000000-0000-0000-0000-000000000002", "revision_id": "80000000-0000-0000-0000-000000000021" },
+      "knowledge_evidence": {
+        "kind": "synthetic_fixture_pin",
+        "value": "fixture_k2",
+        "qualified_publication": false
+      },
+      "raw_value_type": {
+        "kind": "price",
+        "quote_convention": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_gas_outright_quote" }
+      }
+    }
+  ],
+  "input_requirement_versions": [
+    {
+      "key": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000040", "version_id": "60000000-0000-0000-0000-000000000401" },
+      "factor_version": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000003", "version_id": "60000000-0000-0000-0000-000000000031" },
+      "observation_role": "daily_settlement",
+      "use_class": "scenario_variable",
+      "selection_policy": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000020", "version_id": "60000000-0000-0000-0000-000000000201" },
+      "market_business_date": "2040-12-18",
+      "market_cutoff": "2040-12-18T16:00:00Z",
+      "expected_quote_convention": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_gas_outright_quote" }
+    },
+    {
+      "key": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000041", "version_id": "60000000-0000-0000-0000-000000000411" },
+      "factor_version": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000004", "version_id": "60000000-0000-0000-0000-000000000041" },
+      "observation_role": "trader_mark",
+      "use_class": "scenario_variable",
+      "selection_policy": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000020", "version_id": "60000000-0000-0000-0000-000000000201" },
+      "market_business_date": "2040-12-18",
+      "market_cutoff": "2040-12-18T16:00:00Z",
+      "expected_quote_convention": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_gas_spread_quote" }
+    },
+    {
+      "key": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000042", "version_id": "60000000-0000-0000-0000-000000000421" },
+      "factor_version": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000005", "version_id": "60000000-0000-0000-0000-000000000051" },
+      "observation_role": "trader_mark",
+      "use_class": "scenario_variable",
+      "selection_policy": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000020", "version_id": "60000000-0000-0000-0000-000000000201" },
+      "market_business_date": "2040-12-18",
+      "market_cutoff": "2040-12-18T16:00:00Z",
+      "expected_quote_convention": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_gas_outright_quote" }
+    },
+    {
+      "key": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000043", "version_id": "60000000-0000-0000-0000-000000000431" },
+      "factor_version": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000003", "version_id": "60000000-0000-0000-0000-000000000031" },
+      "observation_role": "daily_settlement",
+      "use_class": "frozen_fact",
+      "selection_policy": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000020", "version_id": "60000000-0000-0000-0000-000000000201" },
+      "market_business_date": "2040-12-17",
+      "market_cutoff": "2040-12-17T16:00:00Z",
+      "expected_quote_convention": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_gas_outright_quote" }
+    }
+  ],
+  "market_point_versions": [
+    {
+      "key": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000006", "version_id": "60000000-0000-0000-0000-000000000061" },
+      "display_code": "base_point",
+      "contract_version": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000001", "version_id": "60000000-0000-0000-0000-000000000011" },
+      "output_measure": "outright_price",
+      "output_quote_convention": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_gas_outright_quote" },
+      "rule": {
+        "kind": "DirectAllIn",
+        "version": "1"
+      },
+      "inputs": [
+        {
+          "slot": "mark",
+          "factor_version": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000003", "version_id": "60000000-0000-0000-0000-000000000031" },
+          "requirement": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000040", "version_id": "60000000-0000-0000-0000-000000000401" },
+          "delivery_mapping": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000032", "version_id": "60000000-0000-0000-0000-000000000321" }
+        }
+      ],
+      "static_operands": []
+    },
+    {
+      "key": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000007", "version_id": "60000000-0000-0000-0000-000000000071" },
+      "display_code": "dependent_location_point",
+      "contract_version": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000002", "version_id": "60000000-0000-0000-0000-000000000021" },
+      "output_measure": "outright_price",
+      "output_quote_convention": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_gas_outright_quote" },
+      "rule": {
+        "kind": "BasePlusSpread",
+        "version": "1"
+      },
+      "inputs": [
+        {
+          "slot": "base",
+          "point_version": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000006", "version_id": "60000000-0000-0000-0000-000000000061" },
+          "delivery_mapping": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000029", "version_id": "60000000-0000-0000-0000-000000000291" }
+        },
+        {
+          "slot": "spread",
+          "factor_version": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000004", "version_id": "60000000-0000-0000-0000-000000000041" },
+          "requirement": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000041", "version_id": "60000000-0000-0000-0000-000000000411" },
+          "delivery_mapping": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000033", "version_id": "60000000-0000-0000-0000-000000000331" }
+        }
+      ],
+      "static_operands": []
+    },
+    {
+      "key": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000008", "version_id": "60000000-0000-0000-0000-000000000081" },
+      "display_code": "direct_location_point",
+      "contract_version": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000002", "version_id": "60000000-0000-0000-0000-000000000021" },
+      "output_measure": "outright_price",
+      "output_quote_convention": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_gas_outright_quote" },
+      "rule": {
+        "kind": "DirectAllIn",
+        "version": "1"
+      },
+      "inputs": [
+        {
+          "slot": "mark",
+          "factor_version": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000005", "version_id": "60000000-0000-0000-0000-000000000051" },
+          "requirement": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000042", "version_id": "60000000-0000-0000-0000-000000000421" },
+          "delivery_mapping": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000033", "version_id": "60000000-0000-0000-0000-000000000331" }
+        }
+      ],
+      "static_operands": []
+    }
+  ],
+  "curve_versions": [
+    {
+      "key": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000009", "version_id": "60000000-0000-0000-0000-000000000091" },
+      "display_code": "base_curve",
+      "output_quote_convention": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_gas_outright_quote" },
+      "members": [
+        {
+          "ordinal": 0,
+          "point_version": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000006", "version_id": "60000000-0000-0000-0000-000000000061" }
+        }
+      ],
+      "interpolation_policy": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000026", "version_id": "60000000-0000-0000-0000-000000000261" },
+      "extrapolation_policy": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000027", "version_id": "60000000-0000-0000-0000-000000000271" }
+    },
+    {
+      "key": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000010", "version_id": "60000000-0000-0000-0000-000000000101" },
+      "display_code": "dependent_location_curve",
+      "output_quote_convention": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_gas_outright_quote" },
+      "members": [
+        {
+          "ordinal": 0,
+          "point_version": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000007", "version_id": "60000000-0000-0000-0000-000000000071" }
+        }
+      ],
+      "interpolation_policy": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000026", "version_id": "60000000-0000-0000-0000-000000000261" },
+      "extrapolation_policy": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000027", "version_id": "60000000-0000-0000-0000-000000000271" }
+    },
+    {
+      "key": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000011", "version_id": "60000000-0000-0000-0000-000000000111" },
+      "display_code": "direct_location_curve",
+      "output_quote_convention": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_gas_outright_quote" },
+      "members": [
+        {
+          "ordinal": 0,
+          "point_version": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000008", "version_id": "60000000-0000-0000-0000-000000000081" }
+        }
+      ],
+      "interpolation_policy": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000026", "version_id": "60000000-0000-0000-0000-000000000261" },
+      "extrapolation_policy": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000027", "version_id": "60000000-0000-0000-0000-000000000271" }
+    }
+  ],
+  "market_model_versions": [
+    {
+      "key": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000012", "version_id": "60000000-0000-0000-0000-000000000121" },
+      "display_code": "dependent_model",
+      "reference_pin": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001" },
+      "curves": [
+        { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000009", "version_id": "60000000-0000-0000-0000-000000000091" },
+        { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000010", "version_id": "60000000-0000-0000-0000-000000000101" }
+      ],
+      "numerical_policy": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000025", "version_id": "60000000-0000-0000-0000-000000000251" }
+    },
+    {
+      "key": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000013", "version_id": "60000000-0000-0000-0000-000000000131" },
+      "display_code": "direct_model",
+      "reference_pin": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001" },
+      "curves": [
+        { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000009", "version_id": "60000000-0000-0000-0000-000000000091" },
+        { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000011", "version_id": "60000000-0000-0000-0000-000000000111" }
+      ],
+      "numerical_policy": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000025", "version_id": "60000000-0000-0000-0000-000000000251" }
+    }
+  ],
+  "market_snapshots": [
+    {
+      "key": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000014", "version_id": "60000000-0000-0000-0000-000000000141" },
+      "display_code": "original",
+      "market_as_of": "2040-12-18T16:00:00Z",
+      "knowledge_pin": {
+        "kind": "synthetic_fixture_pin",
+        "value": "fixture_k1"
+      },
+      "selections": [
+        {
+          "requirement": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000040", "version_id": "60000000-0000-0000-0000-000000000401" },
+          "observation": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "observation_id": "70000000-0000-0000-0000-000000000002", "revision_id": "80000000-0000-0000-0000-000000000021" }
+        },
+        {
+          "requirement": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000041", "version_id": "60000000-0000-0000-0000-000000000411" },
+          "observation": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "observation_id": "70000000-0000-0000-0000-000000000003", "revision_id": "80000000-0000-0000-0000-000000000031" }
+        },
+        {
+          "requirement": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000042", "version_id": "60000000-0000-0000-0000-000000000421" },
+          "observation": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "observation_id": "70000000-0000-0000-0000-000000000004", "revision_id": "80000000-0000-0000-0000-000000000041" }
+        },
+        {
+          "requirement": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000043", "version_id": "60000000-0000-0000-0000-000000000431" },
+          "observation": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "observation_id": "70000000-0000-0000-0000-000000000001", "revision_id": "80000000-0000-0000-0000-000000000011" }
+        }
+      ],
+      "reference_pin": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001" },
+      "input_requirement_versions": [
+        { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000040", "version_id": "60000000-0000-0000-0000-000000000401" },
+        { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000041", "version_id": "60000000-0000-0000-0000-000000000411" },
+        { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000042", "version_id": "60000000-0000-0000-0000-000000000421" },
+        { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000043", "version_id": "60000000-0000-0000-0000-000000000431" }
+      ],
+      "selection_policy_versions": [
+        { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000020", "version_id": "60000000-0000-0000-0000-000000000201" }
+      ]
+    },
+    {
+      "key": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000015", "version_id": "60000000-0000-0000-0000-000000000151" },
+      "display_code": "corrected",
+      "market_as_of": "2040-12-18T16:00:00Z",
+      "knowledge_pin": {
+        "kind": "synthetic_fixture_pin",
+        "value": "fixture_k2"
+      },
+      "selections": [
+        {
+          "requirement": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000040", "version_id": "60000000-0000-0000-0000-000000000401" },
+          "observation": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "observation_id": "70000000-0000-0000-0000-000000000002", "revision_id": "80000000-0000-0000-0000-000000000022" }
+        },
+        {
+          "requirement": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000041", "version_id": "60000000-0000-0000-0000-000000000411" },
+          "observation": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "observation_id": "70000000-0000-0000-0000-000000000003", "revision_id": "80000000-0000-0000-0000-000000000031" }
+        },
+        {
+          "requirement": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000042", "version_id": "60000000-0000-0000-0000-000000000421" },
+          "observation": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "observation_id": "70000000-0000-0000-0000-000000000004", "revision_id": "80000000-0000-0000-0000-000000000041" }
+        },
+        {
+          "requirement": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000043", "version_id": "60000000-0000-0000-0000-000000000431" },
+          "observation": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "observation_id": "70000000-0000-0000-0000-000000000001", "revision_id": "80000000-0000-0000-0000-000000000011" }
+        }
+      ],
+      "reference_pin": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001" },
+      "input_requirement_versions": [
+        { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000040", "version_id": "60000000-0000-0000-0000-000000000401" },
+        { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000041", "version_id": "60000000-0000-0000-0000-000000000411" },
+        { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000042", "version_id": "60000000-0000-0000-0000-000000000421" },
+        { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000043", "version_id": "60000000-0000-0000-0000-000000000431" }
+      ],
+      "selection_policy_versions": [
+        { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000020", "version_id": "60000000-0000-0000-0000-000000000201" }
+      ]
+    }
+  ],
+  "illustrative_expectations": [
+    {
+      "snapshot": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000014", "version_id": "60000000-0000-0000-0000-000000000141" },
+      "scenario": {
+        "kind": "explicit_base"
+      },
+      "base_point": "3.00",
+      "dependent_location_point": "3.20",
+      "direct_location_point": "3.20",
+      "frozen_prior_settlement": "2.95",
+      "model_bindings": {
+        "base_and_dependent_outputs": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000012", "version_id": "60000000-0000-0000-0000-000000000121" },
+        "base_and_direct_outputs": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000013", "version_id": "60000000-0000-0000-0000-000000000131" }
+      }
+    },
+    {
+      "snapshot": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000014", "version_id": "60000000-0000-0000-0000-000000000141" },
+      "scenario": {
+        "kind": "absolute_bump",
+        "factor_version": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000003", "version_id": "60000000-0000-0000-0000-000000000031" },
+        "amount": "0.10",
+        "quote_convention": { "reference_catalog_id": "10000000-0000-0000-0000-000000000001", "reference_revision_id": "20000000-0000-0000-0000-000000000001", "code": "test_gas_outright_quote" }
+      },
+      "base_point": "3.10",
+      "dependent_location_point": "3.30",
+      "direct_location_point": "3.20",
+      "frozen_prior_settlement": "2.95",
+      "model_bindings": {
+        "base_and_dependent_outputs": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000012", "version_id": "60000000-0000-0000-0000-000000000121" },
+        "base_and_direct_outputs": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000013", "version_id": "60000000-0000-0000-0000-000000000131" }
+      }
+    },
+    {
+      "snapshot": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000015", "version_id": "60000000-0000-0000-0000-000000000151" },
+      "scenario": {
+        "kind": "explicit_base"
+      },
+      "base_point": "3.05",
+      "dependent_location_point": "3.25",
+      "direct_location_point": "3.20",
+      "frozen_prior_settlement": "2.95",
+      "model_bindings": {
+        "base_and_dependent_outputs": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000012", "version_id": "60000000-0000-0000-0000-000000000121" },
+        "base_and_direct_outputs": { "market_catalog_id": "40000000-0000-0000-0000-000000000001", "entity_id": "50000000-0000-0000-0000-000000000013", "version_id": "60000000-0000-0000-0000-000000000131" }
+      }
+    }
+  ],
+  "reference_pin_state": "unsealed_synthetic_fixture_projection_only"
+}

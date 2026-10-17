@@ -1,5 +1,10 @@
 # Project instructions
 
+This is the standalone OpenETRM repository. Run commands with this repository as
+the explicit working directory. Do not substitute a similarly named application
+or attach its runtime to this preview. Local preview uses this tree's API and an
+isolated, unmodified PostgreSQL database.
+
 Read `docs/architecture.md` and `docs/plan.md` before changing the application.
 The architecture distinguishes agreed requirements from proposed implementation
 choices. Update the decision record when a decision changes.
@@ -7,11 +12,17 @@ choices. Update the decision record when a decision changes.
 ## Public repository
 
 - Write original implementation and use neutral, explicitly synthetic examples.
-- Do not copy private source trees, history, datasets, operational receipts,
-  credentials, prompts or configuration into this repository.
+- Include only material authorized for public distribution. Preserve dependency
+  licenses and required attribution.
+- Keep credentials, local configuration, operational logs and generated artifacts
+  out of the repository.
+- Do not publish conversation transcripts, session exports, internal reasoning or
+  local review logs. Public documentation records technical contracts and verified results.
 - Do not include customer/company names, competing business-product names or
   comparisons in source, documentation, fixtures or commit messages. Retain the
   exact technical identifiers and attribution required by dependencies/licenses.
+- Public market, exchange and market-operator names are permitted. Use synthetic
+  observations; external datasets require verified distribution rights.
 - Inspect the complete staged diff, generated files and commit identity before
   publishing. Never publish local settings, secrets or test accounts.
 - Preserve copyright and required license notices.
@@ -20,6 +31,37 @@ choices. Update the decision record when a decision changes.
 
 ## Architecture
 
+- TypeScript is presentation only. Keep pricing, schedules, TOU evaluation,
+  settlement aggregation, units and other business rules in the managed backend.
+
+- Use TDD for new behavior and bug fixes: write a meaningful failing behavior
+  check first, implement the smallest correct change, then refactor with checks
+  green. Keep tests independent of the implementation's algorithm.
+- Follow DRY and favor simple, elegant code: clear names, small responsibilities
+  and explicit contracts. Share proven common code in `src/OpenEtrm.Shared`;
+  do not create speculative frameworks or a miscellaneous dumping ground.
+- Only check in work the author would be proud to say they wrote. Review the
+  result for correctness, readability and restraint; remove temporary scaffolding,
+  dead code and needless duplication. Passing tests alone is not that review.
+
+- Add a table, configuration value or dependency only with a named current
+  consumer or a concrete executable baseline use case. A seed row or viewer alone
+  does not establish use. Keep future extensions in the plan until justified.
+- Keep the current units, day-count and compounding implementation small and
+  project-owned. Add broader conventions only for a supported consumer with
+  independent numerical tests. Persist the selected convention and implementation
+  version; no blanket financial-library dependency or imported master catalog.
+
+- NEVER ASSUME user intent. NEVER SILENTLY GO TO DEFAULTS. Financial behavior,
+  mark interpretation, dependencies and fallback policies must be explicit in
+  the selected versioned contract/context; missing, ambiguous or conflicting
+  behavior raises a structured error. UI, imports and agents obey the same rule.
+- All-in marks have no inferred upstream curve exposure. Spread marks consume
+  only explicitly declared dependencies. Never infer a spread from an outright
+  mark, switch pricing modes or allocate exposure from mark levels/correlation.
+- Risk results come from deterministic base/up/down PV evaluations under shared
+  factor scenarios. Identical pinned inputs, models and numerical policy give
+  identical outputs; dependencies identify affected work, not exposure amounts.
 - Use an unmodified database and public, reproducible dependencies.
 - Retain independent, reusable sides and explicit instrument memberships.
 - Apply shocks to immutable market scenarios, never to individual trades.

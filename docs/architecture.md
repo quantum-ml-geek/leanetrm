@@ -52,13 +52,34 @@ Logical modules:
 | Module | Responsibility |
 | --- | --- |
 | Identity and administration | Principals, scopes, grants, policy, provider configuration and audit |
-| Reference data | Units, currencies, locations, calendars and versioned conventions |
+| Reference data | Business definitions: units, currencies, commodities, typed locations, calendars, venues and product/index identities |
+| Market setup | Versioned pricing, quantity, delivery, settlement and rounding configuration |
 | Instruments | Sides, compositions, templates and instrument memberships |
 | Trading | Portfolios, books, trades, instrument quantities, amendments and lifecycle |
 | Market data | Primitive factors, observations, curve definitions and snapshots |
 | Calculation | Schedules, pricer execution, scenarios, risk and calculation receipts |
 | Agent operations | Discoverable tools, task execution, provider adapters and execution limits |
 | Presentation | Browser screens, reports and export views over the business operations |
+
+Presentation uses familiar business names. Market data provides futures and
+forward curves with commodity-first or market-type-first browsing. A compact
+market date/time selector sits in the header; user profiles hold time zone and
+other remembered display preferences. Minutes are enough for ordinary display;
+exact retained instants and selected versions remain unchanged underneath. Repeated
+local clock times must remain distinguishable, for example by showing an offset
+only when needed. Internal GUIDs, database fields and numerical implementation
+labels are not user-visible column names or calculation receipts.
+
+Navigation and curve-list side panels and their menu groups can collapse as
+remembered user layout choices. Ordinary tables support display-only search and
+column filters with visible row counts. Connected pricing worksheets keep their
+complete contract mappings. Filtering never changes calculation inputs or access;
+filter state is discarded when its authorized data/context scope changes.
+
+Profile customization is presentation state, never a source of authorization,
+market-input selection policy or contractual clock conventions. The local preview
+stores versioned preferences per demo persona in the browser; verified account
+profiles and synchronization across devices remain part of identity integration.
 
 Modules have explicit contracts. The domain and numerical core do not depend on
 web frameworks, persistence libraries, model-provider SDKs or browser state.
@@ -68,6 +89,15 @@ application service and standard PostgreSQL. Exact dependency versions are chose
 and pinned during setup. A separate native calculation service is not required
 for the first slice. A measured bottleneck can justify moving an implementation
 behind the existing calculation contract later.
+
+Add a table, configuration value or dependency only with a named current consumer
+or a concrete executable baseline use case. A seed row or a viewer alone is not
+sufficient. The current units and interest conventions are small project-owned
+implementations with explicit versions and independent numerical tests. Additional
+algorithms or dependencies require a concrete consumer and qualification; their
+availability does not justify unused catalogs or inherited defaults. Numerical
+policies remain explicit without changing exact monetary arithmetic. Broader
+calendar/FX work stays in the plan until its workflow is implemented.
 
 Long computations use durable jobs. A worker can eventually be deployed
 separately without changing permissions, inputs or result contracts. Separate
@@ -131,6 +161,11 @@ trade's descriptive payment role does not apply an extra pay/receive sign.
 quantities and lifecycle states. Each instrument retains its common behavior
 contract and delegates to its sides. Currency conversion remains explicit.
 
+The local preview now implements shared certified contexts for existing market,
+rate, reference and schedule screens, plus current workspace administration.
+[Implementation scope](implementation.md#shared-historical-market-view-and-administration)
+records the qualified boundaries; the trading abstractions here remain design.
+
 ### 3.1 Definition identity and versions
 
 Use **economic equivalence** to describe reuse: instrument definitions with the
@@ -181,6 +216,17 @@ mixed-clock predicates, DST policies, provenance and qualification gates.
 
 Normalized shapes used for quantity reuse are part of the reusable contract. Two
 equal total quantities with different hourly profiles are not equivalent inputs.
+
+Separate named schedule definitions can share identical immutable typed date
+payloads. Definitions retain semantic roles, source versions, coverage and
+occurrence mappings; equal dates do not merge booked obligations or establish PV
+reuse. A small compiled temporal kernel can compose holiday/date sets, ordered
+events and interval/TOU selections while preserving their distinct semantics.
+Joint-calendar policy, adjustment order, grid resolution and clock/DST rules are
+explicit. Canonical publication is atomic; pricing reuses validated in-memory
+artifacts. Proposed representations and performance qualification are in
+[the schedule design](schedules-and-contract-sequences.md#shared-immutable-data-composition-and-the-fast-path).
+No implementation speed claim follows from this design alone.
 
 ### 3.3 Behavioral contracts on instruments and sides
 
@@ -292,6 +338,28 @@ the same frequency. Valuation still delegates to the side implementations.
 
 ## 4. Market factors and curve dependencies
 
+Curves own common constituent specifications, with dated market contracts retaining
+their identities and dated terms. Commodity, yield and composite/algorithmic curves
+have explicitly typed specifications. Versioned source bindings and delivery
+mappings support multiple dependency layers, including forwards consuming futures.
+Pricing construction and contractual settlement remain separate. Source expiry
+requires an explicit frozen-final/transition/end-eligibility rule; never silently
+roll or replace missing inputs. See the agreed domain structure and five-layer
+example in [market-model.md](market-model.md). Detailed internal storage records
+there are proposals, not additional required public business classes.
+
+Business references and market setup are distinct concepts even where their
+versioned storage shares a reference catalog. Internal joins, provenance and
+version machinery are not separate user-maintained business catalogs. Financial
+configuration still requires exact version pins and authorized changes.
+
+Locations have explicit types such as pipeline, node, hub, region, terminal and
+delivery point. Type and geography are independent: a point, route, area or
+membership set must be supplied according to its supported convention. Optional
+WGS 84 latitude/longitude point fields are implemented; route/area geometry and
+topology remain future scope. Never invent a point for unknown or non-point
+locations or infer pricing dependencies from geographic proximity.
+
 Reference data includes relational currencies, units/dimensions, commodities,
 typed locations, exchanges, clearing houses, clocks/calendars, rate conventions,
 and futures product/series definitions. Use exact catalog/revision foreign keys
@@ -307,6 +375,18 @@ factors.
 
 Names such as `prompt` are aliases. Resolve them to actual dated contract IDs when
 creating a run. Retain the resolved mapping so a later roll cannot rewrite a run.
+
+The agreed current-contract rule advances through its retained contract sequence
+at recorded expiry. Newly listed far-end contracts extend that sequence
+independently. A relative ordinal requires explicit coverage and eligibility;
+missing data does not authorize skipping the expected next entry. Reusable
+schedules may be supplied as retained rows or materialized by a named deterministic
+definition with explicit parameters. People and agents share the same authorized
+maintenance operations; calculations consume pinned rows and rule versions.
+Business-day calendars, contract milestones and generated schedules retain their
+distinct roles. See [schedules and contract sequences](schedules-and-contract-sequences.md)
+for the proposed minimal resolver and qualification gates. This is not yet an
+implemented alias or general schedule generator.
 
 Curves are versioned recipes over factors, constants, reference data and other
 curves. Dependencies include delivery mappings, interpolation, calendars,
@@ -333,6 +413,23 @@ This is a synthetic arithmetic acceptance case, not a claim about market pricing
 
 A power curve inherits gas exposure only when its approved recipe specifies that
 relationship. Historical correlation alone does not define a pricing dependency.
+
+An explicitly selected all-in mark is a direct price input without inferred
+upstream curve dependencies. Base exposure requires an explicit base-plus-spread
+definition and a spread mark. Never infer an implied spread from an all-in mark,
+silently switch pricing modes or allocate exposure from price/spread proportions.
+Other declared inputs consumed by an instrument/pricer remain applicable.
+
+**NEVER ASSUME user intent. NEVER SILENTLY GO TO DEFAULTS.** Missing, ambiguous or
+conflicting financial behavior raises a structured error. Policies and applied
+choices must be explicit and retained in the resolved context. See
+[market-data.md](market-data.md) for mark modes, dated contract histories, future
+historical alignment and deterministic repricing acceptance.
+The local [market-model proposal](market-model.md) details entity/version keys,
+typed reference links, quote/quantity specifications and snapshot input roles.
+Its broader shapes remain a design proposal. The implemented commodity/series
+subset and current security/RLS boundary are described in
+[implementation.md](implementation.md) and [security.md](security.md).
 
 ### 4.1 Storage and execution
 
@@ -474,6 +571,12 @@ Gamma_ff = (V(f+h) - 2*V(f) + V(f-h)) / (h*h)
 UpScenarioPnL = V(f+h) - V(f)
 DownScenarioPnL = V(f-h) - V(f)
 ```
+
+These PV evaluations are deterministic: identical pinned inputs, scenario, model
+versions and numerical policy yield identical results. Dependency traversal
+identifies affected work; it does not assign exposure amounts. Risk is measured
+from the instrument/pricer outputs, not allocated from spread levels or inferred
+hedge relationships.
 
 Retain bump size, absolute/relative convention, factor units, output currency,
 derivative units and whether quantities are applied. A derivative and a finite

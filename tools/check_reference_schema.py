@@ -26,7 +26,13 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pg-bin", type=Path, required=True,
                         help="Directory containing preinstalled PG16+ binaries")
+    parser.add_argument("--market", action="store_true",
+                        help="Also apply and verify the market-data migration")
+    parser.add_argument("--security", action="store_true",
+                        help="Also verify persisted roles and RLS (requires --market)")
     args = parser.parse_args()
+    if args.security and not args.market:
+        parser.error("--security requires --market")
     binaries = {name: args.pg_bin.resolve() / name for name in
                 ("initdb", "pg_ctl", "psql")}
     for binary in binaries.values():
@@ -90,11 +96,13 @@ def main():
                 raise AssertionError("Refusing to use a server outside the new cluster")
             query((ROOT / "db/migrations/0001_reference_data.sql").read_text(),
                   label="migration applies to stock PostgreSQL")
-            query((ROOT / "tests/fixtures/reference-synthetic.sql").read_text(),
-                  label="synthetic relationships and placeholders load")
-
             def reject(label, statement, state="23503"):
                 query("BEGIN;\n" + statement + "\nROLLBACK;", state, label)
+
+            from check_reference_retirement import run_checks as retirement_checks
+            retirement_checks(query, reject)
+            query((ROOT / "tests/fixtures/reference-synthetic.sql").read_text(),
+                  label="synthetic relationships and placeholders load")
 
             product_prefix = ("INSERT INTO ref_data.futures_products "
                               "(catalog_id,revision_id,code,name,exchange_code,")
@@ -238,7 +246,18 @@ def main():
                            f"SET state='draft' WHERE catalog_id='{CAT}' AND id='{race_revision}';", "55000")
                     passed += 1
                     print(f"PASS freeze race {isolation}, writer_first={writer_first}", flush=True)
-            print(f"{passed} reference-schema checks passed.")
+            if args.market:
+                from check_market_schema import run_checks
+                run_checks(query, reject, connection, wait_for_lock, psql, environment, children)
+            if args.security:
+                from check_security_schema import run_checks as security_checks
+                security_checks(query, reject, connection, wait_for_lock, psql, environment, children)
+            from check_location_schema import run_checks as location_checks
+            location_checks(query, reject)
+            if args.security:
+                from check_rate_schema import run_checks as rate_checks
+                rate_checks(query, reject)
+            print(f"{passed} {'combined' if args.market else 'reference'}-schema checks passed.")
         finally:
             for child in children:
                 if child.poll() is None:

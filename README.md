@@ -1,13 +1,25 @@
 # openetrm
+
+Work in this standalone repository for the public application. The local
+**Power TOUs** page uses its native curve API and stock PostgreSQL preview;
+see [the power example and its limits](docs/power-preview.md).
+Run `python3 tools/check_standalone.py` to check dependency boundaries.
+
 Open Source Commodity Trading Risk Management
 
 An ETRM designed for people and AI agents, with reusable sides, deterministic
 valuation and shared market-factor scenarios over a standard relational database.
 
-**Status: foundation implementation. There is no runnable trading application
-yet.** The first reference-data migration and disposable-database checks exist.
-The wider documents specify the intended system; they are not claims of
-implemented product functionality or production qualification.
+**Status: foundation plus a local synthetic market workbench.** A TypeScript
+browser client and managed API read real PostgreSQL data through restricted RLS
+logins and build commodity curves using exact arithmetic. A separate interest-rate
+example uses explicitly selected day-count/compounding rules for discount factors. The disposable preview
+supports pinned input selections, contract histories, observation corrections,
+per-contract pricing diagrams and reference inspection. Shared historical contexts and workspace user/role administration are implemented
+in the loopback preview. Production sign-in, trading and risk workflows remain
+unimplemented. See the [preview command and implemented
+scope](docs/implementation.md). The wider documents specify the intended system;
+they are not claims of implemented functionality or production qualification.
 
 - [Architecture and domain contracts](docs/architecture.md)
 - [Delivery plan and acceptance criteria](docs/plan.md)
@@ -16,7 +28,12 @@ implemented product functionality or production qualification.
 - [Historical context and temporal data](docs/context.md)
 - [Time, delivery calendars and TOU](docs/time-and-schedules.md)
 - [Reference data and futures](docs/reference-data.md)
+- [Market-data contracts](docs/market-data.md)
+- [Market model proposal and key linkages](docs/market-model.md)
 - [Reference schema and disposable verification](db/README.md)
+- [Current implementation and verification](docs/implementation.md)
+- [Business scenarios, settlement gaps and proposed shocker](docs/business-scenarios.md)
+- [Identity, agent login kinds and authorization](docs/security.md)
 
 The first working slice will include futures and fixed/floating linear
 instruments from reusable sides,

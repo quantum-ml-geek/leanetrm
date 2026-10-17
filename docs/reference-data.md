@@ -1,13 +1,63 @@
 # Reference data and futures
 
 Status: approved baseline requirements with an initial schema implementation and
-55 disposable-database checks passing. No booking, valuation, activation or historical publication service is
+173 combined reference/market/security/coordinate/rate checks passing. No booking, valuation, activation or historical publication service is
 implemented by the schema alone.
+The local [market-data slice](implementation.md) adds measurement-basis, quantity,
+quote, profile, settlement-target and cash-rounding references. Broader product
+and state-dependent conversion support remains gated below.
+
+## Business references, setup and internal records
+
+Business reference data identifies shared facts and business objects: units,
+currencies, commodities, typed locations, venues, calendars, product/contract terms
+and index/rate identities. **Market setup** defines how the installation constructs
+and interprets prices: quote/quantity conventions, delivery patterns, settlement
+rules and rounding. Catalog/revision records and relationship tables support both;
+they are internal storage, not extra user-maintained reference categories.
+
+The preview exposes curated Reference data and Market setup views. It hides joins
+and version machinery from the category lists. This changes presentation, not
+access rights. Pricing configuration remains versioned, explicitly selected and
+subject to current permissions; labeling it setup never permits a silent default.
+Existing exact-version foreign keys stay intact in their current storage schema.
+Physical table consolidation and retirement of overlapping legacy definitions
+require a separate migration rather than a cosmetic schema rename.
+
+## Location types and geography
+
+One Location model uses the existing exact-version `location_types` relationship.
+Types can include pipeline, node, hub, region, terminal, delivery point and physical
+site. Types describe the business meaning, not the geometry. There is no separate
+business class/table for every location type, and a type is never inferred from
+its name or available coordinates.
+
+[0004_location_coordinates.sql](../db/migrations/0004_location_coordinates.sql)
+adds optional point latitude/longitude to existing location versions. Both must be
+supplied together in WGS 84 decimal degrees, with latitude in [-90,90] and longitude
+in [-180,180]. The fixed coordinate convention follows the
+[WGS 84 decimal-degree interchange convention](https://www.rfc-editor.org/rfc/rfc7946#section-4).
+Numeric inputs retain the exact supported decimal representation; over-precision,
+nonfinite values and out-of-range values are rejected without rounding.
+
+Missing coordinates stay NULL; zero is a valid supplied coordinate, not a missing
+value. Existing rows receive no inferred or backfilled point. A physical site can
+retain a supplied GPS point, but a pipeline needs route geometry and a region a
+boundary for their full geographic extents. A hub may represent a set of locations.
+Routes, polygons, spatial queries and location memberships/topology are not yet
+implemented. A supplied point does not establish any of them. In particular,
+geographic proximity does not establish pipeline connectivity or a pricing/risk
+dependency. Those relationships must be explicit when implemented.
+
+Coordinate corrections create a new reference revision; retained definitions and
+calculations keep their original version. Optional points allow unknown geography
+and non-point/virtual locations; map-dependent operations must reject unavailable
+geometry rather than invent it. No map-dependent operation exists in this slice.
 
 ## Required foundation
 
 Reference data is a core application module, not a collection of optional seed
-files or arbitrary JSON attributes. The initial schema provides these families:
+files or arbitrary JSON attributes. The current schema provides these families:
 
 | Family | Definitions and relationships |
 | --- | --- |
@@ -17,8 +67,7 @@ files or arbitrary JSON attributes. The initial schema provides these families:
 | Locations | Typed locations and explicit commodity/location relationships |
 | Venues | Exchanges and clearing houses, separately identified |
 | Time | Versioned market clocks, calendars and dated business-day overrides |
-| Rates | Separate FX, interest, heat-rate and commodity-price index definitions |
-| Conventions | Day-count and compounding definitions |
+| Rates and indexes | Interest-rate specifications consumed by dated zero rates; commodity-price index definitions used by settlement targets |
 | Futures | Product terms, dated contract series, milestone states and supporting evidence |
 | Provenance | Source identity, retrieval metadata, evidence and distribution review status |
 
@@ -41,6 +90,52 @@ commodity. Volume-versus-energy measurement bases for the same commodity require
 a later explicit measurement-basis model and state-dependent conversion inputs;
 they must not be modeled as an unconditional unit conversion. This baseline
 restriction must be resolved before those mixed-basis products are enabled.
+
+## Current table consumers and implementation policy
+
+Add a table or dependency only with a named consumer or an executable baseline
+case. A catalog import or a screen showing unused rows does not justify one.
+After migrations 0001–0006, there are **31 reference tables**, including internal
+version and relationship tables. Their bounded uses are:
+
+| Tables in `ref_data` | Current consumer or executable baseline case |
+| --- | --- |
+| `catalogs`, `revisions` | Every exact reference key, draft/seal checks and scoped catalog ownership/sharing |
+| `currencies` | Quote and interest currency links; managed Money rejects cross-currency addition |
+| `dimensions`, `units`, `commodities`, `commodity_units` | Futures lot/quote validation and compatible commodity-unit foreign keys |
+| `unit_conversions` | Capture an explicit multiplicative conversion; write checks reject mismatched endpoint dimensions. Automatic conversion execution is not implemented |
+| `measurement_bases`, `quantity_specifications` | Typed quantity/price multiplication and explicit ratio orientation in scaling curves |
+| `quote_specifications`, `value_specifications` | All-in/spread type checks, quote multipliers, numeric-series domains and price-clearing grids |
+| `clock_rules`, `calendars`, `calendar_days` | Futures milestone clock/calendar links and explicit dated calendar-override capture/constraints. No automatic business-day schedule calculation yet |
+| `location_types`, `locations`, `commodity_locations` | Commodity curve location compatibility, futures location links, explicit pipeline/node/hub/region types and supplied GPS points |
+| `exchanges`, `clearing_houses`, `exchange_clearing_houses` | Futures product links and rejection of unsupported exchange/clearing relationships |
+| `interest_rate_definitions` | The sample zero-rate curve explicitly consumes currency, day count, compounding and implementation identifiers to calculate discount factors |
+| `price_index_definitions`, `settlement_targets` | Forward curves retain their own exact index settlement target independently of upstream futures. Fixing/payment execution is not implemented |
+| `sources`, `product_evidence` | Exact observation source checks; futures evidence/provenance capture and source/product linkage constraints. Data-rights qualification remains separate |
+| `futures_products`, `futures_series`, `futures_milestones` | Product economics, dated delivery and authoritative last-trading validation in the five-layer example |
+| `delivery_profiles` | Explicit equal-profile/equal-period constituent mappings; unsupported shaping fails |
+| `cash_rounding_conventions` | Money rounding with explicit currency, increment, tie rule and stage, exercised with positive/negative ties |
+
+[0005](../db/migrations/0005_retire_unused_definitions.sql) retires the unused FX,
+heat-rate, standalone day-count and standalone compounding catalogs. It refuses
+populated legacy tables or external dependent objects; it never discards retained
+data. The original published migration stays unchanged. Selected day count,
+compounding and implementation identifiers now live directly on the used
+interest-rate specification, with no default and no imported convention catalog.
+
+The rate module implements Actual/365 Fixed and simple compounding directly,
+with exact integer-ratio intermediates. The [implementation notes](implementation.md#interest-rate-example-and-numerical-policy)
+record the explicit division/rounding policy and supported bounds. Units, Money
+and Quantity also remain project-owned, with a deliberately small supported
+catalog. A new convention needs an actual consumer and independent tests; no
+broad financial library or imported master catalog is required.
+
+Standard unit conversions and market economics remain distinct. A fixed energy
+conversion can use a reviewed exact ratio, whereas gas-volume-to-energy conversion
+requires explicit measurement conditions/heating value and power-to-energy
+conversion requires duration/shape. Missing inputs never select an automatic
+conversion. Database foreign keys, market unit variants, contractual measurement
+bases and provenance remain mandatory.
 
 ## Reference revisions and history
 

@@ -1,0 +1,13 @@
+{
+  "name": "openetrm-workbench",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "build": "tsc && node build.mjs",
+    "test": "npm run build && node --test tests/*.test.mjs"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2"
+  },
+  "type": "module"
+}

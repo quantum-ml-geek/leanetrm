@@ -3,6 +3,9 @@
 Status: baseline approved for implementation and publication on 2026-10-16.
 These are intended contracts, not implemented behavior.
 Historical selection is specified in [context.md](context.md).
+Reusable schedule rows, optional deterministic generators and expiry-based
+contract selectors are specified in
+[schedules-and-contract-sequences.md](schedules-and-contract-sequences.md).
 
 ## 1. Instants, dates and clock rules
 

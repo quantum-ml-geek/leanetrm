@@ -1,7 +1,11 @@
 # Historical context and temporal data
 
 Status: baseline approved for implementation and publication on 2026-10-16.
-No implementation or temporal-correctness qualification is implied.
+The broad baseline below remains a product contract. Shared contexts for existing
+market observations, commodity/rate curves, exact definition/reference bundles,
+schedules and contract-date candidates are qualified in owned previews; see
+[implemented scope](implementation.md#shared-historical-market-view-and-administration).
+Trade/lifecycle domains, activation and production recovery remain unimplemented.
 
 This is a baseline product requirement, not an optional reporting feature. Read
 with [architecture](architecture.md), [lifecycle](lifecycle.md) and [plan](plan.md).
@@ -58,15 +62,21 @@ RequestedContext
   scope
   effective_at
   known_at
-  valuation_at       # defaults to effective_at
-  market_as_of        # defaults to valuation_at
-  scenario          # base market unless explicitly selected
+  valuation_at       # explicit resolved instant
+  market_as_of       # explicit resolved instant
+  scenario           # explicit base selection or versioned scenario reference
 ```
 
-The ordinary historical mode uses the selected historical instant for business
+An explicitly selected ordinary historical mode uses the selected instant for business
 time, knowledge cutoff, valuation time and market cutoff. Advanced controls can
 separate them, with explicit labels; changing one coordinate must not silently
 change another.
+
+This named mode is an explicit selection rule, not a missing-field fallback.
+Expand it to complete visible coordinates and an explicit scenario selection
+before evaluation; retain them in the resolved context. Without complete inputs
+or an explicitly selected supported expansion rule, reject the request. Never
+silently assume base scenario, current market, a valuation date or a cutoff.
 
 The first historical valuation mode requires `effective_at = valuation_at` and
 `market_as_of <= valuation_at`. A supported advanced mode may relax those constraints
@@ -123,8 +133,8 @@ the selected instant.
 
 Use one reserved finite end marker for open-ended timeline rows, consistently in
 storage and API serialization. The proposed exact marker is
-`9999-12-31T00:00:00Z`; the user has selected this style of sentinel, and the exact
-supported timestamp bound is confirmed during implementation. It is an exclusive
+`9999-12-31T00:00:00Z`; each supported implementation must enforce this exact
+timestamp bound. It is an exclusive
 end, not a real business date or the last instant of an inclusive day. Reject real
 timestamps/context selections at or beyond the reserved marker. Do not mix null,
 database infinity and a finite sentinel within this convention. Lower bounds and

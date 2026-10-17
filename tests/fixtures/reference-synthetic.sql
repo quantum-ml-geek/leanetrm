@@ -13,8 +13,6 @@ INSERT INTO ref_data.revisions (catalog_id,id,revision_key) VALUES
   ('10000000-0000-0000-0000-000000000002','20000000-0000-0000-0000-000000000001','fixture_v1');
 INSERT INTO ref_data.currencies (catalog_id,revision_id,code,display_code,name,display_minor_units)
   SELECT catalog_id,revision_id,'test_currency_a','TST','Synthetic currency A',2 FROM fixture_context;
-INSERT INTO ref_data.currencies (catalog_id,revision_id,code,display_code,name,display_minor_units)
-  SELECT catalog_id,revision_id,'test_currency_b','TSU','Synthetic currency B',3 FROM fixture_context;
 INSERT INTO ref_data.dimensions (catalog_id,revision_id,code,mass_power,length_power,time_power,temperature_power,amount_power,current_power,luminous_power)
   SELECT catalog_id,revision_id,'energy',1,2,-2,0,0,0,0 FROM fixture_context;
 INSERT INTO ref_data.dimensions (catalog_id,revision_id,code,mass_power,length_power,time_power,temperature_power,amount_power,current_power,luminous_power)
@@ -59,16 +57,8 @@ INSERT INTO ref_data.clearing_houses (catalog_id,revision_id,code,name)
   SELECT catalog_id,revision_id,'test_clearing','Synthetic clearing house' FROM fixture_context;
 INSERT INTO ref_data.exchange_clearing_houses (catalog_id,revision_id,exchange_code,clearing_house_code)
   SELECT catalog_id,revision_id,'test_exchange','test_clearing' FROM fixture_context;
-INSERT INTO ref_data.day_count_conventions (catalog_id,revision_id,code,algorithm_id,algorithm_version)
-  SELECT catalog_id,revision_id,'test_day_count','synthetic_actual_fixed','1' FROM fixture_context;
-INSERT INTO ref_data.compounding_conventions (catalog_id,revision_id,code,method)
-  SELECT catalog_id,revision_id,'test_simple','simple' FROM fixture_context;
-INSERT INTO ref_data.fx_rate_definitions (catalog_id,revision_id,code,base_currency_code,quote_currency_code)
-  SELECT catalog_id,revision_id,'test_fx','test_currency_a','test_currency_b' FROM fixture_context;
-INSERT INTO ref_data.interest_rate_definitions (catalog_id,revision_id,code,currency_code,calendar_code,day_count_code,compounding_code)
-  SELECT catalog_id,revision_id,'test_interest','test_currency_a','test_business','test_day_count','test_simple' FROM fixture_context;
-INSERT INTO ref_data.heat_rate_definitions (catalog_id,revision_id,code,fuel_commodity_code,output_commodity_code,fuel_unit_code,output_unit_code)
-  SELECT catalog_id,revision_id,'test_heat','test_gas','test_power','energy_a','energy_a' FROM fixture_context;
+INSERT INTO ref_data.interest_rate_definitions (catalog_id,revision_id,code,currency_code,calendar_code,day_count,compounding,implementation)
+  SELECT catalog_id,revision_id,'test_interest','test_currency_a','test_business','actual_365_fixed','simple','openetrm_rates_v1' FROM fixture_context;
 INSERT INTO ref_data.price_index_definitions (catalog_id,revision_id,code,commodity_code,location_code,currency_code,quote_unit_code,quote_multiplier,calendar_code)
   SELECT catalog_id,revision_id,'test_price','test_gas','test_hub_a','test_currency_a','energy_a',1,'test_business' FROM fixture_context;
 INSERT INTO ref_data.sources (catalog_id,revision_id,code,kind,locator,retrieved_at,license_reference,distribution_review)
