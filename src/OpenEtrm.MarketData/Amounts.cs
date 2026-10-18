@@ -19,6 +19,7 @@ public sealed record Money
         if (key.Revision.CatalogId == Guid.Empty || key.Revision.RevisionId == Guid.Empty || string.IsNullOrWhiteSpace(key.Code))
             throw new MarketDataException("missing_reference", "Exact reference identity is required.");
     }
+    public string ToString(AmountFormat format, AmountLabel currency) => Amount.ToString(format) + " " + currency.Require(Currency);
     private void Same(Money other)
     {
         if (Currency != other.Currency)
@@ -45,31 +46,108 @@ public sealed record Quantity
     {
         Money.RequireKey(specification); Amount = amount; Specification = specification;
     }
+    public string ToString(AmountFormat format, AmountLabel unit) => Amount.ToString(format) + " " + unit.Require(Specification);
+    public Quantity ConvertTo(ReferenceKey target, UnitConverter converter, AmountFormat? rounding = null) => converter.Convert(this, target, rounding);
     public Quantity Add(Quantity other)
     {
         if (Specification != other.Specification)
             throw new MarketDataException("quantity_mismatch", "Quantity arithmetic requires the exact same unit/commodity/basis specification.");
         return new(Amount + other.Amount, Specification);
     }
+    public Quantity Scale(ExactDecimal scalar) => new(Amount * scalar, Specification);
+}
+
+// A working price unit is independent of a quote's observed-value domain and tick.
+// Intermediate prices retain their units without inheriting final quote limits.
+public sealed record PriceUnit
+{
+    public ReferenceKey Currency { get; }
+    public ReferenceKey Quantity { get; }
+    public ExactDecimal Multiplier { get; }
+    public PriceUnit(ReferenceKey currency, ReferenceKey quantity, ExactDecimal multiplier)
+    {
+        Money.RequireKey(currency); Money.RequireKey(quantity);
+        if (currency.Revision != quantity.Revision || multiplier.CompareTo(default) <= 0)
+            throw new MarketDataException("quote_specification", "Price unit requires coherent references and a positive quote multiplier.");
+        Currency = currency; Quantity = quantity; Multiplier = multiplier;
+    }
+    public static PriceUnit FromQuote(QuoteSpecification specification)
+    {
+        Money.RequireKey(specification.Key);
+        if (specification.Key.Revision != specification.Currency.Revision)
+            throw new MarketDataException("quote_specification", "Quote identity and currency revision must match.");
+        return new(specification.Currency, specification.Quantity, specification.Multiplier);
+    }
+}
+
+public sealed record NumericValue
+{
+    public ExactDecimal Value { get; }
+    public ValueSpecification Specification { get; }
+    public NumericValue(ExactDecimal value, ValueSpecification specification)
+    {
+        specification.Validate();
+        if (value.CompareTo(specification.Minimum) < 0 || value.CompareTo(specification.Maximum) > 0)
+            throw new MarketDataException("price_domain", "Numeric value is outside its declared domain.");
+        Value = value; Specification = specification;
+    }
 }
 
 public sealed record UnitPrice
 {
     public ExactDecimal Value { get; }
-    public QuoteSpecification Specification { get; }
-    public UnitPrice(ExactDecimal value, QuoteSpecification specification)
+    public PriceUnit Unit { get; }
+    public UnitPrice(ExactDecimal value, PriceUnit unit)
     {
-        Money.RequireKey(specification.Key); Money.RequireKey(specification.Currency); Money.RequireKey(specification.Quantity);
-        if (specification.Key.Revision != specification.Currency.Revision ||
-            specification.Key.Revision != specification.Quantity.Revision || specification.Multiplier.CompareTo(default) <= 0 ||
+        ArgumentNullException.ThrowIfNull(unit);
+        Value = value; Unit = unit;
+    }
+    public UnitPrice(ExactDecimal value, QuoteSpecification specification) : this(value, PriceUnit.FromQuote(specification))
+    {
+        if (specification.Minimum.CompareTo(specification.Maximum) > 0 ||
             value.CompareTo(specification.Minimum) < 0 || value.CompareTo(specification.Maximum) > 0)
-            throw new MarketDataException("quote_specification", "Price requires coherent references, explicit domain and positive quote multiplier.");
-        Value = value; Specification = specification;
+            throw new MarketDataException("quote_specification", "Price is outside its explicit quote domain.");
+    }
+    internal void RequireQuote(QuoteSpecification specification)
+    {
+        if (Unit != PriceUnit.FromQuote(specification))
+            throw new MarketDataException("unit_mismatch", "Calculated price must retain the exact selected quote unit.");
+        if (Value.CompareTo(specification.Minimum) < 0 || Value.CompareTo(specification.Maximum) > 0)
+            throw new MarketDataException("price_domain", "Calculated value lies outside the declared domain.");
+    }
+    public string ToString(AmountFormat format, AmountLabel currency, AmountLabel quantity) =>
+        Value.ToString(format) + " " + currency.Require(Unit.Currency) + "/" + quantity.Require(Unit.Quantity) +
+        (Unit.Multiplier == ExactDecimal.Parse("1") ? "" : " × " + Unit.Multiplier);
+    public UnitPrice ConvertTo(ReferenceKey target, UnitConverter converter, AmountFormat? rounding = null) => converter.Convert(this, target, rounding);
+    public UnitPrice Add(UnitPrice other)
+    {
+        Same(other);
+        return new(Value + other.Value, Unit);
+    }
+    private void Same(UnitPrice other)
+    {
+        if (Unit != other.Unit)
+            throw new MarketDataException("unit_mismatch", "Price arithmetic requires the exact same currency, quantity and quote multiplier.");
+    }
+    public UnitPrice Subtract(UnitPrice other) { Same(other); return new(Value - other.Value, Unit); }
+    public UnitPrice Times(NumericValue factor)
+    {
+        var spec = factor.Specification;
+        if (spec.Key.Revision != Unit.Currency.Revision ||
+            spec.Kind == NumericKind.QuantityRatio && spec.NumeratorQuantity != Unit.Quantity)
+            throw new MarketDataException("multiplier_type", "Multiplier must cancel the exact price denominator in the selected reference revision.");
+        var unit = spec.Kind == NumericKind.Dimensionless ? Unit :
+            new PriceUnit(Unit.Currency, spec.DenominatorQuantity!.Value, Unit.Multiplier);
+        return new(Value * factor.Value, unit);
     }
     public Money Times(Quantity quantity)
+        =>ExactTimes(quantity).ToMoney();
+    public ExactMoney ExactTimes(Quantity quantity)
     {
-        if (Specification.Quantity != quantity.Specification)
+        if (Unit.Quantity != quantity.Specification)
             throw new MarketDataException("quantity_mismatch", "Price denominator and quantity specification must match exactly.");
-        return new(Value * Specification.Multiplier * quantity.Amount, Specification.Currency);
+        return ExactMoney.WeightedSum(Unit.Currency, new[] {(
+            (IEnumerable<(ExactDecimal, ExactDecimal)>)new[] {(Value, ExactDecimal.Parse("1"))},
+            new[] {Unit.Multiplier, quantity.Amount})});
     }
 }

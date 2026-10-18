@@ -19,6 +19,10 @@ workflows. A language model interprets intent, proposes structured actions and
 explains retained evidence. It does not become the authority for these rules.
 
 The initial product scope includes futures and fixed/floating linear products.
+The bounded [exchange futures example](exchange-futures.md) retains exact dated
+lot quantities and independent outright/basis observables. Contract profiles and
+basis settlement references are immutable economic terms; curve recipes do not
+invent them or infer upstream exposure from directly quoted marks.
 Futures require explicit settlement/variation-margin state and outstanding risk,
 not only an ordinary forward formula. The contracts must accommodate
 future option pricers, physical operations, optimization and complex fees without
@@ -70,16 +74,46 @@ local clock times must remain distinguishable, for example by showing an offset
 only when needed. Internal GUIDs, database fields and numerical implementation
 labels are not user-visible column names or calculation receipts.
 
+Ordinary table screens share the table renderer and a reusable table workspace
+for column, filter, pivot and named-view controls. Blotter displays the table
+immediately; optional configuration opens from its toolbar. Pivot arithmetic
+remains a managed operation supplied by the consuming screen. Row/column pivots
+reshape those exact returned groups without browser aggregation. The shared grid
+retains exact decimal strings for sorting and export. A shared chart component
+uses approximate numbers for pixel coordinates and exact strings for tooltips;
+it keeps display labels separate from category identities and preserves gaps.
+Account layouts retain grid, pivot and chart presentation choices independently
+of financial contexts. Exports recheck current authority through the pinned
+consuming operation.
+
 Navigation and curve-list side panels and their menu groups can collapse as
 remembered user layout choices. Ordinary tables support display-only search and
 column filters with visible row counts. Connected pricing worksheets keep their
 complete contract mappings. Filtering never changes calculation inputs or access;
 filter state is discarded when its authorized data/context scope changes.
 
+Trading opens a **Blotter** of individual trade bindings. Named views select
+columns, portfolio/book filters, row filters and an explicit pivot layout. Pivots
+use the managed backend, preserving exact quantity and currency partitions; they
+do not merge obligations. Saving a view does not save or choose market inputs,
+knowledge coordinates or authority. Effective/knowledge controls live in the common
+header beside the market date. The active user and current permissions are visible
+in the profile, independently of the layout.
+
+Amount display precision belongs to a deal's shared current presentation, with
+separate trade/fixed/floating role policies in the bounded editor. It is not a
+personal preference and does not enter economic identity, contractual rounding
+or pricing/risk caches. Saved precision uses exact trade foreign keys, explicit
+roles, current authority and optimistic versions; it may format a historical
+financial view without changing that view's inputs. Initial display defaults are
+2/4/3/6 places for money/price/quantity/factors; futures prices use tick scale.
+
 Profile customization is presentation state, never a source of authorization,
-market-input selection policy or contractual clock conventions. The local preview
-stores versioned preferences per demo persona in the browser; verified account
-profiles and synchronization across devices remain part of identity integration.
+market-input selection policy or contractual clock conventions. Blotter layouts persist in the database for the current human account and
+workspace, with current trading-read authority and optimistic version checks.
+They retain no market snapshots, historical coordinates, permissions or results.
+Other preview preferences remain browser-local; production authentication and
+broader account profile synchronization remain part of identity integration.
 
 Modules have explicit contracts. The domain and numerical core do not depend on
 web frameworks, persistence libraries, model-provider SDKs or browser state.
@@ -114,14 +148,16 @@ Portfolio
     Book
       Trades[]
         Trade
-          Instruments: immutable instrument references with signed quantities/bases
-          Lifecycle state and retained events
+          TraderId, TradeDate, counterparty, memo and legal entity
+          Events and lifecycle state
+          Instruments: immutable unit instrument references with external quantities/bases
 
 Instrument
-  Side memberships[]: side reference, coefficient, role and order
-    Side definition
-      Optional ordered composition members
-      Schedule definitions and generated dated legs
+  FuturesContract: exact immutable futures-series reference; typed LotSize
+  SidedInstrument: explicit side memberships where composition is contractual
+    Side reference, signed coefficient, role and order
+    Side definition: index/curve, observation/averaging and payment conventions
+    Separate resolved pricing bindings and generated dated schedules
 ```
 
 These are distinct concepts:
@@ -132,9 +168,27 @@ These are distinct concepts:
   No separate quantity-bearing domain class sits between trade and instrument.
   Stable binding/obligation keys retained inside Trade can distinguish different
   occurrences of the same definition; equivalence alone does not merge them.
+- Events, TraderId, TradeDate, counterparty, memo and legal entity belong to Trade.
+  These booking facts are excluded from reusable instrument and side identity.
+  Trader attribution is distinct from the principal recording an operation.
+  TradeDate is a business field; its relationship to execution instants and
+  effective/knowledge coordinates must be explicit, never silently inferred.
+- An instrument defines unit economics. Each booked quantity uses the existing
+  unit-aware Quantity value type: an ExactDecimal amount with an exact
+  commodity/basis/unit specification, held externally to the instrument in the
+  trade's binding. Contractual unit normalization, such as the physical
+  size of one futures lot, is the typed `FuturesContract.LotSize`; the number
+  of booked lots is not definition data. Unit amounts are fixed at one and do
+  not participate in identity. The exact quantity basis and LotSize do.
 - A side is an independent reusable definition, not a booked trade.
-- An instrument contains one or more sides. A single-side instrument still
-  retains an instrument identity and explicit membership.
+- A simple futures contract is the instrument itself. `FuturesContract` is a leaf
+  `Instrument`, resolved from the exact futures-series primary key. Curves and
+  trade bindings reference that same definition. A curve recipe revision does not
+  change the contract's identity. Resolved quote-admission policy and curve/member
+  selection live in a separate `FuturesMarketBinding`, outside contract identity.
+- `SidedInstrument` retains one or more independent sides through explicit
+  memberships where the product actually requires composition, including the
+  current fixed/floating financial swap. A simple contract needs no artificial side.
 - Coefficients and ordering belong to instrument memberships. They do not make a
   new side definition merely because another instrument uses different weights.
 - Signed booked quantities belong to the trade's instrument bindings, with an
@@ -164,15 +218,53 @@ contract and delegates to its sides. Currency conversion remains explicit.
 The local preview now implements shared certified contexts for existing market,
 rate, reference and schedule screens, plus current workspace administration.
 [Implementation scope](implementation.md#shared-historical-market-view-and-administration)
-records the qualified boundaries; the trading abstractions here remain design.
+records the qualified boundaries. The bounded synthetic futures slice implements
+immutable shared futures contracts, independent trade/pricing bindings and typed execution
+P&L. Latest-head futures booking amendments append immutable versioned trade states;
+earlier revisions are read-only and shared definitions remain unchanged.
+Futures PV, other lifecycle transitions and the wider trading abstractions
+here remain design; fixed/floating swap PV has a bounded managed implementation.
+
+The current preview retains trader attribution, memo, an explicit TradeDate and
+exact-version LegalEntity/Counterparty bindings on trade revisions. New booking
+and amendment operations require the date and both parties. TradeDate is a
+date-only booking fact, independently supplied rather than derived from an
+execution instant or display zone. The V2 booking contract requires each selected
+party version to be effective by the execution instant and visible at the selected
+knowledge cutoff; current authority still governs every read and write.
+Earlier revisions remain unchanged; legacy
+bookings retain unavailable date/party fields until an explicit amendment supplies
+them. Party master versions are immutable scoped reference data; the bounded
+preview supplies synthetic versions and an append-only name/code editor for each
+party type. `ReadTradeParties` permits scoped historical inspection;
+`WriteTradeParties` permits current maintenance without granting trade access.
+Editing checks the expected head revision, preserves the code and nondecreasing
+effective instants, and atomically publishes an immutable successor with actor and
+operation identity. Exact retries return their original version after later edits.
+Deactivation, corporate hierarchies and broader party attributes remain work.
+Trader attribution must reference an actual system human user in the selected
+workspace, independently of the actor who records the trade. Retained attribution
+must remain readable after a user is renamed or disabled; current eligibility
+governs new selections. The existing `trading.traders` records have no user foreign
+key yet and do not satisfy this requirement.
+Reuse the existing project-owned value contracts: Quantity for unit-aware
+amounts, Money for currency amounts and UnitPrice for currency per quantity with
+an explicit quote multiplier, all backed by ExactDecimal. External quantity means
+outside the instrument definition, using these established types.
+
+Readable trade and instrument references accompany exact UUID relationships.
+The selected trading catalog is their namespace. A reference is assigned once
+and survives trade revisions, book moves and reuse; it is not an effective or
+knowledge coordinate. Existing historical states acquire the same display alias
+without changing their original financial facts or publication identity.
 
 ### 3.1 Definition identity and versions
 
 Use **economic equivalence** to describe reuse: instrument definitions with the
 same canonical economic terms and supported conventions can be shared across
 trades within an authorized namespace. Instrument identity includes its economic
-type, side definitions, membership coefficients, relevant ordering and quantity
-transformations. A trade's quantity, booking identity and lifecycle state do not
+type, side definitions, membership coefficients,
+relevant ordering, quantity transformations and the selected discounting policy. A trade's quantity, booking identity and lifecycle state do not
 create different reusable instrument terms. Equivalence for definition/calculation
 reuse does not imply that separate booked trades or their obligations are merged.
 
@@ -191,15 +283,74 @@ Do not infer equivalence from a display name. A content hash is an identity aid,
 not a permission grant or a reason to disclose another workspace's definitions.
 Uniqueness and conflict handling must be enforced atomically, not only by the UI.
 
-Definition changes produce retained versions. Editing one instrument's use of a
-shared side creates or reuses the appropriate new definition and changes only the
-selected binding. Other instruments and prior runs retain their bindings.
+Executable instrument and side definitions mark economic properties with
+`IdentityField` and declare an `EconomicDefinition` canonicalization version.
+For futures, the sole marked `SeriesKey` expands to the exact primary-key columns
+`ref_data.futures_series(catalog_id, revision_id, code)`. Those immutable terms own
+lot size, product and settlement relationships. Primary-key lookup is used in the
+managed model and database admission. A versioned SHA-256-prefix UUID is a compact
+alias; every database reuse verifies the complete exact key, so a hash collision
+cannot select different terms. The contract is available to authorized market
+readers before booking and does not require trade-read permission.
+
+For composed instruments, identity includes ordered memberships, coefficients,
+marked side terms and the explicit discounting choice. Fixed-side keys include
+its exact quote reference. Floating-side keys include the exact projection curve,
+contractual observation dates/weights, index/quote, averaging and payment terms;
+resolved constituent aliases belong to a separate pricing binding. Key lookup and
+atomic uniqueness use the corresponding typed primary/candidate keys, including
+exact payment-rule references. SQL admission resolves immutable derived references
+before lookup. UUID primary keys on retained trading rows remain stable reference
+aliases; they do not substitute for economic uniqueness.
+
+The implemented lookup contracts are:
+
+| Definition | Typed economic lookup key | Storage enforcement |
+| --- | --- | --- |
+| Futures contract | Exact reference catalog, reference revision and series code | Existing futures-series primary key; canonical alias checks the full key |
+| Fixed side | Exact quote reference, fixed price, delivery interval, payment instant and payment-rule reference | Fixed-side candidate key |
+| Floating side | Exact curve/reference/index/quote, delivery/fixing/averaging and payment-rule terms | Named floating-side economic candidate key; resolved contract ID is excluded |
+| Financial swap | Fixed/floating side references, signed coefficient and discounting choice | Swap-instrument candidate key |
+
+Marked resolved units, calendars and observation schedules are determined by those
+exact immutable references and the selected supported rule. The bounded persisted
+floating resolver requires one unique monthly constituent or one complete ordered
+daily set. It compares retained definition/curve/contract/ordinal/weight bindings
+before reuse. Ambiguity or conflicting retained bindings raises a structured error.
+Migration 0020 changes only uniqueness/lookup behavior and preserves earlier rows;
+conflicting legacy economic keys fail migration rather than being merged.
+
+A SHA-256 digest and canonical payload aid managed lookup. Calculation reuse also
+includes complete resolved pricing bindings and the selected context. Different
+bindings cannot be silently interned into whichever object was seen first. No
+cross-run result cache is implied. Trade quantities, parties, trader, memo and
+lifecycle remain outside reusable definition identity. Payment dates may distinguish
+contracts while their commodity factors remain shared.
+
+Migration 0019 leaves existing events, UUIDs and publication coordinates unchanged.
+Typed alias and per-revision pricing-reference tables recover only the exact old
+bindings. New bookings create no futures side or one-side wrapper. Missing pricing
+bindings raise a structured error instead of dropping a holding. Historical
+pricing never silently switches to a current recipe.
 
 ### 3.2 Schedules and quantity bases
 
 Schedule definitions retain delivery intervals, observation rules, payment rules,
 calendars, time zones and source versions. Generated events retain their source
 definition and trade/instrument/membership context.
+
+Each side owns its generated schedule and its PV operation. Its payment rows
+retain delivery/observation terms, typed per-unit quantities, exact price lookups,
+weights and resolved prices, contractual payment dates/currency, discount inputs and model
+versions. The side computes each payment PV from those rows and sums its own
+payment PVs. Instrument.PV delegates to Side.PV and sums membership-signed side
+results. The trade scales that instrument PV by its quantity once. Membership
+direction and booked quantity do not enter independent side valuation.
+
+The inspected side rows are the rows actually valued. An instrument's aligned
+schedule view does not replace side-owned valuation with a net-payment formula.
+Contractual generation, market resolution, side valuation, signed aggregation and
+trade scaling remain distinguishable stages with the same complete context.
 
 Distinguish total-period quantity, flow rate and quantity per occurrence. A total
 quantity must not be multiplied by schedule hours a second time. A flow rate must
@@ -228,20 +379,130 @@ artifacts. Proposed representations and performance qualification are in
 [the schedule design](schedules-and-contract-sequences.md#shared-immutable-data-composition-and-the-fast-path).
 No implementation speed claim follows from this design alone.
 
+The financial-swap editor can use published schedule expressions as a one-time
+date-entry helper. Both suggestions and resolution use the editor's complete
+retained effective/knowledge certificate. The user reviews the resolved date,
+schedule version and occurrence before applying a literal side date. Booking
+retains that exact date; this helper does not establish a moving schedule binding.
+Shared managed date-set, monthly-anchor and rolling utilities remain authoritative;
+the browser neither generates sequences nor evaluates date expressions.
+
+Reference choices come from the selected database revisions, including currencies,
+units, commodities, indices, calendars and curve bindings. Supported payment
+algorithms use typed backend enums and a backend-supplied capability catalog.
+Convention enums do not replace user-maintained reference tables. The standard
+local example uses a USD / US Dollar row in the currencies table with linked
+quotes, rates and trades; its prices and trading examples remain synthetic.
+
 ### 3.3 Behavioral contracts on instruments and sides
 
 Every instrument exposes a common behavior contract. Every side owns the behavior
 for generating its schedule and computing its contribution to PV from that
 schedule. These are executable domain abstractions, not only data records.
 
+Keep the concrete side families small. `FixedSide` and `FloatingSide` have current
+managed consumers; physical and complex contingent sides remain later scope.
+Commodity and receipt/payment direction do not create additional subclasses.
+`SidedInstrument` validates nonempty memberships and sums normalized signed side
+contributions. `FuturesContract` directly implements its supported behavior without
+composition; futures PV rejects unsupported settlement state explicitly. The
+current futures consumer remains execution P&L and open mark sensitivity.
+
+Financial swaps combine one fixed and one floating membership with opposite
+explicit pay/receive coefficients. Each side independently controls its delivery,
+observation and payment terms. The first bounded model normalizes side PVs to
+one currency and quantity basis and uses positive total trade quantity. Sampling and averaging are selected
+financial terms: monthly index, equal calendar-day or business-day observations,
+preceding/following-observation calendar weighting, or supplied quantity weights.
+Calendar-dependent rules retain exact calendar references and resolved date sets.
+Daily rules require the matching dated daily projections. Observations and their
+weights remain separate from payment discounting. The current projection model
+requires valuation before the first fixing; later valuation needs retained actual
+fixings and cannot silently continue forecasting.
+
+Contractual payment dates are generated from each side's payment convention,
+not authored as payment timestamps. New entry chooses monthly payment frequency,
+either days after the last delivery day or a day in the following month, the
+applicable lag basis/short-month policy, business-day adjustment and exact calendar.
+Generate anchor/lag first and adjust afterward. Retain the immutable originating
+rule, calendar and unadjusted/final dates on the actual valued payment plan.
+Calendar-day dates do not shift with the user's display time zone. Existing
+manual-instant revisions remain exact historical definitions; no rule is inferred
+from their dates. New writes require explicit rules.
+
+Commodity is selected from the pinned reference catalogue and filters available
+floating indices/curves and compatible units. Exact quote/quantity references
+remain authoritative; selection does not silently convert units. Reset frequency,
+averaging method and payment frequency are separate financial terms. Current
+booking offers monthly/no-averaging and daily/arithmetic sampling and monthly
+payments only; broader calculation/payment grids require separate qualification.
+
+The local booking consumer persists one complete delivery month with one payment
+per side. It exposes monthly-index and equal daily-calendar projection rules;
+daily rows retain exact contracts and cash allocations before monthly aggregation.
+Other pure-core averaging strategies are not yet booking choices. Storage uses
+immutable typed side definitions, exact reset references and explicit membership
+slots. The shared blotter separates projected swap PV from futures execution P&L.
+Swap risk, actual fixing events and recurring payment strips are not implemented.
+
+The currency's configured default supplies the discount curve unless the
+instrument explicitly selects discounting=false. Calculation inputs retain the
+exact resolved mapping/curve, context, payment date, selected observations and
+numerical policies. Missing defaults or coverage are structured errors.
+Log-linear interpolation applies to discount factors between explicit pillars;
+there is no extrapolation. The first rates implementation uses its declared UTC
+date basis, with user-local display kept separate from contractual dates.
+Side cash amounts and PVs retain exact rational values through their own
+payment calculations. Instrument aggregation applies each membership coefficient
+once to those completed side PVs, and trade scaling happens afterward. A side PV
+may require more decimal places or a larger range than the final Money format;
+never round or reject it prematurely when exact aggregation/scaling yields a
+representable trade value. The final conversion enforces the selected monetary
+policy. Quantity scalability remains an explicit product capability.
+
+FixedSide and FloatingSide now implement independent GenerateSchedule and PV
+operations. Each currently generates one payment; their delivery/payment dates
+and quote multipliers can differ. Side valuation receives no instrument,
+membership direction or trade quantity. The context supplies exact declared
+market inputs and side-specific discount factors. FixedSide can value without a
+built commodity market; FloatingSide requires its own exact projection lookups.
+Instrument.PV validates compatible side outputs bound to the same valuation
+operation, including its scenario and discount inputs, then sums their signed
+values without interpreting or netting side cashflows. A snapshot ID alone cannot
+validate a cached side result; scenario overlays can share the same snapshot.
+
+Payment factors match exact side/payment occurrence, instant, currency and full
+snapshot. Missing, duplicate, extra or nonpositive factors fail. Standalone
+contexts also reject conflicting contents under one observation identity. Rate-based
+valuation retains each side's exact currency-default mapping/curve definition,
+used pillar dates/rates/factors and interpolation policy. An explicit scalar
+common-factor convenience operation remains limited to identical payment dates;
+independent dates require per-side factors. Recurring periods, actual fixings,
+durable swap storage and the browser inspector remain work. Futures execution
+P&L remains a separate implemented operation; generic futures PV/schedules reject
+without the required retained variation-margin/settlement lifecycle state.
+
+Instrument side editors display each side as a vertical field column with
+corresponding fields aligned across columns. Delivery start/end and currency are
+the first fields eligible for carry-over between sides during entry: populate
+only unset counterpart fields, leave each populated value visible/editable, and
+never overwrite another side during later edits. No copy button is exposed.
+Ongoing links require an explicit contract rather than inferred synchronization.
+The futures editor selects a shared contract and keeps trade booking/pricing terms
+separate. The current swap editor exposes its independent fixed/floating sides.
+
 The proposed minimal interfaces are:
 
 ```text
 Instrument
+  Exact immutable contractual identity
   GenerateSchedule(scheduleContext) -> SchedulePlan
   PV(valuationContext) -> ValuationResult
   Dependencies(resolutionContext) -> DependencySet
   Validate(resolutionContext) -> ValidationResult
+
+SidedInstrument : Instrument
+  Sides -> immutable side memberships (one or more)
 
 Side
   GenerateSchedule(sideScheduleContext) -> SchedulePlan
@@ -279,8 +540,8 @@ An instrument may have sibling sides in this form:
 ```text
 Instrument
   [0] OptionSide: references [1] and [2]
-  [1] FloatingFinancialSide
-  [2] FixedFinancialSide
+  [1] FloatingSide
+  [2] FixedSide
 ```
 
 The array indexes illustrate the relationship; persist stable typed references or
@@ -317,7 +578,7 @@ represent a physical swap. Keep each component's schedule and valuation behavior
 ```text
 CompositeSide
   PhysicalSide: delivery events and commodity-specific delivery terms
-  FloatingFinancialSide: payments linked to the declared delivery quantity
+  FloatingSide: payments linked to the declared delivery quantity
 ```
 
 Gas physical terms can include pipeline, zone, receipt/delivery point and gas-day
@@ -497,7 +758,26 @@ portfolio result.
 The initial engine supports trusted built-in operators. An extension interface
 does not authorize tenants or agents to load arbitrary executable code.
 
+Reports consume the same authorized calculations as screens and agent operations.
+A day-over-day P&L request identifies its books/portfolio, opening and closing
+market/effective instants, both knowledge contexts, reporting currency policy and
+supported lifecycle/cash conventions. It must distinguish changes in market value,
+new or amended trades, settlement entitlements and payments. Comparing two current
+execution-P&L displays alone does not establish complete daily economic P&L.
+Keep trade-level reconciliation and exact input/model receipts with book totals.
+A provider may request missing choices through an agent interaction contract;
+provider messages cannot invent policies or grant calculation/booking authority.
+That interaction and its administrative permissions remain future implementation.
+
 ### 5.1 Factor application versus valuation reuse
+
+The first managed implementation supports live quote-input absolute overlays,
+affected base-plan reuse, restricted black-box unit pricers and exact central
+differences. Its current trading consumer measures unprocessed futures execution
+P&L/open sensitivity, rather than full futures PV. See the qualified boundaries in
+[implemented scope](implementation.md#shared-quote-input-scenarios-and-open-futures-sensitivity).
+Durable jobs/receipts, broader shock conventions and integration of full
+instrument PV into risk remain design requirements below.
 
 Apply a factor shock once per scenario, independent of how many computations
 consume it. This does not imply that every different pricer can share one
@@ -544,11 +824,40 @@ sum. Reject a composition when those transformations are missing or unsupported.
 A dimensionless membership coefficient cannot substitute for an undeclared unit
 conversion, heat rate, delivery shape or contract-lot multiplier.
 
-The baseline uses a positive-receipt orientation for unit side values. A signed
-membership coefficient defines the side's contribution and the trade's signed
-quantity for that instrument defines its direction. The membership role is descriptive and
-does not apply another sign. Nested composition coefficients obey the same rule;
-do not apply pay/receive direction again from a label or side kind.
+The user selects direction on each side as used in an instrument: pay/receive
+for financial sides, deliver/accept for physical sides, or another explicitly
+supported pair. Retain that choice and validate it against one canonical signed
+membership coefficient; it is executable input, not a decorative label. The
+direction vocabulary belongs to the supported side/class contract. Never derive
+an additional sign independently from the displayed word. A physical direction
+orients the delivery obligation and its declared valuation contribution together;
+it does not create an undeclared cashflow or count commodity value twice.
+
+Each side returns its signed contribution in the selected instrument currency per
+one unit of the instrument's declared quantity basis. Instrument PV is the plain
+sum of those already normalized contributions. The trade then multiplies by its
+signed quantity in that exact basis, once. Missing conversions, unsupported FX,
+incompatible bases or conflicting direction/coefficient choices fail explicitly.
+
+The numerical implementation can defer multiplication and aggregation as an exact
+expression until the final result is represented. A per-lot intermediate smaller
+than the working decimal scale must not reject a representable multi-lot result.
+This preserves the unit-PV relationship without rounding intermediate values.
+
+A futures holding is booked in lots of a shared `FuturesContract`. Its normalized
+quantity amount is one; typed `LotSize` resolves from the exact series/product.
+The pricing binding supplies the selected curve/member and quote policy. Exact
+final summation applies quote multiplier, LotSize and booked lots once, without
+rounding a per-lot intermediate. Holding-specific variation-margin and settlement
+state remain trade-owned. The current bounded execution-P&L operation does not
+implement settlement cash, margin transitions or full futures PV.
+
+The baseline uses a positive-receipt orientation before applying the side's
+selected direction. A signed membership coefficient defines the side's
+contribution and the trade's signed quantity for that instrument defines its
+direction. The descriptive membership role does not apply another sign. Nested
+composition coefficients obey the same rule; do not apply pay/receive direction
+again from a label or side kind.
 
 The baseline enables quantity scaling for supported linear products. Future
 nonlinear market payoffs may also be quantity scalable: a holding of identical
@@ -596,6 +905,30 @@ full-revaluation P&L and the explain residual.
 Nonsmooth payoffs and optimization decisions may not have stable local Greeks.
 Retain the actual scenario results and diagnostics rather than claiming that a
 Greek approximation is exact for every future model.
+
+### Observable instruments and option underlyings
+
+A contract can have its own market observations and also be the underlying of
+another derivative. A listed option is its own immutable instrument with an exact
+underlying contract reference, strike, right, expiry, exercise, settlement and
+premium/margin conventions. Its market quotes refer to that same option identity;
+they do not require a second definition. An averaged/index/basket underlying must
+be an explicitly specified reference, not an inferred single futures contract.
+
+Observable identity, observations and valuation dependencies remain separate.
+Current primitive input histories use exact `market_data.series` keys, shared by
+curve consumers within the selected versioned context. Covariance axes must use
+explicit selected factor identities/units; dependency membership alone supplies
+no exposure amount. VaR, covariance estimation, independent cross-revision forward
+observable normalization and executable option products are not implemented.
+
+Pricing measure/numeraire, model versions, market-input mode and calibration belong
+to the selected valuation contract/context. An outright option mark has no inferred
+underlying exposure. Model-based option valuation declares its underlying,
+volatility, rates and any other inputs explicitly and reprices under shared
+scenarios. Premium-style versus daily-margin settlement is contractual; it cannot
+be inferred from the underlying being a future. None of this section claims an
+implemented option pricer or lifecycle.
 
 ### 5.4 Future option sides with sibling visibility
 
@@ -671,6 +1004,16 @@ MW * elapsed_hours = MWh
 (USD/MMBtu) * (MMBtu/MWh) = USD/MWh
 ```
 
+The current curve implementation retains a `UnitPrice` through evaluation and
+memoization. Its `PriceUnit` includes the exact currency, quantity specification
+and quote multiplier. Numeric multipliers retain their `ValueSpecification`;
+ratio multiplication cancels the declared numerator against the price denominator,
+while a dimensionless multiplier preserves the unit. Price addition requires an
+identical unit. Binding the completed result to a quote checks both unit identity
+and the final domain; intermediate prices do not inherit final quote bounds.
+This supports the existing add/scale-add recipes, not arbitrary dimensional
+algebra, implicit conversions or FX.
+
 Currency is part of the type. Adding different currencies requires an explicit,
 dated FX input. Unit conversions require a retained definition and convention.
 Similar names do not prove compatibility. Temperature/pressure or energy-content
@@ -689,6 +1032,67 @@ and nonfinite-value rules. Reject unsupported inputs instead of silently
 truncating them. Avoid unlimited precision growth, early currency rounding and
 implicit conversion through browser binary numbers. Decimal financial values
 cross the API as canonical strings.
+
+The amount types expose explicit formatted `ToString` overloads. `AmountFormat`
+selects decimal places, ties, grouping and trailing-zero presentation; resolved
+labels must match the exact amount reference. Decimal-quoted futures price display
+uses the decimal places required by its positive tick, without snapping prices to
+tick multiples. Display precision belongs to the retained deal, with explicit
+side-specific settings where needed. New entry may initialize editable values
+from a named default; saving materializes the selected policy. Personal Profile
+preferences must not own financial amount precision. This corrects the current
+preview implementation, which still uses Profile display settings. Formatting
+does not change economic identity or contractual settlement rounding. Raw values,
+exact sorting and exports remain unchanged.
+
+Financial values at domain and operation boundaries retain their typed amount
+contracts (`Money`, `Quantity`, `UnitPrice` and explicitly typed factors), exact
+reference units and applicable numerical/presentation policy. Canonical decimal
+strings are an exact wire encoding, not a substitute for that type information.
+Binary floating-point values are limited to suitable calculation intermediates
+and presentation coordinates, never retained financial inputs or outputs.
+
+Power quantity entry supports two explicit bases: total energy in MWh over a
+delivery period, or a flat rate in MW over selected delivery intervals. MWh is
+already energy: MWh-to-kWh conversion does not need a schedule. MW-to-MWh requires
+integration over actual elapsed interval durations. A side owns the delivery rule
+and generated typed quantity schedule; trade holding quantity remains outside the
+instrument definition. The rule must retain the selected market clock/rules,
+calendar, TOU, interval resolution and implementation version. Distributing a total
+energy amount across intervals requires an explicit allocation profile; choosing
+total energy alone does not authorize flat-rate allocation. Per-interval rounding
+must not silently change the supplied total. Missing physical conversion inputs
+or allocation rules are errors, not unconditional unit-conversion factors.
+
+The unsaved power preview implements flat-MW integration and explicitly allocated
+total-MWh entry with actual UTC intervals, including clock changes. `ExactQuantity`
+retains rational interval energy and exact quantity references. Settlement matches
+the index's exact quantity specification and rounds aggregate cash once. Typed
+amount JSON retains canonical decimal text alongside references. Each example has
+its own editable display precision. These quantity rules are not yet persisted on
+booked sides. A reference revision without a compatible MW quantity specification
+cannot offer flat-MW entry; supplemental reference versions are not rebound
+implicitly. Gas volume-to-energy conversions
+need selected heating value and measurement conditions; volume-to-mass conversions
+need a selected density basis; daily rates need the applicable delivery-day rule.
+These context-dependent operations remain distinct from static unit ratios.
+
+`Quantity.ConvertTo` and inverse `UnitPrice.ConvertTo` consume an immutable,
+qualified `UnitConverter`. Exact reference versions, commodity, measurement basis
+and dimension must agree. Only declared connected unit ratios are used, including
+inverses; contradictory paths fail catalog admission. Rational products are
+reduced before the final decimal boundary. A result exceeding exact decimal
+precision fails unless the caller supplies final decimal places and a tie rule.
+Price conversion preserves the quote multiplier and price-times-quantity cash.
+`UnitPrice.Times` likewise applies all factors before checking final money precision.
+Gas volume/energy, density conversions and power/energy integration need separate
+explicit physical inputs and are not unconditional unit conversions.
+
+The unit-conversion screen is an authorized consumer of versioned reference rows.
+A separately configured unit catalog pins an exact published market/reference
+bundle. Reads use the same effective/knowledge context and current authority;
+older cutoffs can retain valid market data while the later unit catalog is visibly
+unavailable. Such a conversion raises `unit_catalog`, without current-version fallback.
 
 The working representation and precision budget are implementation decisions
 requiring correctness and benchmark evidence. Evaluate a standard bounded
@@ -969,3 +1373,8 @@ Bitwise reproducibility across platforms is a separate promise requiring evidenc
 The foundation is intended to endure through explicit contracts, retained versions,
 replayable inputs and conformance tests. It does not attempt to implement every
 future model in the first release.
+
+Risk unit pricers return typed exact cash. Execution bases, quote multipliers and
+position quantities remain exact through subtraction and scaling; conversion to
+bounded decimal Money occurs at the final position-value boundary. This matches
+the futures holdings arithmetic without requiring a representable per-unit PV.

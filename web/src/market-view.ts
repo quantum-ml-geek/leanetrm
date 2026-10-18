@@ -1,9 +1,9 @@
 export type Row = Record<string, string | number | null>;
 export type Frame = {id:string; name:string; at:string; observationIds:string[];curveContracts:Record<string,string[]>};
-export type Workspace = {profile:string;example:{at:string;curve:string}; definitions:Record<string,Row[]>; references:Record<string,Row[]>; observations:Row[]; frames:Frame[]; initialFrameIds:string[]};
+export type Workspace = {futuresConvention:string;unitCatalogError?:string|null;unitCatalog?:{revision:unknown;references:Record<string,Row[]>};profile:string;example:{at:string;curve:string}; definitions:Record<string,Row[]>; references:Record<string,Row[]>; observations:Row[]; frames:Frame[]; initialFrameIds:string[]};
 import type {PricingNode} from './pricing-view.js';
 
-export type Point = {contractId?:string; seriesId?:string; maturity?:string; deliveryFrom?:string; deliveryTo?:string; expiry?:string; value:string; quote?:string; lineage:string[]; discountFactor?:string; displayDiscountFactor?:string; annualRate?:string; actualDays?:number};
+export type Point = {priceTick?:string;contractId?:string; seriesId?:string; maturity?:string; deliveryFrom?:string; deliveryTo?:string; expiry?:string; value:string; quote?:string; lineage:string[]; discountFactor?:string; displayDiscountFactor?:string; annualRate?:string; actualDays?:number};
 export type CurveResult = {kind?:'rates';convention?:{dayCount:string;compounding:string};availability?:'no_remaining_contracts';trace?:PricingNode[];snapshotId:string; curve:string; at:string; points:Point[]; evaluated:number; numericalPolicy:string};
 export type HistoryPoint = {at:string; value:string|null; snapshotId:string;unavailableReason?:string|null};
 export type PriceHistory = {points:HistoryPoint[]};
@@ -19,8 +19,14 @@ export function exactRow(rows:Row[],key:string,value:string):Row {
 export function commodityName(code:string,workspace:Workspace){const row=exactRow(workspace.references.commodities,'code',code);const name=publicText(val(row,'name').replace(/^Synthetic /,''));return name.charAt(0).toUpperCase()+name.slice(1);}
 export type MarketType='futures'|'forwards'|'mixed'|'rates';
 export const allCurves=(workspace:Workspace)=>[...workspace.definitions.curves,...(workspace.definitions.rate_curves??[])];
-// Display names are stored with each curve definition; a missing name is an error, not a code-derived guess.
-export function curveName(code:string,workspace:Pick<Workspace,'definitions'>){const name=exactRow(allCurves(workspace as Workspace),'code',code).name;if(typeof name!=='string'||!name)throw Error('Some market details are missing or inconsistent. Refresh and try again.');return publicText(name);}
+// Display names are stored with each curve definition and served as a directory for
+// the catalog. A missing or conflicting name is an error, never a code-derived guess.
+const curveNames=new Map<string,string|null>();
+export function setCurveNames(rows:{code:string;name:string}[]){
+  curveNames.clear();
+  for(const row of rows)curveNames.set(row.code,curveNames.has(row.code)&&curveNames.get(row.code)!==row.name?null:row.name);
+}
+export function curveName(code:unknown){const name=curveNames.get(String(code));if(typeof name!=='string'||!name)throw Error('Some market details are missing or inconsistent. Refresh and try again.');return publicText(name);}
 export const marketCategory=(curve:Row)=>typeof curve.interest_rate_code==='string'?'rates':val(curve,'commodity_code');
 export const categoryName=(code:string,workspace:Workspace)=>code==='rates'?'Interest rates':commodityName(code,workspace);
 export function marketType(curve:Row,workspace:Workspace):MarketType {

@@ -225,6 +225,9 @@ def run_checks(query, psql, environment, manifest, url):
         migration=(Path(__file__).resolve().parents[1]/'db/migrations/0010_workspace_administration.sql').read_text()
         rejected=subprocess.run(psql,env=environment,input=migration,text=True,capture_output=True,timeout=10)
         check('existing grants cannot receive an inferred membership migration',rejected.returncode!=0 and 'Existing grants require a verified workspace membership migration' in rejected.stderr)
+        names=(Path(__file__).resolve().parents[1]/'db/migrations/0026_display_names.sql').read_text()
+        rejected=subprocess.run(psql,env=environment,input=names,text=True,capture_output=True,timeout=10)
+        check('existing curves cannot receive inferred display names',rejected.returncode!=0 and 'Existing curves require a verified display-name migration' in rejected.stderr)
         # Fault injection is confined to this disposable database and restored.
         timeline=query(f"SELECT timeline_id FROM market_data.knowledge_clocks WHERE catalog_id='{catalog}';")
         query(f"UPDATE market_data.knowledge_clocks SET timeline_id=timeline_id+1 WHERE catalog_id='{catalog}';")

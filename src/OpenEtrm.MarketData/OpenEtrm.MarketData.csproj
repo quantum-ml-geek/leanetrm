@@ -5,4 +5,7 @@
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../OpenEtrm.Shared/OpenEtrm.Shared.csproj" />
+  </ItemGroup>
 </Project>

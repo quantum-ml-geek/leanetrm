@@ -1,5 +1,6 @@
 import {displayDate,displayInstant,publicText,friendly} from './market-view.js';
 import {renderRegularTable} from './regular-table.js';
+import {zonedInput} from './user-time.js';
 
 type Calendar={name:string;from:string;to:string;weekendDays:number[];closedDates:string[]};
 type Definition={name:string;symbol:string;firstMonth:string;lastMonth:string;anchor:string;day:number|null;shortMonth:string;adjustment:string;calendar:Calendar|null};
@@ -43,6 +44,7 @@ export function setupDateEditor(run:(work:()=>Promise<void>)=>Promise<void>,api:
   const empty=():Library=>({knownThrough:0,versions:[],canEdit:false,canPublish:false,contractDefinitions:[],calendars:[],choices:{anchors:[],shortMonths:[],adjustments:[],selections:[]}});
   let library=empty(),selected:Version|undefined,shownDates:SavedDates|undefined,shownCurve:Candidate|undefined;
   let pinnedContext:Context|undefined,exactKnownAt:string|undefined;
+  const knownInput=zonedInput(get<HTMLInputElement>('date-context-view'),zone,api);
   const clearDates=()=>{shownDates=undefined;get('dates-result').hidden=true;};
   const clearCurve=()=>{shownCurve=undefined;get('curve-dates-result').hidden=true;};
   const clearExpression=()=>{get('date-expression-result').hidden=true;};
@@ -51,11 +53,11 @@ export function setupDateEditor(run:(work:()=>Promise<void>)=>Promise<void>,api:
     get('date-context').addEventListener(event,()=>{pinnedContext=undefined;clearCurve();clearExpression();});
     get('date-context-view').addEventListener(event,()=>{exactKnownAt=undefined;});
   }
-  function setContext(context:Context){onContextChanged();pinnedContext=context;exactKnownAt=context.knownAt;set('date-context-on',context.effectiveOn);set('date-context-view',context.knownAt?.slice(0,16)??'');}
+  function setContext(context:Context){onContextChanged();pinnedContext=context;exactKnownAt=context.knownAt;set('date-context-on',context.effectiveOn);if(context.knownAt)knownInput.set(context.knownAt);else knownInput.clear();}
   async function context():Promise<Context>{
-    if(!value('date-context-on')||!value('date-context-view'))throw Error('Choose the context date and UTC knowledge time first.');
+    if(!value('date-context-on')||!value('date-context-view'))throw Error('Choose the business date and knowledge time in your display time zone first.');
     if(pinnedContext)return pinnedContext;
-    const snapshot=await api<Snapshot>('date-schedules/context',{effectiveOn:value('date-context-on'),knownAt:exactKnownAt??new Date(value('date-context-view')+'Z').toISOString(),mode:'at'});
+    const snapshot=await api<Snapshot>('date-schedules/context',{effectiveOn:value('date-context-on'),knownAt:exactKnownAt??await knownInput.instant(),mode:'at'});
     setContext(snapshot.context);return snapshot.context;
   }
   async function currentKnowledge(){
@@ -157,11 +159,11 @@ export function setupDateEditor(run:(work:()=>Promise<void>)=>Promise<void>,api:
   function showCurve(c:Candidate){
     shownCurve=c;get('curve-dates-result-title').textContent=publicText(`${c.name} · ${c.contracts.length} contracts`);get('curve-dates-spec').textContent=`Context ${displayDate(c.context.effectiveOn)} · known ${c.context.knownAt?displayInstant(c.context.knownAt,zone()):'from a retained publication prefix'} · end dates excluded`;
     const source=(r:Receipt)=>r.source.version?`v${r.source.version}`:'Literal';
-    renderRegularTable(get('curve-dates-table'),'curve-date-contracts',JSON.stringify(c),['Contract','Start reference','Start','Source','End reference','End','Last trading reference','Last trading · UTC','Source'],c.contracts.map(row=>[row.label,row.startReference.expression,displayDate(row.start),source(row.startReference),row.endReference.expression,displayDate(row.end),row.lastTradingReference.expression,displayInstant(row.lastTradingAt,'UTC'),source(row.lastTradingReference)]),[],isBusy);get('curve-dates-result').hidden=false;
+    renderRegularTable(get('curve-dates-table'),'curve-date-contracts',JSON.stringify(c),['Contract','Start reference','Start','Source','End reference','End','Last trading reference',`Last trading · ${zone()}`,'Source'],c.contracts.map(row=>[row.label,row.startReference.expression,displayDate(row.start),source(row.startReference),row.endReference.expression,displayDate(row.end),row.lastTradingReference.expression,displayInstant(row.lastTradingAt,zone()),source(row.lastTradingReference)]),[],isBusy);get('curve-dates-result').hidden=false;
   }
   get('curve-dates-add').onclick=()=>void run(async()=>{addRow();clearCurve();});
   get('curve-dates-example').onclick=()=>void run(async()=>{const symbol=value('curve-dates-schedule');if(!symbol)throw Error('Choose a published schedule first.');get('curve-dates-rows').replaceChildren();contractExampleRows(symbol,2,'15:30').forEach(addRow);set('curve-dates-name','Scheduled contract example');set('curve-dates-code','scheduled_contracts');clearCurve();});
   curveForm.onsubmit=e=>{e.preventDefault();void run(async()=>{clearCurve();showCurve(await api<Candidate>('date-schedules/contracts/preview',await candidate()));});};
   get('curve-dates-keep').onclick=()=>{if(isBusy()||!curveForm.reportValidity())return;void run(async()=>{clearCurve();const result=await api<Candidate>('date-schedules/contracts/save',await candidate());await load();showCurve(result);});};
-  return {load,context,setContext,clearContext(){pinnedContext=undefined;exactKnownAt=undefined;set('date-context-on','');set('date-context-view','');},refresh(){if(shownDates)showDates(shownDates);if(shownCurve)showCurve(shownCurve);},reset(){library=empty();selected=undefined;form.reset();curveForm.reset();get<HTMLFormElement>('date-expression-form').reset();set('date-context-on','');set('date-context-view','');pinnedContext=undefined;exactKnownAt=undefined;options('curve-dates-schedule',[],'Choose a published schedule…');clearDates();clearCurve();clearExpression();get('curve-dates-rows').replaceChildren();get('dates-table').replaceChildren();get('curve-dates-table').replaceChildren();list();versionLabel();}};
+  return {load,context,setContext,clearContext(){pinnedContext=undefined;exactKnownAt=undefined;set('date-context-on','');knownInput.clear();},refresh(){knownInput.refresh();if(shownDates)showDates(shownDates);if(shownCurve)showCurve(shownCurve);},reset(){library=empty();selected=undefined;form.reset();curveForm.reset();get<HTMLFormElement>('date-expression-form').reset();set('date-context-on','');set('date-context-view','');pinnedContext=undefined;exactKnownAt=undefined;knownInput.clear();options('curve-dates-schedule',[],'Choose a published schedule…');clearDates();clearCurve();clearExpression();get('curve-dates-rows').replaceChildren();get('dates-table').replaceChildren();get('curve-dates-table').replaceChildren();list();versionLabel();}};
 }

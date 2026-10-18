@@ -17,12 +17,16 @@ internal static class SchedulePublicationChecks
         Reject("schedule_unpublished",()=>PublishedSchedules.Resolve([version with{State="draft"}],"oe.ng[0]",context));
         Reject("schedule_unpublished",()=>PublishedSchedules.Resolve([version],"oe.ng[0]",context with{KnownThrough=0}));
         var revised=version with{Version=2,PublicationOrder=2,Definition=definition with{Name="Renamed monthly dates",Day=2}};
+        Eq(PublishedSchedules.Catalog([version,revised],context).Single().Name,"Monthly dates");
+        Eq(PublishedSchedules.Catalog([version,revised],context with{KnownThrough=2}).Single().Version,2);
+        Eq(PublishedSchedules.Catalog([revised],context).Length,0);
+        Eq(PublishedSchedules.Catalog([version],context with{EffectiveOn="2021-05-01"}).Length,0);
         Eq(PublishedSchedules.Resolve([version,revised],"oe.ng[0]",context).Date,new DateOnly(2021,1,1));
         Eq(PublishedSchedules.Resolve([version,revised],"oe.ng[0]",context with{KnownThrough=2}).Date,new DateOnly(2021,1,2));
         Reject("date_index",()=>PublishedSchedules.Resolve([version],"oe.ng[0]",context with{EffectiveOn="2020-12-15"}));
         Reject("schedule_context",()=>PublishedSchedules.Resolve([version],"oe.ng[0]",new(null,1)));
         Eq(PublishedSchedules.Resolve([version],"oe.ng",context).Date,new DateOnly(2021,1,1));
         Reject("schedule_engine",()=>PublishedSchedules.Resolve([version with{EngineVersion="unsupported"}],"oe.ng",context));
-        Console.WriteLine("12 published schedule resolution checks passed.");
+        Console.WriteLine("16 published schedule resolution checks passed.");
     }
 }

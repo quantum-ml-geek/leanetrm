@@ -1,0 +1,37 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {prepareAmountDisplay,amountText,selectDisplayPrecision,initialDisplayPrecision} from '../dist/amount-display.js';
+import {newPreferences,parsePreferences} from '../dist/preferences.js';
+test('display adapter sends exact text and tick choice, keeping raw financial values untouched',async()=>{
+ selectDisplayPrecision(initialDisplayPrecision());
+ const source={holdings:[{priceTick:'0.025',mark:'3.1',presentValue:'12345678901234567890.125',quantity:'1000'}]};
+ const before=JSON.stringify(source),requests=[];
+ await prepareAmountDisplay(source,async body=>{requests.push(...body);return body.map(r=>r.tick?'3.100':r.value==='1000'?'1,000.000':'12,345,678,901,234,567,890.12');});
+ assert.equal(JSON.stringify(source),before);
+ assert.equal(requests.find(r=>r.value==='3.1').tick,'0.025');
+ assert.equal(amountText('3.1','price','0.025'),'3.100');
+ assert.equal(amountText('1000','quantity'),'1,000.000');
+});
+test('incomplete formatter responses fail visibly instead of silently truncating values',async()=>{
+ selectDisplayPrecision(initialDisplayPrecision());
+ await assert.rejects(prepareAmountDisplay({quantity:'9.123'},async()=>[]),/incomplete/);
+});
+test('precision is scoped to the deal rather than the user profile',()=>{
+ const p=newPreferences('UTC');
+ assert.equal('displayPrecision' in p,false);
+ assert.equal('displayPrecision' in parsePreferences(JSON.stringify({...p,displayPrecision:{money:9,price:9,quantity:9,factor:9}})),false);
+});
+test('two deals with identical amounts keep different precision in one response',async()=>{
+ const first={money:2,price:4,quantity:1,factor:6},second={...first,quantity:3};
+ const requests=[];
+ await prepareAmountDisplay([{amountFormat:first,quantity:'123.45'},{amountFormat:second,quantity:'123.45'}],async body=>{requests.push(...body);return body.map(r=>r.decimalPlaces===1?'123.4':'123.450');});
+ assert.deepEqual(requests.map(r=>r.decimalPlaces).sort(),[1,3]);
+ assert.equal(amountText('123.45','quantity',undefined,first),'123.4');
+ assert.equal(amountText('123.45','quantity',undefined,second),'123.450');
+});
+test('settlement marks retain their clearing increment separately from execution ticks',async()=>{
+ const requests=[];
+ await prepareAmountDisplay({priceTick:'0.001',markTick:'0.0001',mark:'3.1001',executionPrice:'3.101'},async body=>{requests.push(...body);return body.map(r=>r.value);});
+ assert.equal(requests.find(r=>r.value==='3.1001').tick,'0.0001');
+ assert.equal(requests.find(r=>r.value==='3.101').tick,'0.001');
+});

@@ -8,6 +8,7 @@ if (args is ["--benchmark"] or ["--benchmark", _])
     return;
 }
 if (args.Length != 0) throw new ArgumentException("Use no arguments for checks, or --benchmark [output-path].");
+UserTimeChecks.Run();
 
 var passed = 0;
 void Check(string name, Action action) { action(); passed++; Console.WriteLine($"PASS {name}"); }

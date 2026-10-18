@@ -45,6 +45,10 @@ class CheckAllTests(unittest.TestCase):
             if '--pg-bin' in command:
                 self.assertEqual(command[command.index('--pg-bin') + 1], '/stock postgres/bin')
         self.assertTrue(any('--browser-check' in command for command in commands))
+        # Party race/revocation checks allocate their own disposable session pool.
+        self.assertTrue(any('--party-check' in command and '--browser-check' in command for command in commands))
+        self.assertTrue(any('--unit-check' in command and '--browser-check' in command for command in commands))
+        self.assertTrue(any('--exchange-check' in command and '--browser-check' in command for command in commands))
         self.assertTrue(any('mixed-gas' in command for command in commands))
 
     def test_failed_browser_checks_stop_later_work_and_preserve_failure(self):

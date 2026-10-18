@@ -12,6 +12,10 @@ if (args is ["--schedules"])
     return;
 }
 
+TradePartyChecks.Run();
+AmountJsonChecks.Run();
+TableViewChecks.Run();
+
 var cat=Guid.NewGuid(); var revision=Guid.NewGuid(); var reference=Guid.NewGuid(); var referenceRevision=Guid.NewGuid();
 var manifest=new PreviewManifest("local-synthetic-preview",cat,revision,reference,referenceRevision,Guid.NewGuid(),Guid.NewGuid(),[],new(DateTimeOffset.UtcNow,"local_power"));
 var row=new Dictionary<string,object> { ["catalog_id"]=cat,["id"]=revision,["reference_catalog_id"]=reference,["reference_revision_id"]=referenceRevision,["state"]="sealed" };
@@ -43,7 +47,7 @@ if(args.Length==1)
             CultureInfo.CurrentCulture=CultureInfo.GetCultureInfo(culture);
             var data=new PreviewData(realManifest,definitions,references,observations);
             var result=data.Build(frame,"local_power");
-            if(result.Values[0].Value.ToString()!="29.1" || data.Definitions["contracts"].Any(c=>c.Text("delivery_from").Length!=10))throw new Exception("Culture changed adapter values");
+            if(result.Values[0].Price.Value.ToString()!="29.1" || data.Definitions["contracts"].Any(c=>c.Text("delivery_from").Length!=10))throw new Exception("Culture changed adapter values");
             Console.WriteLine($"PASS full PostgreSQL adapter fixture under {culture}");passed++;
             if(data.BuildRates(frame,"interest_rates").Values[^1].DisplayDiscountFactor!="0.966184")throw new Exception("Culture changed rate calculation");
             Console.WriteLine($"PASS rate convention adapter under {culture}");passed++;

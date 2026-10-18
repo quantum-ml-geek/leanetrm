@@ -3,12 +3,12 @@ using System.Numerics;
 
 namespace OpenEtrm.MarketData.Power;
 
-public sealed record PowerIndex(ReferenceKey Definition,ReferenceKey Currency,ReferenceKey EnergyUnit,string PriceType,string Timing);
+public sealed record PowerIndex(ReferenceKey Definition,ReferenceKey Currency,ReferenceKey EnergyUnit,ReferenceKey EnergyQuantity,string PriceType,string Timing);
 public sealed record LmpComponents(ExactDecimal Energy,ExactDecimal Congestion,ExactDecimal Loss);
 public sealed record PowerFixing(DateTimeOffset Start,DateTimeOffset End,PowerIndex Index,ExactDecimal Total,LmpComponents? Components);
 public sealed record PowerSettlementPolicy(string Implementation,int PriceScale,int AmountScale)
 {
-    public static PowerSettlementPolicy Preview { get; }=new("duration_weighted_flat_mw_to_even_v1",18,2);
+    public static PowerSettlementPolicy Preview { get; }=new("duration_weighted_power_quantity_to_even_v2",18,2);
     public void Validate()
     {
         if(this!=Preview)throw new MarketDataException("settlement_policy","Choose the supported explicit preview numerical policy.");
@@ -16,6 +16,7 @@ public sealed record PowerSettlementPolicy(string Implementation,int PriceScale,
 }
 public sealed record PowerSettlementResult(string Hours,string Energy,string AveragePrice,string Amount,
     string ExactAmountNumerator,string ExactAmountDenominator,PowerIndex Index,PowerSettlementPolicy Policy);
+public sealed record PowerQuantitySettlement(PowerSettlementResult Summary,ExactQuantity Energy,Money Cash);
 
 public static class PowerSettlement
 {
@@ -40,11 +41,11 @@ public static class PowerSettlement
     private static Dictionary<DateTimeOffset,PowerFixing> Validate(PowerInterval[] periods,PowerFixing[] rows,PowerIndex index)
     {
         if(index is null)throw new MarketDataException("settlement_index","An exact index specification is required.");
-        Money.RequireKey(index.Definition);Money.RequireKey(index.Currency);Money.RequireKey(index.EnergyUnit);
+        Money.RequireKey(index.Definition);Money.RequireKey(index.Currency);Money.RequireKey(index.EnergyUnit);Money.RequireKey(index.EnergyQuantity);
         if(new[]{index.PriceType,index.Timing}.Any(string.IsNullOrWhiteSpace) ||
-            index.EnergyUnit.Code!="megawatt_hour" || index.Definition.Revision!=index.Currency.Revision || index.Currency.Revision!=index.EnergyUnit.Revision)
+            index.EnergyUnit.Code!="megawatt_hour" || index.Definition.Revision!=index.Currency.Revision || index.Currency.Revision!=index.EnergyUnit.Revision || index.EnergyQuantity.Revision!=index.EnergyUnit.Revision)
             throw new MarketDataException("settlement_index","Every index specification and classification is required.");
-        if(periods.Length==0 || periods.Length>110000 || rows.Length!=periods.Length)
+        if(periods is null || rows is null || periods.Length==0 || periods.Length>110000 || rows.Length!=periods.Length || periods.Any(p=>p is null) || rows.Any(r=>r is null))
             throw new MarketDataException("settlement_coverage","Supply exactly one fixing per selected interval.");
         var result=new Dictionary<DateTimeOffset,PowerFixing>();
         foreach(var row in rows)
@@ -64,6 +65,27 @@ public static class PowerSettlement
             previous=period;
         }
         return result;
+    }
+    public static PowerQuantitySettlement Calculate(PowerQuantitySchedule schedule,PowerFixing[] rows,PowerIndex index,PowerSettlementPolicy policy)
+    {
+        if(schedule is null || policy is null)throw new MarketDataException("power_quantity","Supply a typed quantity schedule and explicit settlement policy.");
+        policy.Validate();
+        var periods=schedule.Intervals.Select(p=>p.Interval).ToArray();
+        var fixings=Validate(periods,rows,index);
+        if(index.EnergyUnit!=schedule.EnergyDefinition.Unit || index.EnergyQuantity!=schedule.EnergyDefinition.Key)
+            throw new MarketDataException("settlement_index","The scheduled energy specification must match the selected index's exact commodity and measurement basis.");
+        var one=ExactDecimal.Parse("1");BigInteger priceDuration=0;
+        var cash=ExactMoney.FromMoney(new(default,index.Currency));
+        foreach(var p in schedule.Intervals)
+        {
+            var price=new UnitPrice(fixings[p.Interval.Start].Total,new PriceUnit(index.Currency,schedule.EnergyDefinition.Key,one));
+            cash=cash.Add(p.Energy.Times(price));
+            priceDuration+=Integer(price.Value)*(p.Interval.End-p.Interval.Start).Ticks;
+        }
+        var rounded=cash.ToMoney(new(policy.AmountScale,CashTieRule.ToEven,false,false));
+        var energy=schedule.Total.FormatValue(new(18,CashTieRule.ToEven,false,true));
+        return new(new(schedule.Hours,energy,Rounded(priceDuration,Scale*schedule.Duration.Ticks,policy.PriceScale),rounded.Amount.ToString(),
+            cash.Numerator,cash.Denominator,index,policy),schedule.Total,rounded);
     }
     public static PowerSettlementResult Calculate(PowerInterval[] periods,PowerFixing[] rows,PowerIndex index,ExactDecimal flatMegawatts,PowerSettlementPolicy policy)
     {

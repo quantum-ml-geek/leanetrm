@@ -5,6 +5,7 @@ using OpenEtrm.Security;
 
 if (args.Length > 0)
 {
+    if(args is ["--risk-benchmark",var output]){RiskBenchmark.Run(output);return;}
     if (args is ["--contract-sequences"])
     {
         ContractSequenceChecks.Run();
@@ -50,7 +51,7 @@ var original = fixture.Snapshot();
 Check("five layers: future -> gas forwards -> power forwards", () =>
 {
     var result = model.Build(original, request);
-    Equal(result.Values[0].Value.ToString(), "29.1");
+    Equal(result.Values[0].Price.Value.ToString(), "29.1");
     Equal(result.Values[0].Lineage.Count, 6);
     Equal(result.EvaluatedConstituents, 9);
     Equal(result.NumericalPolicy, CurveModel.NumericalPolicy);
@@ -84,15 +85,15 @@ Check("revised base observation propagates and old snapshot is unchanged", () =>
     var corrected = original with { Id = Guid.NewGuid(), Selections = original.Selections.Select(s =>
         s.Observation.Series == fixture.S(1) ? s with { Observation = s.Observation with {
             Key = new(fixture.Revision.CatalogId, Guid.NewGuid()), Value = ExactDecimal.Parse("3.05") } } : s).ToImmutableArray() };
-    Equal(model.Build(corrected, request).Values[0].Value.ToString(), "29.45");
-    Equal(model.Build(original, request).Values[0].Value.ToString(), "29.1");
+    Equal(model.Build(corrected, request).Values[0].Price.Value.ToString(), "29.45");
+    Equal(model.Build(original, request).Values[0].Price.Value.ToString(), "29.1");
 });
 Check("shared dependencies evaluate once across requested outputs", () =>
 {
     var requests = request.Add(new(fixture.C("hub_power"), fixture.K(4)));
     Equal(model.Build(original, requests).EvaluatedConstituents, 9);
     var reversed = model.Build(original, requests.Reverse().ToImmutableArray());
-    Equal(reversed.Values.Single(x => x.Request == request[0]).Value.ToString(), "29.1");
+    Equal(reversed.Values.Single(x => x.Request == request[0]).Price.Value.ToString(), "29.1");
 });
 Check("independent all-in location curve has no inherited base dependency", () =>
 {
@@ -104,7 +105,7 @@ Check("independent all-in location curve has no inherited base dependency", () =
     var changed = snapshots with { Selections = snapshots.Selections.Select(s => s.Observation.Series == fixture.S(1)
         ? s with { Observation = s.Observation with { Value = ExactDecimal.Parse("3.1") } } : s).ToImmutableArray() };
     var result = extended.Build(changed, outputs);
-    Equal(result.Values[0].Value.ToString(), "29.8"); Equal(result.Values[1].Value.ToString(), "29.1");
+    Equal(result.Values[0].Price.Value.ToString(), "29.8"); Equal(result.Values[1].Price.Value.ToString(), "29.1");
 });
 Check("missing observation raises instead of substituting zero", () => Reject("missing_observation", () =>
     model.Build(original with { Selections = original.Selections.RemoveAt(0) }, request)));
@@ -173,12 +174,12 @@ Check("expired source can explicitly consume its frozen final settlement", () =>
         ObservedAt = Fixture.Utc("2040-12-28T00:00:00Z") } };
     late = late with { Selections = late.Selections.Add(final) };
     var frozenBuild=frozenModel.Build(late, request);
-    Equal(frozenBuild.Values[0].Value.ToString(), "30.5");
+    Equal(frozenBuild.Values[0].Price.Value.ToString(), "30.5");
     var frozenEvidence=frozenBuild.Evaluations.Single(e=>e.Result.Request.Curve==fixture.C("future"));
-    Equal(frozenEvidence.Use,InputUse.FrozenFact);Equal(frozenEvidence.Result.Value.ToString(),"3.2");
+    Equal(frozenEvidence.Use,InputUse.FrozenFact);Equal(frozenEvidence.Result.Price.Value.ToString(),"3.2");
     var misleadingLiveValue = late with { Selections = late.Selections.SetItem(0, late.Selections[0] with {
         Observation = late.Selections[0].Observation with { Value = ExactDecimal.Parse("900") } }) };
-    Equal(frozenModel.Build(misleadingLiveValue, request).Values[0].Value.ToString(), "30.5");
+    Equal(frozenModel.Build(misleadingLiveValue, request).Values[0].Price.Value.ToString(), "30.5");
 });
 Check("invalid source expiry kind rejected", () =>
 {
@@ -188,15 +189,15 @@ Check("invalid source expiry kind rejected", () =>
 });
 Check("same snapshot stays deterministic across threads", () =>
 {
-    Parallel.For(0, 40, _ => Equal(model.Build(original, request).Values[0].Value.ToString(), "29.1"));
+    Parallel.For(0, 40, _ => Equal(model.Build(original, request).Values[0].Price.Value.ToString(), "29.1"));
 });
 Check("dated numeric series input changes only its explicit dependents", () =>
 {
     var ratio = original.Selections.Single(s => s.Input.Series == fixture.S(6));
     var changed = original with { Id = Guid.NewGuid(), Selections = original.Selections.Replace(ratio,
         ratio with { Observation = ratio.Observation with { Key = new(fixture.Revision.CatalogId, Guid.NewGuid()), Value = ExactDecimal.Parse("8") } }) };
-    Equal(model.Build(changed, request).Values[0].Value.ToString(), "32.4");
-    Equal(model.Build(original, request).Values[0].Value.ToString(), "29.1");
+    Equal(model.Build(changed, request).Values[0].Price.Value.ToString(), "32.4");
+    Equal(model.Build(original, request).Values[0].Price.Value.ToString(), "29.1");
 });
 Check("missing numeric series never becomes an implicit constant", () => Reject("missing_observation", () =>
     model.Build(original with { Selections = original.Selections.RemoveAt(5) }, request)));
@@ -205,7 +206,7 @@ Check("explicit typed constant is supported without a synthetic observation", ()
     var curves = fixture.Curves.Select(c => c.Rule == CurveRule.ScaleAdd ? c with {
         Multiplier = new(null, fixture.R("conversion_ratio"), ExactDecimal.Parse("7"), null, null) } : c).ToImmutableArray();
     var result = fixture.Model(curves).Build(original with { Selections = original.Selections.RemoveAt(5) }, request);
-    Equal(result.Values[0].Value.ToString(), "29.1"); Equal(result.Values[0].Lineage.Count, 5);
+    Equal(result.Values[0].Price.Value.ToString(), "29.1"); Equal(result.Values[0].Lineage.Count, 5);
     var evidence=result.Evaluations.Single(e=>e.Result.Request.Curve==fixture.C("hub_power"));
     Equal(evidence.Multiplier!.Value.ToString(),"7");Equal(evidence.MultiplierObservation is null,true);
 });
@@ -357,6 +358,16 @@ passed += MixedResolutionChecks.Run();
 ContractSequenceChecks.Run();
 passed += ExpiryTransitionChecks.Run();
 passed += PowerCurveChecks.Run();
+passed += TypedPriceChecks.Run();
+passed += AmountUnitChecks.Run();
+passed += PowerQuantityChecks.Run();
+passed += ContractIdentityChecks.Run() + TradingIdentityChecks.Run();
+passed += FuturesChecks.Run();
+passed += ExchangeFuturesChecks.Run();
+passed += SwapChecks.Run();
+passed += PaymentRuleChecks.Run();
+passed += IndependentSideChecks.Run();
+passed += RiskChecks.Run();
 Console.WriteLine($"{passed} managed core checks passed.");
 
 sealed class Fixture
@@ -403,12 +414,13 @@ sealed class Fixture
         new(C(code), quote, R("location"), R("uniform"), new(settlement, settlement == SettlementKind.FutureSeries ? null : R("index"),
             settlement == SettlementKind.IndexDifference ? R("index_b") : null), CurveRule.Direct, [member], [],
             settlement == SettlementKind.FutureSeries ? ObservationRole.DailySettlement : ObservationRole.TraderMark, R("source"), null);
-    public CurveModel Model(ImmutableArray<Curve>? curves = null, ImmutableArray<QuoteSpecification>? quotes = null, ImmutableArray<MarketContract>? contracts = null) =>
+    public CurveModel Model(ImmutableArray<Curve>? curves = null, ImmutableArray<QuoteSpecification>? quotes = null,
+        ImmutableArray<MarketContract>? contracts = null, ImmutableArray<ValueSpecification>? valueSpecs = null) =>
         new(Revision, Reference, Quantities, quotes ?? Quotes, contracts ?? Contracts, curves ?? Curves,
             [new(R("future_jan"), R("gas_quantity"), R("currency"), ExactDecimal.Parse("1"), ExactDecimal.Parse("0.025"),
                 R("location"), R("uniform"), new(2041, 1, 1), new(2041, 2, 1), Utc("2040-12-28T00:00:00Z"),
-                R("gas_quantity"), ExactDecimal.Parse("40"), LotBasis.FixedTotal)],
-            [new(R("conversion_ratio"), NumericKind.QuantityRatio, R("gas_quantity"), R("power_quantity"), ExactDecimal.Parse("0"), ExactDecimal.Parse("100"))],
+                R("gas_quantity"), ExactDecimal.Parse("40"), LotBasis.FixedTotal, Utc("2040-01-01T00:00:00Z"),"cash")],
+            valueSpecs ?? [new(R("conversion_ratio"), NumericKind.QuantityRatio, R("gas_quantity"), R("power_quantity"), ExactDecimal.Parse("0"), ExactDecimal.Parse("100"))],
             [new(S(1), K(1), R("gas_out"), null), new(S(2), K(2), R("gas_basis"), null),
              new(S(3), K(3), R("gas_basis"), null), new(S(4), K(4), R("power_basis"), null),
              new(S(5), K(5), R("power_basis"), null), new(S(6), null, null, R("conversion_ratio")),

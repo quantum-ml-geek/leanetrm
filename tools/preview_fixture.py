@@ -10,6 +10,7 @@ CAT = '40000000-0000-0000-0000-000000000001'
 REV = '60000000-0000-0000-0000-000000000001'
 RCAT = '10000000-0000-0000-0000-000000000001'
 RREV = '20000000-0000-0000-0000-000000000001'
+CURRENCY = 'usd'
 TENANT = 'b0000000-0000-0000-0000-000000000001'
 WORKSPACE = 'b1000000-0000-0000-0000-000000000001'
 R = f"'{RCAT}','{RREV}'"
@@ -45,11 +46,34 @@ def installed_tzdb():
     return first.removeprefix('# version ').strip()
 
 
+# Common ISO peak conventions seeded as published TOU products (verify before any
+# settlement use). Peak is hour-beginning [start, end) Monday–Friday, or Monday–Saturday.
+TOU_PRODUCTS = [
+    ('pjm', 'PJM · Eastern prevailing', 'eastern', 7, 23, False),
+    ('nyiso', 'NYISO · Eastern prevailing', 'eastern', 7, 23, False),
+    ('isone', 'ISO-NE · Eastern prevailing', 'eastern', 7, 23, False),
+    ('miso', 'MISO settlement / FTR · fixed EST', 'fixed_est', 6, 22, False),
+    ('spp', 'SPP · Central prevailing', 'central', 6, 22, False),
+    ('ercot', 'ERCOT · Central prevailing', 'central', 6, 22, False),
+    ('caiso', 'CAISO / WECC · Pacific prevailing', 'pacific', 6, 22, True)]
+
+
+def tou_products(catalog, reference, clocks, published_at, product_id):
+    """Published TOU product rows for one market catalog, bound to that catalog's clock rules."""
+    rows = []
+    for n, (code, name, clock, start, end, saturday) in enumerate(TOU_PRODUCTS, start=1):
+        pid = product_id(n)
+        rows.append(f"INSERT INTO market_data.tou_products VALUES ('{catalog}','{pid}','{code}');")
+        rows.append(f"INSERT INTO market_data.tou_product_versions(catalog_id,product_id,version,generation,state,name,clock_catalog_id,clock_revision_id,clock_code,peak_start_hour,peak_end_hour,peak_saturday,publication_order,published_at) VALUES ('{catalog}','{pid}',1,1,'published','{name}',{reference},'{clocks[clock]}',{start},{end},{str(saturday).lower()},{n},'{published_at}');")
+    return rows
+
+
 def identity(prefix, n):
     return f'{prefix}0000000-0000-0000-0000-{n:012d}'
 
 
-def fixture(root):
+def fixture(root, current_schema=True):
+    """current_schema=False omits rows that need migrations 0026+ (curve names, TOU products)."""
     def historical(text):
         for old, new in [('2039','2019'),('2040','2020'),('2041','2021'),('2042','2022')]:
             text = text.replace(old, new)
@@ -142,30 +166,30 @@ def fixture(root):
             extra_obs.append(f"INSERT INTO market_data.observations VALUES ('{CAT}','{oid}','{REV}','{identity('9',number)}',{R},'fixture','{event}','1','{role}','final','2020-12-{day} 16:00:00+00','{now}',{values[n]},NULL);")
         frames.append({'at':f'2020-12-{day}T16:00:00Z','observationIds':pins,
                        'curveContracts':{code:[identity('5',month*5+n) for month in range(6)] for code,n in curves}})
+    extra_ref.append(f"DO $$ BEGIN IF to_regclass('ref_data.futures_product_terms') IS NOT NULL THEN INSERT INTO ref_data.futures_product_terms VALUES({R},'test_gas_future','test_uniform',NULL); END IF; END $$;")
     market=market.replace('UPDATE ref_data.revisions SET', '\n'.join(extra_ref)+'\nUPDATE ref_data.revisions SET',1)
     extra_market.append(f"INSERT INTO market_data.revision_periods VALUES ({M},'2020-01-01','2022-01-01');")
     market=market.replace('UPDATE market_data.revisions SET','\n'.join(extra_market)+'\nUPDATE market_data.revisions SET',1)
     market=market.rsplit('COMMIT;',1)[0]+'\n'+'\n'.join(extra_obs)+'\nCOMMIT;\n'
-    market=named_curves(market)
-    # Common ISO peak conventions as published TOU products (verify before any settlement use).
-    # Peak is hour-beginning [start, end) Monday–Friday, or Monday–Saturday where marked.
-    tou=[]
-    for n,(code,name,clock,start,end,saturday) in enumerate([
-            ('pjm','PJM · Eastern prevailing','synthetic_eastern',7,23,'false'),
-            ('nyiso','NYISO · Eastern prevailing','synthetic_eastern',7,23,'false'),
-            ('isone','ISO-NE · Eastern prevailing','synthetic_eastern',7,23,'false'),
-            ('miso','MISO settlement / FTR · fixed EST','synthetic_fixed_est',6,22,'false'),
-            ('spp','SPP · Central prevailing','synthetic_central',6,22,'false'),
-            ('ercot','ERCOT · Central prevailing','synthetic_central',6,22,'false'),
-            ('caiso','CAISO / WECC · Pacific prevailing','synthetic_pacific',6,22,'true')],start=1):
-        pid=identity('d',n)
-        tou.append(f"INSERT INTO market_data.tou_products VALUES ('{CAT}','{pid}','{code}');")
-        tou.append(f"INSERT INTO market_data.tou_product_versions(catalog_id,product_id,version,generation,state,name,clock_catalog_id,clock_revision_id,clock_code,peak_start_hour,peak_end_hour,peak_saturday,publication_order,published_at) VALUES ('{CAT}','{pid}',1,1,'published','{name}',{R},'{clock}',{start},{end},{saturday},{n},'{now}');")
-    market=market.rsplit('COMMIT;',1)[0]+'\n'.join(tou)+'\nCOMMIT;\n'
+    if current_schema:
+        market=named_curves(market)
+        clocks={'eastern':'synthetic_eastern','central':'synthetic_central','pacific':'synthetic_pacific','fixed_est':'synthetic_fixed_est'}
+        tou=tou_products(CAT,R,clocks,now,lambda n:identity('d',n))
+        market=market.rsplit('COMMIT;',1)[0]+'\n'.join(tou)+'\nCOMMIT;\n'
     manifest={'mode':'local-synthetic-preview','catalogId':CAT,'revisionId':REV,'referenceCatalogId':RCAT,'referenceRevisionId':RREV,
               'tenantId':TENANT,'workspaceId':WORKSPACE,'frames':frames,
               'schedules':[{'curve':'future','from':'2020-12-01T00:00:00Z','to':'2021-05-28T15:30:00Z','exampleAt':'2020-12-28T15:29:00Z'}],
-              'example':{'at':'2020-12-18T16:00:00Z','curve':'local_power'}}
+              'example':{'at':'2020-12-18T16:00:00Z','curve':'local_power'},
+              'unitCatalog':{'referenceRevisionId':RREV,'definitionRevisionId':REV}}
+    # This preview assigns a named IT energy convention to its gas quotes.
+    # The generic schema fixtures keep their unrelated synthetic units.
+    reference=reference.replace("'energy_a'", "'mmbtu_it'").replace("'EA'", "'MMBtu (IT)'")
+    market=market.replace("'energy_a'", "'mmbtu_it'")
+    common=(root/'tests/fixtures/common-units.sql').read_text()
+    market=market.replace('UPDATE ref_data.revisions SET',common+'\nUPDATE ref_data.revisions SET',1)
+    # The preview uses a real currency reference; market prices remain synthetic.
+    reference=reference.replace("'test_currency_a'",f"'{CURRENCY}'").replace("'TST','Synthetic currency A'","'USD','US Dollar'")
+    market=market.replace("'test_currency_a'",f"'{CURRENCY}'")
     return reference, market, security_fixture(CAT,RCAT), manifest
 
 
@@ -174,7 +198,7 @@ def security_fixture(catalog,reference_catalog):
               f"INSERT INTO security.workspaces VALUES ('{TENANT}','{WORKSPACE}','synthetic_market');",
               f"INSERT INTO security.market_catalog_scopes VALUES ('{catalog}','{TENANT}','{WORKSPACE}');",
               f"INSERT INTO security.reference_catalog_scopes VALUES ('{reference_catalog}','{TENANT}','{WORKSPACE}','owner');"]
-    for n,slug,role in [(1,'viewer',1),(2,'editor',4),(3,'approver',5),(4,'admin',6)]:
+    for n,slug,role in [(1,'viewer',1),(2,'editor',4),(3,'approver',5),(4,'admin',6),(5,'trader',2),(6,'risk',3)]:
         pid=identity('c',n)
         security.extend([f"INSERT INTO security.principals VALUES ('{pid}','human',true);",
             f"INSERT INTO security.identity_bindings VALUES ('https://preview.invalid','{slug}','{pid}','human_interactive');",
@@ -183,3 +207,25 @@ def security_fixture(catalog,reference_catalog):
     security.extend(['CREATE ROLE preview_runtime LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS INHERIT IN ROLE openetrm_runtime;',
                      'CREATE ROLE preview_authenticator LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS INHERIT IN ROLE openetrm_authenticator;'])
     return '\n'.join(security)
+
+
+def trading_fixture(catalog, swap_defaults=False, annotations=True):
+    """Immutable synthetic books used by the local futures booking operation."""
+    defaults = f"INSERT INTO trading.currency_discount_defaults VALUES ('{catalog}','d2000000-0000-0000-0000-000000000001','{REV}','{RCAT}','{RREV}','{CURRENCY}','interest_rates','log_discount_geometric_root_to_even_18_v1',1,'2020-01-01 00:00:00+00');" + f"\nINSERT INTO trading.currency_discount_defaults VALUES ('{catalog}','d2000000-0000-0000-0000-000000000002','60000000-0000-0000-0000-000000000002','{RCAT}','{RREV}','{CURRENCY}','interest_rates','log_discount_geometric_root_to_even_18_v1',1,'2020-01-01 00:00:00+00');" if swap_defaults else ''
+    traders=f"INSERT INTO trading.traders VALUES ('{catalog}','d3000000-0000-0000-0000-000000000001',1,'trader_a','Trader A',1,'2020-01-01T00:00:00Z'),('{catalog}','d3000000-0000-0000-0000-000000000002',1,'trader_b','Trader B',1,'2020-01-01T00:00:00Z');" if annotations else ''
+    parties = '\n'.join(f"INSERT INTO trading.{table} VALUES ('{catalog}','{prefix}000000-0000-0000-0000-00000000000{n}',1,'{code}_{n}','Synthetic {label} {n}',1,'2020-01-01T00:00:00Z');" for table,prefix,code,label in [('legal_entities','d4','entity','entity'),('counterparties','d5','party','party')] for n in (1,2)) if annotations else ''
+    return f"""BEGIN;
+INSERT INTO trading.publications VALUES ('{catalog}',1,pg_current_xact_id());
+INSERT INTO trading.portfolios VALUES ('{catalog}','d0000000-0000-0000-0000-000000000001','Synthetic portfolio',1,'2020-01-01 00:00:00+00');
+INSERT INTO trading.books VALUES ('{catalog}','d1000000-0000-0000-0000-000000000001','d0000000-0000-0000-0000-000000000001','Book A',1,'2020-01-01 00:00:00+00');
+INSERT INTO trading.books VALUES ('{catalog}','d1000000-0000-0000-0000-000000000002','d0000000-0000-0000-0000-000000000001','Book B',1,'2020-01-01 00:00:00+00');
+{traders}
+{parties}
+{defaults}
+COMMIT;"""
+
+
+def trade_booking(trade_date='2020-12-18'):
+    """Explicit party/date choices for the standard synthetic trading fixture."""
+    return {'tradeDate': trade_date, 'legalEntityId': 'd4000000-0000-0000-0000-000000000001', 'legalEntityRevision': 1,
+            'counterpartyId': 'd5000000-0000-0000-0000-000000000001', 'counterpartyRevision': 1}

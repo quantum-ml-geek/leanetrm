@@ -1,25 +1,15 @@
 import {renderRegularTable} from './regular-table.js';
 import {displayInstant,publicText,friendly} from './market-view.js';
+import {PendingCommand as PendingAdministration} from './pending-command.js';
+import type {RequestCommand as AdministrativeCommand} from './pending-command.js';
+export {PendingCommand as PendingAdministration} from './pending-command.js';
+export type {RequestCommand as AdministrativeCommand} from './pending-command.js';
 
 type Api=<T>(path:string,body?:unknown)=>Promise<T>;
 type Member={id:string;login:string;name:string;kind:string;enabled:boolean;version:number;roles:string[]};
 type Audit={operationId:string;at:string;actor:string;action:string;before:Member|null;after:Member};
 type Directory={members:Member[];roles:{code:string;name:string;permissions:string[]}[];audit:Audit[];kinds:{code:string;name:string}[]};
-export type AdministrativeCommand={operationId:string;path:string;body:Record<string,unknown>};
 
-// An uncertain response retains the original command. Changing a form cannot
-// silently turn a retry into a second administrative action.
-export class PendingAdministration {
-  command:AdministrativeCommand|undefined;
-  begin(path:string,body:Record<string,unknown>,newId:()=>string=()=>crypto.randomUUID()):AdministrativeCommand{
-    if(this.command){
-      if(this.command.path!==path||JSON.stringify(this.command.body)!==JSON.stringify(body))throw Error('Review the outstanding request before changing its details. You can retry the original request or discard it after checking recent changes.');
-      return this.command;
-    }
-    return this.command={operationId:newId(),path,body:structuredClone(body)};
-  }
-  clear(){this.command=undefined;}
-}
 export function knownAdministrationRejection(code:string|undefined):boolean{
   return !!code&&['admin_conflict','admin_input','last_administrator','self_access_change','admin_limit',
     'access_denied','request_format','request_token','definition_rejected'].includes(code);

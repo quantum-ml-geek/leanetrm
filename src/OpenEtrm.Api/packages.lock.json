@@ -9,7 +9,10 @@
         "contentHash": "7nb5YzXuvWWJxB0J8DiyL3we+X4FOctZrt0fIBnucOIaIevFEEwGQVZKtiu9olXdlNAK1eNgqSral6r/jlhI4w=="
       },
       "openetrm.marketdata": {
-        "type": "Project"
+        "type": "Project",
+        "dependencies": {
+          "OpenEtrm.Shared": "[1.0.0, )"
+        }
       },
       "openetrm.rates": {
         "type": "Project",

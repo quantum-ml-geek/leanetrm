@@ -4,10 +4,14 @@ SEEDED = {'pjm', 'nyiso', 'isone', 'miso', 'spp', 'ercot', 'caiso'}
 
 
 def run_checks(Client, check):
-    viewer = Client(); viewer.bootstrap(); viewer.call('profile', {'profile': 'viewer'})
-    editor = Client(); editor.bootstrap(); editor.call('profile', {'profile': 'editor'})
-    approver = Client(); approver.bootstrap(); approver.call('profile', {'profile': 'approver'})
-    admin = Client(); admin.bootstrap(); admin.call('profile', {'profile': 'admin'})
+    # One preview session switches demo users; the preview caps concurrent sessions.
+    session = Client(); session.bootstrap()
+    class As:
+        def __init__(self, profile): self.profile = profile
+        def call(self, path, body=None, expected=200):
+            session.call('profile', {'profile': self.profile})
+            return session.call(path, body, expected=expected)
+    viewer, editor, approver, admin = As('viewer'), As('editor'), As('approver'), As('admin')
     library = viewer.call('tou-products')
     check('the usual ISO peak definitions start as published TOU products',
           {v['code'] for v in library['versions']} == SEEDED and all(v['state'] == 'published' for v in library['versions']))
@@ -53,13 +57,16 @@ def run_checks(Client, check):
           following['version'] == 2 and following['state'] == 'draft'
           and next(p for p in viewer.call('power/catalog', {'snapshotId': frame['id']})['products'] if p['code'] == 'synthetic_peak')['version'] == 1)
     stale = {'snapshotId': frame['id'], 'curve': 'local_power_all_in', 'contractId': viewer.call('power/catalog', {'snapshotId': frame['id']})['curves'][0]['contracts'][0]['id'],
-             'product': 'pjm', 'productVersion': 2, 'block': 'all', 'minutes': 60, 'hourLabels': 'HE', 'megawatts': '10', 'priceType': 'Test', 'timing': 'End of day',
+             'product': 'pjm', 'productVersion': 2, 'block': 'all', 'minutes': 60, 'hourLabels': 'HE', 'priceType': 'Test', 'timing': 'End of day',
+             'quantity': {'value': '10', 'specification': next(q['specification'] for q in catalog['quantityChoices'] if q['basis'] == 'flat_power')},
+             'quantityBasis': 'flat_power', 'allocation': None, 'display': catalog['display'],
              'nonHolidays': '1' * 168, 'holidays': '1' * 168, 'numericalPolicy': catalog['numericalPolicy']}
     error = viewer.call('power/preview', stale, expected=409)
     check('a power check built from another product version is rejected, never re-evaluated under the newer one', error['code'] == 'tou_conflict')
     admin.call('tou-products', expected=403)
     check('access administration does not grant TOU product reads')
-    editor.call('market/context', {'effectiveOn': '2020-12-17', 'knownAt': None, 'mode': 'current', 'selection': 'latest_correction'})
-    error = editor.call('tou-products', expected=422)
+    session.call('profile', {'profile': 'editor'})
+    session.call('market/context', {'effectiveOn': '2020-12-17', 'knownAt': None, 'mode': 'current', 'selection': 'latest_correction'})
+    error = session.call('tou-products', expected=422)
     check('a historical market view never substitutes current TOU products', error['code'] == 'power_historical')
-    editor.call('market/current', {})
+    session.call('market/current', {})

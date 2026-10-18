@@ -5,7 +5,10 @@ The broad baseline below remains a product contract. Shared contexts for existin
 market observations, commodity/rate curves, exact definition/reference bundles,
 schedules and contract-date candidates are qualified in owned previews; see
 [implemented scope](implementation.md#shared-historical-market-view-and-administration).
-Trade/lifecycle domains, activation and production recovery remain unimplemented.
+Immutable synthetic futures booking history now shares the certified cutoff and
+adds exact effective-instant selection. Latest-head futures and financial swap
+amendments retain prior effective/knowledge views. General lifecycle transitions,
+activation and production recovery remain unimplemented.
 
 This is a baseline product requirement, not an optional reporting feature. Read
 with [architecture](architecture.md), [lifecycle](lifecycle.md) and [plan](plan.md).
@@ -128,7 +131,9 @@ The knowledge columns are UTC timestamps (`timestamptz`), never calendar dates.
 Retain supported subsecond precision for multiple corrections in one day. The
 effective timeline also uses explicit instants; date-only contractual fields stay
 separate dates and require an explicit clock/boundary when mapped to the timeline.
-API timestamps carry an offset and normalize to UTC; display zones do not change
+Database connections explicitly pin UTC timestamp transport, independently of
+server defaults or process time-zone settings. API timestamps carry an offset
+and normalize to UTC; display zones do not change
 the selected instant.
 
 Use one reserved finite end marker for open-ended timeline rows, consistently in

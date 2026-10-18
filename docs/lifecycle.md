@@ -1,13 +1,21 @@
 # Events and lifecycle
 
 Status: baseline approved for implementation and publication on 2026-10-16.
-No implementation is implied. This complements [the architecture](architecture.md)
+The bounded futures booking workflow retains explicit `Unprocessed` settlement
+state and latest-head booking amendments with immutable versioned events. A generic
+event executor and settlement transitions remain unimplemented. This complements [the architecture](architecture.md)
 and [delivery plan](plan.md).
 
 ## 1. Ownership
 
 Instruments and sides define their supported lifecycle behavior. The booked trade
 owns instrument quantities, lifecycle state and retained obligation occurrences.
+Events, TraderId, TradeDate, counterparty, memo and legal entity also belong to
+Trade. Instruments remain reusable unit definitions; each booked quantity uses
+the existing unit-aware Quantity value type, retained externally to the instrument
+by the trade for that binding.
+Side schedules describe planned occurrences; accepted business events are retained
+on the trade, with links to the affected instrument bindings and occurrences.
 
 Two trades may reference the same instrument and side definitions. Amending,
 exercising or terminating one trade must not mutate the other's definition or
@@ -20,8 +28,8 @@ Suggested responsibilities:
 | --- | --- |
 | Portfolio | Contains books and aggregates their authorized trade values |
 | Book | Contains trades and defines the relevant business/access boundary |
-| Trade | Booking identity, book binding, instrument-to-quantity bindings, applicable lifecycle state and retained business events |
-| Instrument | Supported economic actions and coordination of its side behaviors |
+| Trade | Booking identity, book binding, TraderId, TradeDate, counterparty, memo, legal entity, instrument-to-quantity bindings, applicable lifecycle state and retained business events |
+| Instrument | Reusable unit economics, supported economic actions and coordination of its side behaviors |
 | Side | Planned events, schedule/valuation behavior and applicable component rules |
 | Lifecycle handler | Pure validation/planning of a supported state transition |
 | Application service | Current authorization, approval, concurrency and atomic persistence |
@@ -89,6 +97,24 @@ whose meaning changed.
 An amendment is a retained transition, not an overwrite or deletion of the old
 trade. Record the prior bindings, accepted changes, new bindings, effective
 date/instant, actor, reason and application revision.
+
+The implemented `unprocessed_futures_booking_amendment_v1` operation changes
+book, exact dated contract, signed lots, execution price or execution instant.
+It requires the current head, a reason and an explicit effective instant equal to
+the selected working As of instant, no earlier than the previous head. The editor
+previews both states using pinned prices and requires confirmation before submit.
+Historical views and superseded revisions are read-only. Changing contract reuses
+or creates an independent instrument binding; sibling trades retain their state.
+
+`futures_booking_state_v1` events retain revision links, actor, operation identity,
+reason, execution/effective coordinates and certified publication identity.
+Historical reads select the newest visible revision before applying book filters.
+Concurrent commands cannot fork the chain. Identical retry returns its accepted
+original outcome even after a later amendment; outcome reconciliation is explicitly
+current control state. Old and replacement states must both be supported live,
+unprocessed futures in the same definition package and exact currency. This is a
+booking correction workflow, not settlement, economic termination, arbitrary
+backdated insertion or an external-effect dispatcher. No outbox consumer is claimed.
 
 For example, changing a trade's fixed rate:
 

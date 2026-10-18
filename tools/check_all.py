@@ -40,6 +40,9 @@ def run_checks(pg_bin, dotnet, browser, *, run=subprocess.run):
     preview = [sys.executable, 'tools/run_preview.py', '--pg-bin', str(pg_bin),
                '--dotnet', str(dotnet), '--no-build', '--check']
     check('standard preview and browser', [*preview, '--browser-check', '--browser', str(browser)])
+    check('isolated party maintenance and power browser', [*preview, '--party-check', '--browser-check', '--browser', str(browser)])
+    check('isolated units and deal precision browser', [*preview, '--unit-check', '--browser-check', '--browser', str(browser)])
+    check('isolated exchange futures browser', [*preview, '--exchange-check', '--browser-check', '--browser', str(browser)])
     check('mixed-period preview', [*preview, '--example', 'mixed-gas'])
     print('All synthetic verification suites passed.', flush=True)
 

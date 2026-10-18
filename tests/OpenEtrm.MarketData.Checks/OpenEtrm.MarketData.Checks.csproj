@@ -8,6 +8,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/OpenEtrm.MarketData/OpenEtrm.MarketData.csproj" />
+    <ProjectReference Include="../../src/OpenEtrm.Shared/OpenEtrm.Shared.csproj" />
     <ProjectReference Include="../../src/OpenEtrm.Security/OpenEtrm.Security.csproj" />
   </ItemGroup>
 </Project>

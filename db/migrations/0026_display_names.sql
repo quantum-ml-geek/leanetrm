@@ -1,7 +1,12 @@
 -- Stored display names for curves and roles. Names are presentation labels;
--- identity remains the code. Existing curve rows have no defined name, so the
--- NOT NULL step deliberately fails on a database that already holds curves.
+-- identity remains the code. Existing curve rows have no defined name, so this
+-- migration refuses a database that already holds curves rather than inventing one.
 BEGIN;
+DO $$ BEGIN
+ IF EXISTS(SELECT 1 FROM market_data.curves) OR EXISTS(SELECT 1 FROM market_data.rate_curves) THEN
+   RAISE EXCEPTION 'Existing curves require a verified display-name migration' USING ERRCODE='55000';
+ END IF;
+END $$;
 ALTER TABLE market_data.curves ADD COLUMN name text
   CHECK (name = btrim(name) AND name <> '' AND length(name) <= 80);
 ALTER TABLE market_data.curves ALTER COLUMN name SET NOT NULL;

@@ -43,6 +43,7 @@ public sealed class ZeroRateCurve
             Fail("rate_snapshot","Select an exact supported UTC rate context.");
         var date=DateOnly.FromDateTime(snapshot.ValuationAt.UtcDateTime);
         if(date.Year is <1901 or >2199)Fail("rate_date","The rate implementation supports dates from 1901 through 2199.");
+        if(!snapshot.HasCoherentSelections())Fail("observation_conflict","Selections must have unique inputs and consistent contents for each observation identity.");
         var selections=new Dictionary<InputKey,MarketObservation>();
         foreach(var selection in snapshot.Selections)
             if(!selections.TryAdd(selection.Input,selection.Observation))Fail("observation_conflict","Repeated rate input selection is not allowed.");

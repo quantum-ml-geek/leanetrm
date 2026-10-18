@@ -21,7 +21,27 @@ settlement evidence is an error, never a last-price substitution or zero.
 | SEC02 | Stale edits and payload reuse conflict; concurrent identical commands produce one account/audit; private-table access, cross-workspace changes, expired admission and agent role without delegation are denied | `check_admin_preview.py`, `check_temporal_storage.py` |
 | SEC03 | Browser creates/edits/suspends/restores, filters accounts, denies last-admin removal, clears stale forms after actual two-session revocation, and retains/retries the identical request after a lost or malformed post-commit response | `tests/browser/administration.mjs` |
 | PWR00 | Negative power outright/basis prices retain signed values and exact money; independently supplied outright prices have no inferred gas exposure | `PowerCurveChecks.cs` |
+| UNIT01 | Price × explicit heat rate cancels the declared gas quantity to a power-price unit; compatible price × quantity returns money. Reject mismatched references, reversed ratios and mixed quote scales, including zero-valued operands | `TypedPriceChecks.cs` |
+| UNIT02 | Preserve quote multipliers through arithmetic; validate final quote units/domain without imposing that domain on a scaled intermediate. Derived prices retain exact precision without clearing-increment rounding; unsupported precision and overflow reject | `TypedPriceChecks.cs` |
+| FUT01 | Three independently executed holdings in two books share one exact futures contract with explicit pricing bindings; changed contract marks reprice every holding while preserving signed quantities and execution terms | `FuturesChecks.cs`, `check_futures_preview.py` |
+| FUT02 | Tick, lot, exact unit/convention, live-interval and full pinned-input mismatches reject; a zero execution P&L retains its open quantity and Unprocessed settlement | `FuturesChecks.cs`, `check_futures_storage.py` |
+| FUT03 | Backdated trades stay out of pre-commit contexts; exact effective instants exclude later same-day executions; missing certificates and direct runtime writes fail | `check_futures_preview.py`, `check_futures_storage.py` |
+| FUT04 | Identical concurrent retries produce one booking; uncertain/denied retries retain identity, current revocation clears rows, and selecting a shared contract preserves its exact curve | `check_futures_preview.py`, `tests/browser/futures.mjs` |
+| BLT01 | Explicit book/portfolio filters scope trade rows and totals; unknown saved identifiers, unsupported measures and incomplete pivot contracts reject | `check_futures_preview.py` |
+| BLT02 | Pivot totals reconcile with trade arithmetic, keep zero-net groups, partition incompatible units/currencies and count distinct trades rather than bindings | `FuturesChecks.cs` |
+| BLT03 | Selected columns, slicing and named views survive browser reload; snapshot export carries exact display values/context; common header dates and active profile update correctly | `tests/browser/futures.mjs`, `tests/browser/market-context.mjs` |
+| BLT04 | The four weekday demo dates show 2/4/6/8 cumulative trade bindings across two books; repeat loading is idempotent, exact P&L matches independent oracles and old knowledge views exclude later bookings | `check_seeded_preview.py` |
 | TIME01 | The common knowledge context applies to curves, rates and reference views; later corrections stay out of earlier receipts; date/context changes clear stale rows | `check_market_temporal.py`, `tests/browser/market-context.mjs` |
+| RSK01 | A 0.10 gas shock through the explicit heat-rate 7 recipe changes a 10,000-unit power position by 7,000; independent all-in marks remain unchanged | `RiskChecks.cs` |
+| RSK02 | Ten thousand eligible holdings share three unit calls for base/up/down; distinct books and execution bases stay independent; affected curves rebuild once | `RiskChecks.cs`, `FuturesChecks.cs`, `RiskBenchmark.cs` |
+| RSK03 | Nonlinear and zero-delta examples retain gamma and actual scenario values; exact quotient, unit/domain and missing-input failures do not become rounded/zero risk | `RiskChecks.cs` |
+| RSK04 | A risk analyst uses the blotter's retained context; current revocation blocks recalculation/export, edits clear results and Trader gains no scenario authority | `check_risk_preview.py`, `tests/browser/risk.mjs` |
+
+The HTTP futures example has a fixed size of 40 units per lot and mark 3.00.
+Book A holds +2 lots executed at 2.90 and +1 at 2.95; Book B holds −1 at 3.10.
+Execution P&L is respectively 8, 2 and 4 currency units, with book totals 10 and 4.
+All holdings retain one shared exact futures contract with explicit pricing bindings. This is a
+price/holdings oracle, not a daily-settlement or futures-PV qualification.
 
 The expiry price oracle is `(future + 0.1 + 0.2) × 7 + 4 + 2`: 29.1 at
 future 3.0 and 30.5 at final 3.2. The multiplier and every dependency are explicit
@@ -255,10 +275,13 @@ periods gives `10×40 + (12−10)×60 = 520` currency. Billing `10×40 + 12×60`
 incorrectly double count the scheduled portion. This is an independent acceptance
 oracle for a future explicitly configured balancing workflow, not current billing.
 
-## Proposed efficient shocker contract
+## Shared scenario contract and remaining qualification
 
-Agree this contract before exposing a risk API. Existing input-correction tests
-exercise propagation, but there is not yet a reusable scenario/risk engine.
+The bounded implementation now qualifies live quote-input overlays, affected-node
+reuse, black-box unit execution, exact position differences and the RSK01–04
+cases above. This contract also covers remaining scope: parameter/rate and joint
+curve shocks, durable receipts, general PV/lifecycle consumers and broader models
+are not implemented merely because the generic contracts describe them.
 
 1. **Capture once.** Pin effective/knowledge context, definitions, actual/fixing
    state, numerical policy and model versions. Resolve every prompt alias to a
@@ -266,7 +289,8 @@ exercise propagation, but there is not yet a reusable scenario/risk engine.
    including potentially exercised branches, not only currently nonzero exposure.
 2. **Use typed hypothetical overlays.** A scenario names the base snapshot and
    an immutable map from exact dated primitive factor identity to a typed shock.
-   The first supported bump can be explicit absolute price/rate/parameter shifts;
+   The implemented bump is an explicit absolute live price-input shift;
+   rate/parameter shifts remain future scope. In every case,
    currency, quote multiplier, quantity basis and rate representation remain
    explicit. Unsupported relative/cross-unit shocks fail. Source observations
    and IDs remain unchanged, with original lineage plus separate scenario evidence.

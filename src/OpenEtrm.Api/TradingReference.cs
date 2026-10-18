@@ -1,0 +1,13 @@
+using System.Globalization;
+using System.Text.Json;
+
+namespace OpenEtrm.Api;
+
+// Readable aliases are scoped to the selected trading catalog. UUIDs remain the
+// exact relationship keys; aliases are allocated once and never encode revision.
+internal static class TradingReference
+{
+    private static string Format(string prefix,JsonElement row,string field)=>prefix+int.Parse(row.Text(field),CultureInfo.InvariantCulture).ToString("D6",CultureInfo.InvariantCulture);
+    public static string Trade(JsonElement row)=>Format("TR-",row,"trade_reference");
+    public static string Instrument(JsonElement row)=>Format("IN-",row,"instrument_reference");
+}

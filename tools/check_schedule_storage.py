@@ -75,7 +75,7 @@ def run_checks(query, psql, environment, manifest):
         check('published TOU product versions cannot change or be removed, even by the bootstrap owner')
         # Seal it so the next check isolates the catalog-scope policy from the sealing trigger.
         query(f"UPDATE ref_data.revisions SET state='sealed' WHERE catalog_id='{hidden_reference}' AND id='{hidden_revision}';")
-        check('every reference table carries the restrictive current-write policies', query("SELECT count(*) FROM pg_tables t WHERE t.schemaname='ref_data' AND NOT EXISTS(SELECT 1 FROM pg_policies p WHERE p.schemaname='ref_data' AND p.tablename=t.tablename AND p.policyname='current_insert' AND p.permissive='RESTRICTIVE');") == '0')
+        check('TOU product tables carry the restrictive current-read and current-write policies', query("SELECT count(*) FROM pg_policies WHERE schemaname='market_data' AND tablename IN('tou_products','tou_product_versions') AND policyname IN('current_read','current_insert','current_update') AND permissive='RESTRICTIVE';") == '6')
         query(runtime(issue('editor'), expect(f"UPDATE market_data.date_schedule_versions SET calendar_catalog_id='{hidden_reference}',calendar_revision_id='{hidden_revision}',calendar_code='hidden_calendar',generation=generation+1 WHERE catalog_id='{catalog}' AND schedule_id='{schedule}' AND version=3;", '42501')))
         check('a schedule writer cannot bind a calendar from an unscoped reference catalog')
         before = query(f"SELECT generation FROM market_data.date_schedule_versions WHERE catalog_id='{catalog}' AND schedule_id='{schedule}' AND version=3;")

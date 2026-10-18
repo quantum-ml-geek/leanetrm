@@ -44,6 +44,7 @@ export async function withOwnedBrowser(targetFile,browserPath,run){
     async function persona(id){await click('#profile-open');await set('#profile',id);await click('#open');}
     async function check(label,expression){if(!await evaluate(expression))throw Error('FAIL '+label);passed++;console.log('PASS '+label);}
     async function shot(name){if(!/^[a-z-]+$/.test(name))throw Error('Invalid screenshot name');const result=await command('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});await writeFile(join(root,name+'.png'),Buffer.from(result.data,'base64'));}
+    await command('Emulation.setTimezoneOverride',{timezoneId:'UTC'});
     await run({command,evaluate,wait,click,set,submit,persona,check,shot,idle,errors,url:url.origin});
     if(errors.length)throw Error('Uncaught browser exceptions: '+JSON.stringify(errors));
     return passed;

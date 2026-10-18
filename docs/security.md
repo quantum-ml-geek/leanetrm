@@ -20,7 +20,7 @@ rotation, session management and credential revocation integration remain work;
 credential rotation should preserve principal identity. Never log raw credentials
 or capability tokens. There are no seeded users, passwords, grants or universal
 administrator accounts in the migrations. The owned disposable preview fixture
-separately provisions four clearly labeled synthetic test identities and scoped
+separately provisions six clearly labeled synthetic test identities and scoped
 grants; these never establish a production login boundary.
 
 ## Common roles and scoped authority
@@ -37,8 +37,14 @@ grants; these never establish a production login boundary.
 | Market Data Approver | Read, freeze definitions and approve/publish qualified changes |
 | Access Administrator | Manage identities/access and create scoped delegations |
 
-Permission names for trading, valuation and publication reserve those boundaries;
-those operations are not implemented. Storage sealing is not financial approval
+Migration 0011 adds explicit `ReadTrades` to Trader and Risk Analyst. The bounded
+futures booking, holdings and actor-owned request-status operations are implemented;
+Viewer and Access Administrator have no implicit trading read. Current scope is
+workspace-wide, with no per-book exceptions. Historical inputs never restore old
+permissions, and denied reads clear displayed holdings while preserving uncertain
+request identities. Latest-head booking amendments require current AmendTrade
+authority and expected-revision concurrency. Generic valuation and financial
+publication remain future operations. Storage sealing is not financial approval
 or publication. Maker/checker approval rules remain part of those future commands.
 
 Role assignments bind exact tenant/workspace scopes and half-open UTC intervals.
@@ -181,3 +187,17 @@ binds only the invalid synthetic issuer; it must not be exposed as real signup.
 No migration installs users, credentials, grants, memberships or a default admin.
 Upgrading an existing grant installation requires verified membership mappings;
 the fresh-install migration rejects unqualified existing grants.
+
+Named blotter layouts are current presentation state. Forced RLS restricts their
+rows to the bound human principal, tenant and workspace; every API operation
+requires current ReadTrades authority. No actor or workspace identifier is
+accepted in the layout operation. The API validates the supported schema,
+limits named views, serializes each account's writes and checks expected versions.
+Saved settings cannot select financial contexts or confer business access. UI
+layout metadata clears on identity changes even before a market date is selected.
+
+Raw futures/swap business operations require current reference-catalog read
+authority before evaluating new economic or calendar terms. Remembered exact IDs
+do not preserve revoked access. Actor-owned accepted-command replay/status remain
+current trade-control operations. Discount-default reads additionally retain the
+selected historical reference/market-definition visibility.
