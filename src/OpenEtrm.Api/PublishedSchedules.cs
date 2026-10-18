@@ -7,9 +7,11 @@ public sealed record ScheduleContext(string? EffectiveOn,int? KnownThrough,
     [property:System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? KnownAt=null,
     [property:System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] Guid? ContextId=null);
 public sealed record ScheduleVersion(Guid Id,int Version,int Generation,string State,MonthlyDraft Definition,
-    string Selection,DateOnly EffectiveFrom,DateOnly EffectiveTo,int? PublicationOrder,DateTimeOffset? PublishedAt,string EngineVersion="date_schedule_v1",BitemporalRange? Temporal=null);
+    string Selection,DateOnly EffectiveFrom,DateOnly EffectiveTo,int? PublicationOrder,DateTimeOffset? PublishedAt,string EngineVersion="date_schedule_v1",BitemporalRange? Temporal=null,
+    CalendarReference? Calendar=null,[property:System.Text.Json.Serialization.JsonIgnore] ReferenceCalendar? ResolvedCalendar=null);
 public sealed record ScheduleSaveRequest(Guid? Id,int? Version,int? Generation,MonthlyDraft Definition,
-    string? Selection,string? EffectiveFrom,string? EffectiveTo,string? ExpectedState=null);
+    string? Selection,string? EffectiveFrom,string? EffectiveTo,string? ExpectedState=null,CalendarReference? Calendar=null);
+public sealed record DateSchedulePreviewRequest(MonthlyDraft? Definition,CalendarReference? Calendar);
 public sealed record SchedulePublishRequest(Guid Id,int Version,int Generation);
 public sealed record PublishedDateRequest(string? Expression,ScheduleContext? Context);
 public sealed record PublishedContractRequest(string? Code,string? Name,ScheduleContext? Context,ContractFieldDraft[]? Contracts);
@@ -24,11 +26,18 @@ public static class PublishedSchedules
             throw Error("schedule_context","Select an effective date and a captured publication view.");
         try{return DateWorkspace.Date(context.EffectiveOn);}catch(TemporalException){throw Error("schedule_context","Select an exact context date.");}
     }
-    public static void Validate(ScheduleSaveRequest request)
+    // Each engine version has one calendar source; an unknown engine is never reinterpreted.
+    public static MonthlySaved Compile(MonthlyDraft definition,string engineVersion,ReferenceCalendar? calendar) => engineVersion switch
+    {
+        "date_schedule_v1"=>DateWorkspace.Compile(definition),
+        "date_schedule_v2"=>DateWorkspace.Compile(definition,calendar??throw Error("calendar_reference","The schedule's reference calendar is unavailable in this view.")),
+        _=>throw Error("schedule_engine","This retained schedule engine version is unavailable.")
+    };
+    public static void Validate(ScheduleSaveRequest request,string engineVersion,ReferenceCalendar? calendar)
     {
         if(request.Definition is null)throw Error("schedule_definition","Supply an explicit schedule definition.");
-        _=DateWorkspace.Compile(request.Definition);
-        if(request.Selection is not ("absolute_index" or "context_month") || DateWorkspace.Date(request.EffectiveFrom)>=DateWorkspace.Date(request.EffectiveTo))
+        _=Compile(request.Definition,engineVersion,calendar);
+        if(!DateWorkspace.SelectionRules.Any(r=>r.Code==request.Selection) || DateWorkspace.Date(request.EffectiveFrom)>=DateWorkspace.Date(request.EffectiveTo))
             throw Error("schedule_definition","Choose an occurrence selection rule and nonempty effective interval.");
     }
     public static DateReceipt Resolve(IEnumerable<ScheduleVersion> versions,string? expression,ScheduleContext? context)
@@ -41,8 +50,7 @@ public static class PublishedSchedules
             v.PublicationOrder<=context!.KnownThrough && v.EffectiveFrom<=day && day<v.EffectiveTo).OrderByDescending(v=>v.PublicationOrder).ToArray();
         if(eligible.Length==0)throw Error("schedule_unpublished","No published schedule covers this context and publication view.");
         var selected=eligible[0];
-        if(selected.EngineVersion!="date_schedule_v1")throw Error("schedule_engine","This retained schedule engine version is unavailable.");
-        var compiled=DateWorkspace.Compile(selected.Definition);
+        var compiled=Compile(selected.Definition,selected.EngineVersion,selected.ResolvedCalendar);
         var offset=reference.Index??(selected.Selection=="context_month"?0:throw Error("date_index","Fixed schedules need an explicit zero-based occurrence index."));
         var origin=selected.Selection switch {
             "absolute_index"=>0,

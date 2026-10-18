@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
@@ -18,7 +19,35 @@ public sealed class PowerClock
         Fingerprint=Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Rules))).ToLowerInvariant();
     }
     public static PowerClock Capture(TimeZoneInfo zone) => new(zone ?? throw new ArgumentNullException(nameof(zone)));
+    // A reference clock rule: an exact fixed offset .NET can represent, or an installed IANA
+    // zone file whose tzdb release equals the declared one before and after loading it.
+    public static PowerClock FromRule(ClockRule rule,TimeZoneSource source)
+    {
+        switch(rule.Kind)
+        {
+            case "fixed_offset" when rule.FixedOffsetSeconds is int seconds && seconds%60==0 && Math.Abs(seconds)<=14*3600 && rule.IanaZone is null && rule.TzdbVersion is null:
+                return Capture(TimeZoneInfo.CreateCustomTimeZone(rule.Code,TimeSpan.FromSeconds(seconds),rule.Code,rule.Code));
+            case "iana" when rule.FixedOffsetSeconds is null && rule.IanaZone is {} zone && !string.IsNullOrWhiteSpace(rule.TzdbVersion):
+                if(!Regex.IsMatch(zone,@"\A[A-Za-z0-9_+\-]+(/[A-Za-z0-9_+\-]+)*\z",RegexOptions.CultureInvariant) || !source.HasZoneFile(zone))
+                    throw new MarketDataException("clock_rule",$"Clock rule {rule.Code} does not name an installed IANA zone.");
+                var before=source.Version();
+                if(before!=rule.TzdbVersion)
+                    throw new MarketDataException("clock_tzdb",$"Clock rule {rule.Code} declares tzdb {rule.TzdbVersion}; the installed rules are {before}.");
+                // Drop cached zones so the loaded rules come from the release just verified.
+                TimeZoneInfo.ClearCachedData();
+                PowerClock clock;
+                try { clock=Capture(TimeZoneInfo.FindSystemTimeZoneById(zone)); }
+                catch(Exception e) when(e is TimeZoneNotFoundException or InvalidTimeZoneException) { throw new MarketDataException("clock_rule",$"Clock rule {rule.Code} names an unreadable IANA zone."); }
+                if(source.Version()!=before)
+                    throw new MarketDataException("clock_tzdb","The installed time-zone database changed while loading the clock; try again.");
+                return clock;
+            default:
+                throw new MarketDataException("clock_rule",$"Clock rule {rule.Code} is not a complete fixed-offset or IANA rule.");
+        }
+    }
 }
+
+public sealed record ClockRule(string Code,string Kind,int? FixedOffsetSeconds,string? IanaZone,string? TzdbVersion);
 
 public sealed record PowerInterval(DateTimeOffset Start, DateTimeOffset End, DateOnly OperatingDate,
     int HourBeginning, int HourEnding, int Minute, int OffsetMinutes, int Occurrence, bool Holiday);

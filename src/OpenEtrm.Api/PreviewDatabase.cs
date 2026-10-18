@@ -251,7 +251,7 @@ public sealed class PreviewData
         if(IsRateCurve(code))
         {
             var rates=BuildRates(frame,code);
-            return new {kind="rates",snapshotId=frame.Id,frame.Name,at=frame.At,curve=code,referenceDate=rates.ReferenceDate.ToString("yyyy-MM-dd",System.Globalization.CultureInfo.InvariantCulture),currency=rates.Currency.Code,numericalPolicy=rates.NumericalPolicy,
+            return new {kind="rates",snapshotId=frame.Id,frame.Name,at=frame.At,curve=code,referenceDate=rates.ReferenceDate.ToString("yyyy-MM-dd",System.Globalization.CultureInfo.InvariantCulture),currency=rates.Currency.Code,numericalPolicy=rates.NumericalPolicy,convention=new {dayCount=OpenEtrm.Rates.RateConventions.DayCountName,compounding=OpenEtrm.Rates.RateConventions.CompoundingName},
                 points=rates.Values.Select(p=>new {seriesId=p.Series.Id,maturity=p.Maturity.ToString("yyyy-MM-dd",System.Globalization.CultureInfo.InvariantCulture),annualRate=p.AnnualRate,value=p.RatePercent,discountFactor=p.DiscountFactor,displayDiscountFactor=p.DisplayDiscountFactor,actualDays=p.Days,lineage=new[]{p.Observation.Id}}).ToArray()};
         }
         if(frame.CurveContracts.TryGetValue(code,out var selected) && selected.IsEmpty)

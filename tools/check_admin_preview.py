@@ -8,8 +8,10 @@ def run_checks(Client, check):
     check('business readers cannot enumerate identities or permissions')
     admin = Client(); admin.bootstrap(); admin.call('profile', {'profile': 'admin'})
     directory = admin.call('admin')
+    check('identity kinds are served with the directory', [k['code'] for k in directory['kinds']] == ['human', 'service', 'agent'] and all(k['name'] for k in directory['kinds']))
     admin.call('workspace', expected=403)
     check('access administration does not imply market-data access', len(directory['roles']) == 6)
+    check('role choices carry stored display names', all(isinstance(r.get('name'), str) and r['name'].strip() for r in directory['roles']) and len({r['name'] for r in directory['roles']}) == 6)
     request = {'operationId': str(uuid4()), 'login': 'synthetic_reader', 'name': 'Synthetic reader',
                'kind': 'human', 'roles': ['viewer']}
     created = admin.call('admin/create', request)

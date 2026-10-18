@@ -45,6 +45,8 @@ def run_checks(url):
     c.call('profile',{'profile':'viewer'})
     workspace=c.call('workspace')
     check('viewer reads real catalog and exact input frames',len(workspace['definitions']['curves'])==10 and len(workspace['frames'])==4)
+    named=workspace['definitions']['curves']+workspace['definitions']['rate_curves']
+    check('every commodity and rate curve carries its stored display name',all(isinstance(v.get('name'),str) and v['name'].strip()==v['name']!='' for v in named) and len({v['name'] for v in named})==len(named))
     check('speculative reference catalogs are absent',not any(t in workspace['references'] for t in ['day_count_conventions','compounding_conventions','fx_rate_definitions','heat_rate_definitions']))
     point=next(r for r in workspace['references']['locations'] if r['code']=='test_facility_a')
     check('physical location exposes exact coordinate strings',point['latitude']=='12.345678' and point['longitude']=='-45.678912')
@@ -107,6 +109,7 @@ def run_checks(url):
     recovered_value=other.call('evaluate',{'snapshotId':recovered['frame']['id'],'curve':'local_power'})
     check('committed correction recovers without mutation response or retry',recovered_value['points'][0]['value']=='29.8')
     rates=c.call('evaluate',{'snapshotId':old,'curve':'interest_rates'})
+    check('rate convention labels come with the evaluated rate result',rates['convention']=={'dayCount':'Actual/365 Fixed','compounding':'Simple compounding'})
     check('interest curve has real dated rate samples, not commodity contracts',rates['kind']=='rates' and len(rates['points'])==3 and all('seriesId' in p and 'contractId' not in p for p in rates['points']))
     check('rate policy is explicit and convention implementation is local',rates['numericalPolicy']=='simple_actual365fixed_rational_to_even_18_v1' and rates['points'][-1]['actualDays']==365)
     check('annual decimal rates display as explicit percentages',[p['value'] for p in rates['points']]==['2.5','3','3.5'])
@@ -138,6 +141,8 @@ def run_checks(url):
     check_admin(Client,check)
     from check_power_preview import run_checks as check_power
     check_power(Client,check)
+    from check_tou_products import run_checks as check_tou_products
+    check_tou_products(Client,check)
     print(f'{passed} preview HTTP checks passed.',flush=True)
     return workspace
 

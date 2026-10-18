@@ -44,13 +44,18 @@ public static class SchedulePreview
         });
         return new(new(revision, coverage.Curve), references, coverage.From, coverage.To, entries);
     }
-    public static ScheduleShortcut Create(ContractSequence sequence, SchedulePreviewRequest request) => new(
-        request.Symbol!, request.Name!, sequence, request.Position, request.DateRole switch {
-            "delivery_start" => ScheduleDateRole.DeliveryStart,
-            "delivery_end" => ScheduleDateRole.DeliveryEnd,
-            "last_trading" => ScheduleDateRole.LastTradingDate,
-            _ => throw new MarketDataException("shortcut_definition", "Choose the date that this shortcut returns.")
-        });
+    public static ScheduleShortcut Create(ContractSequence sequence, SchedulePreviewRequest request)
+    {
+        var role = DateRoles.Where(r => r.Code == request.DateRole).Select(r => (ScheduleDateRole?)r.Value).SingleOrDefault()
+            ?? throw new MarketDataException("shortcut_definition", "Choose the date that this shortcut returns.");
+        return new(request.Symbol!, request.Name!, sequence, request.Position, role);
+    }
+    // The dates a shortcut can return: one table drives parsing, display codes and the editor's choices.
+    private static readonly (string Code, string Name, ScheduleDateRole Value)[] DateRoles = [
+        ("delivery_start", "Delivery start", ScheduleDateRole.DeliveryStart),
+        ("delivery_end", "Delivery end · not included", ScheduleDateRole.DeliveryEnd),
+        ("last_trading", "Last trading date", ScheduleDateRole.LastTradingDate)];
+    public static object DateRoleChoices => DateRoles.Select(r => new { code = r.Code, name = r.Name });
     public static DateTimeOffset ParseAt(string? value)
     {
         if (value is null || !value.Contains('T') || !DateTimeOffset.TryParseExact(value,
@@ -68,10 +73,8 @@ public static class SchedulePreview
             dateRole = Role(result.DateRole), result.ValuationAt, contractId = result.Contract.Id,
             contractKey = result.Contract, result.Date };
     }
-    public static string Role(ScheduleDateRole role) => role switch {
-        ScheduleDateRole.DeliveryStart => "delivery_start", ScheduleDateRole.DeliveryEnd => "delivery_end",
-        ScheduleDateRole.LastTradingDate => "last_trading", _ => throw new MarketDataException("shortcut_definition", "Unsupported date role.")
-    };
+    public static string Role(ScheduleDateRole role) => DateRoles.Where(r => r.Value == role).Select(r => r.Code).SingleOrDefault()
+        ?? throw new MarketDataException("shortcut_definition", "Unsupported date role.");
 }
 
 // Private preview artifacts, not published reference data. Caller holds its session gate.

@@ -5,6 +5,14 @@ from datetime import datetime, timezone
 from preview_fixture import TENANT, WORKSPACE, security_fixture
 
 
+# Synthetic display names; every exported curve must have exactly one.
+CURVE_NAMES = {
+    'benchmark_delivery': 'Benchmark gas · daily & monthly', 'basis_delivery': 'Location basis · daily & monthly',
+    'location_delivery': 'Location gas · daily & monthly', 'location_all_in': 'Location gas · all-in prices',
+    'benchmark_balmo': 'Benchmark gas · balance of month', 'basis_balmo': 'Location basis · balance of month',
+    'location_balmo': 'Location gas · balance of month'}
+
+
 def fixture(export_path):
     data=json.loads(export_path.read_text())
     cat,rev,rcat,rrev=(data[k] for k in ('catalogId','revisionId','referenceCatalogId','referenceRevisionId'))
@@ -56,7 +64,7 @@ def fixture(export_path):
     for c in data['curves']:
         target='basis_target' if c['indexB'] else 'benchmark_target' if c['indexA']=='benchmark_daily_index' else 'location_target'
         m('curves',(c['code'],rcat,rrev,'gas',c['location'],c['quote'],'uniform_fixed_utc_0900',target,c['rule'],
-                    'synthetic_marks' if c['rule']=='direct' else None,'trader_mark' if c['rule']=='direct' else None))
+                    'synthetic_marks' if c['rule']=='direct' else None,'trader_mark' if c['rule']=='direct' else None,CURVE_NAMES[c['code']]))
         for ordinal,contract in enumerate(c['members']):m('curve_members',(c['code'],contract,ordinal))
         for source in c['inputs']:
             if source['expiryRule']!='require_live':raise ValueError('Unsupported explicit mixed-preview expiry policy')
@@ -65,7 +73,7 @@ def fixture(export_path):
             for mapping in source['mappings']:
                 m('constituent_mappings',(c['code'],source['slot'],mapping['target'],source['source'],mapping['source']))
     for s in data['series']:m('series',(s['id'],'series_'+s['id'].split('-')[-1],rcat,rrev,s['contractId'],s['quote'],None))
-    m('rate_curves',('interest_rates',rcat,rrev,'basic_rate','synthetic_marks','valuation_utc_date'))
+    m('rate_curves',('interest_rates',rcat,rrev,'basic_rate','synthetic_marks','valuation_utc_date','Interest rates'))
     rate_series=[]
     for ordinal,maturity in enumerate(['2026-06-01','2027-01-01','2027-02-28']):
         sid=f'97000000-0000-0000-0000-{ordinal+1:012d}';rate_series.append(sid)

@@ -8,6 +8,7 @@ def run_checks(Client, check):
     check('schedule sources require a selected test persona')
     c.call('profile', {'profile': 'viewer'})
     library = c.call('schedules')
+    check('shortcut date roles and source names are served, not spelled in the browser', [r['code'] for r in library['dateRoles']] == ['delivery_start', 'delivery_end', 'last_trading'] and all(s['name'] for s in library['sources']))
     source = library['sources'][0]
     check('source sequence has exact explicit first and last trading terms',
           source['curve'] == 'future' and len(source['entries']) == 6

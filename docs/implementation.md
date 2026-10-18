@@ -20,6 +20,43 @@ in-memory operations only. Date-set operations remain coding utilities. The name
 described below is a domain consumer with exact contract identities. Monthly anchor generation and durable schedule authoring are now consumers. Project instructions
 now require TDD, DRY, simple code and an explicit quality review before check-in.
 
+## Role-tailored workbench and reference-driven choices
+
+The browser shell uses one token-based stylesheet, a compact market-view chip
+(current, historical or not-applied) and permission-driven navigation: readers
+see Markets, Reference data and a read-only Schedules page (published versions
+and date lookup); market-data editors and approvers also see Contract
+definitions, schedule drafting/publication and the session-only roll shortcuts;
+access administrators see Users & access. Visible controls follow the
+permissions reported by `/api/access`; every operation is still authorized by
+the backend.
+
+Business names and choices come from stored data. Migration 0011 adds required
+display names to curves, rate curves and roles; 0012 adds authored TOU products
+(drafts, approver publication, immutable published versions bound to a sealed
+clock rule, current-workspace only) edited on the Power TOUs page and seeded with
+seven common ISO peak conventions; 0013 records the ISO `weekend_mask` meaning and binds
+new schedule versions to an exact reference calendar (`date_schedule_v2`) under
+the existing draft, publication and temporal rules, with a row-security check
+that the calendar's reference catalog is readable. Power holidays come from the
+settlement index calendar, product clocks from clock rules, rule choices (schedule
+anchors, adjustments and selection, shortcut date roles, identity kinds, power
+blocks and classifications, rate convention labels) from the validating backend, and an IANA clock is
+refused unless its declared tzdb release equals the installed release. Economic
+power choices (curve, period, product, hours, interval) start unselected.
+Retained `date_schedule_v1` inline calendars remain readable and are never
+reinterpreted.
+
+Schedule calendars must come from a sealed reference revision (a database
+trigger enforces this for every writer), and readers receive published versions
+only. An IANA clock also requires an installed zone file and an unchanged tzdb
+release across loading; cached zones are cleared first. Known limits: in a
+historical view, a reference calendar is visible only while a market revision
+that pins it is visible, so a schedule outside that coverage fails with
+`calendar_reference` rather than resolving; and the disposable fixture declares
+its host's installed tzdb release, so the release check protects stored rules
+moved between hosts rather than the fixture itself.
+
 ## Business scenario coverage and permanent browser regressions
 
 [The scenario catalogue](business-scenarios.md) now maps current executable

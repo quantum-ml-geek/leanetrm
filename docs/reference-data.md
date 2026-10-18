@@ -95,7 +95,7 @@ restriction must be resolved before those mixed-basis products are enabled.
 
 Add a table or dependency only with a named consumer or an executable baseline
 case. A catalog import or a screen showing unused rows does not justify one.
-After migrations 0001–0006, there are **31 reference tables**, including internal
+After migrations 0001–0013, there are **31 reference tables**, including internal
 version and relationship tables. Their bounded uses are:
 
 | Tables in `ref_data` | Current consumer or executable baseline case |
@@ -106,7 +106,7 @@ version and relationship tables. Their bounded uses are:
 | `unit_conversions` | Capture an explicit multiplicative conversion; write checks reject mismatched endpoint dimensions. Automatic conversion execution is not implemented |
 | `measurement_bases`, `quantity_specifications` | Typed quantity/price multiplication and explicit ratio orientation in scaling curves |
 | `quote_specifications`, `value_specifications` | All-in/spread type checks, quote multipliers, numeric-series domains and price-clearing grids |
-| `clock_rules`, `calendars`, `calendar_days` | Futures milestone clock/calendar links and explicit dated calendar-override capture/constraints. No automatic business-day schedule calculation yet |
+| `clock_rules`, `calendars`, `calendar_days` | Futures milestone clock/calendar links; published date schedules (engine `date_schedule_v2`) bind an exact calendar version for business-day adjustment and rolling; the power preview takes holidays from the settlement index calendar, and authored TOU products bind exact clock rules. `weekend_mask` bit 0 is Monday through bit 6 Sunday |
 | `location_types`, `locations`, `commodity_locations` | Commodity curve location compatibility, futures location links, explicit pipeline/node/hub/region types and supplied GPS points |
 | `exchanges`, `clearing_houses`, `exchange_clearing_houses` | Futures product links and rejection of unsupported exchange/clearing relationships |
 | `interest_rate_definitions` | The sample zero-rate curve explicitly consumes currency, day count, compounding and implementation identifiers to calculate discount factors |

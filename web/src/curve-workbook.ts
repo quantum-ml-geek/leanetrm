@@ -1,4 +1,4 @@
-import {type CurveResult,type Point,curveName,deliveryLabel,displayDate,pointDate,publicText} from './market-view.js';
+import {type CurveResult,type Point,deliveryLabel,displayDate,pointDate,publicText} from './market-view.js';
 import {type PricingNode,pricingGraph,pricingEquation} from './pricing-view.js';
 
 export type WorkbookRow={id:string;cells:string[];formula:string};
@@ -21,7 +21,7 @@ export function traceWorkbook(selected:string,links:WorkbookLink[]){
 
 // Group evaluated rows into curve tables. Compression is visual only: every
 // actual source/target row pair is retained for inspection and highlighting.
-export function curveWorkbook(result:CurveResult,quoteLabel:(code:string)=>string):CurveWorkbook {
+export function curveWorkbook(result:CurveResult,quoteLabel:(code:string)=>string,curveName:(code:string)=>string):CurveWorkbook {
   if(result.kind==='rates'||!result.points.length)throw unavailable();
   const graphs=result.points.map(p=>pricingGraph(result,p));
   const nodes=new Map<string,PricingNode>(),formulas=new Map<string,string>();
@@ -72,7 +72,8 @@ export function curveWorkbook(result:CurveResult,quoteLabel:(code:string)=>strin
 }
 
 export function rateWorkbook(result:CurveResult):CurveWorkbook {
-  if(result.kind!=='rates'||result.numericalPolicy!=='simple_actual365fixed_rational_to_even_18_v1'||!result.points.length)throw unavailable();
+  if(result.kind!=='rates'||result.numericalPolicy!=='simple_actual365fixed_rational_to_even_18_v1'||!result.points.length||!result.convention)throw unavailable();
+  const convention=result.convention;
   const points=result.points;
   const formula=(p:Point)=>{if(!p.seriesId||p.annualRate===undefined||p.actualDays===undefined||p.discountFactor===undefined)throw unavailable();
     return `1 ÷ (1 + ${p.annualRate} × ${p.actualDays} / 365) = ${p.discountFactor}`;};
@@ -80,8 +81,8 @@ export function rateWorkbook(result:CurveResult):CurveWorkbook {
   const table=(id:string,title:string,subtitle:string,columns:string[],value:(p:Point)=>string,column:number,output=false):WorkbookTable=>({id,title,subtitle,columns,column,output,
     rows:points.map(p=>({id:id+'_'+p.seriesId,cells:[displayDate(pointDate(p)),value(p)],formula:formula(p)}))});
   const tables=[table('rates','Zero rates','Annual rate (%)',['Maturity','Rate (%)'],p=>p.value,0),
-    table('days','Time to maturity','Actual/365 Fixed',['Maturity','Actual days'],p=>String(p.actualDays),0),
-    table('discounts','Discount factors','Simple compounding',['Maturity','Discount factor'],p=>p.discountFactor!,1,true)];
+    table('days','Time to maturity',convention.dayCount,['Maturity','Actual days'],p=>String(p.actualDays),0),
+    table('discounts','Discount factors',convention.compounding,['Maturity','Discount factor'],p=>p.discountFactor!,1,true)];
   return {tables,connections:['rates','days'].map((id,i)=>({source:id,target:'discounts',label:i===0?'Rate':'Time',kind:i===0?'base':'spread',uniform:true,
     links:points.map(p=>({source:id+'_'+p.seriesId,target:'discounts_'+p.seriesId}))}))};
 }

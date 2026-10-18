@@ -15,8 +15,9 @@ def run_checks(Client, check):
     before = capture()['context']
     definition = {'name': 'Temporal monthly dates', 'symbol': 'oe.temporal', 'firstMonth': '2021-01', 'lastMonth': '2021-04',
                   'anchor': 'day', 'day': 1, 'shortMonth': 'reject', 'adjustment': 'unadjusted',
-                  'calendar': {'name': 'Synthetic weekdays', 'from': '2020-12-01', 'to': '2021-06-01', 'weekendDays': [0, 6], 'closedDates': []}}
-    save = {'definition': definition, 'selection': 'context_month', 'effectiveFrom': '2021-01-01', 'effectiveTo': '2021-05-01'}
+                  'calendar': None}
+    calendar = next(c['reference'] for c in viewer.call('date-schedules')['calendars'] if c['reference']['code'] == 'test_business')
+    save = {'definition': definition, 'calendar': calendar, 'selection': 'context_month', 'effectiveFrom': '2021-01-01', 'effectiveTo': '2021-05-01'}
     draft = editor.call('date-schedules/save', save)
     approver.call('date-schedules/publish', {k: draft[k] for k in ['id', 'version', 'generation']})
     first_snapshot = capture()

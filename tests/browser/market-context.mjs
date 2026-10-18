@@ -3,7 +3,12 @@ export async function run({command,evaluate,wait,click,set,submit,persona,check,
   await command('Page.navigate',{url:url+'/'});await wait("document.querySelectorAll('.curve-button').length>0&&"+idle);
   await evaluate(`window.__requests=[];window.__responses=[];window.__originalFetch=window.fetch;window.fetch=async(...args)=>{const path=String(args[0]),body=args[1]?.body?JSON.parse(args[1].body):null;window.__requests.push({path,body});const response=await window.__originalFetch(...args);window.__responses.push({path,status:response.status,data:await response.clone().json()});return response;};window.__api=async(path,body)=>{const boot=await(await window.__originalFetch('/api/bootstrap')).json();const r=await fetch('/api/'+path,{method:body===undefined?'GET':'POST',headers:body===undefined?{}:{'Content-Type':'application/json','X-Preview-CSRF':boot.csrfToken},body:body===undefined?undefined:JSON.stringify(body)});return {status:r.status,data:await r.json()};};`);
   await click('#example');
-  await persona('editor');await click('#example');
+  await click('#nav-schedules');
+  await check('viewer schedules page is read-only lookup without authoring tools',"!document.querySelector('#schedules-page').hidden&&document.querySelector('#dates-editor').hidden&&document.querySelector('#schedule-inspector').hidden&&document.querySelector('#nav-configuration').hidden&&!document.querySelector('#date-expression-form').hidden");
+  await click('#nav-market');
+  await persona('editor');await click('#nav-schedules');
+  await check('editor drafts schedules against reference calendars only',"!document.querySelector('#dates-editor').hidden&&[...document.querySelectorAll('#dates-calendar option')].some(o=>o.value.endsWith('|test_business'))&&!document.querySelector('#dates-closures')&&document.querySelector('#dates-publish').hidden");
+  await click('#nav-market');await click('#example');
   await set('#date-context-on','2020-12-17');await click('#date-context-latest');await click('#apply-view-context');
   await check('explicit context apply displays historical read-only mode',"document.querySelector('#environment-context-note').textContent.includes('Historical view')&&document.querySelector('#error').hidden");
   const first=await evaluate("window.__responses.filter(r=>r.path==='/api/market/context').at(-1).data");

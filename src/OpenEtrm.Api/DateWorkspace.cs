@@ -7,6 +7,15 @@ using OpenEtrm.Shared.Temporal;
 namespace OpenEtrm.Api;
 
 public sealed record CalendarDraft(string? Name,string? From,string? To,ImmutableList<int>? WeekendDays,ImmutableList<string>? ClosedDates);
+// An exact reference calendar version and its retained days. weekend_mask bit 0 is
+// Monday through bit 6 Sunday (ISO 8601); a day row closes (false) or opens (true) a date.
+public sealed record CalendarReference(Guid CatalogId,Guid RevisionId,string Code);
+public sealed record ReferenceCalendar(CalendarReference Reference,DateOnly CoverageFrom,DateOnly CoverageTo,int WeekendMask,
+    ImmutableArray<(DateOnly Date,bool Open)> Days)
+{
+    public IEnumerable<string> WeekendDays => Enumerable.Range(0,7).Where(bit=>(WeekendMask>>bit&1)==1)
+        .Select(bit=>((DayOfWeek)((bit+1)%7)).ToString());
+}
 public sealed record MonthlyDraft(string? Name,string? Symbol,string? FirstMonth,string? LastMonth,string? Anchor,
     int? Day,string? ShortMonth,string? Adjustment,CalendarDraft? Calendar);
 public sealed record MonthlySaved(MonthlyDraft Definition,ImmutableList<MonthlyOccurrence> Dates,[property: System.Text.Json.Serialization.JsonIgnore] DateSet BusinessDays);
@@ -48,17 +57,47 @@ public sealed class DateWorkspace
         return DateSet.Create(from,to,Enumerable.Range(0,count).Select(from.AddDays)
             .Where(d=>!draft.WeekendDays.Contains((int)d.DayOfWeek)&&!closed.Contains(d)));
     }
-    public static MonthlySaved Compile(MonthlyDraft request)
+    public static DateSet Calendar(ReferenceCalendar calendar)
     {
+        if(calendar.WeekendMask is <0 or >127 || calendar.Days.Select(d=>d.Date).Distinct().Count()!=calendar.Days.Length)
+            throw Error("calendar_definition","The reference calendar has an invalid weekend mask or repeated days.");
+        var count=calendar.CoverageTo.DayNumber-calendar.CoverageFrom.DayNumber;
+        if(count<1||count>3660)throw Error("calendar_definition","Calendar coverage must be nonempty and at most 3660 days.");
+        var overrides=DateSet.Create(calendar.CoverageFrom,calendar.CoverageTo,calendar.Days.Select(d=>d.Date));
+        var open=calendar.Days.Where(d=>d.Open).Select(d=>d.Date).ToHashSet();
+        bool Weekend(DateOnly day)=>(calendar.WeekendMask>>(((int)day.DayOfWeek+6)%7)&1)==1;
+        return DateSet.Create(calendar.CoverageFrom,calendar.CoverageTo,Enumerable.Range(0,count).Select(calendar.CoverageFrom.AddDays)
+            .Where(day=>overrides.Contains(day)?open.Contains(day):!Weekend(day)));
+    }
+    // The supported schedule rules: one table drives both validation and the editor's choices.
+    private static readonly (string Code,string Name,MonthlyAnchor Value)[] AnchorRules=[("day","Day of month",MonthlyAnchor.DayOfMonth),("month_end","Month end",MonthlyAnchor.MonthEnd)];
+    private static readonly (string Code,string Name,ShortMonth Value)[] ShortMonthRules=[("reject","Reject the schedule",ShortMonth.Reject),
+        ("clamp","Use that month’s last day",ShortMonth.Clamp),("not_applicable","Not applicable · month-end anchor",ShortMonth.NotApplicable)];
+    private static readonly (string Code,string Name,DateRoll Value)[] AdjustmentRules=[("unadjusted","Unadjusted",DateRoll.Unadjusted),("following","Following",DateRoll.Following),
+        ("preceding","Preceding",DateRoll.Preceding),("modified_following","Modified following",DateRoll.ModifiedFollowing),("modified_preceding","Modified preceding",DateRoll.ModifiedPreceding)];
+    public static readonly (string Code,string Name)[] SelectionRules=[("context_month","Context month · [0] = this month"),("absolute_index","Fixed occurrences · [0] = first date")];
+    public static object Choices => new {
+        anchors=AnchorRules.Select(r=>new {code=r.Code,name=r.Name}),shortMonths=ShortMonthRules.Select(r=>new {code=r.Code,name=r.Name}),
+        adjustments=AdjustmentRules.Select(r=>new {code=r.Code,name=r.Name}),selections=SelectionRules.Select(r=>new {code=r.Code,name=r.Name})};
+    private static T Rule<T>(IEnumerable<(string Code,string Name,T Value)> rules,string? code,string error,string message)
+    {
+        foreach(var rule in rules)if(rule.Code==code)return rule.Value;
+        throw Error(error,message);
+    }
+    public static MonthlySaved Compile(MonthlyDraft request)=>Compile(request,null);
+    // Exactly one calendar source: an inline draft (engine v1) or an exact reference calendar (engine v2).
+    public static MonthlySaved Compile(MonthlyDraft request,ReferenceCalendar? reference)
+    {
+        if(reference is not null && request.Calendar is not null)
+            throw Error("calendar_binding","Choose a reference calendar or an inline calendar, not both.");
         if(string.IsNullOrWhiteSpace(request.Name)||request.Name.Length>80 || request.Symbol is null ||
             !Regex.IsMatch(request.Symbol,@"\Aoe\.[a-z][a-z0-9_]{0,31}\z",RegexOptions.CultureInvariant))
             throw Error("monthly_definition","Name the schedule and give it a lowercase oe.shortcut.");
         DateOnly Month(string? text)=>text?.Length==7?Date(text+"-01"):throw Error("monthly_definition","Choose explicit first and last months.");
-        var anchor=request.Anchor switch{"day"=>MonthlyAnchor.DayOfMonth,"month_end"=>MonthlyAnchor.MonthEnd,_=>throw Error("monthly_definition","Choose a monthly anchor.")};
-        var shortMonth=request.ShortMonth switch{"reject"=>ShortMonth.Reject,"clamp"=>ShortMonth.Clamp,"not_applicable"=>ShortMonth.NotApplicable,_=>throw Error("monthly_definition","Choose a short-month policy.")};
-        var adjustment=request.Adjustment switch{"unadjusted"=>DateRoll.Unadjusted,"following"=>DateRoll.Following,"preceding"=>DateRoll.Preceding,
-            "modified_following"=>DateRoll.ModifiedFollowing,"modified_preceding"=>DateRoll.ModifiedPreceding,_=>throw Error("roll_convention","Choose a business-day adjustment.")};
-        var calendar=Calendar(request.Calendar);
+        var anchor=Rule(AnchorRules,request.Anchor,"monthly_definition","Choose a monthly anchor.");
+        var shortMonth=Rule(ShortMonthRules,request.ShortMonth,"monthly_definition","Choose a short-month policy.");
+        var adjustment=Rule(AdjustmentRules,request.Adjustment,"roll_convention","Choose a business-day adjustment.");
+        var calendar=reference is null?Calendar(request.Calendar):Calendar(reference);
         return new(request,MonthlyDates.Generate(Month(request.FirstMonth),Month(request.LastMonth),anchor,request.Day,shortMonth,adjustment,calendar).ToImmutableList(),calendar);
     }
     public MonthlySaved Keep(string owner,MonthlySaved value)

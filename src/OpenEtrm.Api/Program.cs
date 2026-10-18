@@ -54,7 +54,8 @@ app.Use(async (context,next)=>
         {
             PreviewDeniedException => (403,"access_denied","The selected test identity cannot perform this operation."),
             AntiforgeryValidationException => (400,"request_token","Reload the preview to obtain a valid request token."),
-            MarketDataException m when m.Code == "shortcut_conflict" => (409,m.Code,m.Message),
+            MarketDataException m when m.Code is "shortcut_conflict" or "tou_conflict" => (409,m.Code,m.Message),
+            PostgresException p when p.SqlState is "23505" or "40001" && context.Request.Path.StartsWithSegments("/api/tou-products") => (409,"tou_conflict","This TOU product changed or its code already exists. Reload before editing."),
             MarketDataException m => (422,m.Code,m.Message),
             TemporalException t when t.Code is "date_definition_conflict" or "schedule_conflict" => (409,t.Code,t.Message),
             TemporalException t => (422,t.Code,t.Message),
@@ -122,27 +123,43 @@ PreviewSequenceCoverage ScheduleSource(string? code) => (database.Manifest.Sched
     ?? throw new MarketDataException("sequence_source","Choose an explicitly configured contract schedule.");
 Task<IResult> ScheduleOperation(HttpContext c,Func<PreviewSession,PreviewData,IResult> work) => Locked(c,async session=>
     await database.WithIdentity(Profile(session),"ReadMarketData",async (connection,ct)=>work(session,await MarketData(session,connection,ct)),c.RequestAborted));
-app.MapPost("/api/power/catalog",(HttpContext c,PowerCatalogRequest body)=>ScheduleOperation(c,(session,data)=>
-    Results.Ok(PowerPreview.Catalog(data,Frame(session,body.SnapshotId)))));
-app.MapPost("/api/power/preview",(HttpContext c,PowerPreviewRequest body)=>ScheduleOperation(c,(session,data)=>
+var touStore=new TouProductStore(database.Manifest.CatalogId,database.Manifest.ReferenceCatalogId,database.Manifest.ReferenceRevisionId);
+// TOU products are current definitions; a historical view never substitutes them.
+Task<IResult> PowerOperation(HttpContext c,string permission,Func<PreviewSession,NpgsqlConnection,CancellationToken,Task<IResult>> work)=>Locked(c,session=>
 {
     if(session.MarketContext is not null)
-        throw new MarketDataException("power_historical","Generated TOU examples require current-input mode; retained historical clock publication is not implemented.");
-    return Results.Ok(PowerPreview.Calculate(data,Frame(session,body.SnapshotId),body));
-}));
+        throw new MarketDataException("power_historical","TOU products and power hours require current inputs; historical TOU publication is not implemented.");
+    return database.WithIdentity(Profile(session),permission,(connection,ct)=>work(session,connection,ct),c.RequestAborted);
+});
+async Task<PowerPreview.ProductSet> PublishedProducts(NpgsqlConnection connection,CancellationToken ct)=>
+    PowerPreview.Products(TouProductStore.Published(await touStore.Read(connection,ct)),await touStore.Clocks(connection,ct));
+app.MapPost("/api/power/catalog",(HttpContext c,PowerCatalogRequest body)=>PowerOperation(c,"ReadMarketData",async(session,connection,ct)=>
+    Results.Ok(PowerPreview.Catalog(await database.Read(connection,ct),Frame(session,body.SnapshotId),await PublishedProducts(connection,ct)))));
+app.MapPost("/api/power/preview",(HttpContext c,PowerPreviewRequest body)=>PowerOperation(c,"ReadMarketData",async(session,connection,ct)=>
+    Results.Ok(PowerPreview.Calculate(await database.Read(connection,ct),Frame(session,body.SnapshotId),body,await PublishedProducts(connection,ct)))));
+app.MapGet("/api/tou-products",(Func<HttpContext,Task<IResult>>)(c=>PowerOperation(c,"ReadMarketData",async(session,connection,ct)=>
+{
+    var canEdit=await HasPermission(connection,"WriteMarketDefinitions",ct);var canPublish=await HasPermission(connection,"SealMarketDefinitions",ct);
+    // Row security returns drafts to authors only; readers receive published versions.
+    return Results.Ok(new {versions=await touStore.Read(connection,ct),clocks=await touStore.Clocks(connection,ct),canEdit,canPublish});
+})));
+app.MapPost("/api/tou-products/save",(HttpContext c,TouProductSaveRequest body)=>PowerOperation(c,"WriteMarketDefinitions",async(session,connection,ct)=>
+    Results.Ok(await touStore.Save(connection,body,ct))));
+app.MapPost("/api/tou-products/publish",(HttpContext c,TouProductPublishRequest body)=>PowerOperation(c,"SealMarketDefinitions",async(session,connection,ct)=>
+    Results.Ok(await touStore.Publish(connection,body,ct))));
 app.MapGet("/api/schedules",(Func<HttpContext,Task<IResult>>)(c=>ScheduleOperation(c,(session,data)=>
 {
     var sources=(database.Manifest.Schedules??[]).Select(source=>
     {
         var sequence=SchedulePreview.Compile(data,source);
-        return new {source.Curve,source.From,source.To,source.ExampleAt,
+        return new {source.Curve,name=data.Definitions["curves"].Single(c=>c.Text("code")==source.Curve).Text("name"),source.From,source.To,source.ExampleAt,
             entries=sequence.Entries.Select(e=>new {contractId=e.Contract.Key.Id,e.Ordinal,
                 label=data.References["futures_series"].Single(s=>s.Text("code")==e.Contract.FuturesSeries!.Value.Code).Text("series_label"),
                 e.EligibleFrom,rollAt=e.Contract.Expiry,beforeExpiryAt=e.Contract.Expiry.AddTicks(-1),e.Contract.DeliveryFrom,e.Contract.DeliveryTo,e.LastTradingDate}).ToArray()};
     }).ToArray();
     return Results.Ok(new {sources,shortcuts=session.Shortcuts.For(Profile(session)).Select(SchedulePreview.Describe).ToArray(),
         dateSchedules=session.Dates.For(Profile(session)).ToArray(),draftCurves=session.Dates.Curves(Profile(session)).ToArray(),
-        curveTemplates=data.Definitions["curves"].Select(c=>new {code=c.Text("code")}).ToArray()});
+        curveTemplates=data.Definitions["curves"].Select(c=>new {code=c.Text("code")}).ToArray(),dateRoles=SchedulePreview.DateRoleChoices});
 })));
 app.MapPost("/api/schedules/preview",(HttpContext c,SchedulePreviewRequest body)=>ScheduleOperation(c,(session,data)=>
     Results.Ok(SchedulePreview.Result(SchedulePreview.Create(SchedulePreview.Compile(data,ScheduleSource(body.Curve)),body),SchedulePreview.ParseAt(body.At)))));
@@ -214,7 +231,7 @@ CurveDatesSaved CompileCurve(PreviewSession session,PreviewData data,CurveDatesR
 app.MapPost("/api/schedules/contracts/preview",(HttpContext c,CurveDatesRequest body)=>ScheduleOperation(c,(session,data)=>Results.Ok(CompileCurve(session,data,body))));
 app.MapPost("/api/schedules/contracts/keep",(HttpContext c,CurveDatesRequest body)=>ScheduleOperation(c,(session,data)=>
     Results.Ok(session.Dates.KeepCurve(Profile(session),CompileCurve(session,data,body)))));
-var scheduleStore=new ScheduleStore(database.Manifest.CatalogId);
+var scheduleStore=new ScheduleStore(database.Manifest.CatalogId,database.Manifest.ReferenceCatalogId,database.Manifest.ReferenceRevisionId);
 var knowledgeStore=new KnowledgeStore(database.Manifest.CatalogId);
 Task<IResult> DateOperation(HttpContext c,string permission,Func<PreviewSession,NpgsqlConnection,CancellationToken,Task<IResult>> work)=>Locked(c,session=>
     database.WithIdentity(Profile(session),permission,async(connection,ct)=>
@@ -230,10 +247,18 @@ async Task<bool> HasPermission(NpgsqlConnection connection,string permission,Can
 app.MapGet("/api/date-schedules",(Func<HttpContext,Task<IResult>>)(c=>DateOperation(c,"ReadMarketData",async(session,connection,ct)=>
 {
     var knownThrough=session.MarketContext?.KnownThrough??await scheduleStore.Capture(connection,ct);
-    return Results.Ok(new {knownThrough,versions=session.MarketContext is {} selected?await scheduleStore.ReadAt(connection,selected,ct):await scheduleStore.Read(connection,ct),
-        canEdit=session.MarketContext is null && await HasPermission(connection,"WriteMarketDefinitions",ct),canPublish=session.MarketContext is null && await HasPermission(connection,"SealMarketDefinitions",ct),
-        contractDefinitions=session.ContractDefinitions.Where(p=>p.Key.Owner==Profile(session)).Select(p=>p.Value).ToArray()});
+    var canEdit=session.MarketContext is null && await HasPermission(connection,"WriteMarketDefinitions",ct);
+    var canPublish=session.MarketContext is null && await HasPermission(connection,"SealMarketDefinitions",ct);
+    // Row security returns drafts to authors only; readers receive published versions.
+    var versions=session.MarketContext is {} selected?await scheduleStore.ReadAt(connection,selected,ct):await scheduleStore.Read(connection,ct);
+    return Results.Ok(new {knownThrough,versions,canEdit,canPublish,choices=DateWorkspace.Choices,
+        contractDefinitions=session.ContractDefinitions.Where(p=>p.Key.Owner==Profile(session)).Select(p=>p.Value).ToArray(),
+        calendars=(await scheduleStore.Calendars(connection,ct)).Select(c=>new {c.Reference,c.CoverageFrom,c.CoverageTo,c.WeekendDays,
+            closedDates=c.Days.Where(d=>!d.Open).Select(d=>d.Date),openDates=c.Days.Where(d=>d.Open).Select(d=>d.Date)})});
 })));
+app.MapPost("/api/date-schedules/preview",(HttpContext c,DateSchedulePreviewRequest body)=>DateOperation(c,"ReadMarketData",async(session,connection,ct)=>
+    Results.Ok(DateWorkspace.Compile(body.Definition??throw new TemporalException("schedule_definition","Supply an explicit schedule definition."),
+        await scheduleStore.Calendar(connection,body.Calendar,ct)))));
 app.MapPost("/api/date-schedules/save",(HttpContext c,ScheduleSaveRequest body)=>DateOperation(c,"WriteMarketDefinitions",async(session,connection,ct)=>
     Results.Ok(await scheduleStore.Save(connection,body,ct))));
 app.MapPost("/api/date-schedules/publish",(HttpContext c,SchedulePublishRequest body)=>DateOperation(c,"SealMarketDefinitions",async(session,connection,ct)=>
@@ -386,11 +411,15 @@ app.MapGet("/api/access",(Func<HttpContext,Task<IResult>>)(c=>Locked(c,session=>
         await using var command=ScheduleStore.Command(connection,"SELECT security.current_permissions()");
         return Results.Ok(new {permissions=(string[])(await command.ExecuteScalarAsync(ct))!});
     },c.RequestAborted))));
+// The principal kinds security.principals accepts; each maps to one login kind.
+(string Code,string Name)[] IdentityKinds=[("human","Human"),("service","Service"),("agent","Agent")];
 app.MapGet("/api/admin",(Func<HttpContext,Task<IResult>>)(c=>Locked(c,session=>
     database.WithIdentity(Profile(session),"ManageAccess",async(connection,ct)=>
     {
         await using var command=ScheduleStore.Command(connection,"SELECT security.administration_directory()::text");
-        return Results.Ok(JsonSerializer.Deserialize<JsonElement>((string)(await command.ExecuteScalarAsync(ct))!));
+        var directory=JsonSerializer.Deserialize<Dictionary<string,JsonElement>>((string)(await command.ExecuteScalarAsync(ct))!)!;
+        directory["kinds"]=JsonSerializer.SerializeToElement(IdentityKinds.Select(k=>new {code=k.Code,name=k.Name}));
+        return Results.Ok(directory);
     },c.RequestAborted))));
 async Task<IResult> AdminMutation(HttpContext c,object body,string action)=>await Locked(c,async session=>
 {

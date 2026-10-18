@@ -2,7 +2,9 @@
 from datetime import date, datetime, timezone
 from decimal import Decimal
 import json
+import os
 from pathlib import Path
+import re
 
 CAT = '40000000-0000-0000-0000-000000000001'
 REV = '60000000-0000-0000-0000-000000000001'
@@ -12,6 +14,35 @@ TENANT = 'b0000000-0000-0000-0000-000000000001'
 WORKSPACE = 'b1000000-0000-0000-0000-000000000001'
 R = f"'{RCAT}','{RREV}'"
 M = f"'{CAT}','{REV}'"
+
+
+# Synthetic display names; every curve in this fixture must have exactly one.
+CURVE_NAMES = {
+    'future': 'Gas futures', 'bridge_basis': 'Futures–forward spread', 'base_forward': 'Gas forwards',
+    'gas_basis': 'Regional gas spread', 'local_gas': 'Regional gas forwards', 'power_spread': 'Power spread',
+    'hub_power': 'Hub power forwards', 'power_basis': 'Local power spread', 'local_power': 'Local power forwards',
+    'local_power_all_in': 'Local power · all-in prices', 'interest_rates': 'Interest rates'}
+
+
+def named_curves(sql):
+    """Append each curve's display name to its positional insert; unknown codes fail."""
+    return re.sub(r"(INSERT INTO market_data\.(?:rate_)?curves VALUES \('[^']*','[^']*','([a-z0-9_]+)'[^;]*)\);",
+                  lambda m: f"{m.group(1)},'{CURVE_NAMES[m.group(2)]}');", sql)
+
+
+def installed_tzdb():
+    """The tzdb release the API will use (same lookup as TimeZoneDatabase); the preview declares it explicitly."""
+    tzdir = os.environ.get('TZDIR')
+    if tzdir == '':
+        raise RuntimeError('TZDIR is set but empty; set a zoneinfo directory or unset it')
+    root = Path(tzdir or '/usr/share/zoneinfo')
+    marker, data = root / '+VERSION', root / 'tzdata.zi'
+    if marker.is_file():
+        return marker.read_text().strip()
+    first = data.read_text().splitlines()[0] if data.is_file() else ''
+    if not first.startswith('# version '):
+        raise RuntimeError('Cannot determine the installed tzdb release for the power clock rules')
+    return first.removeprefix('# version ').strip()
 
 
 def identity(prefix, n):
@@ -42,6 +73,13 @@ def fixture(root):
     extra_ref.append(f"INSERT INTO ref_data.locations (catalog_id,revision_id,code,name,type_code,clock_code,latitude,longitude) VALUES ({R},'test_facility_a','Synthetic facility A','test_physical_site','test_utc',12.345678,-45.678912);")
     for kind in ['pipeline','node','region','terminal','delivery_point']:
         extra_ref.append(f"INSERT INTO ref_data.locations (catalog_id,revision_id,code,name,type_code,clock_code) VALUES ({R},'test_{kind}_a','Synthetic {kind.replace('_',' ')} A','test_{kind}','test_utc');")
+    # Market clocks for the TOU products, and weekday closures in the business calendar.
+    tzdb=installed_tzdb()
+    for code,zone in [('synthetic_eastern','America/New_York'),('synthetic_central','America/Chicago'),('synthetic_pacific','America/Los_Angeles')]:
+        extra_ref.append(f"INSERT INTO ref_data.clock_rules (catalog_id,revision_id,code,kind,iana_zone,tzdb_version) VALUES ({R},'{code}','iana','{zone}','{tzdb}');")
+    extra_ref.append(f"INSERT INTO ref_data.clock_rules (catalog_id,revision_id,code,kind,fixed_offset_seconds) VALUES ({R},'synthetic_fixed_est','fixed_offset',-18000);")
+    for closed in ['2021-01-01','2021-03-15']:
+        extra_ref.append(f"INSERT INTO ref_data.calendar_days VALUES ({R},'test_business','{closed}',false,'Synthetic weekday closure');")
     now=datetime.now(timezone.utc).isoformat()
     market=market.replace('2020-12-18 16:01:00+00',now)
     # A separately observed all-in alternative demonstrates independent inputs.
@@ -108,6 +146,22 @@ def fixture(root):
     extra_market.append(f"INSERT INTO market_data.revision_periods VALUES ({M},'2020-01-01','2022-01-01');")
     market=market.replace('UPDATE market_data.revisions SET','\n'.join(extra_market)+'\nUPDATE market_data.revisions SET',1)
     market=market.rsplit('COMMIT;',1)[0]+'\n'+'\n'.join(extra_obs)+'\nCOMMIT;\n'
+    market=named_curves(market)
+    # Common ISO peak conventions as published TOU products (verify before any settlement use).
+    # Peak is hour-beginning [start, end) Monday–Friday, or Monday–Saturday where marked.
+    tou=[]
+    for n,(code,name,clock,start,end,saturday) in enumerate([
+            ('pjm','PJM · Eastern prevailing','synthetic_eastern',7,23,'false'),
+            ('nyiso','NYISO · Eastern prevailing','synthetic_eastern',7,23,'false'),
+            ('isone','ISO-NE · Eastern prevailing','synthetic_eastern',7,23,'false'),
+            ('miso','MISO settlement / FTR · fixed EST','synthetic_fixed_est',6,22,'false'),
+            ('spp','SPP · Central prevailing','synthetic_central',6,22,'false'),
+            ('ercot','ERCOT · Central prevailing','synthetic_central',6,22,'false'),
+            ('caiso','CAISO / WECC · Pacific prevailing','synthetic_pacific',6,22,'true')],start=1):
+        pid=identity('d',n)
+        tou.append(f"INSERT INTO market_data.tou_products VALUES ('{CAT}','{pid}','{code}');")
+        tou.append(f"INSERT INTO market_data.tou_product_versions(catalog_id,product_id,version,generation,state,name,clock_catalog_id,clock_revision_id,clock_code,peak_start_hour,peak_end_hour,peak_saturday,publication_order,published_at) VALUES ('{CAT}','{pid}',1,1,'published','{name}',{R},'{clock}',{start},{end},{saturday},{n},'{now}');")
+    market=market.rsplit('COMMIT;',1)[0]+'\n'.join(tou)+'\nCOMMIT;\n'
     manifest={'mode':'local-synthetic-preview','catalogId':CAT,'revisionId':REV,'referenceCatalogId':RCAT,'referenceRevisionId':RREV,
               'tenantId':TENANT,'workspaceId':WORKSPACE,'frames':frames,
               'schedules':[{'curve':'future','from':'2020-12-01T00:00:00Z','to':'2021-05-28T15:30:00Z','exampleAt':'2020-12-28T15:29:00Z'}],

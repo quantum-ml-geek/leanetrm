@@ -5,19 +5,20 @@ type DateRole='delivery_start'|'delivery_end'|'last_trading';
 type Shortcut={name:string;symbol:string;curve:string;position:number;dateRole:DateRole};
 type Draft=Shortcut&{at:string};
 type Entry={contractId:string;ordinal:number;label:string;eligibleFrom:string;rollAt:string;beforeExpiryAt:string;deliveryFrom:string;deliveryTo:string;lastTradingDate:string};
-type Source={curve:string;from:string;to:string;exampleAt:string;entries:Entry[]};
-type Library={sources:Source[];shortcuts:Shortcut[]};
+type Source={curve:string;name:string;from:string;to:string;exampleAt:string;entries:Entry[]};
+type Role={code:string;name:string};
+type Library={sources:Source[];shortcuts:Shortcut[];dateRoles:Role[]};
 type Resolution={symbol:string;sequence:{code:string};position:number;contractId:string;date:string;dateRole:DateRole;valuationAt:string};
 type Operations={load:()=>Promise<Library>;preview:(draft:Draft)=>Promise<Resolution>;keep:(draft:Draft)=>Promise<Shortcut>;resolve:(body:{symbol:string;at:string})=>Promise<Resolution>};
 
-export function dateRoleName(role:string){
-  const name=({delivery_start:'Delivery start',delivery_end:'Delivery end · not included',last_trading:'Last trading date'} as Record<string,string>)[role];
+export function dateRoleName(role:string,roles:Role[]){
+  const name=roles.find(r=>r.code===role)?.name;
   if(!name)throw Error('Choose the date that the shortcut returns.');return name;
 }
-export function resolutionDisplay(result:Resolution,source:Source){
+export function resolutionDisplay(result:Resolution,source:Pick<Source,'curve'|'entries'>,roles:Role[]){
   const entry=source.entries.find(e=>e.contractId===result.contractId);
   if(result.sequence.code!==source.curve||!entry)throw Error('The resolved contract does not belong to this source schedule.');
-  return {title:`${result.symbol} → ${entry.label}`,date:displayDate(result.date),role:dateRoleName(result.dateRole)};
+  return {title:`${result.symbol} → ${entry.label}`,date:displayDate(result.date),role:dateRoleName(result.dateRole,roles)};
 }
 export function scheduleErrorMessage(code:string):string|undefined{
   return ({
@@ -66,7 +67,7 @@ export function setupShortcutEditor(run:(work:()=>Promise<void>)=>Promise<void>,
   const value=(id:string)=>get<HTMLInputElement|HTMLSelectElement>(id).value;
   const set=(id:string,text:string)=>{get<HTMLInputElement|HTMLSelectElement>(id).value=text;};
   const el=<K extends keyof HTMLElementTagNameMap>(tag:K,text?:string)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=publicText(text);return n;};
-  let library:Library={sources:[],shortcuts:[]};
+  let library:Library={sources:[],shortcuts:[],dateRoles:[]};
   let displayed:Resolution|undefined;
   let exactAt:string|undefined;
   const source=()=>library.sources.find(s=>s.curve===value('schedule-source'));
@@ -88,22 +89,24 @@ export function setupShortcutEditor(run:(work:()=>Promise<void>)=>Promise<void>,
     get('schedule-saved-empty').hidden=library.shortcuts.length>0;
     get('schedule-saved').replaceChildren(...library.shortcuts.map(shortcut=>{
       const row=el('div');row.className='shortcut-saved-row';
-      const description=el('div');description.append(el('strong',shortcut.symbol),el('span',`${shortcut.name} · position ${shortcut.position} · ${dateRoleName(shortcut.dateRole)}`));
+      const description=el('div');description.append(el('strong',shortcut.symbol),el('span',`${shortcut.name} · position ${shortcut.position} · ${dateRoleName(shortcut.dateRole,library.dateRoles)}`));
       const use=el('button','Use shortcut');use.type='button';use.className='secondary';use.onclick=()=>{if(!isBusy())fill(shortcut);};
       row.append(description,use);return row;
     }));
   }
   async function load(){
     const selected=value('schedule-source');library=await operations.load();
-    const options=[el('option','Choose a source schedule…'),...library.sources.map(s=>{const o=el('option',s.curve==='future'?'Sample gas futures':s.curve);o.value=s.curve;return o;})];
+    const options=[el('option','Choose a source schedule…'),...library.sources.map(s=>{const o=el('option',s.name);o.value=s.curve;return o;})];
     options[0].value='';get('schedule-source').replaceChildren(...options);set('schedule-source',library.sources.some(s=>s.curve===selected)?selected:'');
+    const role=value('schedule-date-role'),first=el('option','Choose a date…');first.value='';
+    get('schedule-date-role').replaceChildren(first,...library.dateRoles.map(r=>{const o=el('option',r.name);o.value=r.code;return o;}));set('schedule-date-role',library.dateRoles.some(r=>r.code===role)?role:'');
     get('schedule-unavailable').hidden=library.sources.length>0;renderSource();renderSaved();
   }
   const draft=():Draft=>({name:value('schedule-name'),symbol:value('schedule-symbol'),curve:value('schedule-source'),
     position:Number(value('schedule-position')),dateRole:value('schedule-date-role') as DateRole,at:exactAt??new Date(value('schedule-at')+'Z').toISOString()});
   function render(result:Resolution){
     const selected=source();if(!selected)throw Error('Choose the source schedule.');
-    const shown=resolutionDisplay(result,selected);
+    const shown=resolutionDisplay(result,selected,library.dateRoles);
     get('schedule-result-title').textContent=publicText(shown.title);get('schedule-result-date').textContent=shown.date;
     get('schedule-result-detail').textContent=`${shown.role} · contract position ${result.position} · resolved at ${displayInstant(result.valuationAt,zone())}`;
     displayed=result;get('schedule-summary').textContent='Resolved by the shared schedule service.';get('schedule-output').hidden=false;
@@ -119,8 +122,9 @@ export function setupShortcutEditor(run:(work:()=>Promise<void>)=>Promise<void>,
   };
   get('schedule-example').onclick=()=>void run(async()=>{
     if(!library.sources.length)await load();
-    const example=library.sources.find(s=>s.curve==='future');if(!example)throw Error('This sample does not have a configured gas futures schedule.');
-    fill({name:'Gas prompt',symbol:'oe.ng1',curve:example.curve,position:1,dateRole:'delivery_start'});set('schedule-at',example.exampleAt.slice(0,16));exactAt=example.exampleAt;get('schedule-context-note').textContent='';
+    // The example uses the source schedule the user chose; none is assumed.
+    const example=source();if(!example)throw Error('Choose a source schedule, then load its example.');
+    fill({name:`${example.name} prompt`,symbol:'oe.ng1',curve:example.curve,position:1,dateRole:'delivery_start'});set('schedule-at',example.exampleAt.slice(0,16));exactAt=example.exampleAt;get('schedule-context-note').textContent='';
   });
   get('schedule-source').onchange=renderSource;
   for(const event of ['input','change'])get('schedule-at').addEventListener(event,()=>{exactAt=undefined;get('schedule-context-note').textContent='';});
@@ -131,7 +135,7 @@ export function setupShortcutEditor(run:(work:()=>Promise<void>)=>Promise<void>,
     set('schedule-at',exactAt.slice(0,16));get('schedule-context-note').textContent=id==='schedule-before'?'Immediately before the recorded expiry instant.':'Using the exact recorded expiry instant.';clear();form.requestSubmit();
   };
   return {load,refresh(){renderSource();if(displayed)render(displayed);},reset(){
-    library={sources:[],shortcuts:[]};exactAt=undefined;form.reset();clear();get('schedule-context-note').textContent='';get('schedule-source-panel').hidden=true;
+    library={sources:[],shortcuts:[],dateRoles:[]};exactAt=undefined;form.reset();clear();get('schedule-context-note').textContent='';get('schedule-source-panel').hidden=true;
     const placeholder=el('option','Choose a source schedule…');placeholder.value='';get('schedule-source').replaceChildren(placeholder);
     get('schedule-saved').replaceChildren();get('schedule-contracts').replaceChildren();get('schedule-saved-empty').hidden=false;
   }};

@@ -95,16 +95,8 @@ def main():
             reference,market,security,manifest=mixed_fixture(export)
         else:
             reference,market,security,manifest=fixture(ROOT)
-        query((ROOT/'db/migrations/0001_reference_data.sql').read_text())
-        query((ROOT/'db/migrations/0002_market_data.sql').read_text())
-        query((ROOT/'db/migrations/0003_security.sql').read_text())
-        query((ROOT/'db/migrations/0004_location_coordinates.sql').read_text())
-        query((ROOT/'db/migrations/0005_retire_unused_definitions.sql').read_text())
-        query((ROOT/'db/migrations/0006_rate_curves.sql').read_text())
-        query((ROOT/'db/migrations/0007_date_schedules.sql').read_text())
-        query((ROOT/'db/migrations/0008_temporal_knowledge.sql').read_text())
-        query((ROOT/'db/migrations/0009_market_knowledge.sql').read_text())
-        query((ROOT/'db/migrations/0010_workspace_administration.sql').read_text())
+        for migration in sorted((ROOT/'db/migrations').glob('[0-9][0-9][0-9][0-9]_*.sql')):
+            query(migration.read_text())
         query(reference)
         query(market)
         query(security)

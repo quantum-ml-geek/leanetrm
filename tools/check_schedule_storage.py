@@ -44,7 +44,7 @@ def run_checks(query, psql, environment, manifest):
         check('published version deletion rejected by storage guard')
         query(expect(f"UPDATE market_data.date_schedules SET symbol='oe.changed' WHERE catalog_id='{catalog}' AND id='{schedule}';", '55000'))
         check('canonical schedule identity cannot change after a rename')
-        query(f"INSERT INTO market_data.date_schedule_versions(catalog_id,schedule_id,version,generation,state,definition,selection,effective_from,effective_to,engine_version,publication_order,published_at,publication_xid) SELECT catalog_id,schedule_id,3,1,'draft',definition,selection,effective_from,effective_to,engine_version,NULL,NULL,NULL FROM market_data.date_schedule_versions WHERE catalog_id='{catalog}' AND schedule_id='{schedule}' AND version=2;")
+        query(f"INSERT INTO market_data.date_schedule_versions(catalog_id,schedule_id,version,generation,state,definition,selection,effective_from,effective_to,engine_version,calendar_catalog_id,calendar_revision_id,calendar_code,publication_order,published_at,publication_xid) SELECT catalog_id,schedule_id,3,1,'draft',definition,selection,effective_from,effective_to,engine_version,calendar_catalog_id,calendar_revision_id,calendar_code,NULL,NULL,NULL FROM market_data.date_schedule_versions WHERE catalog_id='{catalog}' AND schedule_id='{schedule}' AND version=2;")
         query(expect(f"UPDATE market_data.date_schedule_versions SET definition=jsonb_set(definition,'{{name}}','\"Changed\"') WHERE catalog_id='{catalog}' AND schedule_id='{schedule}' AND version=3;", '40001'))
         check('draft edits must advance optimistic generation in database')
         query(expect(f"UPDATE market_data.date_schedule_versions SET effective_from='-infinity',generation=generation+1 WHERE catalog_id='{catalog}' AND schedule_id='{schedule}' AND version=3;", '23514'))
@@ -53,8 +53,44 @@ def run_checks(query, psql, environment, manifest):
         check('raw SQL publisher function enforces current permission')
         query(runtime(issue(), expect(f"PERFORM security.publish_date_schedule('{catalog}','{schedule}',3,NULL);", '40001')))
         check('raw SQL publisher rejects a missing optimistic generation')
+        query(expect(f"UPDATE market_data.date_schedule_versions SET calendar_code=NULL,generation=generation+1 WHERE catalog_id='{catalog}' AND schedule_id='{schedule}' AND version=3;", '23514'))
+        check('reference-calendar schedule versions cannot drop their calendar binding')
+        query(expect(f"UPDATE market_data.date_schedule_versions SET engine_version='date_schedule_v1',generation=generation+1 WHERE catalog_id='{catalog}' AND schedule_id='{schedule}' AND version=3;", '23514'))
+        check('an engine version cannot be reinterpreted with the wrong calendar source')
+        query(expect(f"UPDATE market_data.date_schedule_versions SET calendar_code='absent_calendar',generation=generation+1 WHERE catalog_id='{catalog}' AND schedule_id='{schedule}' AND version=3;", '23503'))
+        check('a schedule calendar must be an existing exact reference version')
+        check('weekend mask meaning is recorded with the column', 'bit 0 Monday' in query("SELECT col_description('ref_data.calendars'::regclass,(SELECT attnum FROM pg_attribute WHERE attrelid='ref_data.calendars'::regclass AND attname='weekend_mask'));"))
+        hidden_reference, hidden_revision = str(uuid4()), str(uuid4())
+        query(f"INSERT INTO ref_data.catalogs VALUES('{hidden_reference}','hidden_calendar_test','Synthetic unscoped reference'); "
+              f"INSERT INTO ref_data.revisions(catalog_id,id,revision_key) VALUES('{hidden_reference}','{hidden_revision}','hidden_v1'); "
+              f"INSERT INTO ref_data.clock_rules(catalog_id,revision_id,code,kind,fixed_offset_seconds) VALUES('{hidden_reference}','{hidden_revision}','hidden_utc','fixed_offset',0); "
+              f"INSERT INTO ref_data.calendars VALUES('{hidden_reference}','{hidden_revision}','hidden_calendar','hidden_utc',96,'2020-01-01','2022-01-01');")
+        query(expect(f"UPDATE market_data.date_schedule_versions SET calendar_catalog_id='{hidden_reference}',calendar_revision_id='{hidden_revision}',calendar_code='hidden_calendar',generation=generation+1 WHERE catalog_id='{catalog}' AND schedule_id='{schedule}' AND version=3;", '23514'))
+        check('even the bootstrap owner cannot bind a calendar from an unsealed reference revision')
+        pjm = 'd0000000-0000-0000-0000-000000000001'
+        query(expect(f"INSERT INTO market_data.tou_product_versions(catalog_id,product_id,version,generation,state,name,clock_catalog_id,clock_revision_id,clock_code,peak_start_hour,peak_end_hour,peak_saturday) VALUES('{catalog}','{pjm}',9,1,'draft','Unsealed clock','{hidden_reference}','{hidden_revision}','hidden_utc',7,23,false);", '23514'))
+        check('a TOU product cannot bind a clock from an unsealed reference revision')
+        query(expect(f"UPDATE market_data.tou_product_versions SET peak_end_hour=22 WHERE catalog_id='{catalog}' AND product_id='{pjm}' AND version=1;", '55000'))
+        query(expect(f"DELETE FROM market_data.tou_product_versions WHERE catalog_id='{catalog}' AND product_id='{pjm}' AND version=1;", '55000'))
+        check('published TOU product versions cannot change or be removed, even by the bootstrap owner')
+        # Seal it so the next check isolates the catalog-scope policy from the sealing trigger.
+        query(f"UPDATE ref_data.revisions SET state='sealed' WHERE catalog_id='{hidden_reference}' AND id='{hidden_revision}';")
+        check('every reference table carries the restrictive current-write policies', query("SELECT count(*) FROM pg_tables t WHERE t.schemaname='ref_data' AND NOT EXISTS(SELECT 1 FROM pg_policies p WHERE p.schemaname='ref_data' AND p.tablename=t.tablename AND p.policyname='current_insert' AND p.permissive='RESTRICTIVE');") == '0')
+        query(runtime(issue('editor'), expect(f"UPDATE market_data.date_schedule_versions SET calendar_catalog_id='{hidden_reference}',calendar_revision_id='{hidden_revision}',calendar_code='hidden_calendar',generation=generation+1 WHERE catalog_id='{catalog}' AND schedule_id='{schedule}' AND version=3;", '42501')))
+        check('a schedule writer cannot bind a calendar from an unscoped reference catalog')
+        before = query(f"SELECT generation FROM market_data.date_schedule_versions WHERE catalog_id='{catalog}' AND schedule_id='{schedule}' AND version=3;")
+        # Positive control in a rolled-back transaction: later checks rely on the draft's generation.
+        rebound = query(f"SET SESSION AUTHORIZATION preview_runtime; BEGIN; SELECT security.use_context('{issue('editor')}'); UPDATE market_data.date_schedule_versions SET calendar_code=calendar_code,generation=generation+1 WHERE catalog_id='{catalog}' AND schedule_id='{schedule}' AND version=3 RETURNING generation; ROLLBACK;")
+        check('the same writer can rebind a scoped reference calendar on its draft', rebound.splitlines()[-1] == str(int(before) + 1))
+        query(runtime(issue('editor'), expect(f"INSERT INTO market_data.tou_product_versions(catalog_id,product_id,version,generation,state,name,clock_catalog_id,clock_revision_id,clock_code,peak_start_hour,peak_end_hour,peak_saturday) VALUES('{catalog}','{pjm}',9,1,'draft','Unscoped clock','{hidden_reference}','{hidden_revision}','hidden_utc',7,23,false);", '42501')))
+        check('a TOU product writer cannot bind a clock from an unscoped reference catalog')
+        query(expect(f"INSERT INTO market_data.tou_product_versions(catalog_id,product_id,version,generation,state,name,clock_catalog_id,clock_revision_id,clock_code,peak_start_hour,peak_end_hour,peak_saturday,published_at) SELECT catalog_id,product_id,9,1,'draft','Dated draft',clock_catalog_id,clock_revision_id,clock_code,7,23,false,now() FROM market_data.tou_product_versions WHERE catalog_id='{catalog}' AND product_id='{pjm}' AND version=1;", '23514'))
+        check('a TOU product draft cannot carry a publication timestamp')
+        drafts = "SELECT (SELECT count(*) FROM market_data.tou_product_versions WHERE state='draft')||','||(SELECT count(*) FROM market_data.date_schedule_versions WHERE state='draft');"
+        check('readers see no drafts at the database, while authors still do',
+              query(runtime(issue('viewer'), drafts)) == '0,0' and query(runtime(issue('editor'), drafts)) != '0,0')
         hidden, hidden_schedule = str(uuid4()), str(uuid4())
-        query(f"INSERT INTO market_data.catalogs VALUES('{hidden}','hidden_schedule_test'); INSERT INTO market_data.date_schedules VALUES('{hidden}','{hidden_schedule}','oe.ng'); INSERT INTO market_data.date_schedule_versions(catalog_id,schedule_id,version,generation,state,definition,selection,effective_from,effective_to,engine_version,publication_order,published_at,publication_xid) SELECT '{hidden}','{hidden_schedule}',version,generation,state,definition,selection,effective_from,effective_to,engine_version,10000,published_at,publication_xid FROM market_data.date_schedule_versions WHERE catalog_id='{catalog}' AND schedule_id='{schedule}' AND version=1;")
+        query(f"INSERT INTO market_data.catalogs VALUES('{hidden}','hidden_schedule_test'); INSERT INTO market_data.date_schedules VALUES('{hidden}','{hidden_schedule}','oe.ng'); INSERT INTO market_data.date_schedule_versions(catalog_id,schedule_id,version,generation,state,definition,selection,effective_from,effective_to,engine_version,calendar_catalog_id,calendar_revision_id,calendar_code,publication_order,published_at,publication_xid) SELECT '{hidden}','{hidden_schedule}',version,generation,state,definition,selection,effective_from,effective_to,engine_version,calendar_catalog_id,calendar_revision_id,calendar_code,10000,published_at,publication_xid FROM market_data.date_schedule_versions WHERE catalog_id='{catalog}' AND schedule_id='{schedule}' AND version=1;")
         check('runtime schedule reads cannot cross catalog scope', query(runtime(issue('viewer'), f"SELECT count(*) FROM market_data.date_schedule_versions WHERE catalog_id='{hidden}';")).strip() == '0')
         # Hold publisher admission until a legitimately admitted two-second capability expires.
         locker = connection('BEGIN; SELECT pg_advisory_xact_lock(730849102);', 'schedule_expiry_lock')

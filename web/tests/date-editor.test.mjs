@@ -1,15 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {contractExampleRows,calendarFromFields} from '../dist/date-editor.js';
+import {contractExampleRows,calendarSummary,visibleVersions,calendarKey} from '../dist/date-editor.js';
 test('example bindings refer to schedule occurrences rather than copied dates',()=>{
   const rows=contractExampleRows('oe.ng',3,'15:30');
   assert.equal(rows.length,3);
   assert.deepEqual(rows[1],{label:'Contract 2',start:'oe.ng[1]',end:'oe.ng[2]',lastTrading:'oe.ng[1] - 3bd',cutoffUtc:'15:30'});
 });
-test('closure input requires exact dates and a deliberate weekend selection',()=>{
-  const fields={name:'Test calendar',from:'2021-01-01',to:'2022-01-01',weekends:'0,6',closures:'2021-01-01\n2021-07-05'};
-  assert.deepEqual(calendarFromFields(fields).closedDates,['2021-01-01','2021-07-05']);
-  assert.throws(()=>calendarFromFields({...fields,weekends:''}),/weekday/i);
-  assert.throws(()=>calendarFromFields({...fields,closures:'July 5'}),/date/i);
-  assert.deepEqual(calendarFromFields({...fields,weekends:'none',closures:''}).weekendDays,[]);
+test('a reference calendar is described from its served weekend days, overrides and half-open coverage',()=>{
+  const calendar={reference:{catalogId:'c',revisionId:'r',code:'test_business'},coverageFrom:'2019-01-01',coverageTo:'2022-01-01',weekendDays:['Saturday','Sunday'],closedDates:['2021-01-01','2021-03-15'],openDates:[]};
+  assert.equal(calendarSummary(calendar),'Closed Saturday and Sunday · 2 closed dates · covers Jan 1, 2019 – Dec 31, 2021');
+  assert.equal(calendarSummary({...calendar,weekendDays:[],closedDates:[],openDates:['2021-01-02']}),'No weekly closures · 1 opened date · covers Jan 1, 2019 – Dec 31, 2021');
+});
+test('readers see only published schedule versions; authors also see drafts',()=>{
+  const versions=[{state:'draft'},{state:'published'}];
+  assert.deepEqual(visibleVersions(versions,false),[{state:'published'}]);
+  assert.deepEqual(visibleVersions(versions,true),versions);
+});
+test('calendar choices are keyed by exact reference version, not by code',()=>{
+  assert.notEqual(calendarKey({catalogId:'c',revisionId:'r1',code:'business'}),calendarKey({catalogId:'c',revisionId:'r2',code:'business'}));
 });

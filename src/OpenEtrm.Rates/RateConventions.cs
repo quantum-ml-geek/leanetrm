@@ -11,6 +11,9 @@ public static class RateConventions
 {
     public const string Implementation = "openetrm_rates_v1";
     public const string Policy = "simple_actual365fixed_rational_to_even_18_v1";
+    // Display names of the one convention this implementation evaluates.
+    public const string DayCountName = "Actual/365 Fixed";
+    public const string CompoundingName = "Simple compounding";
 
     public static (string Factor, string DisplayFactor, int Days) SimpleActual365Fixed(
         DateOnly referenceDate, DateOnly maturity, ExactDecimal annualRate)
