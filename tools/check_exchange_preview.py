@@ -70,11 +70,11 @@ def run_checks(url,query=None,manifest=None):
     peak=next(p for p in power_catalog['presets'] if p['product']=='pjm' and p['block']=='peak' and p['minutes']==60)
     energy=next(q for q in power_catalog['quantityChoices'] if q['basis']=='total_energy')
     power_contract=next(v for v in contracts if v['curve']=='ice_pjc')
-    example=c.call('power/preview',{'snapshotId':frame['id'],'curve':'ice_pjc','contractId':power_contract['id'],'product':'pjm','block':'peak','minutes':60,'hourLabels':'HE',
+    example=c.call('power/preview',{'snapshotId':frame['id'],'curve':'ice_pjc','contractId':power_contract['id'],'product':'pjm','productVersion':1,'block':'peak','minutes':60,'hourLabels':'HE',
         'quantity':{'value':'1','specification':energy['specification']},'quantityBasis':'total_energy','allocation':'flat_rate',
         'display':power_catalog['display'],'priceType':'Synthetic','timing':'Illustrative flat futures price',
-        'holidayDates':['2026-11-26'],'nonHolidays':peak['nonHolidays'],'holidays':peak['holidays'],'numericalPolicy':power_catalog['numericalPolicy']})
-    assert example['summary']['hours']=='320' and example['summary']['energy']=='1'
+        'nonHolidays':peak['nonHolidays'],'holidays':peak['holidays'],'numericalPolicy':power_catalog['numericalPolicy']})
+    assert example['summary']['hours']=='320' and example['summary']['energy']=='1' and example['holidays']==['2026-11-26'] and example['holidayCalendar']=='ept_published_peak'
     assert Decimal(example['summary']['amount'])==Decimal(power_contract['mark']).quantize(Decimal('0.01'))
     print('PASS power example: exact indexed futures reference feeds a typed one-MWh peak allocation without inferring official hourly prices.',flush=True)
     risk_catalog=c.call('futures/risk/catalog',context)

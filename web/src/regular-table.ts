@@ -27,7 +27,7 @@ export function renderRegularTable(host:HTMLElement,key:string,scope:string,head
   toolbar.append(search,columnToggle,clear,count);
   const scroll=el('div');scroll.className='regular-table-scroll';const table=el('table'),thead=el('thead'),heading=el('tr'),columnRow=el('tr');columnRow.className='column-filter-row';columnRow.id='column-filters-'+key;columnToggle.setAttribute('aria-controls',columnRow.id);columnRow.hidden=!state.expanded;
   const inputs:HTMLSelectElement[]=[];
-  headers.forEach((name,i)=>{const th=el('th',name);th.scope='col';th.hidden=options?.visible?.[i]===false;heading.append(th);const filter=el('th');filter.hidden=th.hidden;
+  headers.forEach((name,i)=>{const th=el('th',name);th.scope='col';if(numeric.includes(i))th.className='numeric';th.hidden=options?.visible?.[i]===false;heading.append(th);const filter=el('th');filter.hidden=th.hidden;
     if(name){const input=el('select'),all=el('option','All values');all.value='';input.append(all);
       const choices=columnValues(rows.map(r=>typeof r[i]==='string'?r[i] as string:r[i]?.textContent??''));
       choices.forEach((value,index)=>{const option=el('option',value===''?'(Blank)':value);option.value=String(index);input.append(option);});

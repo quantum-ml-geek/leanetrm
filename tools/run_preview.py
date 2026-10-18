@@ -104,31 +104,8 @@ def main():
             reference,market,security,manifest=mixed_fixture(export)
         else:
             reference,market,security,manifest=fixture(ROOT)
-        query((ROOT/'db/migrations/0001_reference_data.sql').read_text())
-        query((ROOT/'db/migrations/0002_market_data.sql').read_text())
-        query((ROOT/'db/migrations/0003_security.sql').read_text())
-        query((ROOT/'db/migrations/0004_location_coordinates.sql').read_text())
-        query((ROOT/'db/migrations/0005_retire_unused_definitions.sql').read_text())
-        query((ROOT/'db/migrations/0006_rate_curves.sql').read_text())
-        query((ROOT/'db/migrations/0007_date_schedules.sql').read_text())
-        query((ROOT/'db/migrations/0008_temporal_knowledge.sql').read_text())
-        query((ROOT/'db/migrations/0009_market_knowledge.sql').read_text())
-        query((ROOT/'db/migrations/0010_workspace_administration.sql').read_text())
-        query((ROOT/'db/migrations/0011_futures_bookings.sql').read_text())
-        query((ROOT/'db/migrations/0012_account_table_views.sql').read_text())
-        query((ROOT/'db/migrations/0013_trade_amendments.sql').read_text())
-        query((ROOT/'db/migrations/0014_trading_references.sql').read_text())
-        query((ROOT/'db/migrations/0015_financial_swaps.sql').read_text())
-        query((ROOT/'db/migrations/0016_swap_payment_rules.sql').read_text())
-        query((ROOT/'db/migrations/0017_trade_annotations.sql').read_text())
-        query((ROOT/'db/migrations/0018_trade_parties.sql').read_text())
-        query((ROOT/'db/migrations/0019_contract_instruments.sql').read_text())
-        query((ROOT/'db/migrations/0020_swap_identity_keys.sql').read_text())
-        query((ROOT/'db/migrations/0021_party_editors.sql').read_text())
-        query((ROOT/'db/migrations/0022_standard_futures_lots.sql').read_text())
-        query((ROOT/'db/migrations/0023_deal_amount_formats.sql').read_text())
-        query((ROOT/'db/migrations/0024_preview_identity_scope.sql').read_text())
-        query((ROOT/'db/migrations/0025_trading_reference_authority.sql').read_text())
+        for migration in sorted((ROOT/'db/migrations').glob('[0-9][0-9][0-9][0-9]_*.sql')):
+            query(migration.read_text())
         query(reference)
         query(market)
         if args.example=='standard':
@@ -155,7 +132,8 @@ def main():
             manifest['unitCatalog']={'referenceRevisionId':unit_reference,'definitionRevisionId':unit_bundle}
         if args.check and args.example=='standard' and not args.exchange_check:
             from check_trade_revision_upgrade import run_checks as check_upgrade
-            check_upgrade(query,psql,env,ROOT,[reference,market,security,trading_fixture(manifest['catalogId'],annotations=False)],manifest)
+            legacy_reference,legacy_market,_,_=fixture(ROOT,current_schema=False)
+            check_upgrade(query,psql,env,ROOT,[legacy_reference,legacy_market,security,trading_fixture(manifest['catalogId'],annotations=False)],manifest)
         (temporary/'manifest.json').write_text(json.dumps(manifest))
         # Freeze assets for this owned instance; a later web build must not change
         # another running preview's presentation while it is being used.

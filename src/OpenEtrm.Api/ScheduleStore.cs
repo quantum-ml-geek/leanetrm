@@ -5,8 +5,9 @@ using OpenEtrm.Shared.Temporal;
 
 namespace OpenEtrm.Api;
 
-public sealed class ScheduleStore(Guid catalog)
+public sealed class ScheduleStore(Guid catalog,Guid referenceCatalog,Guid referenceRevision)
 {
+    private const string Engine="date_schedule_v2";
     private static readonly JsonSerializerOptions Json=new(JsonSerializerDefaults.Web);
     internal static NpgsqlCommand Command(NpgsqlConnection connection,string sql,params object[] args)
     {
@@ -15,16 +16,17 @@ public sealed class ScheduleStore(Guid catalog)
     }
     public async Task<ImmutableArray<ScheduleVersion>> Read(NpgsqlConnection connection,CancellationToken ct)
     {
-        await using var command=Command(connection,"SELECT schedule_id,version,generation,state,definition::text,selection,effective_from,effective_to,publication_order,published_at,engine_version FROM market_data.date_schedule_versions WHERE catalog_id=$1 ORDER BY schedule_id,version",catalog);
+        await using var command=Command(connection,"SELECT schedule_id,version,generation,state,definition::text,selection,effective_from,effective_to,publication_order,published_at,engine_version,calendar_catalog_id,calendar_revision_id,calendar_code FROM market_data.date_schedule_versions WHERE catalog_id=$1 ORDER BY schedule_id,version",catalog);
         await using var reader=await command.ExecuteReaderAsync(ct);var result=ImmutableArray.CreateBuilder<ScheduleVersion>();
         while(await reader.ReadAsync(ct))result.Add(new(reader.GetGuid(0),reader.GetInt32(1),reader.GetInt32(2),reader.GetString(3),
             JsonSerializer.Deserialize<MonthlyDraft>(reader.GetString(4),Json)!,reader.GetString(5),reader.GetFieldValue<DateOnly>(6),reader.GetFieldValue<DateOnly>(7),
-            reader.IsDBNull(8)?null:reader.GetInt32(8),reader.IsDBNull(9)?null:reader.GetFieldValue<DateTimeOffset>(9),reader.GetString(10)));
-        return result.ToImmutable();
+            reader.IsDBNull(8)?null:reader.GetInt32(8),reader.IsDBNull(9)?null:reader.GetFieldValue<DateTimeOffset>(9),reader.GetString(10),null,CalendarAt(reader,11)));
+        await reader.DisposeAsync();
+        return await WithCalendars(connection,result.ToImmutable(),ct);
     }
     public async Task<ImmutableArray<ScheduleVersion>> ReadAt(NpgsqlConnection connection,ScheduleContext context,CancellationToken ct)
     {
-        await using var command=Command(connection,"SELECT schedule_id,version,generation,state,definition::text,selection,effective_from,effective_to,publication_order,published_at,engine_version,known_from,known_to FROM market_data.date_schedule_facts_at($1,$4) WHERE catalog_id=$1 AND effective_from<=$2 AND $2<effective_to AND known_from<=$3 AND $3<known_to ORDER BY schedule_id,version",
+        await using var command=Command(connection,"SELECT f.schedule_id,f.version,f.generation,f.state,f.definition::text,f.selection,f.effective_from,f.effective_to,f.publication_order,f.published_at,f.engine_version,f.known_from,f.known_to,v.calendar_catalog_id,v.calendar_revision_id,v.calendar_code FROM market_data.date_schedule_facts_at($1,$4) f JOIN market_data.date_schedule_versions v ON (v.catalog_id,v.schedule_id,v.version)=(f.catalog_id,f.schedule_id,f.version) WHERE f.catalog_id=$1 AND f.effective_from<=$2 AND $2<f.effective_to AND f.known_from<=$3 AND $3<f.known_to ORDER BY f.schedule_id,f.version",
             catalog,DateWorkspace.Date(context.EffectiveOn),SchedulePreview.ParseAt(context.KnownAt),context.KnownThrough!.Value);
         await using var reader=await command.ExecuteReaderAsync(ct);var result=ImmutableArray.CreateBuilder<ScheduleVersion>();
         while(await reader.ReadAsync(ct))
@@ -32,9 +34,10 @@ public sealed class ScheduleStore(Guid catalog)
             var from=reader.GetFieldValue<DateOnly>(6);var to=reader.GetFieldValue<DateOnly>(7);
             result.Add(new(reader.GetGuid(0),reader.GetInt32(1),reader.GetInt32(2),reader.GetString(3),
                 JsonSerializer.Deserialize<MonthlyDraft>(reader.GetString(4),Json)!,reader.GetString(5),from,to,reader.GetInt32(8),
-                reader.GetFieldValue<DateTimeOffset>(9),reader.GetString(10),new(from,to,reader.GetFieldValue<DateTimeOffset>(11),reader.GetFieldValue<DateTimeOffset>(12))));
+                reader.GetFieldValue<DateTimeOffset>(9),reader.GetString(10),new(from,to,reader.GetFieldValue<DateTimeOffset>(11),reader.GetFieldValue<DateTimeOffset>(12)),CalendarAt(reader,13)));
         }
-        return result.ToImmutable();
+        await reader.DisposeAsync();
+        return await WithCalendars(connection,result.ToImmutable(),ct);
     }
     public async Task<int> Capture(NpgsqlConnection connection,CancellationToken ct)
     {
@@ -44,7 +47,9 @@ public sealed class ScheduleStore(Guid catalog)
     }
     public async Task<ScheduleVersion> Save(NpgsqlConnection connection,ScheduleSaveRequest body,CancellationToken ct)
     {
-        PublishedSchedules.Validate(body);
+        // New and edited versions always bind an exact calendar of this workspace's reference revision.
+        var calendar=await Calendar(connection,body.Calendar,ct);
+        PublishedSchedules.Validate(body,Engine,calendar);
         // One catalog lock serializes create/fork and quota admission across sessions.
         await using(var gate=Command(connection,"SELECT pg_advisory_xact_lock(730849103)"))await gate.ExecuteNonQueryAsync(ct);
         var all=await Read(connection,ct);Guid id;int version,generation;
@@ -72,14 +77,16 @@ public sealed class ScheduleStore(Guid catalog)
         var definition=JsonSerializer.Serialize(body.Definition,Json);
         if(body.Id is not null && all.Any(v=>v.Id==id&&v.Version==version&&v.State=="draft"))
         {
-            await using var update=Command(connection,"UPDATE market_data.date_schedule_versions SET generation=$1,definition=$2::jsonb,selection=$3,effective_from=$4,effective_to=$5 WHERE catalog_id=$6 AND schedule_id=$7 AND version=$8 AND generation=$9 AND state='draft'",
-                generation,definition,body.Selection!,DateWorkspace.Date(body.EffectiveFrom),DateWorkspace.Date(body.EffectiveTo),catalog,id,version,body.Generation!.Value);
+            await using var update=Command(connection,"UPDATE market_data.date_schedule_versions SET generation=$1,definition=$2::jsonb,selection=$3,effective_from=$4,effective_to=$5,engine_version=$10,calendar_catalog_id=$11,calendar_revision_id=$12,calendar_code=$13 WHERE catalog_id=$6 AND schedule_id=$7 AND version=$8 AND generation=$9 AND state='draft'",
+                generation,definition,body.Selection!,DateWorkspace.Date(body.EffectiveFrom),DateWorkspace.Date(body.EffectiveTo),catalog,id,version,body.Generation!.Value,
+                Engine,calendar.Reference.CatalogId,calendar.Reference.RevisionId,calendar.Reference.Code);
             if(await update.ExecuteNonQueryAsync(ct)!=1)throw Error("schedule_conflict","The draft changed. Reload it.");
         }
         else
         {
-            await using var insert=Command(connection,"INSERT INTO market_data.date_schedule_versions(catalog_id,schedule_id,version,generation,state,definition,selection,effective_from,effective_to,engine_version,publication_order,published_at) VALUES($1,$2,$3,$4,'draft',$5::jsonb,$6,$7,$8,'date_schedule_v1',NULL,NULL)",
-                catalog,id,version,generation,definition,body.Selection!,DateWorkspace.Date(body.EffectiveFrom),DateWorkspace.Date(body.EffectiveTo));
+            await using var insert=Command(connection,"INSERT INTO market_data.date_schedule_versions(catalog_id,schedule_id,version,generation,state,definition,selection,effective_from,effective_to,engine_version,calendar_catalog_id,calendar_revision_id,calendar_code,publication_order,published_at) VALUES($1,$2,$3,$4,'draft',$5::jsonb,$6,$7,$8,$9,$10,$11,$12,NULL,NULL)",
+                catalog,id,version,generation,definition,body.Selection!,DateWorkspace.Date(body.EffectiveFrom),DateWorkspace.Date(body.EffectiveTo),
+                Engine,calendar.Reference.CatalogId,calendar.Reference.RevisionId,calendar.Reference.Code);
             await insert.ExecuteNonQueryAsync(ct);
         }
         return (await Read(connection,ct)).Single(v=>v.Id==id&&v.Version==version);
@@ -88,10 +95,51 @@ public sealed class ScheduleStore(Guid catalog)
     {
         var row=(await Read(connection,ct)).SingleOrDefault(v=>v.Id==body.Id&&v.Version==body.Version);
         if(row is null || row.Generation!=body.Generation)throw Error("schedule_conflict","Reload the changed schedule before publishing.");
-        PublishedSchedules.Validate(new(row.Id,row.Version,row.Generation,row.Definition,row.Selection,row.EffectiveFrom.ToString("yyyy-MM-dd"),row.EffectiveTo.ToString("yyyy-MM-dd")));
+        PublishedSchedules.Validate(new(row.Id,row.Version,row.Generation,row.Definition,row.Selection,row.EffectiveFrom.ToString("yyyy-MM-dd"),row.EffectiveTo.ToString("yyyy-MM-dd")),row.EngineVersion,row.ResolvedCalendar);
         await using var command=Command(connection,"SELECT security.publish_date_schedule($1,$2,$3,$4)",catalog,body.Id,body.Version,body.Generation);
         await command.ExecuteScalarAsync(ct);
         return (await Read(connection,ct)).Single(v=>v.Id==body.Id&&v.Version==body.Version);
+    }
+    // Every calendar of this workspace's pinned reference revision, as offered to schedule authors.
+    public async Task<ImmutableArray<ReferenceCalendar>> Calendars(NpgsqlConnection connection,CancellationToken ct)
+    {
+        await using var command=Command(connection,"SELECT code FROM ref_data.calendars WHERE catalog_id=$1 AND revision_id=$2 ORDER BY code",referenceCatalog,referenceRevision);
+        var codes=new List<CalendarReference>();
+        await using(var reader=await command.ExecuteReaderAsync(ct))while(await reader.ReadAsync(ct))codes.Add(new(referenceCatalog,referenceRevision,reader.GetString(0)));
+        return [..(await Calendars(connection,codes,ct)).Values.OrderBy(c=>c.Reference.Code,StringComparer.Ordinal)];
+    }
+    // Reads exact calendar versions visible to the bound identity and context; absent ones are omitted.
+    private static async Task<Dictionary<CalendarReference,ReferenceCalendar>> Calendars(NpgsqlConnection connection,IReadOnlyCollection<CalendarReference> references,CancellationToken ct)
+    {
+        var result=new Dictionary<CalendarReference,ReferenceCalendar>();
+        foreach(var reference in references.Distinct())
+        {
+            await using var head=Command(connection,"SELECT coverage_from,coverage_to,weekend_mask FROM ref_data.calendars WHERE catalog_id=$1 AND revision_id=$2 AND code=$3",reference.CatalogId,reference.RevisionId,reference.Code);
+            DateOnly from,to;int mask;
+            await using(var reader=await head.ExecuteReaderAsync(ct))
+            {
+                if(!await reader.ReadAsync(ct))continue;
+                from=reader.GetFieldValue<DateOnly>(0);to=reader.GetFieldValue<DateOnly>(1);mask=reader.GetInt16(2);
+            }
+            await using var days=Command(connection,"SELECT business_date,is_business_day FROM ref_data.calendar_days WHERE catalog_id=$1 AND revision_id=$2 AND calendar_code=$3 ORDER BY business_date",reference.CatalogId,reference.RevisionId,reference.Code);
+            var rows=ImmutableArray.CreateBuilder<(DateOnly,bool)>();
+            await using(var reader=await days.ExecuteReaderAsync(ct))while(await reader.ReadAsync(ct))rows.Add((reader.GetFieldValue<DateOnly>(0),reader.GetBoolean(1)));
+            result[reference]=new(reference,from,to,mask,rows.ToImmutable());
+        }
+        return result;
+    }
+    public async Task<ReferenceCalendar> Calendar(NpgsqlConnection connection,CalendarReference? reference,CancellationToken ct)
+    {
+        if(reference is null || reference.CatalogId!=referenceCatalog || reference.RevisionId!=referenceRevision)
+            throw Error("calendar_reference","Choose a calendar from this workspace's reference data.");
+        return (await Calendars(connection,[reference],ct)).GetValueOrDefault(reference)??throw Error("calendar_reference","The chosen reference calendar is unavailable.");
+    }
+    private static CalendarReference? CalendarAt(NpgsqlDataReader reader,int column)=>reader.IsDBNull(column)?null:
+        new(reader.GetGuid(column),reader.GetGuid(column+1),reader.GetString(column+2));
+    private static async Task<ImmutableArray<ScheduleVersion>> WithCalendars(NpgsqlConnection connection,ImmutableArray<ScheduleVersion> versions,CancellationToken ct)
+    {
+        var calendars=await Calendars(connection,versions.Where(v=>v.Calendar is not null).Select(v=>v.Calendar!).ToArray(),ct);
+        return [..versions.Select(v=>v.Calendar is null?v:v with{ResolvedCalendar=calendars.GetValueOrDefault(v.Calendar)})];
     }
     private static TemporalException Error(string code,string message)=>new(code,message);
 }

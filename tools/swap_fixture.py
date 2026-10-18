@@ -12,7 +12,7 @@ def fixture():
     prices = []
     for n, commodity, quote, target in [(0, 'gas', 'test_gas_outright', 'test_index_target'), (1, 'power', 'test_power_outright', 'test_power_target')]:
         curve = 'daily_'+commodity
-        rows.append(f"INSERT INTO market_data.curves VALUES ({m},'{curve}',{r},'test_{commodity}','test_hub_a','{quote}','test_uniform','{target}','direct','fixture','trader_mark');")
+        rows.append(f"INSERT INTO market_data.curves VALUES ({m},'{curve}',{r},'test_{commodity}','test_hub_a','{quote}','test_uniform','{target}','direct','fixture','trader_mark','Daily {commodity}');")
         for day in range(1, 32):
             start = date(2021, 1, day); end = start+timedelta(days=1)
             cid = identity('5', 2000+n*100+day); sid = identity('9', 2000+n*100+day)
@@ -20,7 +20,7 @@ def fixture():
                          f"INSERT INTO market_data.curve_members VALUES ({m},'{curve}','{cid}',{day-1});",
                          f"INSERT INTO market_data.series VALUES ({m},'{sid}','swap_{commodity}_{day}',{r},'{cid}','{quote}',NULL);"])
             prices.append((2000+n*100+day, sid, Decimal('3')+Decimal(day)/100 if n==0 else Decimal('40')+Decimal(day)/10, 'trader_mark'))
-    rows.append(f"INSERT INTO market_data.rate_curves VALUES ({m},'interest_rates',{r},'test_interest','fixture','valuation_utc_date');")
+    rows.append(f"INSERT INTO market_data.rate_curves VALUES ({m},'interest_rates',{r},'test_interest','fixture','valuation_utc_date','Interest rates');")
     for n, maturity in enumerate(['2021-01-18', '2021-06-18', '2021-12-18']):
         sid=identity('9', 2800+n)
         rows.extend([f"INSERT INTO market_data.series VALUES ({m},'{sid}','swap_rate_{n}',{r},NULL,NULL,'test_zero_rate');",

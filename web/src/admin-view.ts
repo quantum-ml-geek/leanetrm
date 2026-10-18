@@ -8,12 +8,12 @@ export type {RequestCommand as AdministrativeCommand} from './pending-command.js
 type Api=<T>(path:string,body?:unknown)=>Promise<T>;
 type Member={id:string;login:string;name:string;kind:string;enabled:boolean;version:number;roles:string[]};
 type Audit={operationId:string;at:string;actor:string;action:string;before:Member|null;after:Member};
-type Directory={members:Member[];roles:{code:string;permissions:string[]}[];audit:Audit[]};
+type Directory={members:Member[];roles:{code:string;name:string;permissions:string[]}[];audit:Audit[];kinds:{code:string;name:string}[]};
+
 export function knownAdministrationRejection(code:string|undefined):boolean{
   return !!code&&['admin_conflict','admin_input','last_administrator','self_access_change','admin_limit',
     'access_denied','request_format','request_token','definition_rejected'].includes(code);
 }
-const roleNames:Record<string,string>={viewer:'Viewer',trader:'Trader',risk_analyst:'Risk analyst',market_data_editor:'Market data editor',market_data_approver:'Market data approver',access_administrator:'Access administrator'};
 export function accessChange(before:Member|null,after:Member):string{
   if(!before)return 'Account created';
   const changes=[];
@@ -40,14 +40,19 @@ export function setupAdministration(run:(work:()=>Promise<void>)=>Promise<void>,
     field('admin-login').required=!member;field('admin-kind').required=!member;
     for(const box of get('admin-roles').querySelectorAll<HTMLInputElement>('input'))box.checked=member?.roles.includes(box.value)??false;
   }
+  // Role labels come from the directory; an unknown granted role is an inconsistency, not a guess.
+  function kindName(code:string){const kind=directory?.kinds.find(k=>k.code===code);if(!kind)throw Error('The account directory is inconsistent. Refresh accounts.');return kind.name;}
+  function roleName(code:string){const role=directory?.roles.find(r=>r.code===code);if(!role)throw Error('The account directory is inconsistent. Refresh accounts.');return role.name;}
   function button(label:string,work:()=>void){const b=el('button',label);b.type='button';b.className='secondary';b.onclick=()=>{if(!busy())work();};return b;}
   function render(){
     if(!directory)return;
+    const kind=field('admin-kind').value,first=el('option','Choose a kind…');first.value='';
+    get('admin-kind').replaceChildren(first,...directory.kinds.map(k=>{const o=el('option',k.name);o.value=k.code;return o;}));field('admin-kind').value=directory.kinds.some(k=>k.code===kind)?kind:'';
     get('admin-roles').replaceChildren(...directory.roles.map(role=>{
       const block=el('div'),label=el('label'),box=el('input');box.type='checkbox';box.value=role.code;box.checked=selected?.roles.includes(role.code)??false;
-      label.append(box,document.createTextNode(' '+(roleNames[role.code]??friendly(role.code))));const details=el('details');details.append(el('summary','Permissions'),el('p',role.permissions.map(friendly).join(' · ')));block.className='admin-role';block.append(label,details);return block;
+      label.append(box,document.createTextNode(' '+role.name));const details=el('details');details.append(el('summary','Permissions'),el('p',role.permissions.map(friendly).join(' · ')));block.className='admin-role';block.append(label,details);return block;
     }));
-    renderRegularTable(get('admin-members'),'admin-members',profile(),['Name','Kind','Workspace access','Roles',''],directory.members.map(m=>[m.name,friendly(m.kind),m.enabled?'Active':'Suspended',m.roles.map(r=>roleNames[r]??friendly(r)).join(', ')||'No roles',button('Edit',()=>fill(m))]),[],busy);
+    renderRegularTable(get('admin-members'),'admin-members',profile(),['Name','Kind','Workspace access','Roles',''],directory.members.map(m=>[m.name,kindName(m.kind),m.enabled?'Active':'Suspended',m.roles.map(roleName).join(', ')||'No roles',button('Edit',()=>fill(m))]),[],busy);
     renderRegularTable(get('admin-audit'),'admin-audit',profile(),['Saved','By','Account','Change'],directory.audit.map(a=>[displayInstant(a.at,zone()),a.actor,a.after.name,accessChange(a.before,a.after)]),[],busy);
     fill(selected&&directory.members.find(m=>m.id===selected?.id));pendingNote();
   }

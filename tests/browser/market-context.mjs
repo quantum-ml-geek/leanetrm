@@ -9,7 +9,12 @@ export async function run({command,evaluate,wait,click,set,submit,persona,check,
   await click('#contracts tbody tr:first-child button');
   await check('contract history uses observation dates in the same chart standard',"!document.querySelector('#history-card').hidden&&document.querySelector('#history-chart canvas')&&document.querySelector('#history-chart').dataset.chartAxis==='observation'&&document.querySelector('#history-values tbody').children.length===4");
   await click('#history-chart button:first-of-type');await click('#history-close');
-  await persona('editor');await click('#example');
+  await click('#nav-schedules');
+  await check('viewer schedules page is read-only lookup without authoring tools',"!document.querySelector('#schedules-page').hidden&&document.querySelector('#dates-editor').hidden&&document.querySelector('#schedule-inspector').hidden&&document.querySelector('#nav-configuration').hidden&&!document.querySelector('#date-expression-form').hidden");
+  await click('#nav-market');
+  await persona('editor');await click('#nav-schedules');
+  await check('editor drafts schedules against reference calendars only',"!document.querySelector('#dates-editor').hidden&&[...document.querySelectorAll('#dates-calendar option')].some(o=>o.value.endsWith('|test_business'))&&!document.querySelector('#dates-closures')&&document.querySelector('#dates-publish').hidden");
+  await click('#nav-market');await click('#example');
   await set('#date-context-on','2020-12-17');await click('#date-context-latest');await click('#apply-view-context');
   await check('explicit context apply displays historical read-only mode',"document.querySelector('#environment-context-note').textContent.includes('Historical view')&&document.querySelector('#error').hidden");
   const first=await evaluate("window.__responses.filter(r=>r.path==='/api/market/context').at(-1).data");

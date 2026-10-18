@@ -42,7 +42,7 @@ def run_checks(query, psql, environment, manifest, url):
         return output.strip()
     def capture(token=None):
         return query(runtime(token or issue('viewer'), f"SELECT security.capture_date_context('{catalog}','2021-02-15',NULL);"))
-    columns = 'catalog_id,schedule_id,version,generation,state,definition,selection,effective_from,effective_to,engine_version,publication_order,published_at,publication_xid'
+    columns = 'catalog_id,schedule_id,version,generation,state,definition,selection,effective_from,effective_to,engine_version,calendar_catalog_id,calendar_revision_id,calendar_code,publication_order,published_at,publication_xid'
     try:
         check('commit tracking explicitly enabled in owned preview', query('SHOW track_commit_timestamp;') == 'on')
         capture()
@@ -67,7 +67,7 @@ def run_checks(query, psql, environment, manifest, url):
         # XID ordering is intentionally opposite commit/admission ordering.
         schedule = str(UUID(query(f"SELECT id FROM market_data.date_schedules WHERE catalog_id='{catalog}' AND symbol='oe.ng';")))
         version = int(query(f"SELECT max(version)+1 FROM market_data.date_schedule_versions WHERE catalog_id='{catalog}' AND schedule_id='{schedule}';"))
-        query(f"INSERT INTO market_data.date_schedule_versions({columns}) SELECT catalog_id,schedule_id,{version},1,'draft',definition,selection,effective_from,effective_to,engine_version,NULL,NULL,NULL FROM market_data.date_schedule_versions WHERE catalog_id='{catalog}' AND schedule_id='{schedule}' AND version={version-1};")
+        query(f"INSERT INTO market_data.date_schedule_versions({columns}) SELECT catalog_id,schedule_id,{version},1,'draft',definition,selection,effective_from,effective_to,engine_version,calendar_catalog_id,calendar_revision_id,calendar_code,NULL,NULL,NULL FROM market_data.date_schedule_versions WHERE catalog_id='{catalog}' AND schedule_id='{schedule}' AND version={version-1};")
         old_head = query(f"SELECT max(publication_order) FROM market_data.date_schedule_versions WHERE catalog_id='{catalog}';")
         capture_token = issue('viewer')
         capture_process = connect(f"SET SESSION AUTHORIZATION preview_runtime; BEGIN; SELECT security.use_context('{capture_token}');", 'temporal_older_capture')
@@ -87,7 +87,7 @@ def run_checks(query, psql, environment, manifest, url):
         owner_token = issue(login='preview_owner')
         sql = f"BEGIN; SELECT security.use_context('{owner_token}');"
         for next_version in [version+1, version+2]:
-            sql += f"INSERT INTO market_data.date_schedule_versions({columns}) SELECT catalog_id,schedule_id,{next_version},1,'draft',definition,selection,effective_from,effective_to,engine_version,NULL,NULL,NULL FROM market_data.date_schedule_versions WHERE catalog_id='{catalog}' AND schedule_id='{schedule}' AND version={next_version-1}; SELECT security.publish_date_schedule('{catalog}','{schedule}',{next_version},1);"
+            sql += f"INSERT INTO market_data.date_schedule_versions({columns}) SELECT catalog_id,schedule_id,{next_version},1,'draft',definition,selection,effective_from,effective_to,engine_version,calendar_catalog_id,calendar_revision_id,calendar_code,NULL,NULL,NULL FROM market_data.date_schedule_versions WHERE catalog_id='{catalog}' AND schedule_id='{schedule}' AND version={next_version-1}; SELECT security.publish_date_schedule('{catalog}','{schedule}',{next_version},1);"
         query(sql+' COMMIT;')
         capture()
         check('same-commit publications retain an identical knowledge boundary', query(f"SELECT count(DISTINCT k.known_from) FROM market_data.knowledge_publications k JOIN market_data.date_schedule_versions v USING(catalog_id,publication_order) WHERE v.catalog_id='{catalog}' AND v.schedule_id='{schedule}' AND v.version IN ({version+1},{version+2});") == '1')
@@ -135,6 +135,9 @@ def run_checks(query, psql, environment, manifest, url):
         query(runtime(issue('viewer'), bind+expect(f"PERFORM security.use_market_context('{catalog}','{ctx}');", '42501')))
         check('a request cannot rebind its historical scope after reading')
         check('historical editor has no database write context', query(runtime(issue('editor'),bind+"SELECT security.market_access('"+catalog+"','ImportObservations');")) == 'f')
+        check('TOU products are current definitions: visible now, invisible under a historical market context',
+              int(query(runtime(issue('viewer'),"SELECT count(*) FROM market_data.tou_product_versions;"))) >= 7
+              and query(runtime(issue('viewer'),bind+"SELECT count(*) FROM market_data.tou_product_versions;")) == '0')
         out_of_period = query(runtime(issue('viewer'),f"SELECT security.capture_date_context('{catalog}','2019-01-01',NULL);"))
         check('definition applicability excludes bundles outside their business interval', query(runtime(issue('viewer'),f"SELECT security.use_market_context('{catalog}','{out_of_period}'); SELECT count(*) FROM market_data.revisions;")) == '0')
         check('reference closure cannot fall back outside definition applicability', query(runtime(issue('viewer'),f"SELECT security.use_market_context('{catalog}','{out_of_period}'); SELECT count(*) FROM ref_data.units;")) == '0')
@@ -222,6 +225,9 @@ def run_checks(query, psql, environment, manifest, url):
         migration=(Path(__file__).resolve().parents[1]/'db/migrations/0010_workspace_administration.sql').read_text()
         rejected=subprocess.run(psql,env=environment,input=migration,text=True,capture_output=True,timeout=10)
         check('existing grants cannot receive an inferred membership migration',rejected.returncode!=0 and 'Existing grants require a verified workspace membership migration' in rejected.stderr)
+        names=(Path(__file__).resolve().parents[1]/'db/migrations/0026_display_names.sql').read_text()
+        rejected=subprocess.run(psql,env=environment,input=names,text=True,capture_output=True,timeout=10)
+        check('existing curves cannot receive inferred display names',rejected.returncode!=0 and 'Existing curves require a verified display-name migration' in rejected.stderr)
         # Fault injection is confined to this disposable database and restored.
         timeline=query(f"SELECT timeline_id FROM market_data.knowledge_clocks WHERE catalog_id='{catalog}';")
         query(f"UPDATE market_data.knowledge_clocks SET timeline_id=timeline_id+1 WHERE catalog_id='{catalog}';")

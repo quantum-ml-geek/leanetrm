@@ -20,4 +20,8 @@ export const setupSections=[
   {value:'value_specifications',name:'Numeric input types'},
   {value:'cash_rounding_conventions',name:'Cash rounding'}
 ];
-export function dataSections(available:string[],page:string){return (page==='configuration'?setupSections:referenceSections).filter(section=>available.includes(section.value));}
+export const sectionGroups=[
+  {name:'Reference data',description:'Units, currencies, locations and contract details.',sections:referenceSections},
+  {name:'Pricing & delivery conventions',description:'Clocks, delivery patterns, settlement rules and price conventions.',sections:setupSections}
+];
+export function dataSections(available:string[]){return sectionGroups.map(group=>({...group,sections:group.sections.filter(section=>available.includes(section.value))})).filter(group=>group.sections.length);}

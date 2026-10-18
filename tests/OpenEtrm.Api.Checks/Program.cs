@@ -54,5 +54,16 @@ if(args.Length==1)
         }
     }
     finally {CultureInfo.CurrentCulture=previous;}
+    // A power curve settled on an index difference is unsupported by the hour preview; it must not hide the other curves.
+    JsonElement With(JsonElement row,string field,string value){var copy=JsonSerializer.Deserialize<Dictionary<string,JsonElement>>(row)!;copy[field]=JsonSerializer.SerializeToElement(value);return JsonSerializer.SerializeToElement(copy);}
+    var target=references["settlement_targets"].Single(r=>r.Text("code")=="test_power_target");
+    var difference=With(With(With(target,"code","synthetic_power_difference"),"kind","index_difference"),"index_b_code","test_power_price_b");
+    var changedReferences=new Dictionary<string,ImmutableArray<JsonElement>>(references){["settlement_targets"]=references["settlement_targets"].Add(difference)};
+    var changedDefinitions=new Dictionary<string,ImmutableArray<JsonElement>>(definitions){["curves"]=[..definitions["curves"].Select(c=>c.Text("code")=="local_power_all_in"?With(c,"settlement_target_code","synthetic_power_difference"):c)]};
+    var mixed=new PreviewData(realManifest,changedDefinitions,changedReferences,observations);
+    var catalog=JsonSerializer.SerializeToElement(PowerPreview.Catalog(mixed,frame,new([],[])));
+    var listed=catalog.GetProperty("curves").EnumerateArray().Select(c=>c.GetProperty("code").GetString()).ToArray();
+    if(listed.Contains("local_power_all_in") || listed.Length==0)throw new Exception("Unsupported power curve hid or polluted the catalog");
+    Console.WriteLine("PASS power catalog lists only single-index curves without failing the rest");passed++;
 }
 Console.WriteLine($"{passed} preview adapter checks passed.");

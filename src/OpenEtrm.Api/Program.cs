@@ -56,9 +56,10 @@ app.Use(async (context,next)=>
         {
             PreviewDeniedException => (403,"access_denied","The selected test identity cannot perform this operation."),
             AntiforgeryValidationException => (400,"request_token","Reload the preview to obtain a valid request token."),
-            MarketDataException m when m.Code is "shortcut_conflict" or "table_view_conflict" or "futures_revision_conflict" or "swap_revision_conflict" => (409,m.Code,m.Message),
+            MarketDataException m when m.Code is "shortcut_conflict" or "tou_conflict" or "table_view_conflict" or "futures_revision_conflict" or "swap_revision_conflict" => (409,m.Code,m.Message),
             PostgresException p when p.SqlState=="P0001" && p.MessageText=="party_conflict" => (409,p.MessageText,"This party or request changed. Reload the latest revision or retry the original request."),
             PostgresException p when p.SqlState=="P0001" && p.MessageText is "party_input" or "party_limit" => (422,p.MessageText,"Supply a stable code, name and an effective time at or after the preceding version. Party codes cannot change."),
+            PostgresException p when p.SqlState is "23505" or "40001" && apiPath.StartsWithSegments("/api/tou-products") => (409,"tou_conflict","This TOU product changed or its code already exists. Reload before editing."),
             MarketDataException m => (422,m.Code,m.Message),
             PostgresException p when p.SqlState=="P0001" && p.MessageText is "swap_conflict" or "swap_revision_conflict" or "trade_operation_conflict" => (409,p.MessageText,"This trade or operation changed. Reconcile the original request or reload the latest revision."),
             PostgresException p when p.SqlState=="P0001" && (p.MessageText.StartsWith("payment_",StringComparison.Ordinal)||p.MessageText=="short_month") => (422,p.MessageText,"The generated payment date does not meet its explicit rule and calendar coverage."),
@@ -159,27 +160,52 @@ api.MapPost("/units/convert",(HttpContext c,UnitConvertRequest body)=>Locked(c,s
 },c.RequestAborted)));
 api.MapPost("/amounts/display",(HttpContext c,System.Collections.Immutable.ImmutableArray<DisplayNumberRequest> body)=>Locked(c,session=>
     database.WithIdentity(Profile(session),null,(_,_)=>Task.FromResult<IResult>(Results.Ok(UnitOperations.Display(body))),c.RequestAborted)));
-api.MapPost("/power/catalog",(HttpContext c,PowerCatalogRequest body)=>ScheduleOperation(c,(session,data)=>
-    Results.Ok(PowerPreview.Catalog(data,Frame(session,body.SnapshotId)))));
-api.MapPost("/power/preview",(HttpContext c,PowerPreviewRequest body)=>ScheduleOperation(c,(session,data)=>
+var touStore=new TouProductStore(database.Manifest.CatalogId,database.Manifest.ReferenceCatalogId,database.Manifest.ReferenceRevisionId);
+// TOU products are current definitions; a historical view never substitutes them.
+Task<IResult> PowerOperation(HttpContext c,string permission,Func<PreviewSession,NpgsqlConnection,CancellationToken,Task<IResult>> work)=>Locked(c,session=>
 {
     if(session.MarketContext is not null)
-        throw new MarketDataException("power_historical","Generated TOU examples require current-input mode; retained historical clock publication is not implemented.");
-    return Results.Ok(PowerPreview.Calculate(data,Frame(session,body.SnapshotId),body));
-}));
+        throw new MarketDataException("power_historical","TOU products and power hours require current inputs; historical TOU publication is not implemented.");
+    return database.WithIdentity(Profile(session),permission,(connection,ct)=>work(session,connection,ct),c.RequestAborted);
+});
+async Task<PowerPreview.ProductSet> PublishedProducts(NpgsqlConnection connection,CancellationToken ct)=>
+    PowerPreview.Products(TouProductStore.Published(await touStore.Read(connection,ct)),await touStore.Clocks(connection,ct));
+// Stored display names for every curve in this catalog, for screens that show curve codes from any bundle.
+api.MapGet("/curve-names",(Func<HttpContext,Task<IResult>>)(c=>Locked(c,session=>database.WithIdentity(Profile(session),"ReadMarketData",async(connection,ct)=>
+{
+    if(session.MarketContext is {} selected)await MarketContextStore.Bind(connection,database.Manifest.CatalogId,selected,ct);
+    await using var command=ScheduleStore.Command(connection,"SELECT code,name FROM market_data.curves WHERE catalog_id=$1 UNION SELECT code,name FROM market_data.rate_curves WHERE catalog_id=$1 ORDER BY 1,2",database.Manifest.CatalogId);
+    await using var reader=await command.ExecuteReaderAsync(ct);var rows=new List<object>();
+    while(await reader.ReadAsync(ct))rows.Add(new {code=reader.GetString(0),name=reader.GetString(1)});
+    return Results.Ok(rows);
+},c.RequestAborted))));
+api.MapPost("/power/catalog",(HttpContext c,PowerCatalogRequest body)=>PowerOperation(c,"ReadMarketData",async(session,connection,ct)=>
+    Results.Ok(PowerPreview.Catalog(await database.Read(connection,ct),Frame(session,body.SnapshotId),await PublishedProducts(connection,ct)))));
+api.MapPost("/power/preview",(HttpContext c,PowerPreviewRequest body)=>PowerOperation(c,"ReadMarketData",async(session,connection,ct)=>
+    Results.Ok(PowerPreview.Calculate(await database.Read(connection,ct),Frame(session,body.SnapshotId),body,await PublishedProducts(connection,ct)))));
+api.MapGet("/tou-products",(Func<HttpContext,Task<IResult>>)(c=>PowerOperation(c,"ReadMarketData",async(session,connection,ct)=>
+{
+    var canEdit=await HasPermission(connection,"WriteMarketDefinitions",ct);var canPublish=await HasPermission(connection,"SealMarketDefinitions",ct);
+    // Row security returns drafts to authors only; readers receive published versions.
+    return Results.Ok(new {versions=await touStore.Read(connection,ct),clocks=await touStore.Clocks(connection,ct),canEdit,canPublish});
+})));
+api.MapPost("/tou-products/save",(HttpContext c,TouProductSaveRequest body)=>PowerOperation(c,"WriteMarketDefinitions",async(session,connection,ct)=>
+    Results.Ok(await touStore.Save(connection,body,ct))));
+api.MapPost("/tou-products/publish",(HttpContext c,TouProductPublishRequest body)=>PowerOperation(c,"SealMarketDefinitions",async(session,connection,ct)=>
+    Results.Ok(await touStore.Publish(connection,body,ct))));
 api.MapGet("/schedules",(Func<HttpContext,Task<IResult>>)(c=>ScheduleOperation(c,(session,data)=>
 {
     var sources=(database.Manifest.Schedules??[]).Select(source=>
     {
         var sequence=SchedulePreview.Compile(data,source);
-        return new {source.Curve,source.From,source.To,source.ExampleAt,
+        return new {source.Curve,name=data.Definitions["curves"].Single(c=>c.Text("code")==source.Curve).Text("name"),source.From,source.To,source.ExampleAt,
             entries=sequence.Entries.Select(e=>new {contractId=e.Contract.Key.Id,e.Ordinal,
                 label=data.References["futures_series"].Single(s=>s.Text("code")==e.Contract.FuturesSeries!.Value.Code).Text("series_label"),
                 e.EligibleFrom,rollAt=e.Contract.Expiry,beforeExpiryAt=e.Contract.Expiry.AddTicks(-1),e.Contract.DeliveryFrom,e.Contract.DeliveryTo,e.LastTradingDate}).ToArray()};
     }).ToArray();
     return Results.Ok(new {sources,shortcuts=session.Shortcuts.For(Profile(session)).Select(SchedulePreview.Describe).ToArray(),
         dateSchedules=session.Dates.For(Profile(session)).ToArray(),draftCurves=session.Dates.Curves(Profile(session)).ToArray(),
-        curveTemplates=data.Definitions["curves"].Select(c=>new {code=c.Text("code")}).ToArray()});
+        curveTemplates=data.Definitions["curves"].Select(c=>new {code=c.Text("code")}).ToArray(),dateRoles=SchedulePreview.DateRoleChoices});
 })));
 api.MapPost("/schedules/preview",(HttpContext c,SchedulePreviewRequest body)=>ScheduleOperation(c,(session,data)=>
     Results.Ok(SchedulePreview.Result(SchedulePreview.Create(SchedulePreview.Compile(data,ScheduleSource(body.Curve)),body),SchedulePreview.ParseAt(body.At)))));
@@ -251,7 +277,7 @@ CurveDatesSaved CompileCurve(PreviewSession session,PreviewData data,CurveDatesR
 api.MapPost("/schedules/contracts/preview",(HttpContext c,CurveDatesRequest body)=>ScheduleOperation(c,(session,data)=>Results.Ok(CompileCurve(session,data,body))));
 api.MapPost("/schedules/contracts/keep",(HttpContext c,CurveDatesRequest body)=>ScheduleOperation(c,(session,data)=>
     Results.Ok(session.Dates.KeepCurve(Profile(session),CompileCurve(session,data,body)))));
-var scheduleStore=new ScheduleStore(database.Manifest.CatalogId);
+var scheduleStore=new ScheduleStore(database.Manifest.CatalogId,database.Manifest.ReferenceCatalogId,database.Manifest.ReferenceRevisionId);
 var knowledgeStore=new KnowledgeStore(database.Manifest.CatalogId);
 Task<IResult> DateOperation(HttpContext c,string permission,Func<PreviewSession,NpgsqlConnection,CancellationToken,Task<IResult>> work)=>Locked(c,session=>
     database.WithIdentity(Profile(session),permission,async(connection,ct)=>
@@ -267,10 +293,18 @@ async Task<bool> HasPermission(NpgsqlConnection connection,string permission,Can
 api.MapGet("/date-schedules",(Func<HttpContext,Task<IResult>>)(c=>DateOperation(c,"ReadMarketData",async(session,connection,ct)=>
 {
     var knownThrough=session.MarketContext?.KnownThrough??await scheduleStore.Capture(connection,ct);
-    return Results.Ok(new {knownThrough,versions=session.MarketContext is {} selected?await scheduleStore.ReadAt(connection,selected,ct):await scheduleStore.Read(connection,ct),
-        canEdit=session.MarketContext is null && await HasPermission(connection,"WriteMarketDefinitions",ct),canPublish=session.MarketContext is null && await HasPermission(connection,"SealMarketDefinitions",ct),
-        contractDefinitions=session.ContractDefinitions.Where(p=>p.Key.Owner==Profile(session)).Select(p=>p.Value).ToArray()});
+    var canEdit=session.MarketContext is null && await HasPermission(connection,"WriteMarketDefinitions",ct);
+    var canPublish=session.MarketContext is null && await HasPermission(connection,"SealMarketDefinitions",ct);
+    // Row security returns drafts to authors only; readers receive published versions.
+    var versions=session.MarketContext is {} selected?await scheduleStore.ReadAt(connection,selected,ct):await scheduleStore.Read(connection,ct);
+    return Results.Ok(new {knownThrough,versions,canEdit,canPublish,choices=DateWorkspace.Choices,
+        contractDefinitions=session.ContractDefinitions.Where(p=>p.Key.Owner==Profile(session)).Select(p=>p.Value).ToArray(),
+        calendars=(await scheduleStore.Calendars(connection,ct)).Select(c=>new {c.Reference,c.CoverageFrom,c.CoverageTo,c.WeekendDays,
+            closedDates=c.Days.Where(d=>!d.Open).Select(d=>d.Date),openDates=c.Days.Where(d=>d.Open).Select(d=>d.Date)})});
 })));
+api.MapPost("/date-schedules/preview",(HttpContext c,DateSchedulePreviewRequest body)=>DateOperation(c,"ReadMarketData",async(session,connection,ct)=>
+    Results.Ok(DateWorkspace.Compile(body.Definition??throw new TemporalException("schedule_definition","Supply an explicit schedule definition."),
+        await scheduleStore.Calendar(connection,body.Calendar,ct)))));
 api.MapPost("/date-schedules/save",(HttpContext c,ScheduleSaveRequest body)=>DateOperation(c,"WriteMarketDefinitions",async(session,connection,ct)=>
     Results.Ok(await scheduleStore.Save(connection,body,ct))));
 api.MapPost("/date-schedules/publish",(HttpContext c,SchedulePublishRequest body)=>DateOperation(c,"SealMarketDefinitions",async(session,connection,ct)=>
@@ -580,11 +614,15 @@ api.MapGet("/access",(Func<HttpContext,Task<IResult>>)(c=>Locked(c,session=>
         await using var command=ScheduleStore.Command(connection,"SELECT security.current_permissions()");
         return Results.Ok(new {permissions=(string[])(await command.ExecuteScalarAsync(ct))!});
     },c.RequestAborted))));
+// The principal kinds security.principals accepts; each maps to one login kind.
+(string Code,string Name)[] IdentityKinds=[("human","Human"),("service","Service"),("agent","Agent")];
 api.MapGet("/admin",(Func<HttpContext,Task<IResult>>)(c=>Locked(c,session=>
     database.WithIdentity(Profile(session),"ManageAccess",async(connection,ct)=>
     {
         await using var command=ScheduleStore.Command(connection,"SELECT security.administration_directory()::text");
-        return Results.Ok(JsonSerializer.Deserialize<JsonElement>((string)(await command.ExecuteScalarAsync(ct))!));
+        var directory=JsonSerializer.Deserialize<Dictionary<string,JsonElement>>((string)(await command.ExecuteScalarAsync(ct))!)!;
+        directory["kinds"]=JsonSerializer.SerializeToElement(IdentityKinds.Select(k=>new {code=k.Code,name=k.Name}));
+        return Results.Ok(directory);
     },c.RequestAborted))));
 async Task<IResult> AdminMutation(HttpContext c,object body,string action)=>await Locked(c,async session=>
 {

@@ -4,20 +4,37 @@
 screens. It uses this repository's managed API and isolated stock PostgreSQL.
 Check the repository boundary with `python3 tools/check_standalone.py`.
 
-Choose a market date in **Curves & prices**, then open **Power TOUs**. Select a
-power curve, contract and product example. The two editable Monday–Sunday grids
+Choose a market date in the header, then open **Power TOUs**. Select a power
+curve, delivery period, product example, hours block and grid interval; none of
+these economic choices is preselected. The two editable Monday–Sunday grids
 separate non-holidays from holidays. Cells support 60, 30, 15 or 5 minutes.
-Supply holiday dates separately; blank explicitly means none. Payment calendars
-are separate. HE/HB changes labels, never interval identity or economics.
+HE/HB changes labels, never interval identity or economics.
 Choose an exact quantity specification for **Flat MW** or **Total MWh**. Total
 energy also requires an allocation; the supported choice is flat MW across the
 selected intervals. Decimal display places belong to this unsaved example and
 are editable for quantities, prices and money.
 
-| Product example | Non-holiday on-peak | Clock |
+TOU products are authored on the same page: editors draft a product (code, name,
+market clock, hour-beginning peak window, Saturday flag), approvers publish it,
+and published versions never change. The calculation offers each product's latest
+published version. Each binds an exact clock rule from a sealed reference
+revision. TOU products are current definitions: under a historical market view
+they are not readable and the page refuses rather than substituting them. The
+preview starts with seven common ISO conventions (PJM, NYISO, ISO-NE: Monday–
+Friday HE08–HE23 Eastern prevailing; ERCOT, SPP: HE07–HE22 Central prevailing;
+CAISO/WECC: Monday–Saturday HE07–HE22 Pacific prevailing; MISO: HE07–HE22 fixed
+EST). Verify them against the product specification before any settlement use. Holidays are the closed dates of the curve's
+settlement index calendar inside the delivery period; the calendar must cover
+the whole period, and clients cannot supply their own holiday list. An IANA
+clock rule's declared tzdb release must equal the release of the installed
+zoneinfo data (`+VERSION`, else the `tzdata.zi` header, under `$TZDIR` or the
+system directory); otherwise the calculation is refused with `clock_tzdb`. The
+disposable preview fixture declares the release installed on its host.
+
+| Seeded product | Non-holiday on-peak | Clock |
 |---|---|---|
-| PJM | Monday–Friday HE08–23 | Eastern prevailing |
-| ERCOT | Monday–Friday HE07–22 | Central prevailing |
+| PJM, NYISO, ISO-NE | Monday–Friday HE08–23 | Eastern prevailing |
+| ERCOT, SPP | Monday–Friday HE07–22 | Central prevailing |
 | CAISO / WECC | Monday–Saturday HE07–22 | Pacific prevailing |
 | MISO settlement / FTR | Monday–Friday HE07–22 | Fixed UTC−05 |
 
@@ -110,9 +127,8 @@ and business requirements are:
 - Qualify explicit peak/off-peak constituent selection, locational combinations
   and forward/fixing boundaries. Keep exact mappings and units, fail on gaps or
   ambiguous overlaps, and count the deal's energy once.
-- Add durable TOU drafts/publications and exact product/calendar/clock bindings
-  under existing current permissions and effective/known history. These are
-  required before the unsaved example can become stored market configuration.
+- Add effective/known history to TOU product publication so historical views
+  can use the products that were in force; today products are current-only.
 
 These are pending items, not assertions of completed capability. Continue from
 the existing standalone domain, API, reference links and checks; do not replace

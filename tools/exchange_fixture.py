@@ -9,7 +9,7 @@ from pathlib import Path
 import json
 import re
 from uuid import UUID, uuid5
-from preview_fixture import fixture as baseline, trading_fixture as baseline_trading
+from preview_fixture import fixture as baseline, trading_fixture as baseline_trading, installed_tzdb, tou_products
 
 NAMESPACE=UUID('5a935d8a-8e48-43d6-83fd-4b7b7d4f991d')
 def key(name): return str(uuid5(NAMESPACE,name))
@@ -72,8 +72,10 @@ def fixture(root):
     refs.append(f"INSERT INTO ref_data.sources(catalog_id,revision_id,code,kind,locator,retrieved_at,license_reference,distribution_review) VALUES({R},'demo_eligibility','synthetic','synthetic:exchange-admission-window-v1','2026-10-18T00:00:00Z','Original synthetic admission window; not an exchange first-listing date','redistributable');")
     # Public specifications name market clocks. Published lot totals are consumed
     # directly; fixed UTC is only the explicitly synthetic admission calendar.
+    # The preview declares the tzdb release installed on its host; the API refuses any mismatch.
+    tzdb=installed_tzdb()
     for clock,zone in [('ept','America/New_York'),('cpt','America/Chicago'),('ppt','America/Los_Angeles')]:
-        refs.append(f"INSERT INTO ref_data.clock_rules VALUES({R},'{clock}','iana',NULL,'{zone}','2026c');")
+        refs.append(f"INSERT INTO ref_data.clock_rules VALUES({R},'{clock}','iana',NULL,'{zone}','{tzdb}');")
         refs.append(f"INSERT INTO ref_data.calendars VALUES({R},'{clock}_published_peak','{clock}',{64 if clock=='ppt' else 96},'2026-10-01','2027-05-01');")
         for holiday in ['2026-11-26','2026-12-25','2027-01-01']:
             refs.append(f"INSERT INTO ref_data.calendar_days VALUES({R},'{clock}_published_peak','{holiday}',false,'NERC holiday; published lot totals remain authoritative');")
@@ -101,17 +103,18 @@ def fixture(root):
         quote_kind='basis' if code in ('ice_dgd','ice_hxs','ice_wah') else 'outright'
         refs.append(f"INSERT INTO ref_data.quote_specifications VALUES({R},'{code}_quote','test_{commodity}','{quote_kind}','{q}','usd',1,{tick},{clearing_increment},-10000,100000); ")
         index_code=(location+('_da_peak' if code in ('ice_pjc','ice_pda','ice_spm','ice_sdp','ice_npm','ice_dpn') else '_rt_peak')) if commodity=='power' else location+('_daily' if frequency=='daily' else '_bidweek')
-        if settlement=='cash':
-            if index_code not in indices:
-                refs.append(f"INSERT INTO ref_data.price_index_definitions VALUES({R},'{index_code}','test_{commodity}','{location}','usd','{quote_unit}',1,'demo_execution');")
-                indices.add(index_code)
         clock='ppt' if location.startswith('caiso') else 'cpt' if location=='ercot_north' else 'ept'
         profile_calendar=clock+'_published_peak' if commodity=='power' else 'demo_execution'
+        if settlement=='cash':
+            if index_code not in indices:
+                # Power indexes settle on the NERC-holiday calendar of their market clock.
+                refs.append(f"INSERT INTO ref_data.price_index_definitions VALUES({R},'{index_code}','test_{commodity}','{location}','usd','{quote_unit}',1,'{profile_calendar}');")
+                indices.add(index_code)
         refs.append(f"INSERT INTO ref_data.delivery_profiles VALUES({R},'{code}_profile','exchange_published','{clock}','{profile_calendar}','{basis}',60);")
         refs.append(f"INSERT INTO ref_data.futures_products(catalog_id,revision_id,code,name,definition_state,exchange_code,clearing_house_code,commodity_code,location_code,quote_currency_code,lot_unit_code,quote_unit_code,lot_basis,contract_size,quote_multiplier,outright_tick_size,settlement_method,market_clock_code,trading_calendar_code,delivery_calendar_code,settlement_calendar_code) VALUES({R},'{code}','{name}','synthetic','{exchange}','{clearing}','test_{commodity}','{location}','usd','{lot_unit}','{quote_unit}','{basis}',{size},1,{tick},'{settlement}','{clock}','demo_execution','{profile_calendar}','demo_execution');")
         refs.append(f"INSERT INTO ref_data.futures_product_terms VALUES({R},'{code}','{code}_profile',"+(f"'{index_code}'" if settlement=='cash' and quote_kind!='basis' else 'NULL')+");")
         refs.append(f"INSERT INTO ref_data.product_evidence VALUES({R},'{code}','{code}','units');")
-        defs.append(f"INSERT INTO market_data.curves VALUES({M},'{code}',{R},'test_{commodity}','{location}','{code}_quote','{code}_profile','test_future_target','direct','fixture','daily_settlement');")
+        defs.append(f"INSERT INTO market_data.curves VALUES({M},'{code}',{R},'test_{commodity}','{location}','{code}_quote','{code}_profile','test_future_target','direct','fixture','daily_settlement','{name.replace(chr(39),chr(39)*2)}');")
         contracts[code]=[]
         dates=MONTHS if frequency=='monthly' else DAILY_DATES
         for i,day in enumerate(dates):
@@ -145,7 +148,8 @@ def fixture(root):
             value=mark+Decimal(i)*Decimal('0.05' if commodity=='gas' else '0.50')+Decimal(n)*Decimal('0.01' if commodity=='gas' else '0.25')
             observations.append(f"INSERT INTO market_data.observations VALUES('{catalog}','{oid}','{revision}','{sid}',{R},'fixture','synthetic_{oid}','1','daily_settlement','final','{at}','{now}',{value},NULL);")
         frames.append({'at':at,'observationIds':pins,'curveContracts':contracts})
-    sql='BEGIN;\n'+'\n'.join(ref_statements+refs+[seal]+defs+[f"UPDATE market_data.revisions SET state='sealed' WHERE catalog_id='{catalog}' AND id='{revision}';"]+observations)+'\nCOMMIT;'
+    sql='BEGIN;\n'+'\n'.join(ref_statements+refs+[seal]+defs+[f"UPDATE market_data.revisions SET state='sealed' WHERE catalog_id='{catalog}' AND id='{revision}';"]+observations
+        +tou_products(catalog,R,{'eastern':'ept','central':'cpt','pacific':'ppt','fixed_est':'synthetic_fixed_est'},now,lambda n:key(f'tou_product_{n}')))+'\nCOMMIT;'
     manifest.update(frames=frames,example={'at':frames[-1]['at'],'curve':'nymex_ng'},schedules=[],
        identityIssuer='https://exchange-preview.invalid',futuresConvention='contract_lot_execution_pnl_v2')
     # All identity/catalog IDs are independent. Shared public role-template IDs

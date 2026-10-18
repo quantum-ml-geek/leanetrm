@@ -58,6 +58,37 @@ static class PowerHoursChecks
         var west=TimeOfUse.WeekdayBlock(60,6,22,true);
         Equal(PowerHours.Compile(new(2026,11,1),new(2026,12,1),PowerClock.Capture(TimeZoneInfo.FindSystemTimeZoneById("America/Los_Angeles")),west,holidays,60).Length,384);
         Equal(PowerHours.Compile(new(2026,1,1),new(2026,4,1),ny,all,[],60).Length,2159);
+        // Installed tzdb release: +VERSION wins, tzdata.zi is the fallback, anything else is unknown.
+        var tz=Directory.CreateTempSubdirectory("tzdb-check-");
+        try
+        {
+            Reject("clock_tzdb",()=>TimeZoneDatabase.Version(tz.FullName));
+            File.WriteAllText(Path.Combine(tz.FullName,"tzdata.zi"),"# version 2098a\n# more\n");
+            Equal(TimeZoneDatabase.Version(tz.FullName),"2098a");
+            File.WriteAllText(Path.Combine(tz.FullName,"+VERSION"),"2099z\n");
+            Equal(TimeZoneDatabase.Version(tz.FullName),"2099z");
+            File.WriteAllText(Path.Combine(tz.FullName,"+VERSION"),"2026c-rearguard\n");
+            Reject("clock_tzdb",()=>TimeZoneDatabase.Version(tz.FullName));
+        }
+        finally { tz.Delete(true); }
+        // Clock rules: fixed offsets are exact; IANA rules need an installed zone file and the declared tzdb release,
+        // unchanged across loading.
+        TimeZoneSource Source(params string[] versions){var next=0;return new(()=>versions[Math.Min(next++,versions.Length-1)],id=>id=="America/New_York");}
+        var eastern=new ClockRule("synthetic_eastern","iana",null,"America/New_York","2099z");
+        Equal(PowerHours.Compile(new(2026,11,1),new(2026,11,2),PowerClock.FromRule(new("synthetic_est","fixed_offset",-18000,null,null),Source()),all,[],60).Length,24);
+        Equal(PowerHours.Compile(new(2026,11,1),new(2026,11,2),PowerClock.FromRule(eastern,Source("2099z")),all,[],60).Length,25);
+        Reject("clock_tzdb",()=>PowerClock.FromRule(eastern,Source("2026c")));
+        Reject("clock_tzdb",()=>PowerClock.FromRule(eastern,Source("2099z","2100a")));
+        Reject("clock_tzdb",()=>PowerClock.FromRule(eastern,new(()=>throw new MarketDataException("clock_tzdb","unavailable"),_=>true)));
+        Reject("clock_rule",()=>PowerClock.FromRule(eastern with{IanaZone="Synthetic/Nowhere"},Source("2099z")));
+        Reject("clock_rule",()=>PowerClock.FromRule(eastern with{IanaZone="Eastern Standard Time"},new(()=>"2099z",_=>true)));
+        Reject("clock_rule",()=>PowerClock.FromRule(eastern with{IanaZone="../etc/passwd"},new(()=>"2099z",_=>true)));
+        foreach(var seconds in new int?[]{null,30,-50460,50460})
+            Reject("clock_rule",()=>PowerClock.FromRule(new("synthetic_bad","fixed_offset",seconds,null,null),Source()));
+        Reject("clock_rule",()=>PowerClock.FromRule(new("synthetic_bad","solar",null,null,null),Source()));
+        Equal(TimeZoneDatabase.Directory(null),"/usr/share/zoneinfo");
+        Equal(TimeZoneDatabase.Directory("/synthetic/zoneinfo"),"/synthetic/zoneinfo");
+        Reject("clock_tzdb",()=>TimeZoneDatabase.Directory(""));
         Console.WriteLine($"PASS {count} power-hour, TOU, DST and synthetic settlement checks");
     }
 }

@@ -33,6 +33,27 @@ internal static class DateWorkspaceChecks
             Reject("contract_dates",()=>DateWorkspace.Contract(new("Bad","oe.ng[1]","oe.ng[0]","oe.ng[0]","15:30"),Resolve));
             Reject("contract_dates",()=>DateWorkspace.Contract(new("Bad","oe.ng[0]","oe.ng[1]","oe.ng[0]",null),Resolve));
         });
+        Check("reference calendars decode ISO weekend bits, closures and explicit openings",()=>{
+            var reference=new CalendarReference(Guid.Empty,Guid.Empty,"synthetic_business");
+            ReferenceCalendar Make(int mask,params (DateOnly,bool)[] days)=>new(reference,new(2021,1,1),new(2021,2,1),mask,[..days]);
+            // 96 = bits 5 and 6 = Saturday and Sunday when bit 0 is Monday.
+            var weekdays=DateWorkspace.Calendar(Make(96,(new(2021,1,1),false),(new(2021,1,9),true)));
+            if(weekdays.Contains(new(2021,1,1))||weekdays.Contains(new(2021,1,2))||weekdays.Contains(new(2021,1,3)))throw new Exception("Closure or weekend open");
+            if(!weekdays.Contains(new(2021,1,4))||!weekdays.Contains(new(2021,1,8))||!weekdays.Contains(new(2021,1,9)))throw new Exception("Weekday or explicit opening closed");
+            var fridays=DateWorkspace.Calendar(Make(16));
+            if(fridays.Contains(new(2021,1,1))||!fridays.Contains(new(2021,1,2)))throw new Exception("Bit 4 is Friday");
+            if(DateWorkspace.Calendar(Make(0)).Count!=31)throw new Exception("Empty mask closes days");
+            Reject("calendar_definition",()=>DateWorkspace.Calendar(Make(128)));
+            Reject("calendar_definition",()=>DateWorkspace.Calendar(Make(-1)));
+            Reject("date_coverage",()=>DateWorkspace.Calendar(Make(96,(new(2021,2,1),false))));
+        });
+        Check("a referenced calendar replaces, and never mixes with, an inline calendar",()=>{
+            var reference=new ReferenceCalendar(new(Guid.Empty,Guid.Empty,"synthetic_business"),new(2020,12,1),new(2021,6,1),96,[(new DateOnly(2021,1,1),false)]);
+            var bound=DateWorkspace.Compile(request with{Calendar=null},reference);
+            if(!bound.Dates.Select(d=>d.Date).SequenceEqual(saved.Dates.Select(d=>d.Date)))throw new Exception("Reference calendar changed equal dates");
+            Reject("calendar_binding",()=>DateWorkspace.Compile(request,reference));
+            Reject("calendar_definition",()=>DateWorkspace.Compile(request with{Calendar=null}));
+        });
         Console.WriteLine($"{passed} date workspace checks passed.");
     }
 }

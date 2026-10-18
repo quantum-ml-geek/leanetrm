@@ -31,7 +31,7 @@ def run_checks(url):
     # the picker names nor resolution may advance to that later knowledge.
     author=PreviewClient(url);author.bootstrap();author.call('profile',{'profile':'editor'})
     symbol='oe.late_'+uuid4().hex[:12]
-    draft=author.call('date-schedules/save',{'definition':{'name':'Synthetic late anchors','symbol':symbol,'firstMonth':'2020-12','lastMonth':'2021-03','anchor':'day','day':1,'shortMonth':'reject','adjustment':'unadjusted','calendar':{'name':'Synthetic weekdays','from':'2020-12-01','to':'2021-05-01','weekendDays':[0,6],'closedDates':[]}},'selection':'context_month','effectiveFrom':'2020-12-01','effectiveTo':'2021-04-01'})
+    draft=author.call('date-schedules/save',{'definition':{'name':'Synthetic late anchors','symbol':symbol,'firstMonth':'2020-12','lastMonth':'2021-03','anchor':'day','day':1,'shortMonth':'reject','adjustment':'unadjusted','calendar':None},'calendar':next(c['reference'] for c in author.call('date-schedules')['calendars'] if c['reference']['code']=='test_business'),'selection':'context_month','effectiveFrom':'2020-12-01','effectiveTo':'2021-04-01'})
     publisher=PreviewClient(url);publisher.bootstrap();publisher.call('profile',{'profile':'approver'})
     publisher.call('date-schedules/publish',{key:draft[key] for key in ['id','version','generation']})
     frozen=c.call('date-schedules/catalog',{'context':catalog['context']})
