@@ -1,9 +1,9 @@
 export type Row = Record<string, string | number | null>;
 export type Frame = {id:string; name:string; at:string; observationIds:string[];curveContracts:Record<string,string[]>};
-export type Workspace = {profile:string;example:{at:string;curve:string}; definitions:Record<string,Row[]>; references:Record<string,Row[]>; observations:Row[]; frames:Frame[]; initialFrameIds:string[]};
+export type Workspace = {futuresConvention:string;unitCatalogError?:string|null;unitCatalog?:{revision:unknown;references:Record<string,Row[]>};profile:string;example:{at:string;curve:string}; definitions:Record<string,Row[]>; references:Record<string,Row[]>; observations:Row[]; frames:Frame[]; initialFrameIds:string[]};
 import type {PricingNode} from './pricing-view.js';
 
-export type Point = {contractId?:string; seriesId?:string; maturity?:string; deliveryFrom?:string; deliveryTo?:string; expiry?:string; value:string; quote?:string; lineage:string[]; discountFactor?:string; displayDiscountFactor?:string; annualRate?:string; actualDays?:number};
+export type Point = {priceTick?:string;contractId?:string; seriesId?:string; maturity?:string; deliveryFrom?:string; deliveryTo?:string; expiry?:string; value:string; quote?:string; lineage:string[]; discountFactor?:string; displayDiscountFactor?:string; annualRate?:string; actualDays?:number};
 export type CurveResult = {kind?:'rates';availability?:'no_remaining_contracts';trace?:PricingNode[];snapshotId:string; curve:string; at:string; points:Point[]; evaluated:number; numericalPolicy:string};
 export type HistoryPoint = {at:string; value:string|null; snapshotId:string;unavailableReason?:string|null};
 export type PriceHistory = {points:HistoryPoint[]};

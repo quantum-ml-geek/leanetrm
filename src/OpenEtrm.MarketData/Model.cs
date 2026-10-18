@@ -40,12 +40,14 @@ public sealed record MarketContract(
 
 // Resolved from the exact dated series/product/milestone reference links. This
 // preserves the authoritative specification when constructing an in-memory model.
+public sealed record FuturesLotResolution(Quantity Quantity,ExactDecimal Factor,string Implementation);
+public sealed record FuturesBasisSettlement(ReferenceKey Index,ReferenceKey BenchmarkSeries,string Implementation);
 public sealed record FuturesSeriesSpecification(
     ReferenceKey Key, ReferenceKey QuoteQuantity, ReferenceKey Currency,
     ExactDecimal Multiplier, ExactDecimal TradingTick, ReferenceKey Location,
     ReferenceKey DeliveryProfile, DateOnly DeliveryFrom, DateOnly DeliveryTo,
     DateTimeOffset LastTradingAt, ReferenceKey LotQuantity,
-    ExactDecimal ContractSize, LotBasis LotBasis);
+    ExactDecimal ContractSize, LotBasis LotBasis, DateTimeOffset FirstTradingAt, string SettlementMethod,FuturesLotResolution? LotResolution=null,FuturesBasisSettlement? BasisSettlement=null);
 
 // Identity mapping is the first supported delivery mapping. Explicitly named
 // pairs are required even where source and target delivery periods are equal.
@@ -57,7 +59,24 @@ public sealed record CurveInput(
 public enum NumericKind { QuantityRatio = 1, Dimensionless }
 public sealed record ValueSpecification(
     ReferenceKey Key, NumericKind Kind, ReferenceKey? NumeratorQuantity,
-    ReferenceKey? DenominatorQuantity, ExactDecimal Minimum, ExactDecimal Maximum);
+    ReferenceKey? DenominatorQuantity, ExactDecimal Minimum, ExactDecimal Maximum)
+{
+    internal void Validate()
+    {
+        Money.RequireKey(Key);
+        if (!Enum.IsDefined(Kind)) throw new MarketDataException("unsupported_kind", "Unsupported numeric kind.");
+        if (Minimum.CompareTo(Maximum) > 0 ||
+            Kind == NumericKind.Dimensionless && (NumeratorQuantity is not null || DenominatorQuantity is not null) ||
+            Kind == NumericKind.QuantityRatio && (NumeratorQuantity is null || DenominatorQuantity is null))
+            throw new MarketDataException("value_specification", "Numeric domain and explicit numerator/denominator must match the selected kind.");
+        foreach (var key in new[] { NumeratorQuantity, DenominatorQuantity }.OfType<ReferenceKey>())
+        {
+            Money.RequireKey(key);
+            if (key.Revision != Key.Revision)
+                throw new MarketDataException("value_specification", "Numeric specification and quantity references must share the exact revision.");
+        }
+    }
+}
 public sealed record MarketSeries(
     SeriesKey Key, ContractKey? Contract, ReferenceKey? Quote, ReferenceKey? ValueSpecification);
 // Exactly one of a dated series or an explicitly typed constant.
@@ -85,15 +104,52 @@ public sealed record SelectedObservation(InputKey Input, MarketObservation Obser
 public sealed record MarketSnapshot(
     Guid Id, DefinitionRevision Definitions, DateTimeOffset ValuationAt,
     DateTimeOffset MarketCutoff, InputSelectionPolicy SelectionPolicy,
-    ImmutableArray<SelectedObservation> Selections);
+    ImmutableArray<SelectedObservation> Selections)
+{
+    public bool HasCoherentSelections() => !Selections.IsDefault &&
+        Selections.All(s => s is not null && s.Observation is not null) &&
+        Selections.Select(s => s.Input).Distinct().Count() == Selections.Length &&
+        Selections.GroupBy(s => s.Observation.Key).All(g => g.Select(s => s.Observation).Distinct().Count() == 1);
+
+    public bool HasSameInputs(MarketSnapshot? other) => other is not null &&
+        Id == other.Id && Definitions == other.Definitions && ValuationAt == other.ValuationAt && MarketCutoff == other.MarketCutoff &&
+        SelectionPolicy == other.SelectionPolicy && !Selections.IsDefault && !other.Selections.IsDefault &&
+        Selections.Length == other.Selections.Length && Selections.ToHashSet().SetEquals(other.Selections);
+}
 
 public readonly record struct CurveRequest(CurveKey Curve, ContractKey Contract);
-public sealed record BuiltValue(
-    CurveRequest Request, ReferenceKey Quote, ExactDecimal Value,
-    ImmutableHashSet<ObservationKey> Lineage);
+public sealed record BuiltValue
+{
+    public CurveRequest Request { get; }
+    public ReferenceKey Quote { get; }
+    public UnitPrice Price { get; }
+    public ImmutableHashSet<ObservationKey> Lineage { get; }
+    public BuiltValue(CurveRequest request, QuoteSpecification quote, UnitPrice price, ImmutableHashSet<ObservationKey> lineage)
+    {
+        price.RequireQuote(quote);
+        Request = request; Quote = quote.Key; Price = price; Lineage = lineage;
+    }
+}
 public sealed record CurveEvaluationInput(InputSlot Slot, CurveRequest Source, InputUse Use);
 public sealed record CurveEvaluation(BuiltValue Result, InputUse Use,
-    ImmutableArray<CurveEvaluationInput> Inputs, ExactDecimal? Multiplier, ObservationKey? MultiplierObservation);
-public sealed record CurveBuild(
-    Guid SnapshotId, DefinitionRevision Definitions, string NumericalPolicy,
-    ImmutableArray<BuiltValue> Values, int EvaluatedConstituents, ImmutableArray<CurveEvaluation> Evaluations);
+    ImmutableArray<CurveEvaluationInput> Inputs, NumericValue? Multiplier, ObservationKey? MultiplierObservation);
+public sealed record CurveBuild
+{
+    internal CurveModel Model { get; }
+    public MarketSnapshot Snapshot { get; }
+    public Guid SnapshotId => Snapshot.Id;
+    public DefinitionRevision Definitions => Snapshot.Definitions;
+    public string NumericalPolicy { get; }
+    public ImmutableArray<BuiltValue> Values { get; }
+    public int EvaluatedConstituents { get; }
+    public ImmutableArray<CurveEvaluation> Evaluations { get; }
+    public int ReusedConstituents { get; }
+    public Risk.QuoteShock? Shock { get; }
+    internal CurveBuild(CurveModel model,MarketSnapshot snapshot,string numericalPolicy,ImmutableArray<BuiltValue> values,
+        int evaluatedConstituents,ImmutableArray<CurveEvaluation> evaluations,int reusedConstituents=0,Risk.QuoteShock? shock=null)
+    {
+        Model=model; Snapshot=snapshot; NumericalPolicy=numericalPolicy; Values=values;
+        EvaluatedConstituents=evaluatedConstituents; Evaluations=evaluations;
+        ReusedConstituents=reusedConstituents; Shock=shock;
+    }
+}

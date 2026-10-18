@@ -18,9 +18,22 @@ logins and build commodity curves using exact arithmetic. A separate interest-ra
 example uses explicitly selected day-count/compounding rules for discount factors. The disposable preview
 supports pinned input selections, contract histories, observation corrections,
 per-contract pricing diagrams and reference inspection. Shared historical contexts and workspace user/role administration are implemented
-in the loopback preview. Production sign-in, trading and risk workflows remain
-unimplemented. See the [preview command and implemented
-scope](docs/implementation.md). The wider documents specify the intended system;
+in the loopback preview. A bounded synthetic futures workflow books independent
+lots across books against shared contracts and calculates typed execution P&L.
+The Blotter supports selectable columns, named views, managed pivot summaries and
+snapshot download. Shared absolute quote shocks now revalue open futures
+execution P&L, with exact delta/gamma, affected-computation reuse and a synthetic
+[calculation benchmark](docs/risk-benchmark.md).
+Financial gas/power swaps now book and amend through an independent fixed/floating
+side editor, with commodity-filtered indices, distinct reset/averaging choices,
+generated payment-date rules, monthly-index or daily-calendar projection rows
+and projected PV in the shared blotter.
+Daily settlement, actual swap fixings, recurring payment strips, swap risk, futures
+PV and production sign-in remain unimplemented. See the [preview command and implemented
+scope](docs/implementation.md). The separate [CME/ICE futures example](docs/exchange-futures.md) adds sourced
+contract facts, dated power lot sizes and quoted regional gas basis futures,
+with synthetic prices and explicit lifecycle limits.
+The wider documents specify the intended system;
 they are not claims of implemented functionality or production qualification.
 
 - [Architecture and domain contracts](docs/architecture.md)
@@ -34,7 +47,7 @@ they are not claims of implemented functionality or production qualification.
 - [Market model proposal and key linkages](docs/market-model.md)
 - [Reference schema and disposable verification](db/README.md)
 - [Current implementation and verification](docs/implementation.md)
-- [Business scenarios, settlement gaps and proposed shocker](docs/business-scenarios.md)
+- [Business scenarios, settlement gaps and shared scenarios](docs/business-scenarios.md)
 - [Identity, agent login kinds and authorization](docs/security.md)
 
 The first working slice will include futures and fixed/floating linear
@@ -51,3 +64,8 @@ deployment is implied by this repository's current status.
 Copyright (c) 2017 zerodrift.
 
 Licensed under the [Apache License, Version 2.0](LICENSE).
+
+The local frontend uses pinned public presentation dependencies for its trading
+grid and analytical charts. The build serves their assets locally and includes
+required license notices under `web/dist/vendor`. Business calculations remain
+in the managed backend; see [implemented capabilities](docs/implementation.md).

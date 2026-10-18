@@ -14,11 +14,20 @@ def run_checks(Client, check):
     contract=next(k for k in curve['contracts'] if k['from']=='2021-03-01')
     def request(product='pjm',block='all',minutes=60):
         p=next(p for p in catalog['presets'] if p['product']==product and p['block']==block and p['minutes']==minutes)
-        return dict(snapshotId=frame['id'],curve=curve['code'],contractId=contract['id'],product=product,block=block,minutes=minutes,hourLabels='HE',megawatts='10',priceType='Test',timing='End of day',holidayDates=[],nonHolidays=p['nonHolidays'],holidays=p['holidays'],numericalPolicy=catalog['numericalPolicy'])
+        return dict(snapshotId=frame['id'],curve=curve['code'],contractId=contract['id'],product=product,block=block,minutes=minutes,hourLabels='HE',quantity={'value':'10','specification':next(q['specification'] for q in catalog['quantityChoices'] if q['basis']=='flat_power')},quantityBasis='flat_power',allocation=None,display=catalog['display'],priceType='Test',timing='End of day',holidayDates=[],nonHolidays=p['nonHolidays'],holidays=p['holidays'],numericalPolicy=catalog['numericalPolicy'])
     body=request(); result=c.call('power/preview',body)
     check('curve-linked prevailing March has 743 hours and 7430 MWh',result['summary']['hours']=='743' and result['summary']['energy']=='7430')
     check('generated fixings use the selected curve price and exact cash arithmetic',Decimal(result['summary']['amount'])==Decimal(result['mark'])*7430)
     check('preview is explicitly synthetic and unsaved with captured rules',result['synthetic'] and not result['saved'] and bool(result['clock']['rules']) and len(result['clock']['fingerprint'])==64)
+    total_body={**body,'quantity':{'value':'1','specification':next(q['specification'] for q in catalog['quantityChoices'] if q['basis']=='total_energy')},'quantityBasis':'total_energy','allocation':'flat_rate'}
+    total=c.call('power/preview',total_body)
+    check('total MWh is retained exactly and is never multiplied by delivery hours', total['summary']['energy']=='1' and Decimal(total['summary']['amount'])==Decimal(total['mark']) and total['amounts']['input']['amount']=='1' and total['amounts']['energy']['numerator']=='1' and total['amounts']['energy']['denominator']=='1')
+    from fractions import Fraction
+    check('rational interval energy conserves total MWh before display rounding',sum((Fraction(int(r['energy']['numerator']),int(r['energy']['denominator'])) for r in total['rows']),Fraction(0))==1)
+    c.call('power/preview',{**total_body,'allocation':None},expected=422)
+    c.call('power/preview',{**body,'quantityBasis':'total_energy','allocation':'flat_rate'},expected=422)
+    c.call('power/preview',{**total_body,'quantity':{**total_body['quantity'],'specification':{**total_body['quantity']['specification'],'code':'missing'}}},expected=422)
+    check('missing total allocation, incompatible input units and unavailable exact specifications reject')
     fixed=c.call('power/preview',request('miso'))
     check('fixed EST comparison has 744 hours and 7440 MWh',fixed['summary']['hours']=='744' and fixed['summary']['energy']=='7440')
     fine=c.call('power/preview',request(minutes=5))

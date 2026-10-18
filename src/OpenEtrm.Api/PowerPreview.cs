@@ -8,9 +8,13 @@ namespace OpenEtrm.Api;
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record PowerCatalogRequest(Guid SnapshotId);
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record PowerAmountInput(string Value,ReferenceKey Specification);
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record PowerDisplayInput(int Quantity,int Price,int Money);
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record PowerPreviewRequest(Guid SnapshotId,string Curve,Guid ContractId,string Product,string Block,
-    int Minutes,string HourLabels,string Megawatts,string PriceType,string Timing,string[] HolidayDates,
-    string NonHolidays,string Holidays,string NumericalPolicy);
+    int Minutes,string HourLabels,PowerAmountInput Quantity,string QuantityBasis,string? Allocation,string PriceType,string Timing,string[] HolidayDates,
+    string NonHolidays,string Holidays,string NumericalPolicy,PowerDisplayInput Display);
 
 // Unsaved, explicitly synthetic product bindings. This is not a publication API
 // or a replacement for the selected curve's existing contractual profile.
@@ -52,11 +56,16 @@ public static class PowerPreview
             frame.CurveContracts.TryGetValue(c.Text("code"),out var members)&&members.Contains(k.Key.Id)).Select(k=>new {
                 id=k.Key.Id,from=k.DeliveryFrom.ToString("yyyy-MM-dd",CultureInfo.InvariantCulture),to=k.DeliveryTo.ToString("yyyy-MM-dd",CultureInfo.InvariantCulture)}).ToArray()}),
         weekdays=new[]{"Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"},
+        quantityChoices=data.References["quantity_specifications"].Where(q=>q.Text("commodity_code")=="test_power" && q.Text("unit_code") is "megawatt" or "megawatt_hour")
+            .Select(q=>new{basis=q.Text("unit_code")=="megawatt"?"flat_power":"total_energy",
+                label=(q.Text("unit_code")=="megawatt"?"Flat MW over selected hours":"Total MWh for the delivery period")+" · "+q.Text("basis_code").Replace('_',' '),
+                specification=new ReferenceKey(data.ReferenceRevision,q.Text("code"))}),
+        display=new PowerDisplayInput(3,4,2),
         numericalPolicy=PowerSettlementPolicy.Preview.Implementation
     };
     public static object Calculate(PreviewData data,InputFrame frame,PowerPreviewRequest body)
     {
-        if(string.IsNullOrWhiteSpace(body.Megawatts) || body.HolidayDates is null || body.HolidayDates.Length>366 || body.HourLabels is not ("HE" or "HB") ||
+        if(body.Quantity is null || string.IsNullOrWhiteSpace(body.Quantity.Value) || body.Display is null || body.HolidayDates is null || body.HolidayDates.Length>366 || body.HourLabels is not ("HE" or "HB") ||
             body.NumericalPolicy!=PowerSettlementPolicy.Preview.Implementation ||
             new[]{body.PriceType,body.Timing}.Any(s=>string.IsNullOrWhiteSpace(s)||s.Length>40||s.Any(char.IsControl)))
             throw new MarketDataException("power_input","Supply hour labels, classifications, holiday dates and the explicit numerical policy.");
@@ -76,35 +85,58 @@ public static class PowerPreview
         var value=built.Values.SingleOrDefault(v=>v.Request.Contract.Id==body.ContractId)??throw new MarketDataException("power_contract","Choose a contract in the selected curve and market view.");
         var contract=data.Contracts.Single(k=>k.Key.Id==body.ContractId);
         var clock=Clock(product);
-        var periods=PowerHours.Compile(contract.DeliveryFrom,contract.DeliveryTo,clock,mask,holidays,body.Minutes);
+        var basis=body.QuantityBasis switch{"flat_power"=>PowerQuantityBasis.FlatPower,"total_energy"=>PowerQuantityBasis.TotalEnergy,_=>throw new MarketDataException("power_quantity","Choose total MWh or flat MW explicitly.")};
+        var allocation=body.Allocation switch{null=>(PowerAllocation?)null,"flat_rate"=>PowerAllocation.FlatRate,_=>throw new MarketDataException("power_quantity","Choose an explicit supported total-energy allocation.")};
+        var source=data.References["quantity_specifications"].SingleOrDefault(q=>new ReferenceKey(data.ReferenceRevision,q.Text("code"))==body.Quantity.Specification);
+        if(source.ValueKind==System.Text.Json.JsonValueKind.Undefined)throw new MarketDataException("power_quantity","Select an exact quantity specification from this market's reference revision.");
+        QuantitySpecification Definition(System.Text.Json.JsonElement q)=>new(new(data.ReferenceRevision,q.Text("code")),new(data.ReferenceRevision,q.Text("commodity_code")),
+            new(data.ReferenceRevision,q.Text("basis_code")),new(data.ReferenceRevision,q.Text("unit_code")),new(data.ReferenceRevision,q.Text("dimension_code")));
+        var schedule=PowerQuantitySchedule.Compile(new(ExactDecimal.Parse(body.Quantity.Value),body.Quantity.Specification),basis,Definition(source),Definition(quantity),
+            contract.DeliveryFrom,contract.DeliveryTo,clock,mask,holidays,body.Minutes,allocation);
+        var periods=schedule.Intervals.Select(p=>p.Interval).ToArray();
+        var quantityFormat=new AmountFormat(body.Display.Quantity,CashTieRule.ToEven,true,false);
+        var priceFormat=new AmountFormat(body.Display.Price,CashTieRule.ToEven,true,false);
+        var moneyFormat=new AmountFormat(body.Display.Money,CashTieRule.ToEven,true,false);
         var currency=data.References["currencies"].Single(c=>c.Text("code")==quote.Text("currency_code"));
         var powerUnit=data.References["units"].Single(u=>u.Text("code")=="megawatt" && u.Text("dimension_code")=="power");
         if(currency.Text("display_minor_units")!="2")
             throw new MarketDataException("settlement_policy","The preview's explicit cash rounding supports two minor units.");
         var references=new ReferenceRevision(quote.Id("catalog_id"),quote.Id("revision_id"));
         var target=data.References["settlement_targets"].Single(t=>t.Text("code")==curve.Text("settlement_target_code"));
-        if(target.Text("kind")!="index" || target.OptionalText("index_b_code") is not null)
-            throw new MarketDataException("power_index","The preview supports a single explicitly bound index, not index differences.");
-        var indexCode=target.OptionalText("index_a_code")??throw new MarketDataException("power_index","An explicit settlement index is required.");
+        string? indexCode;
+        if(target.Text("kind")=="index" && target.OptionalText("index_b_code") is null)indexCode=target.OptionalText("index_a_code");
+        else if(target.Text("kind")=="future_series" && contract.FuturesSeries is {} seriesKey)
+        {
+            var series=data.References["futures_series"].Single(s=>s.Text("code")==seriesKey.Code);
+            indexCode=data.References.GetValueOrDefault("futures_product_terms",[]).SingleOrDefault(i=>i.Text("product_code")==series.Text("product_code")) is var link && link.ValueKind!=System.Text.Json.JsonValueKind.Undefined?link.Text("index_code"):null;
+        }
+        else indexCode=null;
+        if(indexCode is null)throw new MarketDataException("power_index","The preview requires one explicitly bound settlement index.");
         var indexDefinition=data.References["price_index_definitions"].Single(i=>i.Text("code")==indexCode);
         if(indexDefinition.Text("commodity_code")!=curve.Text("commodity_code") ||
             indexDefinition.Text("currency_code")!=quote.Text("currency_code") ||
             indexDefinition.Text("quote_unit_code")!=quantity.Text("unit_code") ||
             indexDefinition.Number("quote_multiplier")!=ExactDecimal.Parse("1"))
             throw new MarketDataException("power_index","Index commodity, currency and unit must match the selected power quote exactly.");
-        var index=new PowerIndex(new(references,indexCode),new(references,quote.Text("currency_code")),new(references,"megawatt_hour"),body.PriceType,body.Timing);
+        var index=new PowerIndex(new(references,indexCode),new(references,quote.Text("currency_code")),new(references,"megawatt_hour"),new(references,quantity.Text("code")),body.PriceType,body.Timing);
         // All-in values have no invented LMP decomposition. Component-aware
         // settlement is independently checked in the domain tests.
-        var fixings=periods.Select(p=>new PowerFixing(p.Start,p.End,index,value.Value,null)).ToArray();
-        var byStart=fixings.ToDictionary(f=>f.Start);
-        var summary=PowerSettlement.Calculate(periods,fixings,index,ExactDecimal.Parse(body.Megawatts),PowerSettlementPolicy.Preview);
-        return new {summary,currency=currency.Text("display_code"),mark=value.Value.ToString(),at=frame.At,
+        var fixings=periods.Select(p=>new PowerFixing(p.Start,p.End,index,value.Price.Value,null)).ToArray();
+        var settled=PowerSettlement.Calculate(schedule,fixings,index,PowerSettlementPolicy.Preview);
+        var currencyLabel=new AmountLabel(index.Currency,currency.Text("display_code"));
+        var energyLabel=new AmountLabel(schedule.EnergyDefinition.Key,"MWh");
+        var priceText=value.Price.ToString(priceFormat,currencyLabel,energyLabel);
+        return new {summary=settled.Summary,currency=currency.Text("display_code"),mark=value.Price.Value.ToString(),at=frame.At,
+            amounts=new{input=schedule.Input,energy=settled.Energy,cash=settled.Cash,
+                energyText=settled.Energy.ToString(quantityFormat,energyLabel),cashText=settled.Cash.ToString(moneyFormat,currencyLabel),
+                priceText},
             from=contract.DeliveryFrom.ToString("yyyy-MM-dd",CultureInfo.InvariantCulture),to=contract.DeliveryTo.ToString("yyyy-MM-dd",CultureInfo.InvariantCulture),
             synthetic=true,saved=false,clock=new {clock.Id,clock.Fingerprint,rules=clock.Rules},
-            pins=new {definitions=data.Definitions["revisions"][0],quote,quantity,curve,powerUnit,indexDefinition},
-            holidays,mask,megawatts=body.Megawatts,product=product.Name,
+            pins=new {definitions=data.Definitions["revisions"][0],quote,quantity,source,curve,powerUnit,indexDefinition},
+            holidays,mask,quantityBasis=body.QuantityBasis,body.Allocation,body.Display,quantityImplementation=PowerQuantitySchedule.Implementation,product=product.Name,
             days=periods.GroupBy(p=>p.OperatingDate).Select(g=>new {date=g.Key.ToString("yyyy-MM-dd",CultureInfo.InvariantCulture),
-                intervals=g.Count(),hours=PowerSettlement.Calculate(g.ToArray(),g.Select(p=>byStart[p.Start]).ToArray(),index,ExactDecimal.Parse(body.Megawatts),PowerSettlementPolicy.Preview).Hours}).ToArray(),
-            rows=periods.Select(p=>new {label=PowerHours.Label(p,body.HourLabels=="HE"),p.Start,p.End,p.OffsetMinutes,p.Occurrence,p.Holiday,price=value.Value.ToString()}).ToArray()};
+                intervals=g.Count(),hours=new AmountFormat(18,CashTieRule.ToEven,false,true).FormatFraction(g.Sum(p=>(p.End-p.Start).Ticks),TimeSpan.TicksPerHour)}).ToArray(),
+            rows=schedule.Intervals.Select(p=>new {label=PowerHours.Label(p.Interval,body.HourLabels=="HE"),p.Interval.Start,p.Interval.End,p.Interval.OffsetMinutes,p.Interval.Occurrence,p.Interval.Holiday,
+                energy=p.Energy,energyText=p.Energy.ToString(quantityFormat,energyLabel),price=value.Price.Value.ToString(),priceText}).ToArray()};
     }
 }

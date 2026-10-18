@@ -18,17 +18,6 @@ public static class MarketContextStore
 
     public static InputFrame Select(InputFrame seed,PreviewData data,ScheduleContext context)
     {
-        var selected=seed.ObservationIds.Select(id=>
-        {
-            var current=data.Observation(id);
-            while(true)
-            {
-                var successors=data.Observations.Where(o=>o.OptionalId("corrects_id")==current.Id("id")).ToArray();
-                if(successors.Length==0)return current.Id("id");
-                if(successors.Length!=1)throw new MarketDataException("revision_conflict","An observation has conflicting correction successors.");
-                current=successors[0];
-            }
-        }).ToImmutableArray();
-        return seed with {Id=Guid.NewGuid(),Name="Certified market inputs",ObservationIds=selected,ContextId=context.ContextId};
+        return data.SelectPinned(seed) with {Id=Guid.NewGuid(),Name="Certified market inputs",ContextId=context.ContextId};
     }
 }

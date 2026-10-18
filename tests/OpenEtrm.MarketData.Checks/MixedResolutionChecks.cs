@@ -23,7 +23,7 @@ internal static class MixedResolutionChecks
         var march = f.Monthly(new(2026, 3, 1));
         CurveRequest Delivery(int id) => new(f.C("location_delivery"), f.K(id));
         CurveRequest Balmo(int id) => new(f.C("location_balmo"), f.K(id));
-        string Price(MarketSnapshot snapshot, CurveRequest request) => model.Build(snapshot, [request]).Values[0].Value.ToString();
+        string Price(MarketSnapshot snapshot, CurveRequest request) => model.Build(snapshot, [request]).Values[0].Price.Value.ToString();
 
         foreach (var frame in frames)
         {
@@ -178,7 +178,7 @@ internal static class MixedResolutionChecks
             Equal(build.Evaluations.Count(e => e.Result.Request == direct), 1);
             Equal(build.Values[0].Lineage.Count, 2);
             var reversed = model.Build(snapshot, [direct, Delivery(firstDaily)]);
-            Equal(reversed.Values[1].Value, build.Values[0].Value);
+            Equal(reversed.Values[1].Price.Value, build.Values[0].Price.Value);
             Equal(reversed.Values[1].Lineage.SetEquals(build.Values[0].Lineage), true);
         });
         Check("units and spread interpretation remain enforced", () =>
@@ -199,14 +199,14 @@ internal static class MixedResolutionChecks
                 var period = f.Periods[value.Request.Contract];
                 var evaluation = build.Evaluations.Single(e => e.Result.Request == value.Request);
                 string Input(InputSlot slot) => build.Evaluations.Single(e =>
-                    e.Result.Request == evaluation.Inputs.Single(i => i.Slot == slot).Source).Result.Value.ToString();
-                csv.Add($"{frame.Day:yyyy-MM-dd},{period.Kind},{period.From:yyyy-MM-dd},{period.To:yyyy-MM-dd},{Input(InputSlot.Base)},{Input(InputSlot.Spread)},{value.Value},USD,MMBtu");
+                    e.Result.Request == evaluation.Inputs.Single(i => i.Slot == slot).Source).Result.Price.Value.ToString();
+                csv.Add($"{frame.Day:yyyy-MM-dd},{period.Kind},{period.From:yyyy-MM-dd},{period.To:yyyy-MM-dd},{Input(InputSlot.Base)},{Input(InputSlot.Spread)},{value.Price.Value},USD,MMBtu");
             }
             if (showExample)
             {
                 var daily = build.Values.FirstOrDefault(v => f.Periods[v.Request.Contract].Kind == "Daily");
                 var balmo = build.Values.FirstOrDefault(v => f.Periods[v.Request.Contract].Kind == "BALMO");
-                Console.WriteLine($"EXAMPLE {frame.Day:yyyy-MM-dd}: daily buckets {requests.Count(r => f.Periods[r.Contract].Kind == "Daily")}, monthly buckets 2, first daily {daily?.Value.ToString() ?? "none"}, BALMO {balmo?.Value.ToString() ?? "none"} USD/MMBtu");
+                Console.WriteLine($"EXAMPLE {frame.Day:yyyy-MM-dd}: daily buckets {requests.Count(r => f.Periods[r.Contract].Kind == "Daily")}, monthly buckets 2, first daily {daily?.Price.Value.ToString() ?? "none"}, BALMO {balmo?.Price.Value.ToString() ?? "none"} USD/MMBtu");
             }
         }
         if (csvPath is not null)
@@ -323,7 +323,7 @@ internal sealed class MixedResolutionFixture
         Revision, Reference, [new(R("gas_mmbtu"),R("gas"),R("gas_energy"),R("mmbtu"),R("energy"))],
         quotes ?? Quotes, Contracts, curves ?? Curves,
         [new(R("synthetic_future_jan"),R("gas_mmbtu"),R("usd"),D("1"),D("0.001"),R("benchmark_hub"),R("uniform_fixed_utc_0900"),
-            new(2026,1,1),new(2026,2,1),FutureExpiry,R("gas_mmbtu"),D("10000"),LotBasis.FixedTotal)], [], Series);
+            new(2026,1,1),new(2026,2,1),FutureExpiry,R("gas_mmbtu"),D("10000"),LotBasis.FixedTotal,new DateTimeOffset(2025,1,1,0,0,0,TimeSpan.Zero),"cash")], [], Series);
     public ImmutableArray<CurveRequest> View(Frame frame) => DeliveryIds.Where(id =>
     {
         var period = Periods[K(id)];
@@ -400,7 +400,7 @@ internal sealed class MixedResolutionFixture
                         id = s.Observation.Key.Id, seriesId = s.Input.Series.Id, observedAt = s.Observation.ObservedAt,
                         value = s.Observation.Value.ToString() }),
                     expected = model.Build(snapshot, requests).Values.Select(v => new {
-                        curve = v.Request.Curve.Code, contractId = v.Request.Contract.Id, value = v.Value.ToString() }) };
+                        curve = v.Request.Curve.Code, contractId = v.Request.Contract.Id, value = v.Price.Value.ToString() }) };
             })
         };
         File.WriteAllText(path, System.Text.Json.JsonSerializer.Serialize(document));

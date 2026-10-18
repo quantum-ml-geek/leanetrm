@@ -9,5 +9,9 @@
   "devDependencies": {
     "typescript": "7.0.2"
   },
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "echarts": "6.1.0",
+    "tabulator-tables": "6.6.1"
+  }
 }

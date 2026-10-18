@@ -8,6 +8,7 @@ CAT = '40000000-0000-0000-0000-000000000001'
 REV = '60000000-0000-0000-0000-000000000001'
 RCAT = '10000000-0000-0000-0000-000000000001'
 RREV = '20000000-0000-0000-0000-000000000001'
+CURRENCY = 'usd'
 TENANT = 'b0000000-0000-0000-0000-000000000001'
 WORKSPACE = 'b1000000-0000-0000-0000-000000000001'
 R = f"'{RCAT}','{RREV}'"
@@ -104,6 +105,7 @@ def fixture(root):
             extra_obs.append(f"INSERT INTO market_data.observations VALUES ('{CAT}','{oid}','{REV}','{identity('9',number)}',{R},'fixture','{event}','1','{role}','final','2020-12-{day} 16:00:00+00','{now}',{values[n]},NULL);")
         frames.append({'at':f'2020-12-{day}T16:00:00Z','observationIds':pins,
                        'curveContracts':{code:[identity('5',month*5+n) for month in range(6)] for code,n in curves}})
+    extra_ref.append(f"DO $$ BEGIN IF to_regclass('ref_data.futures_product_terms') IS NOT NULL THEN INSERT INTO ref_data.futures_product_terms VALUES({R},'test_gas_future','test_uniform',NULL); END IF; END $$;")
     market=market.replace('UPDATE ref_data.revisions SET', '\n'.join(extra_ref)+'\nUPDATE ref_data.revisions SET',1)
     extra_market.append(f"INSERT INTO market_data.revision_periods VALUES ({M},'2020-01-01','2022-01-01');")
     market=market.replace('UPDATE market_data.revisions SET','\n'.join(extra_market)+'\nUPDATE market_data.revisions SET',1)
@@ -111,7 +113,17 @@ def fixture(root):
     manifest={'mode':'local-synthetic-preview','catalogId':CAT,'revisionId':REV,'referenceCatalogId':RCAT,'referenceRevisionId':RREV,
               'tenantId':TENANT,'workspaceId':WORKSPACE,'frames':frames,
               'schedules':[{'curve':'future','from':'2020-12-01T00:00:00Z','to':'2021-05-28T15:30:00Z','exampleAt':'2020-12-28T15:29:00Z'}],
-              'example':{'at':'2020-12-18T16:00:00Z','curve':'local_power'}}
+              'example':{'at':'2020-12-18T16:00:00Z','curve':'local_power'},
+              'unitCatalog':{'referenceRevisionId':RREV,'definitionRevisionId':REV}}
+    # This preview assigns a named IT energy convention to its gas quotes.
+    # The generic schema fixtures keep their unrelated synthetic units.
+    reference=reference.replace("'energy_a'", "'mmbtu_it'").replace("'EA'", "'MMBtu (IT)'")
+    market=market.replace("'energy_a'", "'mmbtu_it'")
+    common=(root/'tests/fixtures/common-units.sql').read_text()
+    market=market.replace('UPDATE ref_data.revisions SET',common+'\nUPDATE ref_data.revisions SET',1)
+    # The preview uses a real currency reference; market prices remain synthetic.
+    reference=reference.replace("'test_currency_a'",f"'{CURRENCY}'").replace("'TST','Synthetic currency A'","'USD','US Dollar'")
+    market=market.replace("'test_currency_a'",f"'{CURRENCY}'")
     return reference, market, security_fixture(CAT,RCAT), manifest
 
 
@@ -120,7 +132,7 @@ def security_fixture(catalog,reference_catalog):
               f"INSERT INTO security.workspaces VALUES ('{TENANT}','{WORKSPACE}','synthetic_market');",
               f"INSERT INTO security.market_catalog_scopes VALUES ('{catalog}','{TENANT}','{WORKSPACE}');",
               f"INSERT INTO security.reference_catalog_scopes VALUES ('{reference_catalog}','{TENANT}','{WORKSPACE}','owner');"]
-    for n,slug,role in [(1,'viewer',1),(2,'editor',4),(3,'approver',5),(4,'admin',6)]:
+    for n,slug,role in [(1,'viewer',1),(2,'editor',4),(3,'approver',5),(4,'admin',6),(5,'trader',2),(6,'risk',3)]:
         pid=identity('c',n)
         security.extend([f"INSERT INTO security.principals VALUES ('{pid}','human',true);",
             f"INSERT INTO security.identity_bindings VALUES ('https://preview.invalid','{slug}','{pid}','human_interactive');",
@@ -129,3 +141,25 @@ def security_fixture(catalog,reference_catalog):
     security.extend(['CREATE ROLE preview_runtime LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS INHERIT IN ROLE openetrm_runtime;',
                      'CREATE ROLE preview_authenticator LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS INHERIT IN ROLE openetrm_authenticator;'])
     return '\n'.join(security)
+
+
+def trading_fixture(catalog, swap_defaults=False, annotations=True):
+    """Immutable synthetic books used by the local futures booking operation."""
+    defaults = f"INSERT INTO trading.currency_discount_defaults VALUES ('{catalog}','d2000000-0000-0000-0000-000000000001','{REV}','{RCAT}','{RREV}','{CURRENCY}','interest_rates','log_discount_geometric_root_to_even_18_v1',1,'2020-01-01 00:00:00+00');" + f"\nINSERT INTO trading.currency_discount_defaults VALUES ('{catalog}','d2000000-0000-0000-0000-000000000002','60000000-0000-0000-0000-000000000002','{RCAT}','{RREV}','{CURRENCY}','interest_rates','log_discount_geometric_root_to_even_18_v1',1,'2020-01-01 00:00:00+00');" if swap_defaults else ''
+    traders=f"INSERT INTO trading.traders VALUES ('{catalog}','d3000000-0000-0000-0000-000000000001',1,'trader_a','Trader A',1,'2020-01-01T00:00:00Z'),('{catalog}','d3000000-0000-0000-0000-000000000002',1,'trader_b','Trader B',1,'2020-01-01T00:00:00Z');" if annotations else ''
+    parties = '\n'.join(f"INSERT INTO trading.{table} VALUES ('{catalog}','{prefix}000000-0000-0000-0000-00000000000{n}',1,'{code}_{n}','Synthetic {label} {n}',1,'2020-01-01T00:00:00Z');" for table,prefix,code,label in [('legal_entities','d4','entity','entity'),('counterparties','d5','party','party')] for n in (1,2)) if annotations else ''
+    return f"""BEGIN;
+INSERT INTO trading.publications VALUES ('{catalog}',1,pg_current_xact_id());
+INSERT INTO trading.portfolios VALUES ('{catalog}','d0000000-0000-0000-0000-000000000001','Synthetic portfolio',1,'2020-01-01 00:00:00+00');
+INSERT INTO trading.books VALUES ('{catalog}','d1000000-0000-0000-0000-000000000001','d0000000-0000-0000-0000-000000000001','Book A',1,'2020-01-01 00:00:00+00');
+INSERT INTO trading.books VALUES ('{catalog}','d1000000-0000-0000-0000-000000000002','d0000000-0000-0000-0000-000000000001','Book B',1,'2020-01-01 00:00:00+00');
+{traders}
+{parties}
+{defaults}
+COMMIT;"""
+
+
+def trade_booking(trade_date='2020-12-18'):
+    """Explicit party/date choices for the standard synthetic trading fixture."""
+    return {'tradeDate': trade_date, 'legalEntityId': 'd4000000-0000-0000-0000-000000000001', 'legalEntityRevision': 1,
+            'counterpartyId': 'd5000000-0000-0000-0000-000000000001', 'counterpartyRevision': 1}

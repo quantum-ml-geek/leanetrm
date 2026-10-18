@@ -1,5 +1,32 @@
 # Reference-data storage foundation
 
+[0019_contract_instruments.sql](migrations/0019_contract_instruments.sql) removes
+new-booking futures side/wrapper allocation. The existing exact futures-series
+primary key identifies the contract; compact UUID aliases are checked against the
+full key. Typed immutable alias and per-revision pricing tables preserve legacy
+IDs/events and exact selected curve/member references. Composite FKs require the
+trade alias and selected constituent to resolve the same exact series. RLS follows
+original publication/effective coordinates; missing pricing evidence fails closed.
+Apply with runtime admission stopped and calls drained. This does not backfill
+settlement state or implement futures PV.
+
+
+[0020_swap_identity_keys.sql](migrations/0020_swap_identity_keys.sql) aligns the
+floating-side candidate key with its curve/observation/payment definition. Resolved
+monthly contract IDs remain binding evidence outside that key. Reuse validates
+complete ordered reset bindings; ambiguity is rejected. Prior rows/UUIDs are not
+rewritten, and conflicting retained keys stop migration. Drain runtime writes
+before applying this migration as well.
+
+[0018_trade_parties.sql](migrations/0018_trade_parties.sql) adds immutable scoped
+legal-entity/counterparty versions and exact foreign keys on trade revisions.
+New runtime booking/amendment entrypoints require both parties and an explicit
+date-only trade date, retaining V2 booking events and full idempotency payloads.
+Earlier entrypoints lose runtime execution permission. Existing V1 revisions and
+their certificates retain NULL date/party facts without inferred backfills.
+Apply this additive migration with runtime write admission stopped and admitted
+calls drained; the publication gate does not replace draining old function bodies.
+
 [0001_reference_data.sql](migrations/0001_reference_data.sql) is the first migration.
 It requires stock PostgreSQL 16 or later and installs no extensions. This is a
 storage foundation, not a complete application schema or a runnable service.
@@ -246,3 +273,96 @@ The preview creates all migrations before its explicitly synthetic fixture.
 Its four demo personas and invalid issuer are test-only. Registering additional
 preview identities issues no real credentials and sends no messages. See
 [implemented scope](../docs/implementation.md#shared-historical-market-view-and-administration).
+
+
+## Local trading storage additions
+
+[0011_futures_bookings.sql](migrations/0011_futures_bookings.sql) adds immutable
+synthetic futures sides/instruments, portfolios/books, trades/bindings and a
+commit-certified trading publication prefix joined to the shared historical
+context. Scoped forced RLS and private authorized booking/status operations
+protect current and retained reads. Futures settlement is explicitly unprocessed.
+
+[0012_account_table_views.sql](migrations/0012_account_table_views.sql) stores
+bounded optimistic-versioned account presentation layouts. Layouts carry no
+financial context, permissions or calculated values.
+
+[0013_trade_amendments.sql](migrations/0013_trade_amendments.sql) retains original
+bookings as revision 1 and appends latest-head amendments with immutable event
+identities, prior revision, explicit effective instant and reason. Original root
+rows remain unchanged. Exact retries return their original accepted event;
+conflicting ownership/payloads and stale heads are rejected. Historical state is
+read-only. This is booking-state amendment, not settlement/lifecycle processing.
+
+[0014_trading_references.sql](migrations/0014_trading_references.sql) adds exact-FK
+trade and instrument reference numbers, backfills originals and allocates new
+numbers atomically under the publication gate. UUIDs remain relationship keys.
+References survive amendments and reusable instrument sharing.
+
+Migrations 0013/0014 acquire the global publication fence and source-table locks
+before backfill. Apply 0013 only with runtime write admission stopped and legacy
+calls drained; an already-running old function body cannot be replaced by that
+fence. Qualify upgrades on disposable retained-booking fixtures, preserve original
+publication/context coordinates and take an owned backup before a retained local
+upgrade. These checks do not qualify a generic online production upgrade.
+
+[0015_financial_swaps.sql](migrations/0015_financial_swaps.sql) adds immutable typed
+fixed/floating sides, ordered exact reset references, required instrument
+memberships, swap trade revisions and exact currency-default curve mappings.
+Runtime access is SELECT-only under forced RLS and the existing certified trading
+context. Authorized booking/amendment functions serialize through the publication
+fence, append a publication atomically, validate complete daily/monthly coverage
+and retain original events for idempotent retries. Futures and swaps share operation
+identity collision checks and readable TR/IN references. Apply with runtime write
+admission stopped and calls drained; this is an additive local migration.
+
+Default mappings append under a new trading publication; do not insert new rows
+under an already committed publication. Supplemental synthetic daily observations
+use a separately sealed market revision and explicit manifest pins. Preserve
+existing immutable revisions, observations and retained context certificates.
+
+
+[0016_swap_payment_rules.sql](migrations/0016_swap_payment_rules.sql) adds typed,
+immutable payment conventions and exact optional rule FKs on fixed/floating sides.
+It preserves existing side columns and manual payment instants; newly generated
+UTC boundaries are compatibility storage for date-only rule results, not authored
+payment times. New side identity includes the complete payment rule. Private
+calendar/date helpers independently validate backend-generated dates and bounded
+coverage. Runtime writes use the new scheduled-swap function; legacy accepted
+commands retain exact retry reconciliation without admitting new manual-date
+bookings. All rule rows share their side's atomic trading publication and RLS.
+
+Stop/drain runtime calls before this upgrade. Preservation checks compare the
+original column projection, explicitly accounting for the newly added nullable
+FK columns, and preserve original publications, contexts and command payloads.
+No payment rule is inferred or backfilled onto an existing side.
+
+[0021_party_editors.sql](migrations/0021_party_editors.sql) adds authorized,
+append-only legal-entity and counterparty maintenance. Party versions retain
+their stable identity/code, explicit effective instant and certified publication.
+Typed operation receipts provide exact retries; expected revisions reject stale
+updates. Reads honor the selected certified context, while writes require current
+scoped authority and a current working context. Runtime roles have no direct
+party-table write access. Stop and drain runtime calls before applying this
+additive migration; preserve existing party versions and exact trade references.
+
+[0022_standard_futures_lots.sql](migrations/0022_standard_futures_lots.sql) retains
+exact product/profile and optional index relationships, dated typed lot factors,
+and exact index-minus-benchmark settlement references for quoted basis futures.
+The v2 execution-P&L convention admits explicitly resolved variable lots and
+physical settlement terms without implementing delivery or variation margin.
+Existing unambiguous product profiles are normalized without changing trade rows.
+
+[0023_deal_amount_formats.sql](migrations/0023_deal_amount_formats.sql) stores shared
+current deal display precision, with separate trade/fixed/floating policies,
+optimistic revisions and scoped business operations. Presentation does not amend
+financial history. [0024_preview_identity_scope.sql](migrations/0024_preview_identity_scope.sql)
+retains verified identity-provider scope when administrators create local preview
+accounts. Stop/drain runtime calls before applying these migrations.
+
+[0025_trading_reference_authority.sql](migrations/0025_trading_reference_authority.sql)
+rechecks current reference-catalog access before privileged futures/swap economic
+reads and calendar evaluation. Exact accepted-command replay retains its control
+semantics. Discount-default resolution also checks the selected reference and
+market-definition visibility in historical contexts. Existing owners and ACLs
+remain unchanged; stop/drain runtime calls before upgrading.

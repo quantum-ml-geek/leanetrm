@@ -33,7 +33,10 @@
         }
       },
       "openetrm.marketdata": {
-        "type": "Project"
+        "type": "Project",
+        "dependencies": {
+          "OpenEtrm.Shared": "[1.0.0, )"
+        }
       },
       "openetrm.rates": {
         "type": "Project",

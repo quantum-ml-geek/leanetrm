@@ -1,10 +1,11 @@
 using System.Collections.Immutable;
+using OpenEtrm.MarketData.Trading;
 
 namespace OpenEtrm.MarketData;
 
 // Pure managed core. No database, clock, network, provider SDK or ambient state.
 // Reference leaves arrive resolved through the database's exact-version FKs.
-public sealed class CurveModel
+public sealed partial class CurveModel
 {
     public const string NumericalPolicy = "exact_18_fractional_abs_lt_1e24_v1";
     private static readonly DateTimeOffset End = new(9999, 12, 31, 0, 0, 0, TimeSpan.Zero);
@@ -41,6 +42,31 @@ public sealed class CurveModel
         Validate();
     }
 
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<ReferenceKey,FuturesContract> contractInstruments = new();
+    public FuturesContract FuturesContract(ContractKey member)
+    {
+        if (!contracts.TryGetValue(member, out var projection) || projection.Kind != ContractKind.Future ||
+            projection.FuturesSeries is not {} key || !futures.TryGetValue(key, out var terms))
+            throw new MarketDataException("futures_definition", "An exact dated futures constituent is required.");
+        return FuturesContract(key);
+    }
+    public FuturesContract FuturesContract(ReferenceKey key)
+    {
+        if (!futures.TryGetValue(key, out var terms))
+            throw new MarketDataException("futures_definition", "The exact futures-series primary key is unavailable.");
+        return contractInstruments.GetOrAdd(key, _ => new(terms));
+    }
+    public FuturesMarketBinding BindFutures(Guid bindingId, CurveRequest request, string settlementMethod,string implementation)
+    {
+        var instrument = FuturesContract(request.Contract);
+        if (!curves.TryGetValue(request.Curve, out var curve))
+            throw new MarketDataException("futures_definition", "An exact pricing curve is required.");
+        var quote = Quote(curve);
+        RequireFuturesDefinition(request, contracts[request.Contract], instrument.Series, quote);
+        return new(bindingId, request, contracts[request.Contract], instrument.Series, quote,
+            settlementMethod, implementation, instrument);
+    }
+
     private static ImmutableDictionary<K, V> Unique<K, V>(IEnumerable<V> values, Func<V, K> key) where K : notnull
     {
         var result = ImmutableDictionary.CreateBuilder<K, V>();
@@ -61,12 +87,33 @@ public sealed class CurveModel
         if (!Enum.IsDefined(value)) Fail("unsupported_kind", $"Unsupported {typeof(T).Name}.");
     }
     private static bool Positive(ExactDecimal value) => value.CompareTo(default) > 0;
+    internal void RequireFuturesDefinition(CurveRequest request, MarketContract contract,
+        FuturesSeriesSpecification specification, QuoteSpecification quote)
+    {
+        if (!contracts.TryGetValue(contract.Key, out var retainedContract) || retainedContract != contract ||
+            !futures.TryGetValue(specification.Key, out var retainedSeries) || retainedSeries != specification ||
+            !quotes.TryGetValue(quote.Key, out var retainedQuote) || retainedQuote != quote ||
+            !curves.TryGetValue(request.Curve, out var curve) || !curve.Constituents.Contains(contract.Key) ||
+            request.Contract != contract.Key || curve.Quote != quote.Key)
+            Fail("futures_definition", "Held futures terms must equal the exact definitions used to build the market scenario.");
+    }
     private QuoteSpecification Quote(Curve c) => quotes.TryGetValue(c.Quote, out var q)
         ? q : throw new MarketDataException("missing_reference", "Quote definition is absent.");
+    internal void RequireIndexProjection(CurveRequest request, MarketContract contract,
+        ReferenceKey index, QuoteSpecification quote)
+    {
+        if (!contracts.TryGetValue(contract.Key, out var retained) || retained != contract ||
+            !quotes.TryGetValue(quote.Key, out var retainedQuote) || retainedQuote != quote ||
+            !curves.TryGetValue(request.Curve, out var curve) || request.Contract != contract.Key ||
+            !curve.Constituents.Contains(contract.Key) || curve.Quote != quote.Key ||
+            curve.Settlement.Kind != SettlementKind.Index || curve.Settlement.IndexA != index ||
+            curve.Settlement.IndexB is not null || quote.Kind != QuoteKind.Outright || contract.Kind != ContractKind.Forward)
+            Fail("swap_definition", "A floating projection requires the exact model-owned outright index contract and quote.");
+    }
     private QuantitySpecification Quantity(QuoteSpecification q) => quantities.TryGetValue(q.Quantity, out var x)
         ? x : throw new MarketDataException("missing_reference", "Quantity definition is absent.");
     private static bool SamePriceUnit(QuoteSpecification a, QuoteSpecification b) =>
-        a.Currency == b.Currency && a.Quantity == b.Quantity && a.Multiplier == b.Multiplier;
+        PriceUnit.FromQuote(a) == PriceUnit.FromQuote(b);
 
     private void Validate()
     {
@@ -84,11 +131,7 @@ public sealed class CurveModel
         }
         foreach (var v in valueSpecs.Values)
         {
-            Ref(v.Key); EnumValue(v.Kind);
-            if (v.Minimum.CompareTo(v.Maximum) > 0) Fail("value_specification", "Invalid numeric domain.");
-            if (v.Kind == NumericKind.Dimensionless && (v.NumeratorQuantity is not null || v.DenominatorQuantity is not null) ||
-                v.Kind == NumericKind.QuantityRatio && (v.NumeratorQuantity is null || v.DenominatorQuantity is null))
-                Fail("value_specification", "Value kind requires explicit matching numerator/denominator types.");
+            Ref(v.Key); v.Validate();
             foreach (var key in new[] { v.NumeratorQuantity, v.DenominatorQuantity }.OfType<ReferenceKey>())
             { Ref(key); if (!quantities.ContainsKey(key)) Fail("missing_reference", "Ratio quantity specification is absent."); }
         }
@@ -119,8 +162,19 @@ public sealed class CurveModel
                 if (!futures.TryGetValue(series, out var spec)) Fail("missing_reference", "Resolved dated futures specification is required.");
                 foreach (var key in new[] { spec.Key, spec.QuoteQuantity, spec.Currency, spec.Location, spec.DeliveryProfile, spec.LotQuantity }) Ref(key);
                 EnumValue(spec.LotBasis);
+                if(spec.BasisSettlement is {} basis)
+                {
+                    Ref(basis.Index); Ref(basis.BenchmarkSeries);
+                    if(basis.Implementation!="index_minus_future_v1" || !futures.TryGetValue(basis.BenchmarkSeries,out var benchmark) ||
+                        basis.BenchmarkSeries==spec.Key || benchmark.BasisSettlement is not null ||
+                        benchmark.QuoteQuantity!=spec.QuoteQuantity || benchmark.Currency!=spec.Currency || benchmark.Multiplier!=spec.Multiplier ||
+                        benchmark.DeliveryFrom!=spec.DeliveryFrom || benchmark.DeliveryTo!=spec.DeliveryTo)
+                        Fail("futures_specification","Basis settlement requires an exact compatible dated outright benchmark.");
+                }
                 if (!quantities.ContainsKey(spec.QuoteQuantity) || !quantities.TryGetValue(spec.LotQuantity, out var lot) ||
-                    !Positive(spec.ContractSize) || !Positive(spec.Multiplier) || !Positive(spec.TradingTick) ||
+                    spec.SettlementMethod is not ("cash" or "physical") || !Positive(spec.ContractSize) || !Positive(spec.Multiplier) || !Positive(spec.TradingTick) ||
+                    spec.FirstTradingAt.Offset != TimeSpan.Zero || spec.FirstTradingAt.Ticks % 10 != 0 ||
+                    spec.FirstTradingAt >= spec.LastTradingAt ||
                     lot.Commodity != quantities[spec.QuoteQuantity].Commodity ||
                     contract.DeliveryFrom != spec.DeliveryFrom || contract.DeliveryTo != spec.DeliveryTo || contract.Expiry != spec.LastTradingAt)
                     Fail("futures_specification", "Dated contract conflicts with its authoritative futures specification.");
@@ -144,7 +198,7 @@ public sealed class CurveModel
                 {
                     var spec = futures[series];
                     if (curve.Rule != CurveRule.Direct || curve.DirectRole != ObservationRole.DailySettlement ||
-                        curve.Settlement.Kind != SettlementKind.FutureSeries || output.Kind != QuoteKind.Outright ||
+                        curve.Settlement.Kind != SettlementKind.FutureSeries || output.Kind != (spec.BasisSettlement is null?QuoteKind.Outright:QuoteKind.Basis) ||
                         output.Quantity != spec.QuoteQuantity || output.Currency != spec.Currency || output.Multiplier != spec.Multiplier ||
                         output.TradingTick != spec.TradingTick || curve.Location != spec.Location || curve.DeliveryProfile != spec.DeliveryProfile)
                         Fail("futures_specification", "Futures curve must preserve resolved series/product specifications.");
@@ -263,6 +317,9 @@ public sealed class CurveModel
     }
 
     public CurveBuild Build(MarketSnapshot snapshot, ImmutableArray<CurveRequest> requests)
+        => Build(snapshot,requests,null,[],default);
+    private CurveBuild Build(MarketSnapshot snapshot,ImmutableArray<CurveRequest> requests,Risk.QuoteShock? shock,
+        ImmutableArray<CurveEvaluation> reusable,CancellationToken cancellation)
     {
         EnumValue(snapshot.SelectionPolicy);
         if (snapshot.Id == Guid.Empty || snapshot.Definitions != revision)
@@ -278,8 +335,11 @@ public sealed class CurveModel
                 Fail("observation_conflict", "An observation identity cannot name different contents.");
         var memo = new Dictionary<(CurveRequest, InputUse), BuiltValue>();
         var evaluations = ImmutableArray.CreateBuilder<CurveEvaluation>();
+        foreach(var evaluation in reusable)
+        {memo.Add((evaluation.Result.Request,evaluation.Use),evaluation.Result);evaluations.Add(evaluation);}
         foreach (var selected in inputs.Values)
         {
+            cancellation.ThrowIfCancellationRequested();
             EnumValue(selected.Input.Use);
             var obs = selected.Observation;
             EnumValue(obs.Role); EnumValue(obs.State); Ref(obs.Source);
@@ -307,10 +367,11 @@ public sealed class CurveModel
                 Fail("frozen_fact", "First frozen-input subset requires final contract settlement.");
         }
         var result = requests.Select(r => Evaluate(r, InputUse.Variable)).ToImmutableArray();
-        return new CurveBuild(snapshot.Id, revision, NumericalPolicy, result, memo.Count, evaluations.ToImmutable());
+        return new CurveBuild(this, snapshot, NumericalPolicy, result, memo.Count-reusable.Length, evaluations.ToImmutable(),reusable.Length,shock);
 
         BuiltValue Evaluate(CurveRequest request, InputUse use)
         {
+            cancellation.ThrowIfCancellationRequested();
             if (memo.TryGetValue((request, use), out var cached)) return cached;
             if (!curves.TryGetValue(request.Curve, out var curve) || !curve.Constituents.Contains(request.Contract))
                 throw new MarketDataException("request_member", "Requested curve constituent is absent.");
@@ -320,7 +381,7 @@ public sealed class CurveModel
             var quote = Quote(curve);
             BuiltValue value;
             var dependencies = ImmutableArray.CreateBuilder<CurveEvaluationInput>();
-            ExactDecimal? appliedMultiplier = null;
+            NumericValue? appliedMultiplier = null;
             ObservationKey? multiplierObservation = null;
             if (curve.Rule == CurveRule.Direct)
             {
@@ -333,7 +394,8 @@ public sealed class CurveModel
                     throw new MarketDataException("selection_mismatch", "Selected quote, source, role or finality is incompatible.");
                 if (use == InputUse.FrozenFact && (contract.Kind != ContractKind.Future || obs.ObservedAt < contract.Expiry))
                     throw new MarketDataException("frozen_fact", "Final future settlement must be observed at or after its explicit expiry.");
-                value = new BuiltValue(request, curve.Quote, obs.Value, ImmutableHashSet.Create(obs.Key));
+                var scenarioValue=shock is not null && key==shock.Bump.Input ? obs.Value+shock.AppliedSize : obs.Value;
+                value = new BuiltValue(request, quote, new UnitPrice(scenarioValue, quote), ImmutableHashSet.Create(obs.Key));
             }
             else
             {
@@ -351,11 +413,12 @@ public sealed class CurveModel
                     return Evaluate(sourceRequest, sourceUse);
                 }
                 var baseValue = Read(InputSlot.Base); var spread = Read(InputSlot.Spread);
-                var factor = ExactDecimal.Parse("1");
+                var price = baseValue.Price;
                 var lineage = baseValue.Lineage.Union(spread.Lineage);
                 if (curve.Rule == CurveRule.ScaleAdd)
                 {
                     var binding = curve.Multiplier!;
+                    ExactDecimal factor;
                     if (binding.Series is { } numericSeries)
                     {
                         if (!inputs.TryGetValue(new(numericSeries, InputUse.Variable), out var selected))
@@ -366,13 +429,11 @@ public sealed class CurveModel
                         factor = observation.Value; lineage = lineage.Add(observation.Key); multiplierObservation = observation.Key;
                     }
                     else factor = binding.Constant!.Value;
-                    appliedMultiplier = factor;
+                    appliedMultiplier = new NumericValue(factor, NumericSpecification(binding));
+                    price = price.Times(appliedMultiplier);
                 }
-                var price = curve.Rule == CurveRule.ScaleAdd ? baseValue.Value * factor + spread.Value : baseValue.Value + spread.Value;
-                value = new BuiltValue(request, curve.Quote, price, lineage);
+                value = new BuiltValue(request, quote, price.Add(spread.Price), lineage);
             }
-            if (value.Value.CompareTo(quote.Minimum) < 0 || value.Value.CompareTo(quote.Maximum) > 0)
-                throw new MarketDataException("price_domain", "Calculated value lies outside the declared domain.");
             memo.Add((request, use), value);
             evaluations.Add(new(value, use, dependencies.ToImmutable(), appliedMultiplier, multiplierObservation));
             return value;

@@ -2,7 +2,13 @@ export async function run({command,evaluate,wait,click,set,submit,persona,check,
   await command('Runtime.enable');await command('Page.enable');await command('Emulation.setDeviceMetricsOverride',{width:1440,height:1050,deviceScaleFactor:1,mobile:false});
   await command('Page.navigate',{url:url+'/'});await wait("document.querySelectorAll('.curve-button').length>0&&"+idle);
   await evaluate(`window.__requests=[];window.__responses=[];window.__originalFetch=window.fetch;window.fetch=async(...args)=>{const path=String(args[0]),body=args[1]?.body?JSON.parse(args[1].body):null;window.__requests.push({path,body});const response=await window.__originalFetch(...args);window.__responses.push({path,status:response.status,data:await response.clone().json()});return response;};window.__api=async(path,body)=>{const boot=await(await window.__originalFetch('/api/bootstrap')).json();const r=await fetch('/api/'+path,{method:body===undefined?'GET':'POST',headers:body===undefined?{}:{'Content-Type':'application/json','X-Preview-CSRF':boot.csrfToken},body:body===undefined?undefined:JSON.stringify(body)});return {status:r.status,data:await r.json()};};`);
+  await check('historical time controls are shared in the header beside market date',"document.querySelector('header #date-context')&&document.querySelectorAll('#date-context-on').length===1&&document.querySelector('header #snapshot')");
+  await click('#date-context>summary');
   await click('#example');
+  await check('curve chart uses the shared interactive renderer with explicit delivery axis',"document.querySelector('#curve-chart canvas')&&document.querySelector('#curve-chart').dataset.chartAxis==='delivery'&&document.querySelector('#curve-chart .chart-toolbar').textContent.includes('Reset zoom')");
+  await click('#contracts tbody tr:first-child button');
+  await check('contract history uses observation dates in the same chart standard',"!document.querySelector('#history-card').hidden&&document.querySelector('#history-chart canvas')&&document.querySelector('#history-chart').dataset.chartAxis==='observation'&&document.querySelector('#history-values tbody').children.length===4");
+  await click('#history-chart button:first-of-type');await click('#history-close');
   await persona('editor');await click('#example');
   await set('#date-context-on','2020-12-17');await click('#date-context-latest');await click('#apply-view-context');
   await check('explicit context apply displays historical read-only mode',"document.querySelector('#environment-context-note').textContent.includes('Historical view')&&document.querySelector('#error').hidden");
@@ -33,7 +39,7 @@ export async function run({command,evaluate,wait,click,set,submit,persona,check,
   await set('#date-context-view','2099-01-01T00:00');await click('#apply-view-context');
   await check('future knowledge cutoff errors visibly with no stale row fallback',"!document.querySelector('#error').hidden&&document.querySelector('#contracts').children.length===0&&document.querySelector('#reference').children.length===0");
   await click('#current-view-context');await check('explicit return restores current pins and clears context',"document.querySelector('#date-context-on').value===''&&document.querySelector('#date-context-view').value===''&&document.querySelector('#environment-context-note').textContent.includes('Current workspace')&&window.__responses.filter(r=>r.path==='/api/workspace').at(-1).data.context===null");
-  await click('#nav-market');await click('#example');await evaluate('window.scrollTo(0,0)');await shot('market-desktop');
+  await click('#date-context>summary');await click('#nav-market');await click('#example');await evaluate('window.scrollTo(0,0)');await shot('market-desktop');
   await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await evaluate('window.scrollTo(0,0)');
   await check('mobile 390px view has no page-wide horizontal overflow',"document.documentElement.scrollWidth<=window.innerWidth+1");await shot('market-mobile');
   await check('visible user screens contain no internal GUIDs',"!/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(document.body.innerText)");

@@ -1,34 +1,11 @@
 """HTTP checks against a newly owned synthetic preview; invoked by run_preview.py."""
-import http.cookiejar
-import json
-from urllib.error import HTTPError
-from urllib.request import Request, build_opener, HTTPCookieProcessor
-
+from preview_client import PreviewClient
 
 def run_checks(url):
     passed=0
-    class Client:
+    class Client(PreviewClient):
         def __init__(self):
-            self.opener=build_opener(HTTPCookieProcessor(http.cookiejar.CookieJar()))
-            self.token=''
-        def call(self,path,body=None,expected=200,headers=None):
-            request_headers={'Origin':url,**(headers or {})}
-            if body is not None:
-                request_headers.update({'Content-Type':'application/json','X-Preview-CSRF':self.token})
-                request_headers.update(headers or {})
-            request=Request(url+'/api/'+path,data=None if body is None else json.dumps(body).encode(),headers=request_headers,method='GET' if body is None else 'POST')
-            try:
-                response=self.opener.open(request,timeout=20)
-            except HTTPError as error:
-                response=error
-            value=response.read()
-            if response.code!=expected:
-                raise AssertionError(f'{path}: expected {expected}, got {response.code}: {value.decode()}')
-            return json.loads(value) if value else None
-        def bootstrap(self):
-            boot=self.call('bootstrap')
-            self.token=boot['csrfToken']
-            return boot
+            super().__init__(url)
     def check(name,condition=True):
         nonlocal passed
         if not condition:
@@ -44,6 +21,7 @@ def run_checks(url):
     c.call('profile',{'profile':'administrator'},expected=403);check('client cannot invent test identity')
     c.call('profile',{'profile':'viewer'})
     workspace=c.call('workspace')
+    check('database timestamp transport stays UTC under a non-UTC API environment',all(m.get('event_at') is None or m['event_at'].endswith('+00:00') for m in workspace['references']['futures_milestones']))
     check('viewer reads real catalog and exact input frames',len(workspace['definitions']['curves'])==10 and len(workspace['frames'])==4)
     check('speculative reference catalogs are absent',not any(t in workspace['references'] for t in ['day_count_conventions','compounding_conventions','fx_rate_definitions','heat_rate_definitions']))
     point=next(r for r in workspace['references']['locations'] if r['code']=='test_facility_a')
@@ -138,6 +116,10 @@ def run_checks(url):
     check_admin(Client,check)
     from check_power_preview import run_checks as check_power
     check_power(Client,check)
+    from check_futures_preview import run_checks as check_futures
+    check_futures(Client,check)
+    from check_risk_preview import run_checks as check_risk
+    check_risk(Client,check)
     print(f'{passed} preview HTTP checks passed.',flush=True)
     return workspace
 

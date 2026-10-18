@@ -1,0 +1,38 @@
+"""Cookie/CSRF client for explicitly selected loopback synthetic previews."""
+import http.cookiejar
+import json
+from urllib.error import HTTPError
+from urllib.parse import urlsplit
+from urllib.request import Request, build_opener, HTTPCookieProcessor
+
+
+class PreviewClient:
+    def __init__(self, url, example='baseline'):
+        address = urlsplit(url)
+        if address.scheme != 'http' or address.hostname != '127.0.0.1' or not address.port or address.path not in ('', '/') or address.query or address.fragment or address.username or address.password:
+            raise ValueError('An explicit loopback preview origin is required.')
+        if example not in ('baseline','exchange'):raise ValueError('Choose a configured preview example.')
+        self.api_prefix='/api/' if example=='baseline' else '/examples/exchange/api/'
+        self.url = url.rstrip('/')
+        self.opener = build_opener(HTTPCookieProcessor(http.cookiejar.CookieJar()))
+        self.token = ''
+
+    def call(self, path, body=None, expected=200, headers=None):
+        request_headers = {'Origin': self.url, **(headers or {})}
+        if body is not None:
+            request_headers.update({'Content-Type':'application/json','X-Preview-CSRF':self.token})
+            request_headers.update(headers or {})
+        request = Request(self.url+self.api_prefix+path, data=None if body is None else json.dumps(body).encode(), headers=request_headers, method='GET' if body is None else 'POST')
+        try:
+            response = self.opener.open(request, timeout=20)
+        except HTTPError as error:
+            response = error
+        value = response.read()
+        if response.code != expected:
+            raise AssertionError(f'{path}: expected {expected}, got {response.code}: {value.decode()}')
+        return json.loads(value) if value else None
+
+    def bootstrap(self):
+        boot = self.call('bootstrap')
+        self.token = boot['csrfToken']
+        return boot

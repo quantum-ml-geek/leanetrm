@@ -28,10 +28,19 @@ def main():
     parser.add_argument('--port', type=int, default=0, help='Loopback HTTP port; 0 chooses an unused port')
     parser.add_argument('--no-build', action='store_true', help='Use already-built assets')
     parser.add_argument('--check', action='store_true', help='Run HTTP integration checks, then clean up')
+    parser.add_argument('--unit-check', action='store_true', help='Run amount/unit integration checks in the owned standard fixture')
+    parser.add_argument('--exchange-check',action='store_true',help='Qualify the independent exchange futures dataset')
+    parser.add_argument('--with-exchange',action='store_true',help='Publish the independent exchange futures dataset in this newly owned database')
+    parser.add_argument('--party-check', action='store_true', help='Run party-editor integration checks in an owned fixture')
+    parser.add_argument('--identity-check', action='store_true', help='Run economic-key integration checks in the owned standard fixture, then clean up')
     parser.add_argument('--browser-check',action='store_true',help='Run checked-in browser scenarios in the newly owned standard fixture')
     parser.add_argument('--browser',type=Path,help='Installed Chromium-compatible executable; used only with --browser-check')
     parser.add_argument('--example', choices=['standard','mixed-gas'], default='standard', help='Explicit synthetic dataset')
     args = parser.parse_args()
+    if args.identity_check or args.unit_check or args.party_check or args.exchange_check:
+        args.check = True
+        if args.example != 'standard' or args.identity_check and args.browser_check:
+            parser.error('--identity-check requires the standard fixture without --browser-check')
     if not 0 <= args.port <= 65535:
         parser.error('Port must be between 0 and 65535')
     if args.browser_check and (not args.check or args.example!='standard' or args.browser is None or not args.browser.is_file()):
@@ -105,9 +114,48 @@ def main():
         query((ROOT/'db/migrations/0008_temporal_knowledge.sql').read_text())
         query((ROOT/'db/migrations/0009_market_knowledge.sql').read_text())
         query((ROOT/'db/migrations/0010_workspace_administration.sql').read_text())
+        query((ROOT/'db/migrations/0011_futures_bookings.sql').read_text())
+        query((ROOT/'db/migrations/0012_account_table_views.sql').read_text())
+        query((ROOT/'db/migrations/0013_trade_amendments.sql').read_text())
+        query((ROOT/'db/migrations/0014_trading_references.sql').read_text())
+        query((ROOT/'db/migrations/0015_financial_swaps.sql').read_text())
+        query((ROOT/'db/migrations/0016_swap_payment_rules.sql').read_text())
+        query((ROOT/'db/migrations/0017_trade_annotations.sql').read_text())
+        query((ROOT/'db/migrations/0018_trade_parties.sql').read_text())
+        query((ROOT/'db/migrations/0019_contract_instruments.sql').read_text())
+        query((ROOT/'db/migrations/0020_swap_identity_keys.sql').read_text())
+        query((ROOT/'db/migrations/0021_party_editors.sql').read_text())
+        query((ROOT/'db/migrations/0022_standard_futures_lots.sql').read_text())
+        query((ROOT/'db/migrations/0023_deal_amount_formats.sql').read_text())
+        query((ROOT/'db/migrations/0024_preview_identity_scope.sql').read_text())
+        query((ROOT/'db/migrations/0025_trading_reference_authority.sql').read_text())
         query(reference)
         query(market)
+        if args.example=='standard':
+            from swap_fixture import fixture as swap_fixture
+            swap_market,swap_manifest=swap_fixture();query(swap_market)
+            manifest['swapMarkets']=[swap_manifest]
         query(security)
+        if args.exchange_check or args.with_exchange:
+            from exchange_fixture import fixture as exchange_fixture
+            er,em,es,et,exchange_manifest=exchange_fixture(ROOT)
+            query(er);query(em);query(es);query(et)
+            (temporary/'exchange-manifest.json').write_text(json.dumps(exchange_manifest))
+        from preview_fixture import trading_fixture
+        query(trading_fixture(manifest['catalogId'],swap_defaults=args.example=='standard'))
+        if args.unit_check:
+            manifest['unitCatalogPreviousKnownAt']=query("SELECT to_char(clock_timestamp() AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"');")
+            unit_reference='20000000-0000-0000-0000-000000000004'
+            query(f"INSERT INTO ref_data.revisions(catalog_id,id,revision_key) VALUES('{manifest['referenceCatalogId']}','{unit_reference}','unit_catalog_v1');")
+            for table in ('dimensions','units','unit_conversions','commodities','measurement_bases','quantity_specifications'):
+                query(f"INSERT INTO ref_data.{table} SELECT (jsonb_populate_record(NULL::ref_data.{table},to_jsonb(t)||jsonb_build_object('revision_id','{unit_reference}'))).* FROM ref_data.{table} t WHERE catalog_id='{manifest['referenceCatalogId']}' AND revision_id='{manifest['referenceRevisionId']}';")
+            query(f"INSERT INTO ref_data.units VALUES('{manifest['referenceCatalogId']}','{unit_reference}','catalog_only_kwh','Catalog kWh','energy'); INSERT INTO ref_data.unit_conversions VALUES('{manifest['referenceCatalogId']}','{unit_reference}','catalog_only_kwh','kilowatt_hour','energy',1,1); INSERT INTO ref_data.quantity_specifications VALUES('{manifest['referenceCatalogId']}','{unit_reference}','test_power_catalog_only','test_power','test_power_energy','catalog_only_kwh','energy'); UPDATE ref_data.revisions SET state='sealed' WHERE catalog_id='{manifest['referenceCatalogId']}' AND id='{unit_reference}';")
+            unit_bundle='60000000-0000-0000-0000-000000000004'
+            query(f"BEGIN; INSERT INTO market_data.revisions VALUES ('{manifest['catalogId']}','{unit_bundle}','{manifest['referenceCatalogId']}','{unit_reference}','draft',0); INSERT INTO market_data.revision_periods VALUES ('{manifest['catalogId']}','{unit_bundle}','2020-01-01','2022-01-01'); UPDATE market_data.revisions SET state='sealed' WHERE catalog_id='{manifest['catalogId']}' AND id='{unit_bundle}'; COMMIT;")
+            manifest['unitCatalog']={'referenceRevisionId':unit_reference,'definitionRevisionId':unit_bundle}
+        if args.check and args.example=='standard' and not args.exchange_check:
+            from check_trade_revision_upgrade import run_checks as check_upgrade
+            check_upgrade(query,psql,env,ROOT,[reference,market,security,trading_fixture(manifest['catalogId'],annotations=False)],manifest)
         (temporary/'manifest.json').write_text(json.dumps(manifest))
         # Freeze assets for this owned instance; a later web build must not change
         # another running preview's presentation while it is being used.
@@ -122,8 +170,13 @@ def main():
                  'OPENETRM_PREVIEW_WEB':str(temporary/'web'),
                  'OPENETRM_PREVIEW_RUNTIME':f'Host={temporary};Port=55439;Database=postgres;Username=preview_runtime;SSL Mode=Disable',
                  'OPENETRM_PREVIEW_AUTHENTICATOR':f'Host={temporary};Port=55439;Database=postgres;Username=preview_authenticator;SSL Mode=Disable'}
+        # Exercise transport independently of the launcher's UTC psql sessions.
+        if args.check:
+            app_env['PGTZ']='America/Chicago'
+        shutil.copytree(dll.parent,temporary/'api')
+        frozen_dll=temporary/'api'/dll.name
         log=(temporary/'app.log').open('w')
-        child=subprocess.Popen([str(dotnet),str(dll),'--local-preview'],cwd=ROOT,env=app_env,stdout=log,stderr=subprocess.STDOUT)
+        child=subprocess.Popen([str(dotnet),str(frozen_dll),'--local-preview'],cwd=ROOT,env=app_env,stdout=log,stderr=subprocess.STDOUT)
         deadline=time.monotonic()+20
         while time.monotonic()<deadline:
             if child.poll() is not None:
@@ -138,28 +191,103 @@ def main():
                 time.sleep(.1)
         else:
             raise RuntimeError('Preview did not become ready:\n'+(temporary/'app.log').read_text())
+        if (not args.check or args.unit_check) and args.example=='standard':
+            from seed_preview_positions import seed_positions
+            seed_positions(url,run_id,temporary)
+            from seed_preview_swaps import seed_swaps
+            seed_swaps(url,run_id,temporary)
+            print('Loaded eight futures and sixteen financial swap examples across four weekdays.',flush=True)
+        if args.with_exchange and not args.check:
+            from seed_exchange_positions import seed_positions as seed_exchange
+            seed_exchange(url,run_id,temporary)
+            print('Loaded nineteen exchange-aligned futures examples with original synthetic execution prices.',flush=True)
         print(f'PREVIEW_URL={url}',flush=True)
         print('Private synthetic database. Ctrl+C stops the app and removes its owned database.',flush=True)
         if args.check:
-            if args.example=='mixed-gas':
+            if args.exchange_check:
+                from check_exchange_preview import run_checks as check_exchange
+                check_exchange(url,query,exchange_manifest)
+                from seed_exchange_positions import seed_positions as seed_exchange
+                seeded=seed_exchange(url,run_id,temporary)
+                assert len(seeded)==19 and seeded==seed_exchange(url,run_id,temporary)
+                print('PASS exchange examples populate nineteen real product families through idempotent authorized bookings.',flush=True)
+                if args.browser_check:
+                    target=temporary/'browser-target.json'
+                    target.write_text(json.dumps({'suite':'business_browser_v1','url':url,'runId':run_id}))
+                    browser_process=subprocess.Popen(['node',str(ROOT/'tests/browser/run.mjs'),str(target),str(args.browser.resolve()),'--exchange'],cwd=ROOT,env=env,start_new_session=True)
+                    if browser_process.wait(timeout=120):raise RuntimeError('Owned exchange browser checks failed')
+            elif args.party_check:
+                from check_party_editors import run_checks as check_parties
+                check_parties(url)
+                if args.browser_check:
+                    target=temporary/'browser-target.json'
+                    target.write_text(json.dumps({'suite':'business_browser_v1','url':url,'runId':run_id}))
+                    browser_process=subprocess.Popen(['node',str(ROOT/'tests/browser/run.mjs'),str(target),str(args.browser.resolve()),'--parties-power'],cwd=ROOT,env=env,start_new_session=True)
+                    if browser_process.wait(timeout=120):raise RuntimeError('Owned party/power browser checks failed')
+            elif args.unit_check:
+                from check_units_preview import run_checks as check_units
+                check_units(url,manifest.get('unitCatalogPreviousKnownAt'))
+                from check_deal_formats import run_checks as check_formats
+                check_formats(url)
+                if args.browser_check:
+                    target=temporary/'browser-target.json'
+                    target.write_text(json.dumps({'suite':'business_browser_v1','url':url,'runId':run_id}))
+                    browser_process=subprocess.Popen(['node',str(ROOT/'tests/browser/run.mjs'),str(target),str(args.browser.resolve()),'--units'],cwd=ROOT,env=env,start_new_session=True)
+                    if browser_process.wait(timeout=60):raise RuntimeError('Owned unit browser checks failed')
+            elif args.identity_check:
+                from check_units_preview import run_checks as check_units
+                check_units(url)
+                from check_trading_reference_access import run_checks as check_reference_authority
+                check_reference_authority(query,manifest)
+                from check_economic_lookups import run_checks as check_identities
+                check_identities(url,query,manifest)
+            elif args.example=='mixed-gas':
                 from check_mixed_preview import run_checks
                 run_checks(url,json.loads(export.read_text()))
             else:
                 from check_preview import run_checks
                 workspace=run_checks(url)
+                from check_table_views import run_checks as check_table_views
+                check_table_views(url)
                 from check_schedule_storage import run_checks as check_schedule_storage
                 check_schedule_storage(query,psql,env,manifest)
                 from check_temporal_storage import run_checks as check_temporal_storage
                 check_temporal_storage(query,psql,env,manifest,url)
+                from check_futures_storage import run_checks as check_futures_storage
+                check_futures_storage(query,manifest,psql,env)
+                from check_futures_amendments import run_checks as check_amendments
+                check_amendments(url,query,manifest,psql,env)
                 adapter_fixture=temporary/'adapter-fixture.json'
                 adapter_fixture.write_text(json.dumps(workspace))
                 subprocess.run([str(dotnet),'run','--project','tests/OpenEtrm.Api.Checks','--',str(adapter_fixture)],cwd=ROOT,env=env,check=True,timeout=60)
+                from check_seeded_preview import run_checks as check_seeded_preview
+                check_seeded_preview(url,run_id,temporary)
                 if args.browser_check:
                     target=temporary/'browser-target.json'
                     target.write_text(json.dumps({'suite':'business_browser_v1','url':url,'runId':run_id}))
                     browser_process=subprocess.Popen(['node',str(ROOT/'tests/browser/run.mjs'),str(target),str(args.browser.resolve())],cwd=ROOT,env=env,start_new_session=True)
-                    if browser_process.wait(timeout=180):
+                    if browser_process.wait(timeout=360):
                         raise RuntimeError('Owned browser checks failed')
+                from check_swaps_preview import run_checks as check_swaps
+                check_swaps(url)
+                from check_swap_payment_rules import run_checks as check_swap_payment_rules
+                check_swap_payment_rules(url)
+                from check_trade_annotations import run_checks as check_trade_annotations
+                check_trade_annotations(url)
+                from check_trade_parties import run_checks as check_trade_parties
+                check_trade_parties(url,query,manifest)
+                from check_units_preview import run_checks as check_units
+                check_units(url)
+                from check_trading_reference_access import run_checks as check_reference_authority
+                check_reference_authority(query,manifest)
+                from check_economic_lookups import run_checks as check_identities
+                check_identities(url,query,manifest)
+                from check_swaps_storage import run_checks as check_swaps_storage
+                check_swaps_storage(query,manifest,psql,env)
+                from seed_preview_swaps import seed_swaps
+                seeded=seed_swaps(url,run_id,temporary)
+                assert len(seeded)==16 and seeded==seed_swaps(url,run_id,temporary)
+                print('PASS sixteen synthetic swap examples seed idempotently across all four weekdays',flush=True)
         else:
             child.wait()
     except KeyboardInterrupt:

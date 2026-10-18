@@ -10,7 +10,7 @@ export function parsePreferences(raw:string):Preferences {
   if(v?.version!==1||!validTimeZone(v.timeZone)||!['commodity','marketType'].includes(v.browseBy)||typeof v.commodity!=='string'||v.commodity.length>128||!['all','futures','forwards','rates'].includes(v.marketType)||!['prices','inputs','dependencies'].includes(v.tab))throw Error('Saved profile settings could not be read. Please save your preferences again.');
   for(const name of ['sidebarCollapsed','libraryCollapsed'])if(v[name]!==undefined&&typeof v[name]!=='boolean')throw Error('Saved layout settings could not be read.');
   for(const name of ['collapsedMenus','collapsedCurveGroups'])if(v[name]!==undefined&&(!Array.isArray(v[name])||v[name].length>64||v[name].some((x:unknown)=>typeof x!=='string'||x.length>128)||new Set(v[name]).size!==v[name].length))throw Error('Saved menu settings could not be read.');
-  if(v.collapsedMenus?.some((x:string)=>!['market-menu','settings-menu'].includes(x)))throw Error('Saved menu settings could not be read.');
+  if(v.collapsedMenus?.some((x:string)=>!['market-menu','settings-menu','trading-menu'].includes(x)))throw Error('Saved menu settings could not be read.');
   return {version:1,timeZone:v.timeZone,browseBy:v.browseBy,commodity:v.commodity,marketType:v.marketType,tab:v.tab,sidebarCollapsed:v.sidebarCollapsed??false,libraryCollapsed:v.libraryCollapsed??false,collapsedMenus:v.collapsedMenus??[],collapsedCurveGroups:v.collapsedCurveGroups??[]};
 }
 const key=(profile:string)=>`openetrm.preferences.v1.${profile}`;

@@ -31,7 +31,7 @@ static class PowerHoursChecks
         var five=PowerHours.Compile(new(2026,11,1),new(2026,11,2),ny,TimeOfUse.All(5),[],5);
         Equal(five.Length,300);
         var revision=new ReferenceRevision(Guid.NewGuid(),Guid.NewGuid());
-        var index=new PowerIndex(new(revision,"synthetic_test_v1"),new(revision,"test_currency"),new(revision,"megawatt_hour"),"Test","Intraday");
+        var index=new PowerIndex(new(revision,"synthetic_test_v1"),new(revision,"test_currency"),new(revision,"megawatt_hour"),new(revision,"power_quantity"),"Test","Intraday");
         var rows=five.Select(h=>new PowerFixing(h.Start,h.End,index,ExactDecimal.Parse("30"),new(ExactDecimal.Parse("28"),ExactDecimal.Parse("3"),ExactDecimal.Parse("-1")))).ToArray();
         var result=PowerSettlement.Calculate(five,rows,index,ExactDecimal.Parse("10"),PowerSettlementPolicy.Preview);
         Equal(result.Hours,"25");Equal(result.Energy,"250");Equal(result.AveragePrice,"30");Equal(result.Amount,"7500");

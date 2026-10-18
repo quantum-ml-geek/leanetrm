@@ -10,10 +10,10 @@ public static class CommonRoles
     public static ImmutableArray<RoleTemplate> Templates { get; } =
     [
         Template("viewer", Permission.ReadMarketData),
-        Template("trader", Permission.ReadMarketData, Permission.BookTrade, Permission.AmendTrade, Permission.CreateDelegations),
-        Template("risk_analyst", Permission.ReadMarketData, Permission.RunValuation, Permission.RunScenario, Permission.CreateDelegations),
+        Template("trader", Permission.ReadMarketData, Permission.ReadTrades, Permission.ReadTradeParties, Permission.BookTrade, Permission.AmendTrade, Permission.CreateDelegations),
+        Template("risk_analyst", Permission.ReadMarketData, Permission.ReadTrades, Permission.ReadTradeParties, Permission.RunValuation, Permission.RunScenario, Permission.CreateDelegations),
         Template("market_data_editor", Permission.ReadMarketData, Permission.WriteMarketDefinitions, Permission.ImportObservations,
-            Permission.WriteReferenceData, Permission.CreateDelegations),
+            Permission.WriteReferenceData, Permission.ReadTradeParties, Permission.WriteTradeParties, Permission.CreateDelegations),
         Template("market_data_approver", Permission.ReadMarketData, Permission.SealMarketDefinitions, Permission.SealReferenceData,
             Permission.ApproveMarketData, Permission.PublishMarketData),
         Template("access_administrator", Permission.ManageIdentities, Permission.ManageAccess, Permission.CreateDelegations)

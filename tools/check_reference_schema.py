@@ -82,7 +82,7 @@ def main():
                 if expected_state is None:
                     if result.returncode:
                         raise AssertionError(f"{label or 'SQL'}: {result.stderr}")
-                elif result.returncode == 0 or f"{expected_state}:" not in result.stderr:
+                elif result.returncode == 0 or not any(f"{state}:" in result.stderr for state in (expected_state if isinstance(expected_state, tuple) else (expected_state,))):
                     raise AssertionError(f"{label}: expected {expected_state}, got "
                                          f"{result.returncode}: {result.stderr}")
                 if label:
@@ -172,7 +172,7 @@ def main():
             # Even an owner disabling user triggers cannot bypass the declared FK.
             reject("foreign keys independently prevent referenced deletion",
                    "ALTER TABLE ref_data.currencies DISABLE TRIGGER USER; "
-                   "DELETE FROM ref_data.currencies WHERE code='test_currency_a';")
+                   "DELETE FROM ref_data.currencies WHERE code='test_currency_a';", ("23503", "23001"))
             reject("cannot create an already sealed revision", "INSERT INTO ref_data.revisions "
                    f"(catalog_id,id,revision_key,state) VALUES ('{CAT}',"
                    "'20000000-0000-0000-0000-000000000099','invalid','sealed');", "55000")

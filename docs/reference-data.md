@@ -5,7 +5,10 @@ Status: approved baseline requirements with an initial schema implementation and
 implemented by the schema alone.
 The local [market-data slice](implementation.md) adds measurement-basis, quantity,
 quote, profile, settlement-target and cash-rounding references. Broader product
-and state-dependent conversion support remains gated below.
+and state-dependent conversion support remains gated below. The bounded
+[synthetic futures workflow](implementation.md#synthetic-futures-booking-and-holdings)
+now consumes fixed-total cash product terms, exact curve membership and retained
+trading milestones; daily/final settlement and margin processing remain work.
 
 ## Business references, setup and internal records
 
@@ -56,6 +59,14 @@ geometry rather than invent it. No map-dependent operation exists in this slice.
 
 ## Required foundation
 
+Trading additionally consumes scoped immutable `LegalEntity` and `Counterparty`
+versions. A trade revision binds both through catalog/ID/revision foreign keys;
+they are not properties of an instrument or inferred from a book/trader. Their
+effective date and certified publication visibility govern selection. The local
+preview supplies synthetic party versions for booking and amendment and bounded
+authorized editors for appending legal-entity/counterparty versions. General
+reference-catalog authoring remains outside that workflow.
+
 Reference data is a core application module, not a collection of optional seed
 files or arbitrary JSON attributes. The current schema provides these families:
 
@@ -103,7 +114,7 @@ version and relationship tables. Their bounded uses are:
 | `catalogs`, `revisions` | Every exact reference key, draft/seal checks and scoped catalog ownership/sharing |
 | `currencies` | Quote and interest currency links; managed Money rejects cross-currency addition |
 | `dimensions`, `units`, `commodities`, `commodity_units` | Futures lot/quote validation and compatible commodity-unit foreign keys |
-| `unit_conversions` | Capture an explicit multiplicative conversion; write checks reject mismatched endpoint dimensions. Automatic conversion execution is not implemented |
+| `unit_conversions` | Capture an explicit multiplicative conversion; write checks reject mismatched endpoint dimensions. Quantity/price conversion consumer validates exact ratios, versions, commodities and bases |
 | `measurement_bases`, `quantity_specifications` | Typed quantity/price multiplication and explicit ratio orientation in scaling curves |
 | `quote_specifications`, `value_specifications` | All-in/spread type checks, quote multipliers, numeric-series domains and price-clearing grids |
 | `clock_rules`, `calendars`, `calendar_days` | Futures milestone clock/calendar links and explicit dated calendar-override capture/constraints. No automatic business-day schedule calculation yet |
@@ -136,6 +147,34 @@ requires explicit measurement conditions/heating value and power-to-energy
 conversion requires duration/shape. Missing inputs never select an automatic
 conversion. Database foreign keys, market unit variants, contractual measurement
 bases and provenance remain mandatory.
+
+## Common units and explicit conversions
+
+The synthetic preview's quantity converter consumes project-authored unit and
+conversion rows: Btu (IT), MMBtu (IT), therm (IT), Dth (IT), J/MJ/GJ, kWh/MWh,
+kW/MW/GW, cubic metres, litres, cubic feet, Mcf/MMcf, US gallons, petroleum barrels,
+kilograms, metric tonnes, pounds, short tons and troy ounces. Mcf and MMcf are
+volume multiples, without inferred gas standard conditions or heating value.
+The generic schema fixture retains its unrelated synthetic units; new standard
+preview gas definitions explicitly select MMBtu (IT).
+
+Ratios use exact defining constants, not typical fuel-content factors. For example,
+1 MWh = 3.6 GJ, 1 petroleum barrel = 42 US gallons and 1 short ton = 2,000 pounds.
+The exact IT Btu constant is 1,055.05585262 J; therm (US) is a different convention.
+Definitions were checked against [NIST SP 811 conversion tables](https://www.nist.gov/pml/special-publication-811/nist-guide-si-appendix-b-conversion-factors/nist-guide-si-appendix-b8)
+and [its exact Btu footnote](https://www.nist.gov/pml/special-publication-811/nist-guide-si-footnotes).
+No external observations or proprietary master catalog are imported.
+
+`consistent_exact_unit_ratios_v1` validates the supplied immutable conversion graph
+and applies inverse/chained ratios without intermediate decimal rounding. Typed
+quantities require the same exact commodity and measurement basis; matching a
+physical dimension alone is insufficient. Price conversion applies the inverse
+ratio while preserving the quote multiplier. Nonterminating results require an
+explicit final precision/tie choice; display precision alone does not round stored
+values. Reference data exposes a converter with exact or explicitly rounded mode.
+A separately selected unit bundle can add definitions without changing the
+reference versions of existing trades or curves; unavailable historical bundles
+are not replaced with current rows.
 
 ## Reference revisions and history
 

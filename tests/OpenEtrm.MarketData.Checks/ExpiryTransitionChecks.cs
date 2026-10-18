@@ -23,12 +23,12 @@ internal static class ExpiryTransitionChecks
         final=final with {Observation=final.Observation with {Role=ObservationRole.FinalContractSettlement,ObservedAt=expiry}};
         MarketSnapshot At(DateTimeOffset instant,bool includeFinal=true)=>original with {
             ValuationAt=instant,MarketCutoff=instant,Selections=includeFinal?original.Selections.Add(final):original.Selections};
-        string Price(MarketSnapshot snapshot)=>model.Build(snapshot,[output]).Values[0].Value.ToString();
+        string Price(MarketSnapshot snapshot)=>model.Build(snapshot,[output]).Values[0].Price.Value.ToString();
 
         Check("source is live immediately before expiry and fixed exactly at expiry",()=>{
             Equal(Price(At(expiry.AddSeconds(-1),false)),"29.1");
             var built=model.Build(At(expiry),[output]);
-            Equal(built.Values[0].Value.ToString(),"30.5");
+            Equal(built.Values[0].Price.Value.ToString(),"30.5");
             Equal(built.Evaluations.Single(e=>e.Result.Request.Curve==f.C("future")).Use,InputUse.FrozenFact);
         });
         Check("final evidence never implicitly changes a require-live policy",()=>

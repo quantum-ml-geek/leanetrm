@@ -1,10 +1,10 @@
 # First market-data implementation
 
 Status: local synthetic preview. This is a bounded
-foundation with a runnable local market-data preview, not a trading service. No existing application or production
+foundation with a runnable local market-data and bounded futures trading preview. No existing application or production
 resource is used by its checks.
 
-Latest checkpoint verification (2026-10-17): 60 frontend, 102 managed core,
+Earlier foundation checkpoint verification (2026-10-17): 60 frontend, 102 managed core,
 24 mixed-resolution managed, 29 rate, 31 shared temporal and 20 schedule checks;
 173 stock PostgreSQL schema checks; 198 standard and 24 mixed HTTP, 14 schedule-storage,
 50 temporal/security storage, ten persisted-adapter and 49 owned rendered-browser
@@ -19,6 +19,208 @@ canonical sharing. Its 31 checks and synthetic microbenchmark qualify these raw
 in-memory operations only. Date-set operations remain coding utilities. The named contract-schedule resolver
 described below is a domain consumer with exact contract identities. Monthly anchor generation and durable schedule authoring are now consumers. Project instructions
 now require TDD, DRY, simple code and an explicit quality review before check-in.
+
+## Amount display and unit conversion
+
+Deal editors select decimal places for money/PV, prices, quantities and factors;
+fixed and floating roles have independent controls. Shared current presentation
+is stored against the exact trade identity with optimistic revisions and current
+trade read/amend authority. It is independent of financial history, economic keys
+and contractual cash rounding. Old browser Profile precision is ignored.
+Decimal futures price display follows tick precision. The managed amount types
+provide formatted `ToString` overloads using resolved exact-reference labels.
+Tables show units alongside quantities/prices; formatting preserves raw sorting,
+filters, inputs and exact exports. Display ties use to-even; current initial
+presentation choices are 2/4/3/6 decimal places respectively and are editable.
+
+Reference data → Units / Unit conversions provides a typed quantity converter.
+The consumer uses stored exact ratios, inverse paths and explicit final rounding,
+rejecting incompatible commodity/basis/dimension/version or missing paths.
+`UnitPrice.ConvertTo` preserves price-times-quantity cash using the inverse ratio.
+`UnitPrice.Times` defers intermediate multiplication to the existing exact-money
+aggregation path. Gas composition/heating-value, density and FX conversions are not enabled.
+Power duration/allocation has a separate unsaved consumer below. An optional exact supplemental unit bundle preserves
+existing market definitions while giving the converter its selected catalog.
+
+## Legal entities and counterparties
+
+**Settings → Entities & counterparties** provides create/edit/history controls
+for the existing versioned models. Codes are permanent within their party type
+and catalog. Edits append name/effective-time revisions with an expected head;
+equal effective instants remain distinguishable by publication knowledge.
+Trades keep exact party references. Operations retain actor, request and relational
+result references for safe retry, including after subsequent edits. Delete,
+deactivation, corporate hierarchies and broader attributes are not implemented.
+
+The market-data-editor template has `ReadTradeParties`/`WriteTradeParties`;
+trader/risk templates have party read access. These permissions do not grant trade
+read/booking or access administration. Reads use the selected effective/knowledge
+context; historical writes reject. Denied or context-stale rows are cleared, and
+uncertain save identities are retained separately by account/workspace.
+
+The power example accepts typed quantity inputs with explicit total MWh or flat
+MW basis. Total energy requires a selected allocation; the supported profile uses
+actual selected interval durations. `ExactQuantity` retains fractions until final
+rounding. Settlement requires the exact index quantity specification and returns
+exact cash evidence and typed Money. Each example has editable display precision.
+Compatible quantity definitions must exist in its selected reference revision;
+another revision is not an automatic substitute. Booked swap sides do not yet
+persist this quantity rule.
+
+## Current trading implementation
+
+Trade booking now consumes separate immutable `LegalEntity` and `Counterparty`
+models with exact catalog/ID/revision keys. An explicit date-only TradeDate and
+both party versions are required on new futures/swap bookings and amendments.
+Retained states, history, optional blotter columns and exports expose the selected
+facts. Party-only corrections append a revision without changing the reusable
+unit instrument. Migration 0018 preserves legacy rows with NULL facts, adds exact
+foreign keys/RLS and V2 event schemas, and closes older runtime write entrypoints.
+Initial synthetic party versions are installation fixtures; the bounded name/code
+editors described above are implemented. A general reference-authoring
+or party-onboarding workflow is not implemented.
+
+`IdentityField` marks economic properties and `EconomicDefinition` pins their
+canonicalization contract on each executable instrument/side type. Explicit
+encodings include normalized decimals, exact references, conventions and ordered
+memberships. Canonical payload equality accompanies SHA-256 lookup. An owned
+identity map validates futures definitions; swap unit-value reuse keys by economic
+identity, including its explicit discounting choice, under the selected full context. Database
+economic uniqueness and the publication gate continue to deduplicate persisted
+definitions atomically. No global result cache or new numerical dependency is
+introduced. Booking lookup uses typed primary/candidate keys enforced by database
+indexes; managed digests support operation-local reuse.
+
+`FuturesContract` is a leaf instrument with normalized amount one. Its marked
+SeriesKey is the existing exact `ref_data.futures_series` primary key; LotSize and
+settlement method resolve from its retained product/milestones. `CurveModel`
+provides primary-key and constituent lookup returning one contract instance per
+model, available before booking. Explicit `FuturesMarketBinding` holds curve/member
+and quote-admission policy outside contract identity. Changing only a recipe or
+pricing policy does not create a different future. Final exact P&L applies quote
+multiplier, LotSize and external lots once.
+
+Migration 0019 retains old UUIDs/events and adds typed exact-series aliases and
+per-revision pricing references with FKs, RLS and immutable publication coordinates.
+New bookings use the canonical series-key alias and create no futures side/wrapper.
+Missing revision pricing metadata fails closed. Futures holdings/risk expose
+`pricingBindingId` and separate canonical instrument identity; old operation-status
+payloads retain `sideId` as a compatibility name for original request replay.
+
+Fixed-side identity includes its exact quote key, matching database candidate-key
+lookup. Floating-side identity names its curve and contractual observation/averaging/
+payment configuration; actual projection references have a separate binding identity.
+Swap calculation reuse includes both identities and the retained published UUID.
+Instrument interning rejects a conflicting binding rather than substituting it.
+Swap definitions mark Discounting, and common/specialized PV reject conflicting
+policies. Existing market series, observations, explicit derived dependencies and
+immutable scenario risk already separate market inputs from contractual cashflows.
+Standalone physical forward booking, option products and VaR/covariance remain
+unimplemented; their agreed design is recorded in architecture/plan.
+
+Trading opens a shared Blotter with individual futures trade bindings, managed
+pivots, account-saved layouts, exact exports and shared charts. Eight synthetic
+weekday bookings exercise cumulative holdings across the four standard frames.
+Leaf futures contracts retain exact market terms; composed instruments retain nonempty immutable side memberships.
+Pricing reports typed gross execution P&L and open quote sensitivity; it does not
+implement futures PV, settlement cash, variation margin or fees.
+
+The editor opens from trade rows. Amendments append immutable latest-head booking
+states with expected revision, explicit reason/effective instant, current authority
+and idempotent operation identity. Previous states remain read-only. Book moves
+and amendments preserve stable trade references; reusable instruments have their
+own references. UUIDs remain relationship keys. New table layouts show references;
+existing saved layouts retain their selections.
+
+The header distinguishes working knowledge, retained history, selected price date
+and actual today in the user's time zone. Disabled booking has an explanation and
+an explicit return to working inputs. Power TOUs and Reference data are under
+Settings. Visible branding is LeanETRM. These presentation choices do not alter
+financial contexts or authorization.
+
+Migrations 0011 through 0015 add certified trading publications/contexts, futures
+bookings, account layouts, immutable trade revisions and readable references.
+Both trading backfills acquire the publication gate and lock their source tables.
+Migration 0013 additionally requires stopped runtime write admission and drained
+legacy calls: the gate cannot replace a function body already executing.
+Disposable upgrade checks preserve original bookings and earlier certificates.
+See [database storage](../db/README.md) and [verification](verification.md).
+
+## Financial swap numerical core
+
+The managed core now includes independent FixedSide/FloatingSide definitions and
+a FinancialSwapInstrument with normalized currency and quantity bases. Delivery
+and payment terms are independently owned by each side. Opposite membership coefficients carry pay/receive; positive typed trade
+quantity scales the result once. Contractual fixed prices retain PriceUnit without
+inheriting the observed quote's domain or tick. Floating projections must equal the
+originating model's retained outright index, quote and exact dated contracts.
+
+Supported core averaging rules are monthly index, every calendar day, equal
+business-day observations, calendar-day weighting using the preceding/following
+eligible observation, and explicitly supplied positive daily quantity weights.
+Business-day rules require a covered exact calendar. Every required projection
+must be present in date order; unsupported rules and gaps fail explicitly. The
+bounded delivery interval is at most 366 days. This first forecast model rejects
+valuation at or after the declared first fixing; retained actual fixings and
+settlement remain future work.
+
+Each side applies its own quote multiplier and payment factors to exact rational
+cash amounts. Exact side PVs survive signed instrument aggregation and later
+trade quantity scaling. A repeating intermediate average can
+produce an exact final amount; an unrepresentable final amount raises an error.
+The currency-default discount consumer builds rates from the same full snapshot,
+retains exact mapping/curve and bracketing observation identities, and uses the
+existing explicit simple Actual/365 Fixed rate policy. Log-linear interpolation of
+stored 18-digit discount factors uses an exact integer geometric root and a single
+nearest/ties-to-even at 18 digits output rounding. Pillar gaps are bounded to 3660 days;
+extrapolation is rejected. discounting=false uses one without requiring a default
+mapping or rate observations. Payment dates use the declared UTC rate date basis.
+
+Each Side now declares GenerateSchedule and PV behavior. FixedSide and
+FloatingSide independently generate their own payment plan, resolve their own
+price inputs and evaluate their payment PVs through the shared linear payment
+pricer. The instrument delegates to Side.PV, validates common currency/unit and
+the same valuation-operation identity (including scenario and discount inputs),
+and sums membership-signed exact side PVs. Cross-operation cached side results
+are rejected even when snapshots match. Standalone snapshot/rate paths reject
+conflicting contents under one observation identity.
+The financial-swap trade-valuing operation applies positive typed trade quantity
+once after that sum. The current instrument implementation is
+`independent_side_financial_swap_v2`.
+
+Each side currently has one payment. Delivery/payment dates, calendars, lookup
+rules and quote multipliers belong to that side. SideValuationContext carries no
+instrument, membership sign or trade quantity. A standalone fixed side can value
+with only the selected snapshot and rate inputs; a floating side additionally
+requires its declared model-owned market projections. Returned side schedules
+are the actual evaluated rows. Shared payment dates do not merge the side rows.
+The explicit scalar-factor compatibility operation rejects different payment
+dates when discounting is enabled; the rates operation resolves each side's DF.
+
+Rate-based rows retain exact currency/default mapping, curve definition and used
+pillar maturities, annual rates, factors, observations and interpolation policy.
+Side payments/side PVs use `independent_side_rational_pv_v1`; instrument aggregation
+uses `signed_exact_side_pv_sum_v1`; final financial-swap trade scaling uses
+`financial_swap_trade_scale_exact_18_v1`. ExactMoney retains rational or large
+side amounts through all those stages; only final Money conversion applies the
+working precision/range. No rounded unit or gross-side PV is substituted.
+
+FuturesContract satisfies the common behavior contract by explicitly rejecting PV
+and payment schedule generation without required variation-margin/settlement
+state. Its existing execution-P&L/open-sensitivity operations are unchanged.
+OptionSide is not implemented: explicit sibling references, base-versus-final
+valuation modes and exercise-control double-counting constraints remain recorded
+in the architecture; O13 does not yet select an adjustment or joint allocation.
+
+These managed contracts now have persisted default resolution, authorized swap
+booking/amendments, a shared blotter and a schedule-inspection editor, described
+below. Swap risk and fee capture/calculation/reconciliation remain deferred;
+current futures execution-P&L diagnostics are gross and exclude fees.
+
+The futures editor separates trade inputs from a vertical side panel populated
+from actual selected contract metadata. The financial swap editor has aligned
+fixed/floating columns and initializes only unset counterpart delivery/currency
+fields. No copy button is present; later edits remain independent.
 
 ## Business scenario coverage and permanent browser regressions
 
@@ -777,3 +979,94 @@ February rollover, hidden internal IDs and mobile page containment. These checks
 use owned disposable resources; the user preview is a separate retained instance.
 Desktop and mobile views are also inspected visually. No public deployment or
 publication is implied.
+
+
+## Financial swap booking and schedule inspection
+
+The local application now books and amends monthly financial gas/power swaps
+through the same authorized operations used by its editor. Each side owns delivery
+and payment terms, generates its actual valued schedule and computes its own PV.
+The instrument applies membership signs to completed side PVs; positive trade
+quantity scales the sum once. Fixed contractual strikes do not inherit observed
+market-price bounds or tick sizes. Preview validates current head, effective time,
+reason and compatible exact quote/unit references before confirmation.
+
+Booking exposes monthly-index and daily-calendar arithmetic averaging. The latter
+requires complete, unambiguous, live dated daily contracts: a monthly mark cannot
+fill a gap. Thirty-one January reset rows can feed one monthly payment. Reset cash
+allocations remain rational and sum exactly to the side payment; the final trade
+amount must fit the declared exact working format. Each side inspector retains
+prices, weights, lookup/observation lineage, cash, payment time, discount mapping,
+curve/pillars, DF and PV. User-local clocks affect display/entry; contractual
+intervals and the explicit rate-date basis retain their meaning.
+
+Currency defaults and supplemental immutable daily-market bundles respect the
+common effective/knowledge context. A later backdated mapping does not alter a
+certified earlier view. The shared backend blotter displays projected swap PV and
+futures execution P&L as separate nullable measures, with typed product partitions
+in pivots. Saved account layouts retain their choices. New trade offers Futures
+or Financial swap; both have backed booking and latest-head amendment operations.
+The swap editor uses aligned vertical columns and initializes only unset peer
+delivery/currency fields; subsequent edits remain independent.
+
+Owned standard previews include sixteen explicit monthly/daily gas/power examples
+across the same four weekdays, alongside the original eight futures. Seeding uses
+stable authorized commands and retries without duplicates. No live feed, actual
+fixing ingestion, recurring payment strips, swap risk, physical delivery, PPA or
+fee/reconciliation workflow is enabled by this slice. Broader core averaging
+strategies remain hidden until calendar/weight capture and persistence exist.
+
+
+## Generated payment dates and commodity selection
+
+New swap entry selects commodity from exact reference data and filters the
+compatible floating indices, curves and working units. The editor labels its
+selector Floating Index. Reset frequency and averaging method are distinct:
+monthly index/no averaging or daily calendar/arithmetic mean are backed choices.
+Payment frequency currently supports monthly payments over one delivery month.
+
+Each side owns an explicit payment rule: days after its last delivery day, or a
+specified day of the following month. Calendar/business-day lag, short-month
+reject/clamp and unadjusted/following/preceding/modified-following adjustments are
+implemented with covered exact reference calendars. Lag precedes adjustment.
+Missing/inapplicable parameters, inconsistent dates, unknown conventions and
+unsupported coverage fail explicitly. Managed generation reuses the shared date
+rolling kernel; database admission independently validates the generated result.
+
+Actual valued plans retain their rule/calendar evidence and generated
+unadjusted/final dates. Payment dates display as dates and never shift with user
+time zone. The existing selected UTC rate-date convention still determines DF
+lookup and due-date eligibility. Legacy manual-instant revisions retain their
+original contents; no rule is inferred. Latest-head amendments choose explicit
+rules and append new immutable definitions/events. New entry has no editable
+payment date/time field. New rule identities remain distinct even if their
+currently generated dates happen to coincide.
+
+The swap editor's schedule-date helper calls the common published resolver for
+delivery start/end entry. Its symbol catalog and date resolution share the exact
+editor context; a later publication does not change either. Reviewed results show
+the actual date, source version and occurrence. Apply writes a literal date to
+the selected side field and invalidates valuation; the trade has no moving symbol
+binding. Read-only revisions cannot apply results, and form/context changes,
+denial and close discard pending or resolved helper state.
+
+Payment-rule option lists are returned by the backend from the same typed
+conventions used to parse inputs. User-maintained commodities, indices, calendars,
+units and currencies still come from selected reference rows. The standard local
+sample dataset links quotes, rates and trades to `usd` / `USD` / `US Dollar` in
+`ref_data.currencies`; the UI does not substitute a currency label.
+
+Shared grids suppress row activation after pointer dragging, text selection or
+scrolling. Deliberate pointer and keyboard activation preserve source-row identity
+through virtual scrolling. Schedule tables have a single bounded scrolling area;
+shared table text uses consistent spacing and tabular numeric alignment without
+changing exact values or exports.
+
+The separately selectable [exchange futures example](exchange-futures.md) uses
+public product facts and synthetic observations. V2 lot normalization supports
+physical/cash terms, fixed totals, explicit calendar-day rates and published
+power-hour totals. Basis quotes retain exact regional-index and benchmark-series
+settlement references while remaining independent factors for current mark risk.
+Deal display precision is shared current presentation outside financial history;
+Profile has no amount-precision controls. Daily/final settlement and variation
+margin remain unimplemented.

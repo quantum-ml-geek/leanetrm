@@ -12,12 +12,23 @@ public sealed record ScheduleSaveRequest(Guid? Id,int? Version,int? Generation,M
     string? Selection,string? EffectiveFrom,string? EffectiveTo,string? ExpectedState=null);
 public sealed record SchedulePublishRequest(Guid Id,int Version,int Generation);
 public sealed record PublishedDateRequest(string? Expression,ScheduleContext? Context);
+public sealed record ScheduleCatalogRequest(ScheduleContext? Context);
+public sealed record ScheduleReferenceChoice(string Symbol,string Name,int Version,string Selection);
 public sealed record PublishedContractRequest(string? Code,string? Name,ScheduleContext? Context,ContractFieldDraft[]? Contracts);
 public sealed record PublishedDateSource(Guid ScheduleId,int Version,int Generation,int PublicationOrder,
     string Symbol,string Name,string Selection,string EngineVersion,int Occurrence,ScheduleContext Context,MonthlyDraft Definition,BitemporalRange? Temporal=null);
 
 public static class PublishedSchedules
 {
+    private static IEnumerable<ScheduleVersion> Eligible(IEnumerable<ScheduleVersion> versions,ScheduleContext? context)
+    {
+        var day=ContextDate(context);
+        return versions.Where(v=>v.State=="published"&&v.PublicationOrder<=context!.KnownThrough&&v.EffectiveFrom<=day&&day<v.EffectiveTo)
+            .OrderByDescending(v=>v.PublicationOrder);
+    }
+    public static ImmutableArray<ScheduleReferenceChoice> Catalog(IEnumerable<ScheduleVersion> versions,ScheduleContext? context)=>
+        Eligible(versions,context).GroupBy(v=>v.Definition.Symbol).Select(g=>g.First())
+            .Select(v=>new ScheduleReferenceChoice(v.Definition.Symbol!,v.Definition.Name!,v.Version,v.Selection)).OrderBy(v=>v.Symbol,StringComparer.Ordinal).ToImmutableArray();
     public static DateOnly ContextDate(ScheduleContext? context)
     {
         if(context is null || context.EffectiveOn is null || context.KnownThrough is null or <0)
@@ -37,8 +48,7 @@ public static class PublishedSchedules
         if(expression?.Length==10 && DateOnly.TryParseExact(expression,"yyyy-MM-dd",System.Globalization.CultureInfo.InvariantCulture,
             System.Globalization.DateTimeStyles.None,out var literal))return new(expression,literal,"literal",null,null,null,new{kind="literal",context});
         var reference=DateReference.Parse(expression);
-        var eligible=versions.Where(v=>v.Definition.Symbol==reference.Symbol && v.State=="published" &&
-            v.PublicationOrder<=context!.KnownThrough && v.EffectiveFrom<=day && day<v.EffectiveTo).OrderByDescending(v=>v.PublicationOrder).ToArray();
+        var eligible=Eligible(versions,context).Where(v=>v.Definition.Symbol==reference.Symbol).ToArray();
         if(eligible.Length==0)throw Error("schedule_unpublished","No published schedule covers this context and publication view.");
         var selected=eligible[0];
         if(selected.EngineVersion!="date_schedule_v1")throw Error("schedule_engine","This retained schedule engine version is unavailable.");

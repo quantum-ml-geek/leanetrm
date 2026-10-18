@@ -9,6 +9,10 @@ power curve, contract and product example. The two editable Monday–Sunday grid
 separate non-holidays from holidays. Cells support 60, 30, 15 or 5 minutes.
 Supply holiday dates separately; blank explicitly means none. Payment calendars
 are separate. HE/HB changes labels, never interval identity or economics.
+Choose an exact quantity specification for **Flat MW** or **Total MWh**. Total
+energy also requires an allocation; the supported choice is flat MW across the
+selected intervals. Decimal display places belong to this unsaved example and
+are editable for quantities, prices and money.
 
 | Product example | Non-holiday on-peak | Clock |
 |---|---|---|
@@ -45,13 +49,22 @@ checks their exact sum against total LMP.
 For flat MW, MWh is MW × actual elapsed hours. Average prices are duration weighted
 and cash is the sum of interval MWh × price. Integer/rational intermediates
 remain exact, including five-minute durations. The required
-`duration_weighted_flat_mw_to_even_v1` policy rounds price reports to 18 digits
+`duration_weighted_power_quantity_to_even_v2` policy rounds price reports to 18 digits
 and final cash to two, ties to even, after aggregation. It also returns the exact
 cash numerator/denominator. Signed quantities and negative prices retain signs.
 Hour and energy reports round to 18 fractional digits under that versioned
 policy; cash is calculated from exact intermediates, never these report strings.
 Hourly diagnostic aggregation requires complete UTC hours and does not replace
 a contractually named published hourly price.
+
+Total MWh is conserved rather than multiplied by hours. Each interval retains an
+`ExactQuantity` with its exact quantity specification and rational share of total
+selected duration. A 1-MWh total over 23 hours therefore has 1/23 MWh in each hour,
+without rounding those shares before settlement. Signed totals, exact price
+denominators and final overflow checks use the same typed amount operations.
+Display rows retain the exact decimal price and rational energy separately from
+formatted text. The selected reference revision must contain its quantity
+definitions; a supplemental unit catalog is not an implicit cross-version bridge.
 
 Price type (Test, Official or a user label) and timing (End of day, Intraday or a
 user label) are independent required classifications. A label never promotes
@@ -68,7 +81,8 @@ Current-input mode captures the installed rules once for its calculation receipt
 The fixture uses actual MWh/MW reference units and retains its synthetic currency;
 it does not convert user databases. No tables were added for this preview.
 Variable volume, metered sub-hour quantity, shaping calibration and futures
-variation margin are outside this flat-MW example. The domain, HTTP and browser
+variation margin and persistence of these quantity rules on booked sides are
+outside this example. The domain, HTTP and browser
 checks cover DST, holidays, partitioning, exact arithmetic, reference validation,
 editable grids, current access and the original curve screens.
 

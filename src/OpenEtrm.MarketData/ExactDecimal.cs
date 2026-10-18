@@ -16,6 +16,9 @@ public readonly partial record struct ExactDecimal : IComparable<ExactDecimal>
     private static readonly BigInteger Scale = BigInteger.Pow(10, 18);
     private static readonly BigInteger Limit = BigInteger.Pow(10, 42);
     private readonly BigInteger scaled;
+    internal BigInteger ScaledValue => scaled;
+    internal static BigInteger WorkingScale => Scale;
+    internal static ExactDecimal FromScaled(BigInteger value) => new(value);
 
     private ExactDecimal(BigInteger value)
     {
@@ -50,6 +53,30 @@ public readonly partial record struct ExactDecimal : IComparable<ExactDecimal>
     }
 
     public int CompareTo(ExactDecimal other) => scaled.CompareTo(other.scaled);
+    public ExactDecimal DivideExact(ExactDecimal denominator) => DivideExactProduct(this,denominator);
+    // Divide as a rational expression so h*h need not fit the working scale.
+    // Only the final quotient is represented; there is never implicit rounding.
+    internal static ExactDecimal DivideExactProduct(ExactDecimal numerator,params ExactDecimal[] denominators)
+    {
+        var product=BigInteger.One;
+        foreach(var denominator in denominators)
+        {
+            if(denominator.scaled.IsZero)throw new MarketDataException("numeric_division","A divisor cannot be zero.");
+            product*=denominator.scaled;
+        }
+        var quotient=BigInteger.DivRem(numerator.scaled*BigInteger.Pow(Scale,denominators.Length),product,out var remainder);
+        if(!remainder.IsZero)throw new MarketDataException("precision_loss","The exact quotient exceeds 18 fractional digits; no rounding policy was selected.");
+        return new(quotient);
+    }
+    internal static ExactDecimal CentralDifferenceExact(ExactDecimal @base,ExactDecimal up,ExactDecimal down,ExactDecimal bump,int order)
+    {
+        if(bump.scaled.Sign<=0 || order is not(1 or 2))throw new MarketDataException("risk_bump","Use a positive exact bump and supported derivative order.");
+        var numerator=order==1?(up.scaled-down.scaled)*Scale:(up.scaled-2*@base.scaled+down.scaled)*Scale*Scale;
+        var denominator=order==1?2*bump.scaled:bump.scaled*bump.scaled;
+        var quotient=BigInteger.DivRem(numerator,denominator,out var remainder);
+        if(!remainder.IsZero)throw new MarketDataException("precision_loss","The exact sensitivity exceeds 18 fractional digits; no rounding policy was selected.");
+        return new(quotient);
+    }
     public bool IsMultipleOf(ExactDecimal increment)
     {
         if (increment.scaled.Sign <= 0)
@@ -66,6 +93,7 @@ public readonly partial record struct ExactDecimal : IComparable<ExactDecimal>
         if (compare > 0 || compare == 0 && (tieRule == CashTieRule.AwayFromZero || !quotient.IsEven)) quotient++;
         return new ExactDecimal(quotient * increment.scaled * scaled.Sign);
     }
+    public string ToString(AmountFormat format) => format.Format(this);
     public override string ToString()
     {
         var absolute = BigInteger.Abs(scaled);

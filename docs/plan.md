@@ -8,10 +8,131 @@ covering the existing managed, frontend, database and browser suites. The comple
 command passed on the Ubuntu 24.04 hosted runner on 2026-10-17; verification
 records the exact run and environment. Production deployment remains unqualified.
 
+The implemented trading workspace now has a shared Blotter with individual trade
+rows, managed pivots, account-saved layouts, exact-data exports and shared charts.
+Eight synthetic weekday futures bookings cover the four standard market frames.
+Immutable futures contracts are shared directly by curve consumers and trades across books.
+Typed execution P&L and deterministic base/up/down open sensitivity are implemented;
+daily/final settlement, variation-margin transitions and generic futures PV remain
+unimplemented. Quantities, quote scales, numerical policy and exact inputs stay in
+the managed backend.
+
+Simple futures contracts are leaf instruments keyed by the exact futures-series
+primary key, independent of the curve recipe. Explicit pricing bindings retain
+selected curve/member and quote policy. Composed products use `SidedInstrument`
+with nonempty immutable memberships; fixed/floating swaps remain its current
+consumer. Fused exact aggregation preserves final arithmetic and trade-owned
+quantities. Migration 0019 preserves historical UUID aliases and pricing bindings;
+new future bookings create neither a side nor a wrapper definition.
+
+Latest-head futures booking amendments append immutable versioned trade states.
+They require explicit reason/effective time, current authority and expected-head
+concurrency. Historical and superseded states remain read-only; arbitrary insertion
+into earlier history, settlement and general lifecycle execution remain work.
+Readable trade/instrument references survive amendments, book moves and definition
+reuse. They appear in new table layouts, the editor, exports and risk input receipts;
+existing saved layouts retain their choices. The header distinguishes working
+knowledge, historical views, selected price date and actual today in the user's
+zone. Power TOUs and Reference data are under Settings; visible branding is LeanETRM.
+
+Trade owns events, TraderId, TradeDate, counterparty, memo and legal entity.
+Trader attribution, memo, an explicitly supplied date-only TradeDate and exact
+LegalEntity/Counterparty versions are retained on current trade revisions.
+New bookings/amendments require date and both parties; legacy revisions retain
+unknown fields without backfilling inferred facts. General party administration
+and broader lifecycle execution remain work. Instruments
+remain unit definitions with separate unit-aware Quantity values held by Trade per
+instrument binding. Reuse the existing project-owned Quantity, Money and UnitPrice
+contracts backed by ExactDecimal; external quantities live outside the instrument
+definition.
+
+Versioned marked economic fields now define managed instrument/side identity.
+Request-local loading and swap unit-value reuse consume the canonical keys;
+atomic database uniqueness independently retains one definition across bookings.
+Trade quantities, attribution and parties remain outside economic identity.
+Futures SeriesKey is marked and matches the exact series primary-key columns;
+LotSize is resolved from those immutable terms. Fixed-side quote references now
+participate in keys, and floating sides separate contractual curve/observation
+configuration from resolved pricing bindings. Swap discounting remains marked.
+Lookup and uniqueness use typed primary/candidate keys; managed digests remain
+calculation aids rather than database authority. Observable/factor identity is
+separate from full contract equivalence. Options, standalone physical forward
+booking, VaR/covariance and cross-revision forward-observable normalization remain
+explicit later work.
+
+Financial gas and power swaps now have local booking/amendment operations, a
+shared trade blotter and an editor with independently valued side tables. The
+booking model supports one whole delivery month, monthly-index or complete daily
+calendar observations, independently generated payment dates and explicit currency-default
+or no discounting. Daily resets aggregate into one monthly floating payment;
+retained exact lookups, cash allocations, DFs and PVs are inspectable. Four explicit
+weekday dates have synthetic monthly/daily gas and power examples.
+Each side now selects either a period-end day lag or a day of the following
+month, with explicit day basis, short-month behavior, date adjustment and exact
+calendar where consumed. Generated date-only rows retain the rule evidence.
+New entry has commodity-filtered indices/units and separate reset-frequency and
+averaging-method fields. Earlier manual-date revisions remain inspectable without
+inferred replacement conventions; amendments must select the new rules explicitly.
+The swap editor can resolve published schedule symbols against its exact retained
+context, review the source version/occurrence and apply a literal delivery date.
+Suggestions obey that same cutoff. Payment-policy choices come from the backend's
+typed supported conventions; reference choices remain database-backed. The standard
+local example uses USD from the currency reference table with synthetic prices.
+Shared tables now guard row activation during selection/scrolling and use a single
+scroll container for schedule inspection.
+The managed core additionally validates calendar-based and quantity-weighted
+rules; those need persisted authoring before booking controls are exposed.
+Actual fixings, recurring payment strips, swap risk, physical products and PPAs
+remain work. Current shock controls support futures only.
+FixedSide and FloatingSide now independently generate and value their own
+schedules through Side.PV. Each side currently has one payment; payment/delivery
+dates and DFs can differ. Side results retain normalized unit quantities, lookup
+terms/weights, prices/lineage, exact cash/PV and discount construction evidence.
+Instrument.PV only sums membership-signed side PVs under one full context; trade
+quantity scales afterward. Recurring periods and actual fixings remain work; the browser inspector
+now exposes the actual valued payment and reset rows. Options retain explicit sibling references
+and distinct base/final valuation modes; the exercise-control accounting choice
+in O13 is still open and no option model is enabled.
+The instrument editor uses vertical side fields, separated from trade-level
+booking terms. Future multi-side editors align corresponding fields; delivery
+start/end and currency may initialize only unset counterpart fields during entry,
+without a copy button. Each value stays editable and later changes do not overwrite
+the other side. Fixed/floating entry is implemented; persistent cross-side linking is not.
+Fee implementation is deferred: individual-execution and grouped-position fees
+need explicit calculation scope, periods, netting, tiers and allocation. Expected
+charges, statement evidence, adjustments and payments remain distinct; missing fee
+coverage is unknown. No unsupported fee controls or assumed rates are exposed.
+Reconciliation reporting and published closes follow supported financial/lifecycle
+contracts. Existing execution-P&L diagnostics remain gross and exclude fees.
+
+Amount precision is now scoped to shared current deal presentation, with separate
+trade/fixed/floating role policies and optimistic version checks. The Profile
+precision fields are removed and old browser values are ignored. Futures prices
+retain tick-derived decimal formatting; calculation precision and contractual
+cash rounding remain explicit, separate policies. These controls persist on the
+deal's role, not the reusable economic side identity.
+Money/Quantity/UnitPrice
+support formatted text with exact-reference labels. Reference data includes a
+quantity-conversion consumer over common energy, power, volume and mass units;
+exact ratios and final explicitly selected rounding stay in the managed backend.
+Physical gas heating-value, density and power-duration conversions remain separate
+future consumers. Supplemental unit catalogs preserve existing market/trade pins.
+
 The standalone [power TOU preview](power-preview.md) now connects editable masks
 to actual selected curve contracts and synthetic flat settlements. It qualifies
 current-input calculations, explicit clock captures and fixed-MW integration;
 durable TOU/product publication and historical clock selection remain work.
+The next quantity entry contract supports explicit total MWh and flat MW choices.
+It must retain side delivery/allocation rules and typed generated quantities,
+preserve total energy through interval allocation, and reject missing conversion
+context. The unsaved preview now provides total-MWh entry with explicit flat-rate
+allocation and exact interval quantities alongside flat-MW integration. Independent
+checks cover DST, TOU/holidays, signed quantities, conservation, incompatible
+references, cash rounding and overflow. Booked-side rate integration remains work.
+Legal-entity/counterparty editors now append immutable versions through separate
+party permissions, with retained history, optimistic conflicts and safe retries.
+Trader attribution must also be linked to actual scoped human
+users; the current independent synthetic trader rows do not satisfy D117.
 
 The initial reference-data schema and disposable database checks are implemented.
 The first local market-data slice now also implements commodity curve building,
@@ -28,8 +149,8 @@ limits. It is not a promise to deliver all future capabilities in one commit.
 
 The next settlement/roll/risk acceptance cases and current coverage are explicit in
 [business scenarios](business-scenarios.md). They distinguish existing expiry/roll
-primitives from unimplemented fixing selection, variation margin and a reusable
-scenario engine; planned cases are not counted as passing tests.
+primitives and the bounded shared scenario engine from unimplemented fixing
+selection and variation margin; planned cases are not counted as passing tests.
 
 Read [the architecture](architecture.md) and [decision record](decisions.md) for
 the contracts these milestones must preserve.
@@ -41,7 +162,7 @@ remaining limits are recorded in
 [implemented scope](implementation.md#shared-historical-market-view-and-administration).
 Workspace identity/role administration and atomic access audit are implemented
 in the loopback preview. Production credential integration, initial-admin bootstrap,
-durable curve activation, future trade/lifecycle history and failover/restore
+durable curve activation, broader trade lifecycle history and failover/restore
 qualification remain work. Exact legacy input editing stays a separately labeled
 mode and does not claim timestamp certification.
 
@@ -552,3 +673,10 @@ target. Document what was run and what remains unverified.
 
 Architecture notes are living contracts. Update them when implementation evidence
 changes a proposal, and retain the compatibility consequences of the decision.
+
+The bounded [exchange futures example](exchange-futures.md) extends executable
+booking, amendment, execution P&L and open shocks to explicitly resolved physical,
+variable-lot and quoted-basis contracts. Nineteen sourced product families and one
+synthetic calendar-day control cover 113 dated definitions. Full settlement,
+variation margin, physical delivery and production data activation remain exit
+criteria before a broader futures lifecycle claim.

@@ -18,18 +18,18 @@ internal static class PowerCurveChecks
         var request=new CurveRequest(f.C("power_all_in"),f.K(5));
         Check("declared negative outright price stays negative without a floor",()=>{
             var build=model.Build(snapshot,[request]);
-            Equal(build.Values[0].Value.ToString(),"-5.125");Equal(build.EvaluatedConstituents,1);
+            Equal(build.Values[0].Price.Value.ToString(),"-5.125");Equal(build.EvaluatedConstituents,1);
         });
         Check("negative locational basis can make the derived power price negative",()=>{
             var changed=original with {Selections=original.Selections.Select(s=>s.Input.Series==f.S(5)
                 ?s with {Observation=s.Observation with {Value=ExactDecimal.Parse("-40")}}:s).ToImmutableArray()};
-            Equal(model.Build(changed,[new(f.C("local_power"),f.K(5))]).Values[0].Value.ToString(),"-12.9");
+            Equal(model.Build(changed,[new(f.C("local_power"),f.K(5))]).Values[0].Price.Value.ToString(),"-12.9");
         });
         Check("an outright power mark has no inferred gas exposure even when negative",()=>{
             var changed=snapshot with {Selections=snapshot.Selections.Select(s=>s.Input.Series==f.S(1)
                 ?s with {Observation=s.Observation with {Value=ExactDecimal.Parse("3.1")}}:s).ToImmutableArray()};
             var result=model.Build(changed,[new(f.C("local_power"),f.K(5)),request]);
-            Equal(result.Values[0].Value.ToString(),"29.8");Equal(result.Values[1].Value.ToString(),"-5.125");
+            Equal(result.Values[0].Price.Value.ToString(),"29.8");Equal(result.Values[1].Price.Value.ToString(),"-5.125");
         });
         Check("negative power price preserves exact signed monetary amounts",()=>{
             var quote=f.Quotes.Single(q=>q.Key==f.R("power_out"));

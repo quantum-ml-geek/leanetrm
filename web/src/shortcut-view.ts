@@ -1,5 +1,6 @@
 import {displayDate,displayInstant,publicText} from './market-view.js';
 import {renderRegularTable} from './regular-table.js';
+import {zonedInput} from './user-time.js';
 
 type DateRole='delivery_start'|'delivery_end'|'last_trading';
 type Shortcut={name:string;symbol:string;curve:string;position:number;dateRole:DateRole};
@@ -8,7 +9,7 @@ type Entry={contractId:string;ordinal:number;label:string;eligibleFrom:string;ro
 type Source={curve:string;from:string;to:string;exampleAt:string;entries:Entry[]};
 type Library={sources:Source[];shortcuts:Shortcut[]};
 type Resolution={symbol:string;sequence:{code:string};position:number;contractId:string;date:string;dateRole:DateRole;valuationAt:string};
-type Operations={load:()=>Promise<Library>;preview:(draft:Draft)=>Promise<Resolution>;keep:(draft:Draft)=>Promise<Shortcut>;resolve:(body:{symbol:string;at:string})=>Promise<Resolution>};
+type Operations={time:<T>(path:string,body?:unknown)=>Promise<T>;load:()=>Promise<Library>;preview:(draft:Draft)=>Promise<Resolution>;keep:(draft:Draft)=>Promise<Shortcut>;resolve:(body:{symbol:string;at:string})=>Promise<Resolution>};
 
 export function dateRoleName(role:string){
   const name=({delivery_start:'Delivery start',delivery_end:'Delivery end · not included',last_trading:'Last trading date'} as Record<string,string>)[role];
@@ -52,7 +53,7 @@ export function scheduleErrorMessage(code:string):string|undefined{
     shortcut_missing:'Choose a shortcut kept in this demo user’s preview session.',
     sequence_source:'Choose a configured futures schedule. Missing eligibility rules are never inferred.',
     sequence_definition:'This source has incomplete or conflicting contract dates. Its schedule must be corrected before use.',
-    sequence_context:'Choose an explicit date and time in UTC.',
+    sequence_context:'Choose an explicit date and time in your display time zone.',
     sequence_coverage:'Choose a test time within the source schedule’s displayed coverage range.',
     sequence_horizon:'There are not enough remaining contracts for that position at this time.',
     sequence_ineligible:'The expected contract is not yet eligible for trading. A later contract cannot take its place.',
@@ -68,7 +69,7 @@ export function setupShortcutEditor(run:(work:()=>Promise<void>)=>Promise<void>,
   const el=<K extends keyof HTMLElementTagNameMap>(tag:K,text?:string)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=publicText(text);return n;};
   let library:Library={sources:[],shortcuts:[]};
   let displayed:Resolution|undefined;
-  let exactAt:string|undefined;
+  const timeInput=zonedInput(get<HTMLInputElement>('schedule-at'),zone,operations.time);
   const source=()=>library.sources.find(s=>s.curve===value('schedule-source'));
   function clear(){displayed=undefined;get('schedule-output').hidden=true;get('schedule-summary').textContent='Preview the shortcut to see the contract and date it returns.';}
   form.addEventListener('input',clear);form.addEventListener('change',clear);
@@ -99,8 +100,8 @@ export function setupShortcutEditor(run:(work:()=>Promise<void>)=>Promise<void>,
     options[0].value='';get('schedule-source').replaceChildren(...options);set('schedule-source',library.sources.some(s=>s.curve===selected)?selected:'');
     get('schedule-unavailable').hidden=library.sources.length>0;renderSource();renderSaved();
   }
-  const draft=():Draft=>({name:value('schedule-name'),symbol:value('schedule-symbol'),curve:value('schedule-source'),
-    position:Number(value('schedule-position')),dateRole:value('schedule-date-role') as DateRole,at:exactAt??new Date(value('schedule-at')+'Z').toISOString()});
+  const draft=async():Promise<Draft>=>({name:value('schedule-name'),symbol:value('schedule-symbol'),curve:value('schedule-source'),
+    position:Number(value('schedule-position')),dateRole:value('schedule-date-role') as DateRole,at:await timeInput.instant()});
   function render(result:Resolution){
     const selected=source();if(!selected)throw Error('Choose the source schedule.');
     const shown=resolutionDisplay(result,selected);
@@ -109,29 +110,29 @@ export function setupShortcutEditor(run:(work:()=>Promise<void>)=>Promise<void>,
     displayed=result;get('schedule-summary').textContent='Resolved by the shared schedule service.';get('schedule-output').hidden=false;
   }
   form.onsubmit=event=>{event.preventDefault();void run(async()=>{
-    clear();const input=draft();
+    clear();const input=await draft();
     const saved=library.shortcuts.some(s=>s.symbol===input.symbol&&s.name===input.name&&s.curve===input.curve&&s.position===input.position&&s.dateRole===input.dateRole);
     render(await(saved?operations.resolve({symbol:input.symbol,at:input.at}):operations.preview(input)));
   });};
   get('schedule-keep').onclick=()=>{
     if(isBusy()||!form.reportValidity())return;
-    void run(async()=>{clear();const input=draft();await operations.keep(input);await load();render(await operations.resolve({symbol:input.symbol,at:input.at}));});
+    void run(async()=>{clear();const input=await draft();await operations.keep(input);await load();render(await operations.resolve({symbol:input.symbol,at:input.at}));});
   };
   get('schedule-example').onclick=()=>void run(async()=>{
     if(!library.sources.length)await load();
     const example=library.sources.find(s=>s.curve==='future');if(!example)throw Error('This sample does not have a configured gas futures schedule.');
-    fill({name:'Gas prompt',symbol:'oe.ng1',curve:example.curve,position:1,dateRole:'delivery_start'});set('schedule-at',example.exampleAt.slice(0,16));exactAt=example.exampleAt;get('schedule-context-note').textContent='';
+    fill({name:'Gas prompt',symbol:'oe.ng1',curve:example.curve,position:1,dateRole:'delivery_start'});timeInput.set(example.exampleAt);get('schedule-context-note').textContent='';
   });
   get('schedule-source').onchange=renderSource;
-  for(const event of ['input','change'])get('schedule-at').addEventListener(event,()=>{exactAt=undefined;get('schedule-context-note').textContent='';});
+  for(const event of ['input','change'])get('schedule-at').addEventListener(event,()=>{get('schedule-context-note').textContent='';});
   for(const id of ['schedule-before','schedule-at-boundary'])get(id).onclick=()=>{
     const entry=source()?.entries.find(e=>e.contractId===value('schedule-boundary'));
     if(isBusy()||!entry)return;
-    exactAt=id==='schedule-before'?entry.beforeExpiryAt:entry.rollAt;
-    set('schedule-at',exactAt.slice(0,16));get('schedule-context-note').textContent=id==='schedule-before'?'Immediately before the recorded expiry instant.':'Using the exact recorded expiry instant.';clear();form.requestSubmit();
+    timeInput.set(id==='schedule-before'?entry.beforeExpiryAt:entry.rollAt);
+    get('schedule-context-note').textContent=id==='schedule-before'?'Immediately before the recorded expiry instant.':'Using the exact recorded expiry instant.';clear();form.requestSubmit();
   };
-  return {load,refresh(){renderSource();if(displayed)render(displayed);},reset(){
-    library={sources:[],shortcuts:[]};exactAt=undefined;form.reset();clear();get('schedule-context-note').textContent='';get('schedule-source-panel').hidden=true;
+  return {load,refresh(){timeInput.refresh();renderSource();if(displayed)render(displayed);},reset(){
+    library={sources:[],shortcuts:[]};timeInput.clear();form.reset();clear();get('schedule-context-note').textContent='';get('schedule-source-panel').hidden=true;
     const placeholder=el('option','Choose a source schedule…');placeholder.value='';get('schedule-source').replaceChildren(placeholder);
     get('schedule-saved').replaceChildren();get('schedule-contracts').replaceChildren();get('schedule-saved-empty').hidden=false;
   }};
