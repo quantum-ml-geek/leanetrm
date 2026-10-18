@@ -16,6 +16,25 @@ ALTER TABLE market_data.rate_curves ADD COLUMN name text
 ALTER TABLE market_data.rate_curves ALTER COLUMN name SET NOT NULL;
 ALTER TABLE market_data.rate_curves ADD UNIQUE (catalog_id, revision_id, name);
 
+-- A curve code keeps one display name across every revision of its catalog (commodity
+-- and rate curves share one code space), so screens can name a code without a revision.
+-- Checked as the security owner so rows hidden from the writer still count, and
+-- serialized per code so concurrent drafts cannot both introduce a name. Runtime
+-- writers can only insert curve rows.
+CREATE FUNCTION market_data.guard_curve_name() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+BEGIN
+ PERFORM pg_advisory_xact_lock(hashtextextended('curve_name:'||NEW.catalog_id::text||':'||NEW.code,0));
+ IF EXISTS(SELECT 1 FROM market_data.curves c WHERE c.catalog_id=NEW.catalog_id AND c.code=NEW.code AND c.name<>NEW.name)
+   OR EXISTS(SELECT 1 FROM market_data.rate_curves r WHERE r.catalog_id=NEW.catalog_id AND r.code=NEW.code AND r.name<>NEW.name) THEN
+   RAISE EXCEPTION 'Curve % already has a different display name in this catalog', NEW.code USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END; $$;
+ALTER FUNCTION market_data.guard_curve_name() OWNER TO openetrm_security_owner;
+REVOKE ALL ON FUNCTION market_data.guard_curve_name() FROM PUBLIC;
+CREATE TRIGGER guard_curve_name BEFORE INSERT ON market_data.curves FOR EACH ROW EXECUTE FUNCTION market_data.guard_curve_name();
+CREATE TRIGGER guard_curve_name BEFORE INSERT ON market_data.rate_curves FOR EACH ROW EXECUTE FUNCTION market_data.guard_curve_name();
+
 ALTER TABLE security.roles ADD COLUMN name text
   CHECK (name = btrim(name) AND name <> '' AND length(name) <= 80) UNIQUE;
 UPDATE security.roles SET name = CASE code

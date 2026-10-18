@@ -366,3 +366,22 @@ reads and calendar evaluation. Exact accepted-command replay retains its control
 semantics. Discount-default resolution also checks the selected reference and
 market-definition visibility in historical contexts. Existing owners and ACLs
 remain unchanged; stop/drain runtime calls before upgrading.
+
+## Display names, authored TOU products and schedule calendars
+
+[0026_display_names.sql](migrations/0026_display_names.sql) stores a display name
+on every commodity and rate curve and on each role template. A curve code keeps
+one name across all revisions of its catalog. Existing curve rows have no
+defined name, so the migration refuses a database that already holds curves;
+such an installation needs a verified naming migration first. Stop/drain runtime
+calls before upgrading.
+
+[0027_tou_products.sql](migrations/0027_tou_products.sql) replaces fixed TOU
+choices with authored products: editors save drafts and approvers publish
+immutable versions bound to an exact sealed clock rule. Readers see published
+versions only, and power previews pin the product version they price.
+
+[0028_schedule_calendars.sql](migrations/0028_schedule_calendars.sql) binds each
+date-schedule version to an exact sealed holiday calendar from a reference
+catalog the writer can access. The weekend mask uses ISO 8601 bits (bit 0 is
+Monday). Draft schedule versions are hidden from readers.
