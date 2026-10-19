@@ -100,7 +100,9 @@ export async function run({command,evaluate,wait,click,set,submit,persona,check,
   await check('a resized column keeps its width when the grid is redrawn for a new size',`${resizedWidth}>=140&&${bookWidth}===${resizedWidth}`);
   await set('#futures-holdings .table-search','Jan');await menu('blotter-settings');await set('#blotter-name','Book A review');await click('#blotter-save');
   await check('named view saves selected books columns and row filters',"document.querySelector('#blotter-saved').value==='Book A review'&&document.querySelector('#error').hidden");
-  await check('account save captures resized columns and a non-default visual order',"(()=>{const v=window.__futuresResponses.filter(r=>r.path==='/api/table-views/blotter'&&r.data.layout).at(-1).data.layout;return v.grid.widths.book>=140&&v.grid.order.indexOf('book')>v.grid.order.indexOf('market');})()");
+  const savedGrid="window.__futuresResponses.filter(r=>r.path==='/api/table-views/blotter'&&r.data.layout).at(-1).data.layout.grid";
+  await check('account save captures a resized column width',`${savedGrid}.widths.book>=140`,savedGrid);
+  await check('account save captures a non-default visual order',`(g=>g.order.indexOf('book')>g.order.indexOf('market'))(${savedGrid})`,savedGrid);
   const savedBefore=await evaluate("window.__futuresResponses.filter(r=>r.path==='/api/table-views/blotter'&&r.data.layout).at(-1).data");
   let sideToken='',sideCookie='';const cookies=new Map();
   async function sideApi(path,body){
