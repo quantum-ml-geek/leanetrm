@@ -139,10 +139,10 @@ public sealed partial class SwarmGateway
                     User = "1654:1654",
                     ReadOnly = true,
                     StopGracePeriod = 10000000000L,
-                    CapDrop = new[] { "ALL" },
+                    CapabilityDrop = new[] { "ALL" },
                     Privileges = new { NoNewPrivileges = true },
                     Labels = labels,
-                    Mounts = new[] { new { Type = "tmpfs", Target = "/tmp", TmpfsOptions = new { SizeBytes = 16777216, Mode = 448 } } }
+                    Mounts = new[] { new { Type = "tmpfs", Target = "/tmp", TmpfsOptions = new { SizeBytes = 16777216, Mode = 1023 } } }
                 },
                 Resources = new { Limits = new { NanoCPUs = p.GetProperty("cpu_nano").GetInt64(), MemoryBytes = p.GetProperty("memory_bytes").GetInt64(), Pids = p.GetProperty("process_limit").GetInt32() } },
                 RestartPolicy = new { Condition = "none" },
@@ -175,7 +175,7 @@ public sealed partial class SwarmGateway
             "/TaskTemplate/ContainerSpec/Init" => value is null || value.ToJsonString() == "false",
             "/TaskTemplate/ContainerSpec/Command" or "/TaskTemplate/ContainerSpec/Args" or "/TaskTemplate/ContainerSpec/Env" or
             "/TaskTemplate/ContainerSpec/Groups" or "/TaskTemplate/ContainerSpec/Secrets" or "/TaskTemplate/ContainerSpec/Configs" or
-            "/TaskTemplate/ContainerSpec/CapAdd" or "/TaskTemplate/ContainerSpec/Hosts" or "/TaskTemplate/ContainerSpec/Ulimits" or
+            "/TaskTemplate/ContainerSpec/CapabilityAdd" or "/TaskTemplate/ContainerSpec/Hosts" or "/TaskTemplate/ContainerSpec/Ulimits" or
             "/TaskTemplate/Placement/Preferences" or "/TaskTemplate/Placement/Platforms" or "/TaskTemplate/Networks[]/Aliases" or "/EndpointSpec/Ports"
                 => value is null || value is JsonArray a && a.Count == 0,
             "/TaskTemplate/Resources/Reservations" or "/TaskTemplate/Networks[]/DriverOpts" or "/TaskTemplate/ContainerSpec/Sysctls"

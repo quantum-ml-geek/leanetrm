@@ -191,6 +191,19 @@ API's eligible nodes must exclude those control roles when separate placement is
 required. The template creates no database, application, workload network or
 host-maintenance access and does not migrate the existing hosted Compose release.
 
+When a separately placed scheduler cannot join the database's local bridge,
+`deploy/openetrm-worker-database-proxy.service` provides an optional installation
+transport using the operating system's `socat` package. Its root-owned environment
+file must supply an exact private listener address/port, permitted worker address
+and database container address. Bind it only to an authenticated private tunnel;
+never a public or wildcard address. It forwards opaque TCP bytes without TLS
+termination or database credentials. The worker still requires PostgreSQL
+`VerifyFull` TLS and its own restricted SCRAM login. Qualify the selected route,
+certificate identity and source-address restriction before use. Keep container
+identity/address checks in the private installation record; database replacement
+requires explicit transport review. This transport publishes no database container
+port and does not change Swarm node availability.
+
 ## Verification and remaining work
 
 The owned PostgreSQL checks exercise real migrations, identities, RLS, delegated

@@ -101,6 +101,9 @@ static class AutomationChecks
         handler.ServiceId = "syntheticservice0000000001";
         var container = handler.ServiceSpec!.RootElement.GetProperty("TaskTemplate").GetProperty("ContainerSpec");
         if (container.GetProperty("User").GetString() != "1654:1654" || !container.GetProperty("ReadOnly").GetBoolean() || !container.GetProperty("Privileges").GetProperty("NoNewPrivileges").GetBoolean()) throw new Exception("Workload isolation was weakened");
+        if(container.GetProperty("CapabilityDrop")[0].GetString()!="ALL" ||
+            container.GetProperty("Mounts")[0].GetProperty("TmpfsOptions").GetProperty("Mode").GetInt32()!=1023)
+            throw new Exception("The Engine task protocol must drop capabilities and permit bounded non-root temporary writes");
         await gateway.RemoveCompletedWorkload(claim with { LaunchPrepared = true, ServiceId = observed.ServiceId }, CancellationToken.None);
         var uncertain = await gateway.ReconcileWorkload(claim with { LaunchPrepared = true }, false, Authorize, CancellationToken.None);
         if (uncertain.State != "unknown" || handler.Creates != 1) throw new Exception("A missing admitted service was launched a second time");
