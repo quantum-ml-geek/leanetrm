@@ -36,6 +36,14 @@ and a pinned local pull operator; schema and infrastructure changes require a
 separate qualified baseline (D135). Hosted authentication and collection boundaries are described
 in [hosted pilot operations](hosted-pilot.md); the synthetic local preview stays isolated.
 
+The public buildless homepage lives in `site/`, separately from the authenticated
+workspace assets. The hosted gateway serves only its exact homepage and two public
+assets; `/app` forwards to the application's native root with its query intact.
+Only successful sign-in redirects to that native root are rewritten to `/app`.
+All other application and API paths retain the authenticated upstream routing.
+The site and gateway configuration require a separately reviewed installation;
+the application-image updater does not deploy them (D163).
+
 Schema releases retain the immutable reference-intake migration before the
 durable-job and Swarm migrations (D141). Import and scheduling executor roles
 remain independent; an image update cannot silently adopt a different schema.
@@ -147,7 +155,7 @@ Logical modules:
 
 Presentation uses familiar business names. Market data provides futures and
 forward curves with commodity-first or market-type-first browsing. A compact
-market date/time selector sits in the header; user profiles hold time zone and
+market-close calendar sits in the header (D162); user profiles hold time zone and
 other remembered display preferences. Minutes are enough for ordinary display;
 exact retained instants and selected versions remain unchanged underneath. Repeated
 local clock times must remain distinguishable, for example by showing an offset
@@ -206,6 +214,13 @@ application service and standard PostgreSQL. Exact dependency versions are chose
 and pinned during setup. A separate native calculation service is not required
 for the first slice. A measured bottleneck can justify moving an implementation
 behind the existing calculation contract later.
+
+Custom curve authoring uses a typed graph shared by visual and formula editors
+(D161). Exact source and date-reference bindings are persisted as normalized
+foreign keys; calculation uses immutable multi-date typed inputs and returns
+exact rational prices with observation and factor lineage. A qualified SQL
+transformation may aggregate only its supplied panel. The initial workspace and
+its explicit limits are described in [custom curves](custom-curves.md).
 
 Add a table, configuration value or dependency only with a named current consumer
 or a concrete executable baseline use case. A seed row or a viewer alone is not

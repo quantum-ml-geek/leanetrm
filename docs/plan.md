@@ -3,10 +3,32 @@
 Status: design baseline approved for implementation on 2026-10-16. Milestone 0 is complete; no
 application implementation milestones below are complete.
 
+The local custom-curve workspace implements typed visual graphs, formula
+roundtrips, exact multi-date sampling, explicit date/schedule references and
+separate save/publish operations (D161). Prompt, inclusive daily-forward BALMO
+and per-tenor historical-average templates have executable synthetic consumers.
+A registered panel-only SQL mean shares the exact units/lineage contract.
+[Custom curves](custom-curves.md) records the supported policies and limits.
+Integration into booked instruments, cross-revision rolling histories and
+historical VaR/covariance remain later work.
+
+The header's As of calendar qualifies available exact snapshots through the
+managed backend (D162), including all inputs of a custom graph's history window.
+It disables unavailable dates, preserves the user's display zone and requires an
+explicit choice among multiple closes or saved versions. Changing only the
+snapshot preserves the active custom graph and clears its old calculations.
+
 The [verification workflow](verification.md) now defines a single local/CI command
 covering the existing managed, frontend, database and browser suites. The complete
 command passed on the Ubuntu 24.04 hosted runner on 2026-10-17; verification
 records the exact run and environment. Production deployment remains unqualified.
+
+The public landing source and hosted gateway route contract are available
+separately from the authenticated workspace (D163). An owned nginx check exercises
+static routes, native application routing and a synthetic sign-in upstream.
+This is gateway routing qualification, not verification of a real installation's
+identity service or authorization. Landing/gateway activation remains an explicit
+operator step outside automatic application-image updates.
 
 The implemented trading workspace now has a shared Blotter with individual trade
 rows, managed pivots, account-saved layouts, exact-data exports and shared charts.

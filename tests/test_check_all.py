@@ -47,6 +47,8 @@ class CheckAllTests(unittest.TestCase):
         self.assertTrue(any('tools/check_automation.py' in c and '--dotnet' in c for c in commands))
         self.assertIn(['node','--test','tests/browser/owned-browser.test.mjs'],commands)
         self.assertTrue(any('--execution-check' in c for c in commands))
+        self.assertTrue(any('--custom-curves-check' in c and '--browser-check' in c for c in commands))
+        self.assertTrue(any('--market-dates-check' in c and '--browser-check' in c for c in commands))
         self.assertTrue(any('--jobs-check' in c and '--browser-check' in c for c in commands))
         for command in commands:
             if '--pg-bin' in command:

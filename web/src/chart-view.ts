@@ -1,6 +1,6 @@
 import {init,type Chart} from './vendor/echarts.js';
 import {publicText} from './market-view.js';
-export type ChartSpec={title:string;subtitle?:string;axis:'delivery'|'observation'|'maturity'|'category';unit:string;exportImage?:(download:()=>void)=>void;kind?:'line'|'bar';series:{name:string;points:{x:string;y:string|null;label?:string}[]}[]};
+export type ChartSpec={title:string;subtitle?:string;axis:'delivery'|'observation'|'maturity'|'category';axisName?:string;unit:string;exportImage?:(download:()=>void)=>void;kind?:'line'|'bar';series:{name:string;points:{x:string;y:string|null;label?:string}[]}[]};
 const palette=['#256b52','#bf7142','#416da5','#9671ad','#9a8530','#4b8996'];
 const escape=(value:string)=>value.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
 export function chartOptions(spec:ChartSpec){
@@ -17,7 +17,7 @@ export function chartOptions(spec:ChartSpec){
       const series=spec.series[item.seriesIndex],category=categories[item.dataIndex],point=series.points.find(p=>p.x===category);
       return escape(publicText(`${point?.label??category} · ${series.name}: ${point?.y??'Unavailable'} ${spec.unit}`));
     }).join('<br>')},
-    xAxis:{type:'category',name:spec.axis==='delivery'?'Delivery period':spec.axis==='maturity'?'Maturity date':spec.axis==='observation'?'Observation date':'Book',nameLocation:'middle',nameGap:30,data:categories,axisLine:{lineStyle:{color:'#b7c8b0'}},axisPointer:{label:{formatter:(p:{value:string})=>categoryLabel(String(p.value))}},axisLabel:{color:'#6c7e63',fontSize:10,hideOverlap:true,formatter:categoryLabel}},
+    xAxis:{type:'category',name:spec.axisName??(spec.axis==='delivery'?'Delivery period':spec.axis==='maturity'?'Maturity date':spec.axis==='observation'?'Observation date':'Book'),nameLocation:'middle',nameGap:30,data:categories,axisLine:{lineStyle:{color:'#b7c8b0'}},axisPointer:{label:{formatter:(p:{value:string})=>categoryLabel(String(p.value))}},axisLabel:{color:'#6c7e63',fontSize:10,hideOverlap:true,formatter:categoryLabel}},
     yAxis:{type:'value',name:spec.unit,...(spec.axis==='category'?{nameLocation:'middle',nameRotate:90,nameGap:50}:{}),scale:spec.kind!=='bar',nameTextStyle:{color:'#607457'},axisLabel:{color:'#6c7e63',fontSize:10},splitLine:{lineStyle:{color:'#e8eee3'}}},
     dataZoom:[{type:'inside',filterMode:'none'},{type:'slider',labelFormatter:(_value:number,label:string)=>categoryLabel(label),height:16,bottom:10,borderColor:'#e1e8da',backgroundColor:'#f6f8f4',fillerColor:'#256b521a',handleStyle:{color:'#256b52'},moveHandleStyle:{color:'#256b52',opacity:.35},
       dataBackground:{lineStyle:{color:'#a9bea4'},areaStyle:{color:'#e3ece0'}},selectedDataBackground:{lineStyle:{color:'#256b52'},areaStyle:{color:'#256b5226'}},emphasis:{handleStyle:{color:'#1d5641'},moveHandleStyle:{color:'#256b52',opacity:.6}},textStyle:{color:'#6c7e63',fontSize:10}}],

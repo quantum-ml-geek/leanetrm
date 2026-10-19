@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from uuid import UUID, uuid5
 from preview_client import PreviewClient
-from seed_preview_positions import BOOKS, EXECUTIONS
+from seed_preview_positions import BOOKS, execution_frames
 from preview_fixture import CAT, REV, WORKSPACE
 from swap_fixture import REVISION
 
@@ -21,9 +21,7 @@ def seed_swaps(url, run_id, owned_root, client=None):
         raise ValueError('The application does not match the owner marker.')
     client.bootstrap(); client.call('profile', {'profile': 'trader'})
     workspace = client.call('workspace')
-    frames = [f for f in workspace['frames'] if f['id'] in workspace['initialFrameIds']]
-    if sorted(f['at'][:10] for f in frames) != [row[0] for row in EXECUTIONS]:
-        raise ValueError('Expected the four explicit weekday market dates.')
+    frames = execution_frames(workspace)
     choices = [('test_gas', REV, 'monthly_index_price', '3', BOOKS[0], True),
                ('test_power', REV, 'monthly_index_price', '40', BOOKS[1], True),
                ('test_gas', REVISION, 'calendar_day_arithmetic', '3', BOOKS[0], False),

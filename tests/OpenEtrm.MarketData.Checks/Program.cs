@@ -3,6 +3,8 @@ using OpenEtrm.MarketData;
 using OpenEtrm.Security;
 
 
+if(args is ["--custom-curves"]){CustomCurveChecks.Run();return;}
+
 if (args.Length > 0)
 {
     if(args is ["--risk-benchmark",var output]){RiskBenchmark.Run(output);return;}
@@ -23,6 +25,7 @@ if (args.Length > 0)
 }
 
 PowerHoursChecks.Run();
+CustomCurveChecks.Run();
 var passed = 0;
 void Check(string label, Action run) { run(); passed++; Console.WriteLine($"PASS {label}"); }
 void Equal<T>(T actual, T expected) where T : notnull

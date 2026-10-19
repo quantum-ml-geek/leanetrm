@@ -51,6 +51,8 @@ def run_checks(pg_bin, dotnet, browser, *, run=subprocess.run):
     check('isolated page-assistant administration', [*preview, '--assistant-check'])
     check('isolated units and deal precision browser', [*preview, '--unit-check', '--browser-check', '--browser', str(browser)])
     check('standard futures execution policies', [*preview, '--execution-check'])
+    check('custom curve graphs and editor', [*preview, '--custom-curves-check', '--browser-check', '--browser', str(browser)])
+    check('market close calendar', [*preview, '--market-dates-check', '--browser-check', '--browser', str(browser)])
     check('isolated exchange futures browser', [*preview, '--exchange-check', '--browser-check', '--browser', str(browser)])
     check('isolated hosted authentication and browser', [*preview, '--hosted-check', '--browser-check', '--browser', str(browser)])
     check('isolated jobs and infrastructure browser', [*preview, '--jobs-check', '--browser-check', '--browser', str(browser)])

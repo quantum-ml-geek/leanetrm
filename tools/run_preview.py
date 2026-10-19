@@ -35,6 +35,9 @@ def main():
     parser.add_argument('--booking-check',action='store_true',help='Qualify backend-owned immutable trade booking facts')
     parser.add_argument('--unit-check', action='store_true', help='Run amount/unit integration checks in the owned standard fixture')
     parser.add_argument('--execution-check',action='store_true',help='Qualify standard futures execution policies in an owned synthetic fixture')
+    parser.add_argument('--custom-curves-check',action='store_true',help='Qualify custom curve definitions and calculations in an owned synthetic fixture')
+    parser.add_argument('--market-dates-check',action='store_true',help='Qualify scoped market-close availability and the calendar in an owned fixture')
+    parser.add_argument('--with-custom-curves',action='store_true',help='Load synthetic monthly and daily NG panels for the custom curve editor')
     parser.add_argument('--exchange-check',action='store_true',help='Qualify the independent exchange futures dataset')
     parser.add_argument('--with-exchange',action='store_true',help='Publish the independent exchange futures dataset in this newly owned database')
     parser.add_argument('--party-check', action='store_true', help='Run party-editor integration checks in an owned fixture')
@@ -44,7 +47,7 @@ def main():
     parser.add_argument('--browser',type=Path,help='Installed Chromium-compatible executable; used only with --browser-check')
     parser.add_argument('--example', choices=['standard','mixed-gas'], default='standard', help='Explicit synthetic dataset')
     args = parser.parse_args()
-    if args.identity_check or args.unit_check or args.party_check or args.exchange_check or args.booking_check or args.draft_check or args.hosted_check or args.jobs_check or args.execution_check or args.assistant_check:
+    if args.identity_check or args.unit_check or args.party_check or args.exchange_check or args.booking_check or args.draft_check or args.hosted_check or args.jobs_check or args.execution_check or args.assistant_check or args.custom_curves_check or args.market_dates_check:
         args.check = True
         if args.example != 'standard' or args.identity_check and args.browser_check:
             parser.error('--identity-check requires the standard fixture without --browser-check')
@@ -54,6 +57,8 @@ def main():
         parser.error('Port must be between 0 and 65535')
     if args.browser_check and (not args.check or args.example!='standard' or args.browser is None or not args.browser.is_file()):
         parser.error('--browser-check requires --check, --example standard and an installed --browser executable')
+    if args.with_custom_curves and args.example!='standard':
+        parser.error('--with-custom-curves requires the standard fixture')
     bins = {n: args.pg_bin.resolve()/n for n in ('initdb','pg_ctl','psql')}
     dotnet = args.dotnet.resolve()
     for binary in [dotnet,*bins.values()]:
@@ -129,6 +134,9 @@ def main():
         if args.execution_check:
             from check_futures_execution import prepare as prepare_execution
             reference,market,manifest=prepare_execution(reference,market,manifest)
+        if args.custom_curves_check or args.with_custom_curves or args.market_dates_check:
+            from custom_curve_fixture import prepare as prepare_custom_curves
+            reference,market,manifest=prepare_custom_curves(reference,market,manifest)
         if args.hosted_check:
             from provision_hosted import prepare as prepare_hosted
             prepared=temporary/'fresh-pilot-check'
@@ -229,7 +237,23 @@ def main():
         print(f'PREVIEW_URL={url}',flush=True)
         print('Private synthetic database. Ctrl+C stops the app and removes its owned database.',flush=True)
         if args.check:
-            if args.execution_check:
+            if args.market_dates_check:
+                from check_market_dates import run_checks as check_market_dates
+                check_market_dates(url,query,manifest)
+                if args.browser_check:
+                    target=temporary/'browser-target.json'
+                    target.write_text(json.dumps({'suite':'business_browser_v1','url':url,'runId':run_id}))
+                    browser_process=subprocess.Popen(['node',str(ROOT/'tests/browser/run.mjs'),str(target),str(args.browser.resolve()),'--market-dates'],cwd=ROOT,env=env,start_new_session=True)
+                    if browser_process.wait(timeout=240):raise RuntimeError('Owned market date browser checks failed')
+            elif args.custom_curves_check:
+                from check_custom_curves import run_checks as check_custom_curves
+                check_custom_curves(url,query,manifest)
+                if args.browser_check:
+                    target=temporary/'browser-target.json'
+                    target.write_text(json.dumps({'suite':'business_browser_v1','url':url,'runId':run_id}))
+                    browser_process=subprocess.Popen(['node',str(ROOT/'tests/browser/run.mjs'),str(target),str(args.browser.resolve()),'--custom-curves'],cwd=ROOT,env=env,start_new_session=True)
+                    if browser_process.wait(timeout=180):raise RuntimeError('Owned custom curve browser checks failed')
+            elif args.execution_check:
                 from check_futures_execution import run_checks as check_execution
                 check_execution(url,query,manifest)
             elif args.jobs_check:
