@@ -151,6 +151,8 @@ def run_checks(url,query,manifest,direct_reads):
     check_trade_valuation_scope(c,check,query)
     from check_trading_pin_reads import run_checks as check_trading_pin_reads
     check_trading_pin_reads(c,check,query,manifest)
+    from check_trading_compression import run_checks as check_trading_compression
+    check_trading_compression(c,check,query,manifest)
     from check_risk_preview import run_checks as check_risk
     check_risk(Client,check)
     from check_tou_products import run_checks as check_tou_products
