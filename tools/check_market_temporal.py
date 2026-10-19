@@ -18,6 +18,12 @@ def run_checks(Client, check):
     changed = c.call('corrections', {'snapshotId': seed['id'], 'observationId': oid, 'value': '3.2'})
     c.call('market/context', {**request, 'mode': 'at', 'knownAt': context['knownAt']})
     historical = c.call('workspace')
+    retained_boot = c.call('bootstrap')
+    compact_boot = c.call('bootstrap?includeFrames=false')
+    check('compact bootstrap preserves the selected historical context and its exact filtered frames',
+          compact_boot['frames'] == [] and retained_boot['frames'] == c.call('bootstrap')['frames'] and
+          bool(retained_boot['frames']) and all(f['contextId'] == historical['context']['contextId'] for f in retained_boot['frames']) and
+          c.call('workspace')['context'] == historical['context'])
     check('historical workspace omits later corrections and later observation dates', changed['observationId'] not in [o['id'] for o in historical['observations']] and all(o['observed_at'][:10] <= '2020-12-17' for o in historical['observations']))
     sources = c.call('evaluate', {'snapshotId': frame['id'], 'curve': 'local_power', 'includeSources': True})
     check('on-demand sources retain the certified cutoff without leaking later corrections',

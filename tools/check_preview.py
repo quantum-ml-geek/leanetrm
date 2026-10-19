@@ -14,6 +14,13 @@ def run_checks(url,query,manifest,direct_reads):
         print('PASS '+name,flush=True)
     c=Client();boot=c.bootstrap()
     check('synthetic preview boundary is explicit',boot['mode']=='local-synthetic-preview' and boot['profile'] is None)
+    compact=c.call('bootstrap?includeFrames=false')
+    check('identity bootstrap can omit unused frame payload without changing session metadata',compact['frames']==[] and
+          all(compact[key]==boot[key] for key in ['mode','runId','profiles','profile','customProfiles','catalogId','tenantId','workspaceId']) and
+          bool(compact['csrfToken']) and bool(boot['frames']))
+    check('full bootstrap remains compatible and compact reads preserve exact retained frames',
+          c.call('bootstrap?includeFrames=true')['frames']==boot['frames']==c.call('bootstrap')['frames'])
+    c.call('bootstrap?includeFrames=unknown',expected=400);check('invalid bootstrap frame selection is rejected')
     c.call('workspace',expected=403);check('no identity does not read workspace')
     c.call('workspace/catalog',expected=403);check('navigation catalog requires current identity')
     c.call('reference/catalog?table=currencies',expected=403);check('reference pages require current identity')
@@ -25,6 +32,9 @@ def run_checks(url,query,manifest,direct_reads):
     workspace=c.call('workspace')
     check('database timestamp transport stays UTC under a non-UTC API environment',all(m.get('event_at') is None or m['event_at'].endswith('+00:00') for m in workspace['references']['futures_milestones']))
     check('viewer reads real catalog and exact input frames',len(workspace['definitions']['curves'])==10 and len(workspace['frames'])==4)
+    compact=c.call('bootstrap?includeFrames=false')
+    check('compact identity bootstrap retains the selected profile and authorized workspace pins',compact['profile']=='viewer' and
+          c.call('workspace/catalog')['frames']==workspace['frames'])
     named=workspace['definitions']['curves']+workspace['definitions']['rate_curves']
     directory=c.call('curve-names')
     check('the curve-name directory serves stored names for every catalog curve, including other bundles',{v['code'] for v in named}<={d['code'] for d in directory} and {'daily_gas','daily_power'}<={d['code'] for d in directory} and all(d['name'] for d in directory))
@@ -125,6 +135,8 @@ def run_checks(url,query,manifest,direct_reads):
     check_power(Client,check)
     from check_futures_preview import run_checks as check_futures
     check_futures(Client,check)
+    from check_trading_directory import run_checks as check_trading_directory
+    check_trading_directory(c,check,query,manifest)
     from check_risk_preview import run_checks as check_risk
     check_risk(Client,check)
     from check_tou_products import run_checks as check_tou_products

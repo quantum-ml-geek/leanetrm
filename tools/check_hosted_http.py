@@ -131,6 +131,7 @@ def run_checks(root, manifest, query, dotnet, dll, environment, browser=None, co
             query('DROP TABLE public.hosted_ownership_probe;')
         api = start()
         anonymous = Client(); anonymous.call('/', expected=302); anonymous.call('/api/bootstrap', expected=401)
+        anonymous.call('/api/bootstrap?includeFrames=false', expected=401)
         anonymous.call('/api/profile', {'profile':'admin'}, expected=401)
         anonymous.call('/api/bootstrap', headers={'X-User': 'admin', 'X-Forwarded-User': 'admin'}, expected=401)
         for _ in range(15):
@@ -141,6 +142,10 @@ def run_checks(root, manifest, query, dotnet, dll, environment, browser=None, co
         client.login('', password, '/auth?failed=1')
         client.login('invalid', password)
         boot = client.bootstrap(); assert boot['profile'] == first and boot['mode'] == 'hosted-pilot' and len(boot['profiles']) == 1
+        compact, _ = client.call('/api/bootstrap?includeFrames=false')
+        assert compact['frames'] == [] and compact['profile'] == first and compact['profiles'] == boot['profiles']
+        retained, _ = client.call('/api/bootstrap')
+        assert retained['frames'] == boot['frames']
         assert all(cookie.secure for cookie in client.cookies)
         client.call('/api/profile', {'profile': 'admin'}, expected=403)
         client.call('/api/admin/create', {'operationId': str(uuid4()), 'login': 'forged', 'name': 'Forged', 'kind': 'human', 'roles': ['access_administrator']}, expected=403)

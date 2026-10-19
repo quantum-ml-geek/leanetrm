@@ -9,7 +9,7 @@ export async function run({command,evaluate,wait,click,set,submit,persona,check,
     if(path==='/api/futures/book'&&window.__rejectAdmissionBooking){(window.__admissionBookCommands??=[]).push(JSON.parse(args[1].body));return window.__unknownBookingOutcome?new Response('Synthetic unconfirmed response',{status:502}):new Response(JSON.stringify({code:'futures_execution_policy'}),{status:422,headers:{'Content-Type':'application/json'}});}
     const response=await window.__admissionSend(...args);
     if(path!=='/api/trading/workspace'||!response.ok)return response;
-    const data=await response.json();window.__sourceFirstTrading=data.catalog.contracts[0].firstTrading;
+    const data=await response.json();if(data.catalog.kind!=='priced_contracts')return new Response(JSON.stringify(data),{status:200,headers:{'Content-Type':'application/json'}});window.__sourceFirstTrading=data.catalog.contracts[0].firstTrading;
     if(window.__unknownFirstTrading)for(const contract of data.catalog.contracts){contract.firstTrading=null;contract.firstTradingDate=null;contract.eligibleFrom='2020-12-15T11:00:00Z';contract.eligibilityNote='Sourced contract terms; explicit sample trading eligibility and generated closing marks.';}
     return new Response(JSON.stringify(data),{status:200,headers:{'Content-Type':'application/json'}});
   };`);

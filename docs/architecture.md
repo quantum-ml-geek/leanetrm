@@ -43,6 +43,10 @@ Historical visibility uses indexed exact publication lookups without caching
 current authority. Blotter reads its catalog and report in one bound operation
 and returns their shared context (D143). This database function upgrade requires
 the same separately qualified schema baseline as other migrations.
+Blotter navigation requests a booking directory without pricing unused entry
+contracts. Choosing a new futures trade explicitly loads the priced catalog and
+replaces both catalog and report under one shared context before opening entry.
+Historical requests retain their selected context and remain read-only.
 Business reads follow the definition bundle's declared reference relationships;
 the reference inspector loads its selected table separately in bounded pages
 under the same authorization and temporal rules (D144).
