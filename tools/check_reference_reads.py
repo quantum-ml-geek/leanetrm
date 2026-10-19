@@ -52,7 +52,7 @@ def run_checks(c, check):
             'exchange_clearing_houses': ['exchange_code', 'clearing_house_code'],
             'product_evidence': ['product_code', 'source_code', 'fact_group'],
             'futures_milestones': ['series_code', 'milestone'],
-            'futures_execution_admissions': ['series_code', 'implementation'],
+            'futures_execution_policies': ['series_code', 'implementation'],
             'futures_lot_resolutions': ['series_code'],
             'futures_product_terms': ['product_code'],
             'futures_basis_settlements': ['series_code']}

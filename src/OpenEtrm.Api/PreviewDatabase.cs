@@ -41,7 +41,7 @@ public sealed class PreviewDatabase : IAsyncDisposable
         "exchanges", "clearing_houses", "exchange_clearing_houses",
         "interest_rate_definitions", "price_index_definitions", "sources", "product_evidence",
         "delivery_profiles", "settlement_targets", "cash_rounding_conventions",
-        "futures_products", "futures_series", "futures_execution_admissions", "futures_milestones", "futures_lot_resolutions", "futures_product_terms", "futures_basis_settlements"];
+        "futures_products", "futures_series", "futures_execution_policies", "futures_milestones", "futures_lot_resolutions", "futures_product_terms", "futures_basis_settlements"];
     private static readonly string[] DefinitionTables = ["revisions", "contracts", "curves", "series", "curve_members", "curve_inputs", "constituent_mappings", "rate_curves", "rate_curve_points", "revision_periods"];
     private static readonly string[] UnitTables = ["dimensions", "units", "unit_conversions", "commodities", "measurement_bases", "quantity_specifications"];
 
@@ -162,7 +162,7 @@ SELECT NOT(rolsuper OR rolbypassrls OR rolcreatedb OR rolcreaterole) AND pg_has_
     {
         var loaded=new Dictionary<string,ImmutableArray<JsonElement>>();
         var bounded=new HashSet<string>(["futures_series","futures_products","futures_milestones","futures_lot_resolutions",
-            "futures_product_terms","futures_basis_settlements","futures_execution_admissions","product_evidence","locations","commodity_locations","calendar_days"]);
+            "futures_product_terms","futures_basis_settlements","futures_execution_policies","product_evidence","locations","commodity_locations","calendar_days"]);
         async Task<ImmutableArray<JsonElement>> ReadTable(string table,string? column=null,IEnumerable<string>? codes=null)
         {
             // These immutable tables are complete in every read scope. Reuse
@@ -207,7 +207,7 @@ SELECT NOT(rolsuper OR rolbypassrls OR rolcreatedb OR rolcreaterole) AND pg_has_
         var products=Codes(loaded["futures_series"],"product_code").ToArray();
         loaded["futures_products"]=await ReadTable("futures_products","code",products);
         foreach(var table in new[]{"futures_product_terms","product_evidence"})loaded[table]=await ReadTable(table,"product_code",products);
-        foreach(var table in new[]{"futures_milestones","futures_lot_resolutions","futures_execution_admissions"})loaded[table]=await ReadTable(table,"series_code",seen);
+        foreach(var table in new[]{"futures_milestones","futures_lot_resolutions","futures_execution_policies"})loaded[table]=await ReadTable(table,"series_code",seen);
         var locations=Codes(definitions["curves"],"location_code")
             .Concat(Codes(loaded["futures_products"],"location_code"))
             .Concat(Codes(loaded["price_index_definitions"],"location_code")).Distinct().ToArray();
@@ -251,7 +251,7 @@ SELECT NOT(rolsuper OR rolbypassrls OR rolcreatedb OR rolcreaterole) AND pg_has_
             "exchange_clearing_houses"=>"exchange_code,clearing_house_code",
             "product_evidence"=>"product_code,source_code,fact_group",
             "futures_milestones"=>"series_code,milestone",
-            "futures_execution_admissions"=>"series_code,implementation",
+            "futures_execution_policies"=>"series_code,implementation",
             "futures_lot_resolutions" or "futures_basis_settlements"=>"series_code",
             "futures_product_terms"=>"product_code",
             _=>"code"
@@ -401,7 +401,8 @@ public sealed class PreviewData
     private readonly HashSet<(string Curve,Guid Contract)> curveMembers;
     public ImmutableDictionary<string, ImmutableArray<JsonElement>> Definitions { get; }
     public ImmutableDictionary<string, ImmutableArray<JsonElement>> References { get; }
-    public FuturesAdmission Admission { get; }
+    public FuturesExecutionPolicies ExecutionPolicies { get; }
+    public string FuturesConvention => manifest.FuturesConvention;
     public ImmutableArray<JsonElement> Observations { get; }
     public CurveModel Model { get; }
     public ImmutableArray<MarketContract> Contracts { get; }
@@ -418,7 +419,7 @@ public sealed class PreviewData
         IReadOnlyDictionary<string, ImmutableArray<JsonElement>> references, ImmutableArray<JsonElement> observations)
     {
         RequireBundlePin(manifest,Single(definitions["revisions"]));
-        this.manifest=manifest; Definitions=definitions.ToImmutableDictionary(); References=references.ToImmutableDictionary(); Admission=new(References); Observations=observations;
+        this.manifest=manifest; Definitions=definitions.ToImmutableDictionary(); References=references.ToImmutableDictionary(); ExecutionPolicies=new(References); Observations=observations;
         // Index only the rows captured by this authorized read. Grouping retains
         // duplicate keys so each consumer still applies its exact cardinality rule.
         referenceRows=IndexRows(References,[("quantity_specifications","code"),("quote_specifications","code"),

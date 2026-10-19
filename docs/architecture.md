@@ -48,16 +48,26 @@ the reference inspector loads its selected table separately in bounded pages
 under the same authorization and temporal rules (D144).
 
 Exchange first-trading facts and application execution eligibility are distinct
-(D157). A sourced date never becomes a fabricated exchange event instant. The
-actual timestamp may remain unknown; sample execution requires a separate exact
-admission under a named rule and supported convention, with generated-mark and
-qualification source hashes. A next-native-day admission pins its approved
-instant, clock offset and tzdb release. The managed clock and database both reject
-a boundary inconsistent with the declared zone/date. Existing precise synthetic
-facts retain their exact first-trading boundary. Source-series foreign keys
-establish lineage; they do not assert equality of every sourced and qualified
-term. Eligibility remains outside reusable instrument identity and is retained in
-the selected market binding, lifecycle checks and risk context.
+(D158, superseding D157's installation-specific restrictions). A sourced date
+never becomes a fabricated exchange event instant. The actual timestamp may
+remain unknown; execution requires a separate exact-version policy under the
+selected convention, price source and price role. A next-native-day policy pins
+its approved instant, clock offset and tzdb release. The managed clock and
+database reject a boundary inconsistent with the declared zone/date, including
+missing or ambiguous local midnights. Date-bound proofs support minute-aligned
+offsets within fourteen hours of UTC; historical second-offset dates are outside
+this contract. Existing precise synthetic facts retain their exact first-trading
+boundary unless a retained policy conflicts. Eligibility remains outside reusable
+instrument identity and is retained in the selected market binding, lifecycle
+checks and risk context.
+
+The hosted pilot uses the standard application. Private seed/import scripts and
+installation configuration supply real exchange references and separately labeled
+generated prices. Generic exact-version execution policies qualify supported
+futures use without rewriting unknown source milestones or adding installation
+names to business rules (D158). Source provenance is separate from execution
+qualification. Schema changes still require a separately qualified release.
+
 
 ## 2. Application structure and deployment
 

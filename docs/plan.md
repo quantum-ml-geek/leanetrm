@@ -17,15 +17,16 @@ daily/final settlement, variation-margin transitions and generic futures PV rema
 unimplemented. Quantities, quote scales, numerical policy and exact inputs stay in
 the managed backend.
 
-Sample futures execution admits explicitly qualified candidate terms and generated
-trader marks under D157. Actual first-trading timestamps can remain unknown when
-only a source date exists; the selected eligibility record supplies a separate
-supported boundary. Missing/conflicting admissions, wrong mark roles, missing
-source hashes and inconsistent clock offsets reject. This does not enable
-official settlement, variation margin or delivery. Migration 0038 introduces the
-exact-version admission schema; 0039 tightens its clock and conflicting-receipt
-checks. Installations that already provisioned those objects require qualified
-existing-object adoption rather than re-executing table creation.
+Futures execution admits explicitly qualified candidate terms under D158. Actual
+first-trading timestamps can remain unknown when only a source date exists; an
+exact-version policy supplies a separate supported boundary and selected price
+source/role. Missing/conflicting policies, wrong sources/roles and inconsistent
+or ambiguous clock boundaries reject. This does not enable official settlement,
+variation margin or delivery. Public migrations 0038/0039 remain immutable
+history; migration 0040 converts uniquely qualified retained admissions to generic
+policies without changing native source facts. Their original source-prefix/hash
+restrictions apply only to that legacy conversion. Existing installations require
+a separately qualified schema release.
 
 The shared managed valuation path is implemented (D145–148): risk creates
 immutable scenarios and compares returned book/holding values. Instruments own
@@ -906,8 +907,10 @@ changes a proposal, and retain the compatibility consequences of the decision.
 
 The bounded [exchange futures example](exchange-futures.md) extends executable
 booking, amendment, execution P&L and open shocks to explicitly resolved physical,
-variable-lot and quoted-basis contracts. Nineteen sourced product families and one
-synthetic calendar-day control cover 113 dated definitions. Full settlement,
+variable-lot and quoted-basis contracts. Nineteen sourced product families cover
+72 source-confirmed monthly maturities across twelve families, 61 executable.
+Daily definitions remain non-executable until their listings are confirmed. Invented unit controls
+stay in numerical tests. Full settlement,
 variation margin, physical delivery and production data activation remain exit
 criteria before a broader futures lifecycle claim.
 
@@ -923,3 +926,15 @@ production readiness. The automated-release extension adds exact-source CI and
 attestation admission, bounded data-only packaging, isolated candidate checks and
 interruption/retention controls. Automatic database upgrades and rollback of
 financial state remain outside that contract. See [pilot operations](hosted-pilot.md) for release gates and limits.
+
+The standard execution-policy extension (D158) separates real exchange definitions
+from generated price observations and installation seeding. Qualification covers
+explicit execution eligibility, date-only source preservation, source/role matching,
+current reference authority and historical visibility. Reconcile any privately
+installed schema additions with the reviewed migration chain before deploying;
+private seeding does not justify a separate application build or changed hashes.
+Full futures lifecycle and official market-data activation remain work.
+
+Job entry resolves user-zone wall clocks through the managed resolver (D159); UTC
+storage and elapsed-interval recurrence remain explicit. Contractual clocks and
+date-only facts are separate from timestamp presentation.

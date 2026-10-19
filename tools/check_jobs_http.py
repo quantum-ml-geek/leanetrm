@@ -20,10 +20,19 @@ def prepare(query,manifest):
     SELECT automation.observe_nodes('syntheticcluster00000000001','[{{"id":"syntheticnode0000000000001","version":7,"name":"Synthetic shared worker","role":"worker","state":"ready","availability":"active","cpuNano":1000000000,"memoryBytes":1073741824,"workloadNode":true}}]'::jsonb);""")
 
 
-def run_checks(url):
+def run_checks(url,query=None):
     client = PreviewClient(url)
     client.bootstrap()
     client.call('profile', {'profile': 'viewer'})
+    if query is not None:
+        # Job-only members can resolve their own wall clocks without market access.
+        query("DELETE FROM security.role_permissions WHERE permission='ReadMarketData' AND role_id=(SELECT id FROM security.roles WHERE code='viewer');")
+        try:
+            assert 'ReadMarketData' not in client.call('access')['permissions']
+            candidates=client.call('time/inspect',{'localTime':'2040-01-02T08:30:00','timeZone':'Asia/Tokyo'})['candidates']
+            assert len(candidates)==1 and candidates[0]['instant'].startswith('2040-01-01T23:30:00')
+        finally:
+            query("INSERT INTO security.role_permissions SELECT id,'ReadMarketData' FROM security.roles WHERE code='viewer';")
     now = datetime.now(timezone.utc)
     body = dict(requestId=str(uuid4()),name='Synthetic HTTP readiness',operation='worker_check',
                 dueAt=(now+timedelta(minutes=1)).isoformat(),expiresAt=(now+timedelta(hours=1)).isoformat(),
