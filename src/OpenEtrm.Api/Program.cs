@@ -158,6 +158,7 @@ void MapPreview(RouteGroupBuilder api,PreviewDatabase database,string cookieName
 {
 var sessions=new ConcurrentDictionary<string,PreviewSession>();
 var marketReads=new MarketReads(database);
+var scheduleReads=new ScheduleReads(database);
 api.MapGet("/health",()=>new {mode=database.Manifest.Mode,runId});
 api.MapGet("/bootstrap",async (HttpContext context,IAntiforgery antiforgery,bool includeFrames=true)=>
 {
@@ -225,24 +226,17 @@ var touStore=new TouProductStore(database.Manifest.CatalogId,database.Manifest.R
 // TOU products are current definitions; a historical view never substitutes them.
 Task<IResult> PowerOperation(HttpContext c,string permission,Func<PreviewSession,NpgsqlConnection,CancellationToken,Task<IResult>> work)=>Locked(c,session=>
 {
-    if(session.MarketContext is not null)
-        throw new MarketDataException("power_historical","TOU products and power hours require current inputs; historical TOU publication is not implemented.");
+    ScheduleReads.RequireCurrent(Pin(session));
     return database.WithIdentity(Profile(session),permission,(connection,ct)=>work(session,connection,ct),c.RequestAborted);
 });
-async Task<PowerPreview.ProductSet> PublishedProducts(NpgsqlConnection connection,CancellationToken ct)=>
-    PowerPreview.Products(TouProductStore.Published(await touStore.Read(connection,ct)),await touStore.Clocks(connection,ct));
 api.MapGet("/curve-names",(Func<HttpContext,Task<IResult>>)(c=>Locked(c,session=>database.WithIdentity(Profile(session),"ReadMarketData",async(connection,ct)=>
     Results.Ok(await marketReads.CurveNames(connection,Pin(session),ct)),c.RequestAborted))));
 api.MapPost("/power/catalog",(HttpContext c,PowerCatalogRequest body)=>PowerOperation(c,"ReadMarketData",async(session,connection,ct)=>
-    Results.Ok(PowerPreview.Catalog(await database.Read(connection,ct,observationIds:[]),Frame(session,body.SnapshotId),await PublishedProducts(connection,ct)))));
+    Results.Ok(await scheduleReads.PowerCatalog(connection,Pin(session,body.SnapshotId),ct))));
 api.MapPost("/power/preview",(HttpContext c,PowerPreviewRequest body)=>PowerOperation(c,"ReadMarketData",async(session,connection,ct)=>
-    Results.Ok(PowerPreview.Calculate(await database.Read(connection,ct,observationIds:Frame(session,body.SnapshotId).ObservationIds),Frame(session,body.SnapshotId),body,await PublishedProducts(connection,ct)))));
+    Results.Ok(PowerPreview.Calculate(await database.Read(connection,ct,observationIds:Frame(session,body.SnapshotId).ObservationIds),Frame(session,body.SnapshotId),body,await scheduleReads.PublishedProducts(connection,Pin(session),ct)))));
 api.MapGet("/tou-products",(Func<HttpContext,Task<IResult>>)(c=>PowerOperation(c,"ReadMarketData",async(session,connection,ct)=>
-{
-    var canEdit=await HasPermission(connection,"WriteMarketDefinitions",ct);var canPublish=await HasPermission(connection,"SealMarketDefinitions",ct);
-    // Row security returns drafts to authors only; readers receive published versions.
-    return Results.Ok(new {versions=await touStore.Read(connection,ct),clocks=await touStore.Clocks(connection,ct),canEdit,canPublish});
-})));
+    Results.Ok(await scheduleReads.TouProducts(connection,Pin(session),ct)))));
 api.MapPost("/tou-products/save",(HttpContext c,TouProductSaveRequest body)=>PowerOperation(c,"WriteMarketDefinitions",async(session,connection,ct)=>
     Results.Ok(await touStore.Save(connection,body,ct))));
 api.MapPost("/tou-products/publish",(HttpContext c,TouProductPublishRequest body)=>PowerOperation(c,"SealMarketDefinitions",async(session,connection,ct)=>
@@ -339,23 +333,12 @@ Task<IResult> DateOperation(HttpContext c,string permission,Func<PreviewSession,
         if(session.MarketContext is {} selected)await MarketContextStore.Bind(connection,database.Manifest.CatalogId,selected,ct);
         return await work(session,connection,ct);
     },c.RequestAborted));
-async Task<bool> HasPermission(NpgsqlConnection connection,string permission,CancellationToken ct)
+api.MapGet("/date-schedules",(Func<HttpContext,Task<IResult>>)(c=>Locked(c,session=>database.WithIdentity(Profile(session),"ReadMarketData",async(connection,ct)=>
 {
-    await using var command=ScheduleStore.Command(connection,"SELECT security.has_permission($1)",permission);
-    return Equals(await command.ExecuteScalarAsync(ct),true);
-}
-api.MapGet("/date-schedules",(Func<HttpContext,Task<IResult>>)(c=>DateOperation(c,"ReadMarketData",async(session,connection,ct)=>
-{
-    var knownThrough=session.MarketContext?.KnownThrough??await scheduleStore.Capture(connection,ct);
-    var canEdit=session.MarketContext is null && await HasPermission(connection,"WriteMarketDefinitions",ct);
-    var canPublish=session.MarketContext is null && await HasPermission(connection,"SealMarketDefinitions",ct);
-    // Row security returns drafts to authors only; readers receive published versions.
-    var versions=session.MarketContext is {} selected?await scheduleStore.ReadAt(connection,selected,ct):await scheduleStore.Read(connection,ct);
-    return Results.Ok(new {knownThrough,versions,canEdit,canPublish,choices=DateWorkspace.Choices,
-        contractDefinitions=session.ContractDefinitions.Where(p=>p.Key.Owner==Profile(session)).Select(p=>p.Value).ToArray(),
-        calendars=(await scheduleStore.Calendars(connection,ct)).Select(c=>new {c.Reference,c.CoverageFrom,c.CoverageTo,c.WeekendDays,
-            closedDates=c.Days.Where(d=>!d.Open).Select(d=>d.Date),openDates=c.Days.Where(d=>d.Open).Select(d=>d.Date)})});
-})));
+    var library=await scheduleReads.Library(connection,Pin(session),ct);
+    return Results.Ok(new {library.KnownThrough,library.Versions,library.CanEdit,library.CanPublish,choices=DateWorkspace.Choices,
+        contractDefinitions=session.ContractDefinitions.Where(p=>p.Key.Owner==Profile(session)).Select(p=>p.Value).ToArray(),library.Calendars});
+},c.RequestAborted))));
 api.MapPost("/date-schedules/preview",(HttpContext c,DateSchedulePreviewRequest body)=>DateOperation(c,"ReadMarketData",async(session,connection,ct)=>
     Results.Ok(DateWorkspace.Compile(body.Definition??throw new TemporalException("schedule_definition","Supply an explicit schedule definition."),
         await scheduleStore.Calendar(connection,body.Calendar,ct)))));
@@ -518,7 +501,7 @@ api.MapPost("/parties/catalog",(HttpContext c,PartyReadRequest body)=>Locked(c,s
         var selected=session.MarketContext ?? (await knowledgeStore.Capture(connection,new(frame.At.UtcDateTime.ToString("yyyy-MM-dd",System.Globalization.CultureInfo.InvariantCulture),null,"current"),ct)).Context;
         await MarketContextStore.Bind(connection,database.Manifest.CatalogId,selected,ct);
         return Results.Ok(new{versions=await PartyEditors.Read(connection,database.Manifest.CatalogId,body.Kind,frame.At,ct),context=selected,
-            canEdit=session.MarketContext is null && await HasPermission(connection,"WriteTradeParties",ct)});
+            canEdit=session.MarketContext is null && await PreviewDatabase.HasPermission(connection,"WriteTradeParties",ct)});
     },c.RequestAborted)));
 api.MapPost("/parties/save",(HttpContext c,PartySaveRequest body)=>Locked(c,session=>
 {
@@ -538,12 +521,12 @@ Task<IResult> FuturesRead(HttpContext c,FuturesReadRequest body,Func<NpgsqlConne
     {
         if(expectedConvention is SwapStore.Convention or TradingBlotter.Convention){if(body.Convention!=expectedConvention)throw new MarketDataException("swap_context","Select the explicit supported swap valuation convention.");}
         else FuturesStore.Convention(body.Convention);
-        if(scenario && !await HasPermission(connection,"RunScenario",ct)||dealRisk && !await HasPermission(connection,"RunDealRisk",ct))throw new PreviewDeniedException();
+        if(scenario && !await PreviewDatabase.HasPermission(connection,"RunScenario",ct)||dealRisk && !await PreviewDatabase.HasPermission(connection,"RunDealRisk",ct))throw new PreviewDeniedException();
         var frame=Frame(session,body.SnapshotId);
         var working=session.MarketContext is null&&body.KnowledgeMode=="current"&&body.ContextId is null;
         if(amendmentPreview&&!working)
             throw new MarketDataException("historical_read_only","Amendments require working data.");
-        if(amendmentPreview&&!await HasPermission(connection,"AmendTrade",ct))throw new PreviewDeniedException();
+        if(amendmentPreview&&!await PreviewDatabase.HasPermission(connection,"AmendTrade",ct))throw new PreviewDeniedException();
         int? currentHead=null;
         if(working&&headTrade is {} trade)
         {
@@ -564,27 +547,27 @@ Task<IResult> FuturesRead(HttpContext c,FuturesReadRequest body,Func<NpgsqlConne
         await using(var bind=ScheduleStore.Command(connection,"SELECT security.use_trading_context($1,$2)",database.Manifest.CatalogId,frame.At))await bind.ExecuteNonQueryAsync(ct);
         var data=await database.Read(connection,ct,observationIds:frame.ObservationIds);
         var value=await read(connection,data,frame,ct);
-        if(scenario && !await HasPermission(connection,"RunScenario",ct)||dealRisk && !await HasPermission(connection,"RunDealRisk",ct))throw new PreviewDeniedException();
+        if(scenario && !await PreviewDatabase.HasPermission(connection,"RunScenario",ct)||dealRisk && !await PreviewDatabase.HasPermission(connection,"RunDealRisk",ct))throw new PreviewDeniedException();
         await using(var check=ScheduleStore.Command(connection,"SELECT security.trading_access($1,'ReadTrades')",database.Manifest.CatalogId))
             if(!Equals(await check.ExecuteScalarAsync(ct),true))throw new PreviewDeniedException();
         var response=System.Text.Json.Nodes.JsonNode.Parse(JsonSerializer.Serialize(value,new JsonSerializerOptions{PropertyNamingPolicy=JsonNamingPolicy.CamelCase,Converters={new ExactDecimalJsonConverter()}}))!.AsObject();
         foreach(var json in combinedWorkspace?new[]{response["catalog"]!.AsObject(),response["blotter"]!.AsObject()}:new[]{response})
         {
         json["context"]=JsonSerializer.SerializeToNode(selected,new JsonSerializerOptions{PropertyNamingPolicy=JsonNamingPolicy.CamelCase});json["asOf"]=JsonSerializer.SerializeToNode(frame.At);
-        json["canRunDealRisk"]=JsonSerializer.SerializeToNode(await HasPermission(connection,"RunDealRisk",ct));
-        json["canBook"]=JsonSerializer.SerializeToNode(session.MarketContext is null&&body.KnowledgeMode=="current"&&await HasPermission(connection,"BookTrade",ct));
+        json["canRunDealRisk"]=JsonSerializer.SerializeToNode(await PreviewDatabase.HasPermission(connection,"RunDealRisk",ct));
+        json["canBook"]=JsonSerializer.SerializeToNode(session.MarketContext is null&&body.KnowledgeMode=="current"&&await PreviewDatabase.HasPermission(connection,"BookTrade",ct));
         if(json["books"] is not null)
         {
-            json["canAmendTrades"]=JsonSerializer.SerializeToNode(working&&await HasPermission(connection,"AmendTrade",ct));
+            json["canAmendTrades"]=JsonSerializer.SerializeToNode(working&&await PreviewDatabase.HasPermission(connection,"AmendTrade",ct));
             json["bookingUnavailableReason"]=JsonSerializer.SerializeToNode(!working
                 ?"Historical view is read-only. Return to working data, then select an As of date."
-                :!await HasPermission(connection,"BookTrade",ct)?"Your current role does not have Book Trade permission.":null);
+                :!await PreviewDatabase.HasPermission(connection,"BookTrade",ct)?"Your current role does not have Book Trade permission.":null);
         }
         if(headTrade is not null)
         {
             var selectedRevision=json["state"]?["revision"]?.GetValue<int>()??json["expectedRevision"]?.GetValue<int>();
             var lifecycleEligible=json["lifecycleEligible"]?.GetValue<bool>()??true;
-            var canAmend=working&&currentHead==selectedRevision&&lifecycleEligible&&await HasPermission(connection,"AmendTrade",ct);
+            var canAmend=working&&currentHead==selectedRevision&&lifecycleEligible&&await PreviewDatabase.HasPermission(connection,"AmendTrade",ct);
             if(amendmentPreview&&!canAmend)throw new MarketDataException(expectedConvention==SwapStore.Convention?"swap_revision_conflict":"futures_revision_conflict","Reload the latest eligible trade revision before amending.");
             json["canAmend"]=JsonSerializer.SerializeToNode(canAmend);
             json["amendUnavailableReason"]=JsonSerializer.SerializeToNode(!working?"Historical view is read-only. Return to working data to amend."
@@ -616,7 +599,7 @@ api.MapPost("/futures/amend",(HttpContext c,FuturesAmendRequest body)=>Locked(c,
     c.Items["futures_attempted"]=true;
     return await database.WithIdentity(Profile(session),"AmendTrade",async(connection,ct)=>
     {
-        if(!await HasPermission(connection,"ReadTrades",ct)||!await HasPermission(connection,"ReadMarketData",ct))throw new PreviewDeniedException();
+        if(!await PreviewDatabase.HasPermission(connection,"ReadTrades",ct)||!await PreviewDatabase.HasPermission(connection,"ReadMarketData",ct))throw new PreviewDeniedException();
         return Results.Ok(await futuresStore.Amend(connection,await database.Read(connection,ct),Frame(session,body.SnapshotId),body,ct));
     },c.RequestAborted);
 }));
@@ -664,7 +647,7 @@ api.MapPost("/futures/book",(HttpContext c,FuturesBookRequest body)=>Locked(c,as
     c.Items["futures_attempted"]=true;
     return await database.WithIdentity(Profile(session),"BookTrade",async(connection,ct)=>
     {
-        if(!await HasPermission(connection,"ReadTrades",ct))throw new PreviewDeniedException();
+        if(!await PreviewDatabase.HasPermission(connection,"ReadTrades",ct))throw new PreviewDeniedException();
         return Results.Ok(await futuresStore.Book(connection,await database.Read(connection,ct),Frame(session,body.SnapshotId),body,ct));
     },c.RequestAborted);
 }));
