@@ -403,7 +403,7 @@ sequence does not claim an automatic upgrade of those retained installations.
 
 ## Page-assistant model providers
 
-[0042_model_providers.sql](migrations/0042_model_providers.sql) grants
+[0043_model_providers.sql](migrations/0043_model_providers.sql) grants
 `ManageModelProviders` to access administrators and adds the `assistant` schema
 for the page assistant's providers ([ai-assistant.md](../docs/ai-assistant.md)
 §5): one provider per workspace and vendor, insert-only credentials and an

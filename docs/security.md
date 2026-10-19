@@ -314,7 +314,7 @@ not full agent credential exchange or qualified hostile-code isolation.
 
 ## Page-assistant provider administration
 
-Migration 0042 adds `ManageModelProviders`, held by Access Administrator, for the
+Migration 0043 adds `ManageModelProviders`, held by Access Administrator, for the
 page assistant's Settings › AI ([ai-assistant.md](ai-assistant.md) §5). Provider,
 credential and audit tables force RLS with no runtime table grants; three definer
 operations recheck the permission and refuse delegated agent contexts, so an agent
