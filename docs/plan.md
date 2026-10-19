@@ -791,16 +791,19 @@ latency, retained observation counts, contracts and booked positions. It can
 enforce that budget separately from ordinary correctness checks. Broader
 concurrency and larger reference/contract workloads still require qualification.
 
-The five-sample bounded workload with 12,420 observations, 105 series, 92 contract
-definitions, 12 curves and 24 trades (16 swaps) passed that budget for all ten
-navigation views. It retains 160 unique initial observation pins; the priced curve
-evaluates 54 constituents with zero risk scenarios. With 40 ms browser latency,
-10 MiB/s download and 5 MiB/s upload, initial readiness was 816 ms, curve pricing
-p95 was 174 ms and the slowest page p95 was 959 ms. This run used stock PostgreSQL
-16.14, .NET 10.0.402 and Chrome 155 on macOS 26.6 arm64; API resident memory was
-321,696 KiB at the reporting instant, not a peak measurement. Its 190 reference
-rows and single client do not establish larger-catalog or concurrency limits.
-Reports retain source and frozen API/web artifact identities outside the repository.
+The five-sample bounded workload with 10,190 reference rows, 12,420 observations,
+105 series, 92 contract definitions, 12 curves and 24 trades (16 swaps) passed that
+budget for all ten navigation views. It retains 160 unique initial observation
+pins; the priced curve evaluates 54 constituents with zero risk scenarios. With
+40 ms browser latency, 10 MiB/s download and 5 MiB/s upload, initial readiness was
+679 ms, curve pricing p95 was 138 ms and the slowest page p95 was 390 ms. Reference
+inspection also verified consecutive 200-row pages and search beyond the first
+page in 4,008 locations and 2,007 futures series. This run used stock PostgreSQL
+16.14, .NET 10.0.402 and Chrome 155 on macOS 26.6.2 arm64; API resident memory was
+513,504 KiB at the reporting instant, not a peak measurement. This bounded catalog
+and single client do not establish larger-catalog or concurrency limits. Reports
+retain source, migrations and frozen API/web artifact identities outside the
+repository.
 
 Acceptance:
 

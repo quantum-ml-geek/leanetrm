@@ -271,7 +271,7 @@ def main():
                 run_checks(url,json.loads(export.read_text()))
             else:
                 from check_preview import run_checks
-                workspace=run_checks(url)
+                workspace=run_checks(url,query,manifest)
                 from check_table_views import run_checks as check_table_views
                 check_table_views(url)
                 from check_schedule_storage import run_checks as check_schedule_storage

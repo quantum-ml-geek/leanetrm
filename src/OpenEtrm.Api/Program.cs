@@ -225,13 +225,17 @@ Task<IResult> PowerOperation(HttpContext c,string permission,Func<PreviewSession
 async Task<PowerPreview.ProductSet> PublishedProducts(NpgsqlConnection connection,CancellationToken ct)=>
     PowerPreview.Products(TouProductStore.Published(await touStore.Read(connection,ct)),await touStore.Clocks(connection,ct));
 // Stored display names for every curve in this catalog, for screens that show curve codes from any bundle.
-api.MapGet("/curve-names",(Func<HttpContext,Task<IResult>>)(c=>Locked(c,session=>database.WithIdentity(Profile(session),"ReadMarketData",async(connection,ct)=>
+async Task<List<object>> CurveNames(NpgsqlConnection connection,CancellationToken ct)
 {
-    if(session.MarketContext is {} selected)await MarketContextStore.Bind(connection,database.Manifest.CatalogId,selected,ct);
     await using var command=ScheduleStore.Command(connection,"SELECT code,name FROM market_data.curves WHERE catalog_id=$1 UNION SELECT code,name FROM market_data.rate_curves WHERE catalog_id=$1 ORDER BY 1,2",database.Manifest.CatalogId);
     await using var reader=await command.ExecuteReaderAsync(ct);var rows=new List<object>();
     while(await reader.ReadAsync(ct))rows.Add(new {code=reader.GetString(0),name=reader.GetString(1)});
-    return Results.Ok(rows);
+    return rows;
+}
+api.MapGet("/curve-names",(Func<HttpContext,Task<IResult>>)(c=>Locked(c,session=>database.WithIdentity(Profile(session),"ReadMarketData",async(connection,ct)=>
+{
+    if(session.MarketContext is {} selected)await MarketContextStore.Bind(connection,database.Manifest.CatalogId,selected,ct);
+    return Results.Ok(await CurveNames(connection,ct));
 },c.RequestAborted))));
 api.MapPost("/power/catalog",(HttpContext c,PowerCatalogRequest body)=>PowerOperation(c,"ReadMarketData",async(session,connection,ct)=>
     Results.Ok(PowerPreview.Catalog(await database.Read(connection,ct,observationIds:[]),Frame(session,body.SnapshotId),await PublishedProducts(connection,ct)))));
@@ -412,10 +416,10 @@ api.MapPost("/date-schedules/contracts/save",(HttpContext c,PublishedContractReq
         throw new TemporalException("preview_limit","At most 16 candidate definitions can be kept per persona.");
     session.ContractDefinitions[key]=result;return Results.Ok(result);
 }));
-async Task<PreviewData> MarketData(PreviewSession session,NpgsqlConnection connection,CancellationToken ct,System.Collections.Immutable.ImmutableArray<Guid>? observationIds=null)
+async Task<PreviewData> MarketData(PreviewSession session,NpgsqlConnection connection,CancellationToken ct,System.Collections.Immutable.ImmutableArray<Guid>? observationIds=null,ReferenceReadScope referenceScope=ReferenceReadScope.DefinitionClosure)
 {
     if(session.MarketContext is {} selected)await MarketContextStore.Bind(connection,database.Manifest.CatalogId,selected,ct);
-    return await database.Read(connection,ct,observationIds:observationIds);
+    return await database.Read(connection,ct,observationIds:observationIds,referenceScope:referenceScope,includeCalendarDays:false);
 }
 api.MapPost("/market/context",(HttpContext c,MarketContextRequest body)=>Locked(c,async session=>
 {
@@ -445,18 +449,29 @@ Task<IResult> Workspace(HttpContext c,bool catalogOnly)=>Locked(c,async session=
 {
     var read=await database.WithIdentity(Profile(session),"ReadMarketData",async(connection,ct)=>
     {
-        var data=await MarketData(session,connection,ct,catalogOnly?System.Collections.Immutable.ImmutableArray<Guid>.Empty:null);
+        var data=await MarketData(session,connection,ct,catalogOnly?System.Collections.Immutable.ImmutableArray<Guid>.Empty:null,
+            catalogOnly?ReferenceReadScope.DefinitionClosure:ReferenceReadScope.AllVisible);
         UnitCatalogData? units;
         try { units=await database.ReadUnitCatalog(connection,data,ct); }
         catch(MarketDataException e) when(e.Code=="unit_catalog") { units=null; }
-        return (Data:data,Units:units);
+        return (Data:data,Units:units,CurveNames:catalogOnly?await CurveNames(connection,ct):null);
     },c.RequestAborted);
     var data=read.Data;
-    return Results.Ok(new {unitCatalog=read.Units,unitCatalogError=read.Units is null?"unit_catalog":null,context=session.MarketContext,profile=session.Profile,example=database.Manifest.Example,futuresConvention=database.Manifest.FuturesConvention,definitions=data.Definitions,references=data.References,observations=data.Observations,observationScope=catalogOnly?"on_demand":"all_visible",
+    return Results.Ok(new {unitCatalog=read.Units,unitCatalogError=read.Units is null?"unit_catalog":null,context=session.MarketContext,profile=session.Profile,example=database.Manifest.Example,futuresConvention=database.Manifest.FuturesConvention,curveNames=read.CurveNames,definitions=data.Definitions,references=data.References,referenceScope=catalogOnly?"definition_closure":"all_visible",observations=data.Observations,observationScope=catalogOnly?"on_demand":"all_visible",
         frames=session.Frames.Values.Where(f=>f.ContextId==session.MarketContext?.ContextId).OrderBy(f=>f.At).ToArray(),initialFrameIds=session.MarketContext is null?session.InitialFrames:session.Frames.Values.Where(f=>f.ContextId==session.MarketContext.ContextId).Select(f=>f.Id).ToArray()});
 });
 api.MapGet("/workspace",(Func<HttpContext,Task<IResult>>)(c=>Workspace(c,false)));
 api.MapGet("/workspace/catalog",(Func<HttpContext,Task<IResult>>)(c=>Workspace(c,true)));
+api.MapGet("/reference/catalog",(Func<HttpContext,Task<IResult>>)(c=>Locked(c,session=>database.WithIdentity(Profile(session),"ReadMarketData",async(connection,ct)=>
+{
+    if(session.MarketContext is {} selected)await MarketContextStore.Bind(connection,database.Manifest.CatalogId,selected,ct);
+    var requestedOffset=c.Request.Query["offset"].ToString();
+    if(!int.TryParse(c.Request.Query.ContainsKey("offset")?requestedOffset:"0",System.Globalization.NumberStyles.None,System.Globalization.CultureInfo.InvariantCulture,out var offset))
+        throw new MarketDataException("reference_page",$"Choose an offset from 0 to {PreviewDatabase.ReferenceMaximumOffset}.");
+    var page=await database.ReadReferencePage(connection,c.Request.Query["table"].ToString(),offset,c.Request.Query["search"].ToString(),ct);
+    return Results.Ok(new {page.Table,page.Rows,page.References,page.Offset,page.PageSize,page.MaximumOffset,page.HasMore,page.Search,page.ReferenceRevision,page.DefinitionRevisionId,
+        tables=PreviewDatabase.ReferenceTables,referenceScope="selected_table",context=session.MarketContext,profile=session.Profile});
+},c.RequestAborted))));
 api.MapPost("/evaluate",(HttpContext c,BuildRequest body)=>Locked(c,async session=>
 {
     var frame=Frame(session,body.SnapshotId);
@@ -553,7 +568,7 @@ api.MapPost("/table-views/blotter",(HttpContext c,SaveTableView body)=>Locked(c,
 api.MapPost("/table-views/blotter/delete",(HttpContext c,DeleteTableView body)=>Locked(c,session=>
     database.WithIdentity(Profile(session),"ReadTrades",async(connection,ct)=>{await TableViews.Delete(connection,body,ct);return Results.Ok(new {deleted=true});},c.RequestAborted)));
 var futuresStore=new FuturesStore(database.Manifest);
-Task<IResult> FuturesRead(HttpContext c,FuturesReadRequest body,Func<NpgsqlConnection,PreviewData,InputFrame,CancellationToken,Task<object>> read,bool scenario=false,Guid? headTrade=null,bool amendmentPreview=false,string? expectedConvention=null,bool dealRisk=false)=>
+Task<IResult> FuturesRead(HttpContext c,FuturesReadRequest body,Func<NpgsqlConnection,PreviewData,InputFrame,CancellationToken,Task<object>> read,bool scenario=false,Guid? headTrade=null,bool amendmentPreview=false,string? expectedConvention=null,bool dealRisk=false,bool combinedWorkspace=false)=>
     Locked(c,session=>database.WithIdentity(Profile(session),"ReadTrades",async(connection,ct)=>
     {
         if(expectedConvention is SwapStore.Convention or TradingBlotter.Convention){if(body.Convention!=expectedConvention)throw new MarketDataException("swap_context","Select the explicit supported swap valuation convention.");}
@@ -587,7 +602,9 @@ Task<IResult> FuturesRead(HttpContext c,FuturesReadRequest body,Func<NpgsqlConne
         if(scenario && !await HasPermission(connection,"RunScenario",ct)||dealRisk && !await HasPermission(connection,"RunDealRisk",ct))throw new PreviewDeniedException();
         await using(var check=ScheduleStore.Command(connection,"SELECT security.trading_access($1,'ReadTrades')",database.Manifest.CatalogId))
             if(!Equals(await check.ExecuteScalarAsync(ct),true))throw new PreviewDeniedException();
-        var json=System.Text.Json.Nodes.JsonNode.Parse(JsonSerializer.Serialize(value,new JsonSerializerOptions{PropertyNamingPolicy=JsonNamingPolicy.CamelCase,Converters={new ExactDecimalJsonConverter()}}))!.AsObject();
+        var response=System.Text.Json.Nodes.JsonNode.Parse(JsonSerializer.Serialize(value,new JsonSerializerOptions{PropertyNamingPolicy=JsonNamingPolicy.CamelCase,Converters={new ExactDecimalJsonConverter()}}))!.AsObject();
+        foreach(var json in combinedWorkspace?new[]{response["catalog"]!.AsObject(),response["blotter"]!.AsObject()}:new[]{response})
+        {
         json["context"]=JsonSerializer.SerializeToNode(selected,new JsonSerializerOptions{PropertyNamingPolicy=JsonNamingPolicy.CamelCase});json["asOf"]=JsonSerializer.SerializeToNode(frame.At);
         json["canRunDealRisk"]=JsonSerializer.SerializeToNode(await HasPermission(connection,"RunDealRisk",ct));
         json["canBook"]=JsonSerializer.SerializeToNode(session.MarketContext is null&&body.KnowledgeMode=="current"&&await HasPermission(connection,"BookTrade",ct));
@@ -610,7 +627,8 @@ Task<IResult> FuturesRead(HttpContext c,FuturesReadRequest body,Func<NpgsqlConne
                 :!lifecycleEligible?"This retained state is outside the supported live, unprocessed futures lifecycle. Settlement must be handled separately."
                 :!canAmend?"Your current role does not have Amend Trade permission.":null);
         }
-        return Results.Ok(json);
+        }
+        return Results.Ok(response);
     },c.RequestAborted));
 api.MapPost("/trade-formats/read",(HttpContext c,DealFormatRead body)=>
 {
@@ -641,6 +659,8 @@ api.MapPost("/futures/blotter",(HttpContext c,FuturesBlotterRequest body)=>Futur
 api.MapPost("/futures/holdings",(HttpContext c,FuturesReadRequest body)=>FuturesRead(c,body,futuresStore.Holdings));
 var swapStore=new SwapStore(database);
 var tradingBlotter=new TradingBlotter(database.Manifest,futuresStore,swapStore);
+api.MapPost("/trading/workspace",(HttpContext c,FuturesBlotterRequest body)=>FuturesRead(c,body.Context??throw new MarketDataException("blotter_view","Supply the selected context."),
+ async(connection,data,frame,ct)=>new{catalog=await futuresStore.Catalog(connection,data,frame,ct),blotter=await tradingBlotter.Read(connection,data,frame,body.View,ct)},expectedConvention:TradingBlotter.Convention,combinedWorkspace:true));
 api.MapPost("/trading/blotter",(HttpContext c,FuturesBlotterRequest body)=>FuturesRead(c,body.Context??throw new MarketDataException("blotter_view","Supply the selected context."),
  (connection,data,frame,ct)=>tradingBlotter.Read(connection,data,frame,body.View,ct),expectedConvention:TradingBlotter.Convention));
 api.MapPost("/swaps/catalog",(HttpContext c,FuturesReadRequest body)=>FuturesRead(c,body,swapStore.Catalog,expectedConvention:SwapStore.Convention));

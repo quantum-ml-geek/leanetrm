@@ -27,6 +27,9 @@ function el<K extends keyof HTMLElementTagNameMap>(tag:K,content?:string){const 
 function choose(id:string,options:{value:string;name:string}[],value:string){const node=select(id);node.replaceChildren(...options.map(o=>{const option=el('option',o.name);option.value=o.value;return option;}));node.value=value;}
 let csrf='',workspace:Workspace|undefined,curve='',result:CurveResult|undefined,contract='',historyData:PriceHistory|undefined,pricingContract='',showAllContracts=false,input='',draftFor='',busy=false,page='market';
 let contextDirty=false,currentProfile='',administrationScope='',permissions:string[]=[];
+type ReferencePage={table:string;rows:Row[];references:Record<string,Row[]>;offset:number;pageSize:number;maximumOffset:number;hasMore:boolean;search:string;referenceRevision:{catalogId:string;revisionId:string};definitionRevisionId:string;context:Context|null;profile:string;referenceScope:'selected_table'};
+let referencePage:ReferencePage|undefined;
+const canAdvanceReference=()=>!!referencePage&&referencePage.hasMore&&referencePage.offset+referencePage.pageSize<=referencePage.maximumOffset;
 let hostedPilot=false;
 type ProfileChoices={mode:string;profiles:{id:string;name:string}[];customProfiles:{id:string;name:string}[]};
 const can=(permission:string)=>permissions.includes(permission);
@@ -50,6 +53,7 @@ function syncControls(){
   if(!busy){$('save').toggleAttribute('disabled',!canCorrect());select('snapshot').disabled=page==='admin';}
   for(const id of ['source-contract','pricing-contract'])select(id).disabled=busy||showAllContracts||!result?.points.length;
   for(const id of ['source-all','pricing-all'])$<HTMLButtonElement>(id).disabled=busy||!result||!result.points.length||(result.points.length<2&&!showAllContracts);
+  $('reference-previous').toggleAttribute('disabled',busy||!referencePage||referencePage.offset===0);$('reference-next').toggleAttribute('disabled',busy||!canAdvanceReference());
   futures.sync();parties.sync();jobs.sync();document.body.setAttribute('aria-busy',String(busy));
 }
 function renderWorkspaceMode(){
@@ -64,13 +68,13 @@ async function transport<T>(path:string,body?:unknown,root=apiRoot):Promise<T>{
   try{response=await fetch(root+path,{method:body===undefined?'GET':'POST',credentials:'same-origin',headers:body===undefined?{}:{'Content-Type':'application/json','X-Preview-CSRF':csrf},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(20000)});}
   catch{throw Object.assign(Error(body!==undefined?'We could not confirm the result. Refresh and check the saved changes before saving again.':'The app could not connect. Please refresh the page.'),{code:'response_unknown'});}
   if(response.status===401){workspace=undefined;result=undefined;historyData=undefined;curve='';document.body.hidden=true;location.replace('/auth');throw Object.assign(Error('Sign in to continue.'),{code:'sign_in_required'});}
-  if(!response.ok){const error=await response.json().catch(()=>({code:'request_failed'}));const messages:Record<string,string>={clock_tzdb:'The installed time-zone rules differ from the product clock’s declared release, or cannot be verified. Calculations are blocked until they match.',clock_rule:'This product’s market clock is incomplete or unknown in reference data.',power_calendar:'The settlement index calendar does not cover this whole delivery period.',power_index:'This curve needs a single settlement index with matching commodity, currency and unit.',tou_definition:'Supply a lowercase code, a name, a market clock and an ordered peak window.',tou_conflict:'This TOU product changed or its code is already used. Reload before editing.',clock_reference:'Choose a market clock from this workspace’s reference data.',calendar_reference:'Choose a business calendar from this workspace’s reference data.',calendar_binding:'Choose a reference calendar, not a typed one.',futures_revision_conflict:'This trade changed. Reload the current revision before amending.',futures_amendment:'Supply an explicit amendment reason and use the selected working As of time.',futures_no_change:'Change a supported booking term before previewing an amendment.',futures_trade:'The trade revision is unavailable in this context.',historical_read_only:'This historical view is read-only. Return to working data before booking or amending.',risk_bump:'Enter a positive absolute bump and choose distinct supported quote inputs.',risk_factor:'Choose an available dated quote input in this market context.',risk_position:'Choose books containing live supported holdings.',risk_policy:'Choose the supported exact repricing policy.',risk_convention:'Choose the supported execution-P&L shock convention.',precision_loss:'An exact result needs more precision. For a conversion, choose explicit final rounding; no value was rounded automatically.',price_domain:'A base or shocked price is outside the contract’s allowed price range.',table_view_conflict:'This saved view changed in another session. Use Reload views before saving or deleting it.',table_view:'Choose a valid named layout; at most twenty views can be saved per table.',blotter_view:'Choose available books and explicit pivot dimensions/measures. Lots require dated-contract grouping.',power_historical:'Return to current inputs to use the unsaved power example. Historical clock publication is not supported yet.',power_units:'This example needs an outright curve quoted per MWh.',settlement_coverage:'The selected mask has no intervals or the fixing coverage is incomplete.',power_input:'Complete the product, units and classification choices.',access_denied:hostedPilot?'Your account does not have permission for that operation.':'This demo user can’t make that change. You can switch users in Profile → Preview access.',revision_conflict:'This price has already changed. Refresh and choose the version you want in Price changes.',mutation_outcome_unknown:'We could not confirm whether your change was saved. Refresh and check the saved changes before saving again.',numeric_format:'Enter a number with no commas or spaces, using up to 18 decimal places.',missing_value:'Enter a new value before saving.',definition_rejected:'This value does not meet the contract’s price rules. Check the allowed range and settlement increment in Reference data.',snapshot_missing:'Choose an available market date.',request_token:'Please refresh the page before making this change.',request_cancelled:'This took too long. Please refresh and try again.',admin_conflict:'This account changed or the login name is already registered. Refresh accounts before editing.',last_administrator:'Keep at least one current administrator in this workspace.',self_access_change:'Another administrator must remove your administrative access.',admin_input:'Enter a name, login, identity kind and explicit roles.',admin_limit:'This preview has reached its account limit.',administration_outcome_unknown:'We could not confirm the change. Check accounts and recent access changes, then retry the retained request if necessary.'};throw Object.assign(Error(scheduleErrorMessage(error.code)??messages[error.code]??'The app could not complete that request. Please refresh and try again.'),{code:error.code});}
+  if(!response.ok){const error=await response.json().catch(()=>({code:'request_failed'}));const messages:Record<string,string>={unit_catalog:'The configured unit catalog is unavailable at this effective date or knowledge cutoff.',reference_catalog:'The configured reference catalog is unavailable in this context.',reference_page:'Choose an available category and valid page or search text.',clock_tzdb:'The installed time-zone rules differ from the product clock’s declared release, or cannot be verified. Calculations are blocked until they match.',clock_rule:'This product’s market clock is incomplete or unknown in reference data.',power_calendar:'The settlement index calendar does not cover this whole delivery period.',power_index:'This curve needs a single settlement index with matching commodity, currency and unit.',tou_definition:'Supply a lowercase code, a name, a market clock and an ordered peak window.',tou_conflict:'This TOU product changed or its code is already used. Reload before editing.',clock_reference:'Choose a market clock from this workspace’s reference data.',calendar_reference:'Choose a business calendar from this workspace’s reference data.',calendar_binding:'Choose a reference calendar, not a typed one.',futures_revision_conflict:'This trade changed. Reload the current revision before amending.',futures_amendment:'Supply an explicit amendment reason and use the selected working As of time.',futures_no_change:'Change a supported booking term before previewing an amendment.',futures_trade:'The trade revision is unavailable in this context.',historical_read_only:'This historical view is read-only. Return to working data before booking or amending.',risk_bump:'Enter a positive absolute bump and choose distinct supported quote inputs.',risk_factor:'Choose an available dated quote input in this market context.',risk_position:'Choose books containing live supported holdings.',risk_policy:'Choose the supported exact repricing policy.',risk_convention:'Choose the supported execution-P&L shock convention.',precision_loss:'An exact result needs more precision. For a conversion, choose explicit final rounding; no value was rounded automatically.',price_domain:'A base or shocked price is outside the contract’s allowed price range.',table_view_conflict:'This saved view changed in another session. Use Reload views before saving or deleting it.',table_view:'Choose a valid named layout; at most twenty views can be saved per table.',blotter_view:'Choose available books and explicit pivot dimensions/measures. Lots require dated-contract grouping.',power_historical:'Return to current inputs to use the unsaved power example. Historical clock publication is not supported yet.',power_units:'This example needs an outright curve quoted per MWh.',settlement_coverage:'The selected mask has no intervals or the fixing coverage is incomplete.',power_input:'Complete the product, units and classification choices.',access_denied:hostedPilot?'Your account does not have permission for that operation.':'This demo user can’t make that change. You can switch users in Profile → Preview access.',revision_conflict:'This price has already changed. Refresh and choose the version you want in Price changes.',mutation_outcome_unknown:'We could not confirm whether your change was saved. Refresh and check the saved changes before saving again.',numeric_format:'Enter a number with no commas or spaces, using up to 18 decimal places.',missing_value:'Enter a new value before saving.',definition_rejected:'This value does not meet the contract’s price rules. Check the allowed range and settlement increment in Reference data.',snapshot_missing:'Choose an available market date.',request_token:'Please refresh the page before making this change.',request_cancelled:'This took too long. Please refresh and try again.',admin_conflict:'This account changed or the login name is already registered. Refresh accounts before editing.',last_administrator:'Keep at least one current administrator in this workspace.',self_access_change:'Another administrator must remove your administrative access.',admin_input:'Enter a name, login, identity kind and explicit roles.',admin_limit:'This preview has reached its account limit.',administration_outcome_unknown:'We could not confirm the change. Check accounts and recent access changes, then retry the retained request if necessary.'};throw Object.assign(Error(scheduleErrorMessage(error.code)??messages[error.code]??'The app could not complete that request. Please refresh and try again.'),{code:error.code});}
   return response.json() as Promise<T>;
 }
 async function api<T>(path:string,body?:unknown):Promise<T>{
  const payload=await transport<T>(path,body);
- if(/^(trading\/blotter|swaps\/(preview|editor)|futures\/(holdings|editor|amend-preview)|evaluate|history|power\/preview)$/.test(path)){
-  const displayed=path==='evaluate'||path==='history'?{points:(payload as CurveResult|PriceHistory).points}:payload;
+ if(/^(trading\/(blotter|workspace)|swaps\/(preview|editor)|futures\/(holdings|editor|amend-preview)|evaluate|history|power\/preview)$/.test(path)){
+  const displayed=path==='trading/workspace'?(payload as {blotter:unknown}).blotter:path==='evaluate'||path==='history'?{points:(payload as CurveResult|PriceHistory).points}:payload;
   await prepareAmountDisplay(displayed,request=>transport<string[]>('amounts/display',request),path==='history'?decimalTick():undefined);
  }
  return payload;
@@ -85,8 +89,7 @@ async function act(work:()=>Promise<void>){
 function action(name:string,run:()=>Promise<void>){const button=el('button',name);button.disabled=busy;button.type='button';button.onclick=()=>void act(run);return button;}
 function decimalTick(){if(!workspace||!curve||marketType(selectedCurve(),data())!=='futures')return undefined;return val(row('quote_specifications','code',val(selectedCurve(),'quote_code'),true),'clearing_increment');}
 function table(target:string,headers:string[],rows:(string|HTMLElement)[][],numeric:number[]=[],displayRows?:string[][]){
-  const revision=data().definitions.revisions[0];
-  const referenceScope=[data().profile,page,select('reference-table').value,revision.reference_catalog_id,revision.reference_revision_id];
+  const referenceScope=[data().profile,page,select('reference-table').value,referencePage?.referenceRevision,referencePage?.offset,referencePage?.search,historicalContext()];
   const marketScope=[data().profile,curve,result?.snapshotId??'',target==='history-values'?contract:'',target==='revisions'?input:'',...(['inputs','mappings'].includes(target)?[showAllContracts?'all':pricingContract]:[])];
   renderRegularTable($(target),target,JSON.stringify(target==='reference'?referenceScope:marketScope),headers,rows,numeric,()=>busy,{displayRows});
 }
@@ -96,7 +99,6 @@ function setPage(next:string){
   page=next;$('jobs-page').hidden=next!=='jobs';$('delivery-page').hidden=next!=='delivery';$('parties-page').hidden=next!=='parties';$('futures-page').hidden=next!=='futures';$('power-page').hidden=next!=='power';select('snapshot').closest<HTMLElement>('.date-control')!.hidden=['admin','jobs'].includes(next);$('market-page').hidden=next!=='market';$('reference-page').hidden=next!=='reference';$('schedules-page').hidden=next!=='schedules';$('curve-date-editor').hidden=next!=='configuration';$('date-context').hidden=['admin','jobs'].includes(next);$('admin-page').hidden=next!=='admin';$('no-access-page').hidden=true;
   text('page-section',next==='jobs'?'WORKSPACE':next==='futures'?'TRADING':next==='admin'?'ADMINISTRATION':['configuration','schedules','power','reference'].includes(next)?'WORKSPACE SETTINGS':'MARKET DATA');text('header-calculation-time','');text('page-title',next==='jobs'?'Jobs & Infrastructure':next==='delivery'?'Delivery prices':next==='parties'?'Entities & counterparties':next==='futures'?'Blotter':next==='power'?'Power TOUs':next==='admin'?'Users & access':next==='market'?'Curves & prices':next==='configuration'?'Contract definitions':next==='schedules'?'Schedules':'Reference data');
   for(const name of ['market','delivery','power','reference','configuration','schedules','admin','futures','parties','jobs'])$('nav-'+name).classList.toggle('active',next===name);
-  if(next==='reference')renderReference();
   text('status',next==='jobs'?'Jobs and infrastructure · current authority.':next==='futures'?'Trading blotter · saved market inputs.':next==='admin'?'Workspace identity and access administration.':next==='schedules'?'Reusable schedule shortcuts.':result?`Prices for ${instant(result.at)}`:'Choose a curve and a market date to get started.');syncControls();
 }
 function showView(view:Preferences['tab']){document.querySelectorAll<HTMLElement>('.view').forEach(n=>n.hidden=n.id!==`view-${view}`);document.querySelectorAll<HTMLButtonElement>('.tab').forEach(b=>{const active=b.dataset.view===view;b.classList.toggle('active',active);b.setAttribute('aria-selected',String(active));});}
@@ -266,34 +268,53 @@ function renderDependencies(){
   $('source-flow').replaceChildren(sources);$('dependencies').replaceChildren(dependencies);
 }
 
-function referenceName(table:string,code:string){const catalog=data().unitCatalog?.references;const current=['reference','configuration'].includes(page)&&catalog&&['units','unit_conversions','dimensions','commodities','measurement_bases','quantity_specifications'].includes(select('reference-table').value)&&catalog[table];const r=current?exactRow(current,'code',code):row(table,'code',code,true);if(typeof r.name==='string')return r.name.replace(/^Synthetic /,'');if(typeof r.symbol==='string')return r.symbol;if(typeof r.display_code==='string')return r.display_code;return friendly(code);}
+function referenceName(table:string,code:string,references=data().references){const r=exactRow(references[table]??[],'code',code);if(typeof r.name==='string')return r.name.replace(/^Synthetic /,'');if(typeof r.symbol==='string')return r.symbol;if(typeof r.display_code==='string')return r.display_code;return friendly(code);}
 const linkedTables:Record<string,string>={commodity_code:'commodities',fuel_commodity_code:'commodities',output_commodity_code:'commodities',currency_code:'currencies',quote_currency_code:'currencies',unit_code:'units',lot_unit_code:'units',from_unit_code:'units',to_unit_code:'units',quote_unit_code:'units',fuel_unit_code:'units',output_unit_code:'units',location_code:'locations',type_code:'location_types',exchange_code:'exchanges',clearing_house_code:'clearing_houses',source_code:'sources',product_code:'futures_products',series_code:'futures_series',clock_code:'clock_rules',market_clock_code:'clock_rules',calendar_code:'calendars',trading_calendar_code:'calendars',quantity_code:'quantity_specifications',basis_code:'measurement_bases',index_a_code:'price_index_definitions',index_b_code:'price_index_definitions',numerator_quantity_code:'quantity_specifications',denominator_quantity_code:'quantity_specifications'};
 function referenceValue(r:Row,key:string){
-  if(r[key]===null)return '—';const value=val(r,key);if(value==='true'||value==='false')return value==='true'?'Yes':'No';if(linkedTables[key])return referenceName(linkedTables[key],value);
+  if(r[key]===null)return '—';const value=val(r,key);if(value==='true'||value==='false')return value==='true'?'Yes':'No';if(linkedTables[key])return referenceName(linkedTables[key],value,referencePage!.references);
   if(key.endsWith('_at'))return instant(value);if(key==='code')return friendly(value);
   if(/^-?\d+(\.\d+)?$/.test(value)||['name','symbol','display_code','zone_name','series_label','delivery_from','delivery_to','event_date','date','locator','evidence'].includes(key))return value;
   return friendly(value);
 }
-function renderReference(){
-  if(contextDirty)return;
+function clearReference(){referencePage=undefined;unitConverter.reset();$('reference').replaceChildren();text('reference-page-status','');}
+function referenceCategory(){
   const groups=dataSections(Object.keys(data().references)),sections=groups.flatMap(g=>g.sections),previous=select('reference-table').value;
-  const selected=sections.some(s=>s.value===previous)?previous:sections[0]?.value;
-  if(!selected)throw Error('These details are unavailable. Please refresh the page.');
+  const selected=sections.some(s=>s.value===previous)?previous:'currencies';
+  if(!sections.some(s=>s.value===selected))throw Error('These details are unavailable. Please refresh the page.');
   select('reference-table').replaceChildren(...groups.map(g=>{const group=document.createElement('optgroup');group.label=g.name;group.append(...g.sections.map(s=>{const option=el('option',s.name);option.value=s.value;return option;}));return group;}));select('reference-table').value=selected;
   const group=groups.find(g=>g.sections.some(s=>s.value===selected))!;
   text('data-title',group.sections.find(s=>s.value===selected)!.name);text('data-description',group.description);
-  if(data().unitCatalogError&&['units','unit_conversions','dimensions','commodities','measurement_bases','quantity_specifications'].includes(selected)){
-    unitConverter.reset();$('reference').textContent='The configured unit catalog is unavailable at this effective date or knowledge cutoff.';return;
-  }
-  unitConverter.populate(data().unitCatalog?{...data(),references:data().unitCatalog!.references}:data(),selected==='units'||selected==='unit_conversions');
-  const rows=data().unitCatalog?.references[selected]??data().references[selected],columns=publicColumns(rows);table('reference',columns.map(c=>c.name),rows.map(r=>columns.map(c=>referenceValue(r,c.key))));
+  return selected;
+}
+function renderReference(){
+  if(contextDirty||!referencePage)return;
+  const {table:selected,rows,offset,hasMore}=referencePage;
+  if(data().unitCatalog)unitConverter.populate({...data(),references:data().unitCatalog!.references},selected==='units'||selected==='unit_conversions');else unitConverter.reset();
+  const columns=publicColumns(rows);table('reference',columns.map(c=>c.name),rows.map(r=>columns.map(c=>referenceValue(r,c.key))));
+  const filter=$('reference').querySelector<HTMLInputElement>('.table-search')!;filter.placeholder='Filter this page…';filter.setAttribute('aria-label','Filter this page');
+  text('reference-page-status',rows.length?`Rows ${offset+1}–${offset+rows.length}${hasMore?canAdvanceReference()?' · more available':' · Refine your search to see more results.':''}`:'No rows on this page.');
+}
+async function loadReference(offset=0,search=''){
+  clearReference();if(contextDirty)throw Error('Apply the changed context first.');
+  const owner=data(),selected=referenceCategory(),context=historicalContext()??null;
+  const query=new URLSearchParams({table:selected,offset:String(offset),search});
+  const next=await api<ReferencePage>('reference/catalog?'+query);
+  const unitCatalogPage=['units','unit_conversions','dimensions','commodities','measurement_bases','quantity_specifications'].includes(selected);
+  const revision=owner.definitions.revisions[0],expected=unitCatalogPage?owner.unitCatalog?.revision as ReferencePage['referenceRevision']|undefined:{catalogId:val(revision,'reference_catalog_id'),revisionId:val(revision,'reference_revision_id')};
+  const sameRevision=expected&&next.referenceRevision?.catalogId===expected.catalogId&&next.referenceRevision?.revisionId===expected.revisionId&&(unitCatalogPage||next.definitionRevisionId===val(revision,'id'));
+  const sameRequest=next.table===selected&&next.offset===offset&&next.search===search;
+  const sameContext=next.profile===owner.profile&&JSON.stringify(next.context)===JSON.stringify(context);
+  const boundedPage=next.referenceScope==='selected_table'&&next.pageSize===200&&Number.isSafeInteger(next.maximumOffset)&&next.maximumOffset>=offset&&typeof next.hasMore==='boolean'&&Array.isArray(next.rows)&&next.rows.length<=200&&next.references;
+  if(workspace!==owner||contextDirty||page!=='reference'||select('reference-table').value!==selected||!sameRevision||!sameRequest||!sameContext||!boundedPage)
+    throw Error('The reference page is missing or inconsistent. Refresh and try again.');
+  referencePage=next;try{renderReference();}catch(error){clearReference();throw error;}
 }
 async function loadWorkspace(){
   const next=await api<Workspace>('workspace/catalog');
-  if(next.observationScope!=='on_demand'||!Array.isArray(next.observations)||next.observations.length)throw Error('The market catalog is missing or inconsistent. Refresh and try again.');
-  const names=await api<{code:string;name:string}[]>('curve-names');workspace=next;setCurveNames(names);
+  if(next.referenceScope!=='definition_closure'||next.observationScope!=='on_demand'||!Array.isArray(next.observations)||next.observations.length||!Array.isArray(next.curveNames))throw Error('The market catalog is missing or inconsistent. Refresh and try again.');
+  clearReference();workspace=next;setCurveNames(next.curveNames);
 }
-async function reload(selected:string){await loadWorkspace();renderFrames(selected);renderContext();renderReference();}
+async function reload(selected:string){await loadWorkspace();renderFrames(selected);renderContext();}
 function updateFilters(){
   prefs.browseBy=select('browse-by').value as Preferences['browseBy'];prefs.commodity=select('commodity').value;persist();
   if(curve&&!marketGroups(data(),prefs.browseBy,prefs.commodity,prefs.marketType).some(g=>g.curves.some(c=>c.code===curve))){curve='';clearPrices();}
@@ -317,7 +338,7 @@ $('sign-out').onclick=()=>void act(async()=>{await api('logout',{});location.ass
 async function loadIdentity(){
   jobs.reset();$('jobs-page').hidden=true;
   deliveryPrices.reset();$('delivery-page').hidden=true;parties.reset();unitConverter.reset();futures.reset();power.reset();touProducts.reset();schedules.reset();dateEditor.reset();administration.reset();contextDirty=false;$('parties-page').hidden=true;$('power-page').hidden=true;$('futures-page').hidden=true;$('no-access-page').hidden=true;
-  curve='';clearPrices();workspace=undefined;setCurveNames([]);permissions=[];choose('snapshot',[{value:'',name:'Choose a date…'}],'');select('snapshot').closest<HTMLElement>('.date-control')!.hidden=true;$('reference').replaceChildren();$('curves').replaceChildren();$('market-page').hidden=true;$('reference-page').hidden=true;$('schedules-page').hidden=true;$('curve-date-editor').hidden=true;$('admin-page').hidden=true;$('date-context').hidden=true;
+  curve='';clearPrices();clearReference();choose('reference-table',[],'');workspace=undefined;setCurveNames([]);permissions=[];choose('snapshot',[{value:'',name:'Choose a date…'}],'');select('snapshot').closest<HTMLElement>('.date-control')!.hidden=true;$('curves').replaceChildren();$('market-page').hidden=true;$('reference-page').hidden=true;$('schedules-page').hidden=true;$('curve-date-editor').hidden=true;$('admin-page').hidden=true;$('date-context').hidden=true;
   permissions=(await api<{permissions:string[]}>('access')).permissions;loadProfile();renderTimeZones();
   // Navigation follows current permissions; the backend still authorizes every operation.
   const read=can('ReadMarketData'),author=read&&(can('WriteMarketDefinitions')||can('SealMarketDefinitions')),manage=can('ManageAccess')&&can('ManageIdentities');
@@ -335,7 +356,7 @@ $('browse-by').onchange=()=>void act(async()=>updateFilters());$('commodity').on
 document.querySelectorAll<HTMLButtonElement>('[data-type]').forEach(b=>b.onclick=()=>void act(async()=>{prefs.marketType=b.dataset.type as Preferences['marketType'];updateFilters();}));
 document.querySelectorAll<HTMLButtonElement>('.tab').forEach(b=>b.onclick=()=>{if(busy)return;prefs.tab=b.dataset.view as Preferences['tab'];persist();showView(prefs.tab);});
 const schedules=setupShortcutEditor(act,{time:api,load:()=>api('schedules'),preview:draft=>api('schedules/preview',draft),keep:draft=>api('schedules/keep',draft),resolve:body=>api('schedules/resolve',body)},()=>busy,()=>prefs.timeZone);
-function dirtyContext(){deliveryPrices.reset();parties.reset();unitConverter.reset();futures.reset();power.reset();contextDirty=true;if(workspace)clearPrices();$('reference').replaceChildren();text('environment-context-note','Context changed · choose View this context to apply it.');}
+function dirtyContext(){deliveryPrices.reset();parties.reset();clearReference();futures.reset();power.reset();contextDirty=true;if(workspace)clearPrices();text('environment-context-note','Context changed · choose View this context to apply it.');}
 const parties=setupPartyEditors({api,act,busy:()=>busy,zone:()=>prefs.timeZone,profile:()=>administrationScope+':'+currentProfile,source:()=>{if(contextDirty)throw Error('Apply the changed context first.');return frame().id;}});
 $('nav-parties').onclick=()=>void act(async()=>{if(contextDirty)await applyContext();setPage('parties');await parties.load();});
 const administration=setupAdministration(act,api,()=>busy,()=>prefs.timeZone,()=>administrationScope+':'+currentProfile,profileChoices);
@@ -349,10 +370,10 @@ async function applyContext(){
   text('environment-context-note','Historical view · latest corrections known at the chosen time. Changes are disabled.');
 }
 $('close-view-context').onclick=()=>{$<HTMLDetailsElement>('date-context').open=false;};
-$('apply-view-context').onclick=()=>void act(applyContext);
+$('apply-view-context').onclick=()=>void act(async()=>{await applyContext();if(page==='reference')await loadReference();});
 async function currentInputs(){parties.reset();unitConverter.reset();futures.reset();power.reset();await api('market/current',{});contextDirty=false;dateEditor.clearContext();clearPrices();await reload('');text('environment-context-note','Current workspace · exact selected inputs');}
-$('current-view-context').onclick=()=>void act(currentInputs);
-$('return-working').onclick=()=>void act(currentInputs);
+$('current-view-context').onclick=()=>void act(async()=>{await currentInputs();if(page==='reference')await loadReference();});
+$('return-working').onclick=()=>void act(async()=>{await currentInputs();if(page==='reference')await loadReference();});
 const deliveryPrices=setupPowerImports({api,act,busy:()=>busy,instant});
 const jobs=setupJobs({api,act,busy:()=>busy,identity:()=>administrationScope+':'+currentProfile,instant});
 $('nav-jobs').onclick=()=>void act(async()=>{setPage('jobs');await jobs.load();});
@@ -364,12 +385,24 @@ $('nav-futures').onclick=()=>void act(async()=>{if(contextDirty)await applyConte
 const touProducts=setupTouProducts(act,api,()=>busy,()=>prefs.timeZone,async()=>{power.reset();if(select('snapshot').value)await power.load();});
 $('nav-power').onclick=$('curve-power').onclick=()=>void act(async()=>{setPage('power');power.reset();await touProducts.load();if(select('snapshot').value)await power.load();});
 $('nav-schedules').onclick=()=>{if(busy)return;setPage('schedules');void act(async()=>{await schedules.load();await dateEditor.load();});};
-$('nav-configuration').onclick=()=>{if(busy)return;void act(async()=>{if(contextDirty)await applyContext();setPage('configuration');await dateEditor.load();});};$('nav-market').onclick=()=>void act(async()=>{if(contextDirty)await applyContext();setPage('market');});$('nav-reference').onclick=()=>void act(async()=>{if(contextDirty)await applyContext();setPage('reference');});$('reference-table').onchange=()=>{try{renderReference();}catch{notice('These reference details are unavailable. Please choose another category.');}};
+$('nav-configuration').onclick=()=>{if(busy)return;void act(async()=>{if(contextDirty)await applyContext();setPage('configuration');await dateEditor.load();});};$('nav-market').onclick=()=>void act(async()=>{if(contextDirty)await applyContext();setPage('market');});$('nav-reference').onclick=()=>void act(async()=>{if(contextDirty)await applyContext();setPage('reference');$<HTMLInputElement>('reference-search').value='';await loadReference();});
+$('reference-table').onchange=()=>void act(async()=>{$<HTMLInputElement>('reference-search').value='';await loadReference();});
+$('reference-search-form').onsubmit=event=>{event.preventDefault();void act(()=>loadReference(0,$<HTMLInputElement>('reference-search').value));};
+$('reference-previous').onclick=()=>void act(()=>loadReference(Math.max(0,referencePage!.offset-referencePage!.pageSize),referencePage!.search));
+$('reference-next').onclick=()=>void act(()=>loadReference(referencePage!.offset+referencePage!.pageSize,referencePage!.search));
 for(const id of ['source-contract','pricing-contract'])select(id).onchange=()=>void act(async()=>{pricingContract=select(id).value;input='';draftFor='';renderDependencies();renderInputs();});
 for(const id of ['source-all','pricing-all'])$(id).onclick=()=>void act(async()=>{showAllContracts=!showAllContracts;renderDependencies();renderInputs();});
 $('history-close').onclick=()=>{clearChart($('history-chart'));$('history-card').hidden=true;historyData=undefined;contract='';};
 $('correction-form').onsubmit=event=>{event.preventDefault();void act(async()=>{const current=frame(),next=await api<{frame:Frame;observationId:string}>('corrections',{snapshotId:current.id,observationId:input,value:$<HTMLInputElement>('correction-value').value});clearPrices();await reload(next.frame.id);input=next.observationId;await build();notice('Your change was saved. The market date now shows the corrected prices. Earlier versions are still available.');});};
-void act(async()=>{const examples=await transport<{id:string;name:string;url:string}[]>('examples',undefined,'/api/');const chooser=select('example-dataset');chooser.replaceChildren(...examples.map(e=>new Option(e.name,e.id)));chooser.value=exampleId;chooser.onchange=()=>{const selected=examples.find(e=>e.id===chooser.value);if(selected)location.assign(selected.url);};
-const boot=await api<ProfileChoices & {csrfToken:string;profile:string|null;runId:string;tenantId:string;workspaceId:string}>('bootstrap');csrf=boot.csrfToken;administrationScope=[boot.runId,boot.tenantId,boot.workspaceId].join(':');hostedPilot=boot.mode==='hosted-pilot';
+let initialWorkspaceReady=false;
+void act(async()=>{
+const [examples,boot]=await Promise.all([transport<{id:string;name:string;url:string}[]>('examples',undefined,'/api/'),api<ProfileChoices & {csrfToken:string;profile:string|null;runId:string;tenantId:string;workspaceId:string}>('bootstrap')]);
+const chooser=select('example-dataset');chooser.replaceChildren(...examples.map(e=>new Option(e.name,e.id)));chooser.value=exampleId;chooser.onchange=()=>{const selected=examples.find(e=>e.id===chooser.value);if(selected)location.assign(selected.url);};
+csrf=boot.csrfToken;administrationScope=[boot.runId,boot.tenantId,boot.workspaceId].join(':');hostedPilot=boot.mode==='hosted-pilot';
   // Synthetic sign-in is an explicit loopback preview facility only.
-  $('example').hidden=hostedPilot;if(hostedPilot&&!boot.profile)throw Error('The signed-in account could not be verified.');currentProfile=boot.profile??'viewer';if(!boot.profile)await api('profile',{profile:currentProfile});await loadIdentity();await profileChoices(boot);});
+  $('example').hidden=hostedPilot;if(hostedPilot&&!boot.profile)throw Error('The signed-in account could not be verified.');currentProfile=boot.profile??'viewer';if(!boot.profile)await api('profile',{profile:currentProfile});await loadIdentity();await profileChoices(boot);initialWorkspaceReady=true;
+}).then(async()=>{
+  if(!initialWorkspaceReady)return;
+  await new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve())));
+  if(!busy&&$('error').hidden)performance.mark('leanetrm:workspace-ready');
+});

@@ -161,9 +161,12 @@ export function setupFutures(options:{api:Api;act:(work:()=>Promise<void>)=>Prom
     clear();
     const request:ReadRequest={snapshotId:source.snapshotId,convention:source.convention,knowledgeMode:source.context?'retained':'current',...(source.context?{contextId:source.context.contextId}:{})};
     try{
-      catalog=await api<Catalog>('futures/catalog',request);
-      viewControls();
-      const reportRequest={context:{...request,convention:'trading_workspace_v1',knowledgeMode:'retained',contextId:catalog.context.contextId},view:{mode:view.mode,bookIds:view.bookIds,portfolioIds:view.portfolioIds,groupBy:view.mode==='pivot'?view.groupBy:[],measures:view.mode==='pivot'?view.measures:[],pivotConvention:view.mode==='pivot'?'trading_blotter_totals_v1':null}};holdings=await api<Holdings>('trading/blotter',reportRequest);lastReadRequest=reportRequest;render();await loadChart(reportRequest);workspace.closeMenus();
+      const selectedView={mode:view.mode,bookIds:view.bookIds,portfolioIds:view.portfolioIds,groupBy:view.mode==='pivot'?view.groupBy:[],measures:view.mode==='pivot'?view.measures:[],pivotConvention:view.mode==='pivot'?'trading_blotter_totals_v1':null};
+      const combined=await api<{catalog:Catalog;blotter:Holdings}>('trading/workspace',{context:{...request,convention:'trading_workspace_v1'},view:selectedView});
+      const selected=combined.catalog.context,reported=combined.blotter.context;
+      if(!selected.contextId||selected.contextId!==reported.contextId||selected.effectiveOn!==reported.effectiveOn||selected.knownAt!==reported.knownAt||combined.catalog.asOf!==combined.blotter.asOf)throw Error('The trading workspace returned inconsistent market contexts. Refresh and try again.');
+      catalog=combined.catalog;holdings=combined.blotter;viewControls();
+      const reportRequest={context:{...request,convention:'trading_workspace_v1',knowledgeMode:'retained',contextId:selected.contextId},view:selectedView};lastReadRequest=reportRequest;render();await loadChart(reportRequest);workspace.closeMenus();
     }catch(error){clear();throw error;}
   }
   async function loadChart(reportRequest:{context:unknown;view:unknown}){

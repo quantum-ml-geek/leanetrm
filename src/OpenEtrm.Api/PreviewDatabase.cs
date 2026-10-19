@@ -14,6 +14,10 @@ public sealed record PreviewManifest(string Mode, Guid CatalogId, Guid RevisionI
     PreviewSequenceCoverage[]? Schedules = null,PreviewSwapMarket[]? SwapMarkets=null, PreviewUnitCatalog? UnitCatalog=null,string IdentityIssuer="https://preview.invalid",string FuturesConvention="fixed_total_cash_execution_pnl_v1");
 public sealed record PreviewUnitCatalog(Guid ReferenceRevisionId,Guid DefinitionRevisionId);
 public sealed record UnitCatalogData(ReferenceRevision Revision,ImmutableDictionary<string,ImmutableArray<JsonElement>> References);
+public enum ReferenceReadScope { DefinitionClosure, AllVisible }
+public sealed record ReferencePage(string Table,ImmutableArray<JsonElement> Rows,
+    ImmutableDictionary<string,ImmutableArray<JsonElement>> References,int Offset,int PageSize,int MaximumOffset,bool HasMore,string Search,
+    ReferenceRevision ReferenceRevision,Guid DefinitionRevisionId);
 public sealed record PreviewSwapMarket(Guid RevisionId,PreviewSeedFrame[] Frames);
 public sealed record PreviewSequenceCoverage(string Curve, DateTimeOffset From, DateTimeOffset To, DateTimeOffset ExampleAt);
 public sealed record PreviewExample(DateTimeOffset At,string Curve);
@@ -30,6 +34,7 @@ public sealed class PreviewDatabase : IAsyncDisposable
     private readonly string runtimeLogin;
     private readonly Func<string>? hostedSession;
     public PreviewManifest Manifest { get; }
+    public const int ReferenceMaximumOffset=100000;
     public static readonly string[] ReferenceTables = ["currencies", "dimensions", "units", "unit_conversions", "commodities",
         "measurement_bases", "quantity_specifications", "quote_specifications", "value_specifications", "locations",
         "clock_rules", "calendars", "calendar_days", "commodity_units", "location_types", "commodity_locations",
@@ -120,7 +125,8 @@ SELECT NOT(rolsuper OR rolbypassrls OR rolcreatedb OR rolcreaterole) AND pg_has_
         }
     }
 
-    public async Task<PreviewData> Read(NpgsqlConnection connection, CancellationToken ct,Guid? selectedRevision=null,PreviewData? sharedReferences=null,ImmutableArray<Guid>? observationIds=null)
+    public async Task<PreviewData> Read(NpgsqlConnection connection, CancellationToken ct,Guid? selectedRevision=null,PreviewData? sharedReferences=null,ImmutableArray<Guid>? observationIds=null,
+        ReferenceReadScope referenceScope=ReferenceReadScope.DefinitionClosure,bool includeCalendarDays=true)
     {
         if(selectedRevision is {} requested&&requested!=Manifest.RevisionId&&!(Manifest.SwapMarkets??[]).Any(m=>m.RevisionId==requested))throw new PreviewDeniedException();
         var selectedManifest=selectedRevision is {} id?Manifest with {RevisionId=id}:Manifest;
@@ -133,22 +139,163 @@ SELECT NOT(rolsuper OR rolbypassrls OR rolcreatedb OR rolcreaterole) AND pg_has_
         if (definitions["revisions"].Length != 1 || definitions["revisions"][0].Text("state") != "sealed") throw new PreviewDeniedException();
         PreviewData.RequireBundlePin(selectedManifest, definitions["revisions"][0]);
         IReadOnlyDictionary<string,ImmutableArray<JsonElement>> references;
-        if(sharedReferences is not null)
+        if(sharedReferences is not null && (sharedReferences.ReferenceRevision!=new ReferenceRevision(selectedManifest.ReferenceCatalogId,selectedManifest.ReferenceRevisionId)||sharedReferences.DefinitionRevision.CatalogId!=selectedManifest.CatalogId))
+            throw new MarketDataException("reference_pin_mismatch","Shared reference rows require the same exact authorized catalog and revision.");
+        async Task RequireSharedReferenceAccess()
         {
-            if(sharedReferences.ReferenceRevision!=new ReferenceRevision(selectedManifest.ReferenceCatalogId,selectedManifest.ReferenceRevisionId)||sharedReferences.DefinitionRevision.CatalogId!=selectedManifest.CatalogId)throw new MarketDataException("reference_pin_mismatch","Shared reference rows require the same exact authorized catalog and revision.");
-            references=sharedReferences.References;
+            if(sharedReferences is null)return;
+            await using var access=ScheduleStore.Command(connection,"SELECT security.reference_access($1,'ReadMarketData') AND security.reference_version_visible($1,$2)",selectedManifest.ReferenceCatalogId,selectedManifest.ReferenceRevisionId);
+            if(!Equals(await access.ExecuteScalarAsync(ct),true))throw new PreviewDeniedException();
         }
-        else
-        {
-            var loaded=new Dictionary<string,ImmutableArray<JsonElement>>();
-            foreach(var table in ReferenceTables)loaded[table]=await Rows(connection,$"SELECT row_to_json(t)::text FROM(SELECT * FROM ref_data.{table} WHERE catalog_id=$1 AND revision_id=$2)t",[selectedManifest.ReferenceCatalogId,selectedManifest.ReferenceRevisionId],ct);
-            references=loaded;
-        }
+        await RequireSharedReferenceAccess();
+        references=await ReadReferences(connection,selectedManifest,definitions,referenceScope,includeCalendarDays,sharedReferences,ct);
         var observations = observationIds is {} pins
             ? await ReadObservationFacts(connection, selectedManifest, pins, ct)
             : await Rows(connection, "SELECT row_to_json(t)::text FROM (SELECT * FROM market_data.observations WHERE catalog_id=$1 AND definition_revision_id=$2 ORDER BY observed_at,received_at,id) t", [selectedManifest.CatalogId, selectedManifest.RevisionId], ct);
+        await RequireSharedReferenceAccess();
         return new PreviewData(selectedManifest, definitions, references, observations);
     }
+
+    private static async Task<IReadOnlyDictionary<string,ImmutableArray<JsonElement>>> ReadReferences(NpgsqlConnection connection,
+        PreviewManifest manifest,IReadOnlyDictionary<string,ImmutableArray<JsonElement>> definitions,
+        ReferenceReadScope scope,bool includeCalendarDays,PreviewData? sharedReferences,CancellationToken ct)
+    {
+        var loaded=new Dictionary<string,ImmutableArray<JsonElement>>();
+        var bounded=new HashSet<string>(["futures_series","futures_products","futures_milestones","futures_lot_resolutions",
+            "futures_product_terms","futures_basis_settlements","product_evidence","locations","commodity_locations","calendar_days"]);
+        async Task<ImmutableArray<JsonElement>> ReadTable(string table,string? column=null,IEnumerable<string>? codes=null)
+        {
+            // These immutable tables are complete in every read scope. Reuse
+            // stays within this authorized operation; bounded tables always
+            // resolve against this definition's own explicit relationships.
+            if(column is null&&!bounded.Contains(table)&&sharedReferences is not null)
+                return sharedReferences.References[table];
+            var parameters=new object[]{manifest.ReferenceCatalogId,manifest.ReferenceRevisionId};
+            var predicate="";
+            if(column is not null)
+            {
+                var selected=codes!.Distinct().ToArray();
+                if(selected.Length==0)return ImmutableArray<JsonElement>.Empty;
+                predicate=$" AND {column}=ANY($3::text[])";
+                parameters=[..parameters,selected];
+            }
+            return await Rows(connection,$"SELECT row_to_json(t)::text FROM(SELECT * FROM ref_data.{table} WHERE catalog_id=$1 AND revision_id=$2{predicate})t",parameters,ct);
+        }
+        if(scope==ReferenceReadScope.AllVisible)
+        {
+            foreach(var table in ReferenceTables)loaded[table]=await ReadTable(table);
+            return loaded;
+        }
+        foreach(var table in ReferenceTables.Where(t=>!bounded.Contains(t)))loaded[table]=await ReadTable(table);
+
+        // Follow only exact-version declared settlement links. These metadata
+        // references do not introduce market dependencies or pricing inputs.
+        var pending=Codes(definitions["contracts"],"futures_series_code").ToHashSet();
+        var seen=new HashSet<string>();
+        var series=ImmutableArray.CreateBuilder<JsonElement>();
+        var basis=ImmutableArray.CreateBuilder<JsonElement>();
+        while(pending.Count>0)
+        {
+            var batch=pending.ToArray();seen.UnionWith(batch);
+            series.AddRange(await ReadTable("futures_series","code",batch));
+            var links=await ReadTable("futures_basis_settlements","series_code",batch);
+            basis.AddRange(links);
+            pending=Codes(links,"benchmark_series_code").Where(code=>!seen.Contains(code)).ToHashSet();
+        }
+        loaded["futures_series"]=series.ToImmutable();
+        loaded["futures_basis_settlements"]=basis.ToImmutable();
+        var products=Codes(loaded["futures_series"],"product_code").ToArray();
+        loaded["futures_products"]=await ReadTable("futures_products","code",products);
+        foreach(var table in new[]{"futures_product_terms","product_evidence"})loaded[table]=await ReadTable(table,"product_code",products);
+        foreach(var table in new[]{"futures_milestones","futures_lot_resolutions"})loaded[table]=await ReadTable(table,"series_code",seen);
+        var locations=Codes(definitions["curves"],"location_code")
+            .Concat(Codes(loaded["futures_products"],"location_code"))
+            .Concat(Codes(loaded["price_index_definitions"],"location_code")).Distinct().ToArray();
+        loaded["locations"]=await ReadTable("locations","code",locations);
+        loaded["commodity_locations"]=await ReadTable("commodity_locations","location_code",locations);
+        loaded["calendar_days"]=includeCalendarDays?await ReadTable("calendar_days"):ImmutableArray<JsonElement>.Empty;
+        return loaded;
+    }
+
+    private static IEnumerable<string> Codes(IEnumerable<JsonElement> rows,string column)=>rows
+        .Where(row=>row.TryGetProperty(column,out var value)&&value.ValueKind==JsonValueKind.String)
+        .Select(row=>row.GetProperty(column).GetString()!).Distinct();
+
+    public async Task<ReferencePage> ReadReferencePage(NpgsqlConnection connection,string table,int offset,string? search,CancellationToken ct)
+    {
+        search??="";
+        if(!ReferenceTables.Contains(table)||offset is <0 or >ReferenceMaximumOffset||search.Length>160)
+            throw new MarketDataException("reference_page",$"Choose a supported reference table, an offset from 0 to {ReferenceMaximumOffset} and search text up to 160 characters.");
+        var revision=new ReferenceRevision(Manifest.ReferenceCatalogId,Manifest.ReferenceRevisionId);
+        var definition=Manifest.RevisionId;
+        if(UnitTables.Contains(table)&&Manifest.UnitCatalog is {} configured)
+        {
+            revision=new(Manifest.ReferenceCatalogId,configured.ReferenceRevisionId);
+            definition=configured.DefinitionRevisionId;
+        }
+        async Task RequireReferenceAccess()
+        {
+            await using var access=ScheduleStore.Command(connection,"SELECT security.reference_access($1,'ReadMarketData')",revision.CatalogId);
+            if(!Equals(await access.ExecuteScalarAsync(ct),true))throw new PreviewDeniedException();
+        }
+        await RequireReferenceAccess();
+        var visible=await Rows(connection,"SELECT row_to_json(t)::text FROM(SELECT reference_catalog_id,reference_revision_id FROM market_data.revisions WHERE catalog_id=$1 AND id=$2 AND state='sealed')t",[Manifest.CatalogId,definition],ct);
+        if(visible.Length!=1||visible[0].Id("reference_catalog_id")!=revision.CatalogId||visible[0].Id("reference_revision_id")!=revision.RevisionId)
+            throw new MarketDataException(UnitTables.Contains(table)?"unit_catalog":"reference_catalog","The exact reference catalog is unavailable in this context.");
+        var order=table switch
+        {
+            "unit_conversions"=>"from_unit_code,to_unit_code",
+            "commodity_units"=>"commodity_code,unit_code",
+            "calendar_days"=>"calendar_code,business_date",
+            "commodity_locations"=>"commodity_code,location_code",
+            "exchange_clearing_houses"=>"exchange_code,clearing_house_code",
+            "product_evidence"=>"product_code,source_code,fact_group",
+            "futures_milestones"=>"series_code,milestone",
+            "futures_lot_resolutions" or "futures_basis_settlements"=>"series_code",
+            "futures_product_terms"=>"product_code",
+            _=>"code"
+        };
+        const int pageSize=200;
+        // Table and key identifiers come only from the fixed public catalog.
+        // Search is literal, including SQL wildcard characters, and never runs
+        // a full-result count before returning the bounded selected page.
+        var found=await Rows(connection,$"""
+            SELECT row_to_json(t)::text FROM (
+                SELECT r.* FROM ref_data.{table} r
+                WHERE catalog_id=$1 AND revision_id=$2
+                  AND ($3='' OR strpos(lower(row_to_json(r)::text),lower($3))>0)
+                ORDER BY {order} LIMIT 201 OFFSET $4
+            ) t
+            """,[revision.CatalogId,revision.RevisionId,search,offset],ct);
+        var rows=found.Take(pageSize).ToImmutableArray();
+        var references=ImmutableDictionary.CreateBuilder<string,ImmutableArray<JsonElement>>();
+        references.Add(table,rows);
+        // Names for inspector cells are exact-version linked rows, not labels
+        // borrowed from the business catalog or a preceding page/context.
+        foreach(var (target,columns) in ReferenceLabels)
+        {
+            var codes=columns.SelectMany(column=>Codes(rows,column)).Distinct().ToArray();
+            if(codes.Length==0)continue;
+            var linked=await Rows(connection,$"SELECT row_to_json(t)::text FROM(SELECT * FROM ref_data.{target} WHERE catalog_id=$1 AND revision_id=$2 AND code=ANY($3::text[]))t",[revision.CatalogId,revision.RevisionId,codes],ct);
+            references[target]=references.TryGetValue(target,out var existing)
+                ? existing.Concat(linked).DistinctBy(row=>row.GetProperty("code").GetString()).ToImmutableArray():linked;
+        }
+        await RequireReferenceAccess();
+        return new(table,rows,references.ToImmutable(),offset,pageSize,ReferenceMaximumOffset,found.Length>pageSize,search,revision,definition);
+    }
+
+    private static readonly (string Table,string[] Columns)[] ReferenceLabels=
+    [
+        ("commodities",["commodity_code","fuel_commodity_code","output_commodity_code"]),
+        ("currencies",["currency_code","quote_currency_code"]),
+        ("units",["unit_code","lot_unit_code","from_unit_code","to_unit_code","quote_unit_code","fuel_unit_code","output_unit_code"]),
+        ("locations",["location_code"]),("location_types",["type_code"]),
+        ("exchanges",["exchange_code"]),("clearing_houses",["clearing_house_code"]),
+        ("sources",["source_code"]),("futures_products",["product_code"]),("futures_series",["series_code"]),
+        ("clock_rules",["clock_code","market_clock_code"]),("calendars",["calendar_code","trading_calendar_code"]),
+        ("quantity_specifications",["quantity_code","numerator_quantity_code","denominator_quantity_code"]),
+        ("measurement_bases",["basis_code"]),("price_index_definitions",["index_a_code","index_b_code"])
+    ];
 
     private static Task<ImmutableArray<JsonElement>> ReadObservationFacts(NpgsqlConnection connection,PreviewManifest manifest,ImmutableArray<Guid> pins,CancellationToken ct)
     {

@@ -5,10 +5,19 @@ def run_checks(c, check):
     c.call('profile', {'profile': 'viewer'})
     catalog = c.call('workspace/catalog')
     full = c.call('workspace')
+    check('navigation carries the exact authorized cross-bundle curve-name directory',
+          catalog.get('curveNames') == c.call('curve-names'))
+    context = c.call('market/context', {'effectiveOn': '2020-12-17', 'mode': 'current',
+                                        'selection': 'latest_correction'})['context']
+    historical = c.call('workspace/catalog')
+    check('navigation directory preserves the selected effective and knowledge context',
+          historical.get('curveNames') == c.call('curve-names')
+          and historical['context'] == context)
+    c.call('market/current', {})
     check('navigation catalog omits observation history explicitly',
           catalog['observationScope'] == 'on_demand' and catalog['observations'] == [])
-    check('navigation preserves exact definitions, references and input frames',
-          all(catalog[k] == full[k] for k in ['definitions', 'references', 'frames', 'initialFrameIds']))
+    check('navigation preserves exact definitions and input frames',
+          all(catalog[k] == full[k] for k in ['definitions', 'frames', 'initialFrameIds']))
     unit_tables = {'dimensions', 'units', 'unit_conversions', 'commodities',
                    'measurement_bases', 'quantity_specifications'}
     check('unit conversion catalog contains only its consumed reference tables',
@@ -49,6 +58,32 @@ def run_checks(c, check):
     check('price sources are replaced for the requested historical input frame',
           {o['id'] for o in other['observations']} ==
           {o['id'] for o in full['observations'] if fact(o) in earlier_facts})
+    c.call('profile', {'profile': 'trader'})
+    context = {'snapshotId': frame['id'], 'convention': 'trading_workspace_v1',
+               'knowledgeMode': 'current'}
+    view = {'mode': 'trades', 'bookIds': [], 'portfolioIds': [], 'groupBy': [],
+            'measures': [], 'pivotConvention': None}
+    combined = c.call('trading/workspace', {'context': context, 'view': view})
+    check('one workspace read binds its catalog and blotter to the same context and As of',
+          combined['catalog']['context'] == combined['blotter']['context']
+          and combined['catalog']['asOf'] == combined['blotter']['asOf'] == frame['at'])
+    check('working workspace preserves current booking authority', combined['catalog']['canBook'])
+    retained = {**context, 'knowledgeMode': 'retained',
+                'contextId': combined['catalog']['context']['contextId']}
+    repeated = c.call('trading/workspace', {'context': retained, 'view': view})
+    old_catalog = c.call('futures/catalog', {**retained, 'convention': full['futuresConvention']})
+    old_report = c.call('trading/blotter', {'context': retained, 'view': view})
+    check('combined workspace preserves the exact retained catalog and report contracts',
+          repeated == {'catalog': old_catalog, 'blotter': old_report})
+    pivot = {**view, 'mode': 'pivot', 'groupBy': ['book', 'market', 'contract'],
+             'measures': ['quantity'], 'pivotConvention': 'trading_blotter_totals_v1'}
+    pivoted = c.call('trading/workspace', {'context': retained, 'view': pivot})
+    check('combined workspace preserves explicit managed pivot scopes',
+          pivoted['blotter'] == c.call('trading/blotter', {'context': retained, 'view': pivot}))
+    c.call('trading/workspace', {'context': {**context, 'convention': 'unknown'}, 'view': view}, expected=422)
+    c.call('profile', {'profile': 'viewer'})
+    c.call('trading/workspace', {'context': retained, 'view': view}, expected=403)
+    check('combined workspace rejects unsupported conventions and missing current trading authority')
     c.call('profile', {'profile': 'admin'})
     c.call('workspace/catalog', expected=403)
     c.call('evaluate', {'snapshotId': frame['id'], 'curve': 'local_power',

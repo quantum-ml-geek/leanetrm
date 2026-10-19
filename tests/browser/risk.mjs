@@ -1,6 +1,8 @@
+import {setupTradingReplies} from './trading-responses.mjs';
 export async function run({command,evaluate,wait,click,set,submit,persona,check,shot,idle,url,errors}){
   await command('Page.enable');await command('Runtime.enable');await command('Emulation.setDeviceMetricsOverride',{width:1440,height:1250,deviceScaleFactor:1,mobile:false});
   await command('Page.navigate',{url});await wait(idle);
+  await setupTradingReplies(evaluate);
   await evaluate(`(()=>{const send=window.fetch;window.__riskReads=[];window.__riskRequests=[];window.fetch=async(input,init)=>{const path=String(input);if(path==='/api/futures/risk'){window.__riskRequests.push(JSON.parse(init.body));if(window.__denyRisk){window.__denyRisk=false;return new Response(JSON.stringify({code:'access_denied'}),{status:403,headers:{'Content-Type':'application/json'}});}}const response=await send(input,init);try{window.__riskReads.push({path,data:await response.clone().json()});}catch{}return response;};})();`);
   await persona('risk');
   const frame=await evaluate("(async()=>{const w=await(await fetch('/api/workspace')).json();return w.frames.find(f=>f.at.startsWith('2020-12-18')).id;})()");
@@ -11,7 +13,7 @@ export async function run({command,evaluate,wait,click,set,submit,persona,check,
   const factor=await evaluate("window.__riskReads.find(r=>r.path==='/api/futures/risk/catalog').data.factors.find(f=>f.curves.includes('future')&&f.deliveryFrom==='2021-01-01').seriesId");
   await set('#risk-factor',factor);await set('#risk-bump','0.1');await submit('#risk-form');await wait("document.querySelector('#risk-results .tabulator-row')");
   await check('risk screen displays exact shared-factor results with explicit derivative units',"document.querySelector('#error').hidden&&document.querySelector('#risk-results').textContent.includes('Delta')&&document.querySelector('#risk-results').textContent.includes('Gamma')&&document.querySelector('#risk-results').textContent.includes('USD / (1 USD / MMBtu (IT))')");
-  await check('risk calculation uses the blotter context and reuses a single held unit',"(()=>{const r=window.__riskReads.filter(r=>r.path==='/api/futures/risk').at(-1).data;const h=window.__riskReads.filter(r=>r.path==='/api/trading/blotter').at(-1).data;return r.context.contextId===h.context.contextId&&r.work.unitPricerCalls===3&&r.heldContracts===1&&r.work.positionCount===h.holdings.length;})()");
+  await check('risk calculation uses the blotter context and reuses a single held unit',"(()=>{const r=window.__riskReads.filter(r=>r.path==='/api/futures/risk').at(-1).data;const h=window.__tradingReports(window.__riskReads).at(-1).data;return r.context.contextId===h.context.contextId&&r.work.unitPricerCalls===3&&r.heldContracts===1&&r.work.positionCount===h.holdings.length;})()");
   await check('shared bar chart shows both signed shock directions by book',"document.querySelector('#risk-plots canvas')&&document.querySelector('#risk-plots .chart').dataset.chartAxis==='category'&&document.querySelector('#risk-work').textContent.includes('3 pricer calls')");
   await click('#risk-results details>summary');await wait("document.querySelectorAll('#risk-results .standard-data-grid').length===2");
   await check('individual results remain available beneath book totals',"document.querySelector('#risk-results details').textContent.includes('Individual holding results')&&document.querySelector('#risk-results details .tabulator-row')");

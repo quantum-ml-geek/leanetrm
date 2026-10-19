@@ -1,7 +1,7 @@
 """HTTP checks against a newly owned synthetic preview; invoked by run_preview.py."""
 from preview_client import PreviewClient
 
-def run_checks(url):
+def run_checks(url,query,manifest):
     passed=0
     class Client(PreviewClient):
         def __init__(self):
@@ -16,6 +16,7 @@ def run_checks(url):
     check('synthetic preview boundary is explicit',boot['mode']=='local-synthetic-preview' and boot['profile'] is None)
     c.call('workspace',expected=403);check('no identity does not read workspace')
     c.call('workspace/catalog',expected=403);check('navigation catalog requires current identity')
+    c.call('reference/catalog?table=currencies',expected=403);check('reference pages require current identity')
     c.call('profile',{'profile':'viewer'},headers={'X-Preview-CSRF':'invalid'},expected=400);check('CSRF token enforced')
     c.call('profile',{'profile':'viewer'},headers={'Origin':'https://untrusted.invalid'},expected=403);check('foreign origin rejected')
     c.call('health',headers={'Host':'untrusted.invalid'},expected=403);check('host boundary enforced')
@@ -130,6 +131,9 @@ def run_checks(url):
     check_tou_products(Client,check)
     from check_page_reads import run_checks as check_page_reads
     check_page_reads(c,check)
+    from check_reference_reads import run_checks as check_reference_reads,run_scope_checks
+    check_reference_reads(c,check)
+    run_scope_checks(c,check,query,manifest)
     print(f'{passed} preview HTTP checks passed.',flush=True)
     return workspace
 
