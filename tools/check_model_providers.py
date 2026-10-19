@@ -288,7 +288,8 @@ def run_checks(url, query, psql, manifest, temporary, environment, dotnet):
                       "UPDATE assistant.administration_audit SET request='{}';",
                       "DELETE FROM assistant.administration_audit;",
                       f"DELETE FROM assistant.providers WHERE id='{provider}';",
-                      f"UPDATE assistant.providers SET vendor='google' WHERE id='{provider}';",
+                      # Advancing the version leaves only the identity rule to refuse a changed vendor.
+                      f"UPDATE assistant.providers SET vendor='google',version=version+1 WHERE id='{provider}';",
                       f"UPDATE assistant.providers SET version=version+2 WHERE id='{provider}';"):
         query(expect(statement, '55000'))
     check('credentials and audit are immutable and a provider changes only by advancing its version, even for the owner')
