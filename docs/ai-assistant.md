@@ -1,12 +1,15 @@
 # Page assistant, phase 1: local-preview core
 
-Status: design proposal; implementation follows §12. Implemented so far, from step 2: the
-market and reference page reads (`MarketReads`) and the schedule library, TOU product and
-power hour catalog reads (`ScheduleReads`), extracted under a page-view `PinnedContext`
-(a retained context, or working data that binds nothing). Other page operations are
-still page handlers, among them contract shortcuts, date resolution, the date picker
-catalog, the power hour calculation, trade parties and trades. The turn's working-data
-pin (§7.2), which binds a captured context, is not implemented.
+Status: design proposal; implementation follows §12. Implemented so far, from step 2:
+the market and reference page reads (`MarketReads`) and the schedule library, TOU
+product and power hour catalog reads (`ScheduleReads`), extracted under a page-view
+`PinnedContext` (a retained context, or working data that binds nothing), and the trade
+party read (`PartyReads`), which binds the dated cutoff of a `TradingView`: for working
+data a context captured from current knowledge at the frame's date, otherwise the
+retained context. Other page operations are still page handlers, among them contract
+shortcuts, date resolution, the date picker catalog, the power hour calculation and
+trades. The turn's working-data pin (§7.2), which binds a captured context, is not
+implemented.
 
 The page assistant ships in three phases, each with its own design:
 
@@ -94,14 +97,15 @@ Facts the body relies on and does not restate:
   global advisory lock 730849102 (D134), held to commit; a catalog retains at most
   4096 contexts, never reclaimed (`knowledge_limit`), and each current-mode capture
   adds one.
-- **Authorization.** Market and reference page reads and the schedule library, TOU
-  product and power hour catalog reads call `MarketReads` or `ScheduleReads` with a
-  `PinnedContext`; other page operations are still `MapPreview` handlers bound to the
-  HTTP request, session and frames. `security.has_permission` for an agent principal
-  requires the agent's permission, an unexpired, unrevoked delegation listing it, the
-  delegator's current permission and `CreateDelegations`, and enabled principals; it
-  does not know who asked. `security.trading_access` and `security.use_market_context`
-  also require `ReadMarketData`. Control-table writes advance `security.epoch`
+- **Authorization.** Market and reference page reads, the schedule library, TOU
+  product and power hour catalog reads and the trade party read call `MarketReads` or
+  `ScheduleReads` with a `PinnedContext`, or `PartyReads` with a `TradingView`; other
+  page operations are still `MapPreview` handlers bound to the HTTP request, session
+  and frames. `security.has_permission` for an agent principal requires the agent's
+  permission, an unexpired, unrevoked delegation listing it, the delegator's current
+  permission and `CreateDelegations`, and enabled principals; it does not know who
+  asked. `security.trading_access` and `security.use_market_context` also require
+  `ReadMarketData`. Control-table writes advance `security.epoch`
   (`guard_control_change`), which `security.use_context` holds `FOR SHARE` per request
   and which fences delivery-price collection (P18 requires throughput qualification
   before broader use). `ReadMarketData` is held by every role except access

@@ -32,7 +32,9 @@ def page_view(c, name, context=None):
                                                        'contractId': contract})},
             'schedules': c.call('date-schedules'),
             'touProducts': current_only('tou-products'),
-            'powerCatalog': current_only('power/catalog', {'snapshotId': frame['id']})}
+            'powerCatalog': current_only('power/catalog', {'snapshotId': frame['id']}),
+            'parties': {kind: c.call('parties/catalog', {'snapshotId': frame['id'], 'kind': kind})
+                        for kind in ('legal_entity', 'counterparty')}}
 
 
 def run_checks(views, dotnet, environment, directory):

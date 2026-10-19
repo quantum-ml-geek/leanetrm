@@ -7,9 +7,9 @@ using OpenEtrm.Api;
 using OpenEtrm.MarketData;
 using OpenEtrm.Shared.Temporal;
 
-// Page reads run without an HTTP request or workspace session. Given the pinned context a
-// page used, a direct caller receives exactly the page's read or refusal, and each read binds
-// exactly its pin: a retained context for the request, or nothing for working data.
+// Page reads run without an HTTP request or workspace session. Given the pinned context or
+// trading view a page used, a direct caller receives exactly the page's read or refusal, and
+// each read binds exactly what that names: its context, or nothing for live working data.
 internal static class DirectReadChecks
 {
     static readonly JsonSerializerOptions Json=new(JsonSerializerDefaults.Web){Converters={new ExactDecimalJsonConverter()}};
@@ -20,13 +20,15 @@ internal static class DirectReadChecks
             ??throw new InvalidOperationException("Run through tools/run_preview.py.")));
         var reads=new MarketReads(database);
         var schedules=new ScheduleReads(database);
+        var parties=new PartyReads(database);
         using var fixture=JsonDocument.Parse(File.ReadAllText(fixturePath));
         var profile=fixture.RootElement.GetProperty("profile").GetString()!;
         var views=fixture.RootElement.GetProperty("views").EnumerateArray().Select(v=>new View(v)).ToArray();
         var (working,historical)=(views.Single(v=>v.Context is null),views.Single(v=>v.Context is not null));
         Task<T> Read<T>(Func<NpgsqlConnection,CancellationToken,Task<T>> read)=>database.WithIdentity(profile,"ReadMarketData",read,CancellationToken.None);
         // A request binds a market context at most once, so a second bind shows whether the read bound one.
-        Task<T> Direct<T>(View view,string name,Func<NpgsqlConnection,CancellationToken,Task<T>> read)=>Read(async(c,ct)=>
+        // Reads bind their view's context unless they say otherwise.
+        Task<T> Direct<T>(View view,string name,Func<NpgsqlConnection,CancellationToken,Task<T>> read,bool? binds=null)=>Read(async(c,ct)=>
         {
             var value=await read(c,ct);
             await Execute(c,"SAVEPOINT bind_probe",ct);
@@ -34,7 +36,7 @@ internal static class DirectReadChecks
             try{await MarketContextStore.Bind(c,database.Manifest.CatalogId,historical.Context!,ct);}
             catch(PostgresException e) when(e.SqlState=="42501"&&e.MessageText.Contains("exactly once",StringComparison.Ordinal))
             {bound=true;await Execute(c,"ROLLBACK TO SAVEPOINT bind_probe",ct);}
-            if(bound!=(view.Context is not null))throw new Exception($"{view.Name} {name} did not bind exactly its pin.");
+            if(bound!=(binds??view.Context is not null))throw new Exception($"{view.Name} {name} did not bind exactly its pin.");
             return value;
         });
         foreach(var view in views)
@@ -64,8 +66,34 @@ internal static class DirectReadChecks
                 "knownThrough","versions","canEdit","canPublish","calendars");
             await Matches($"{view.Name} TOU products match their page",()=>Direct(view,"TOU products",(c,ct)=>schedules.TouProducts(c,view.Pin(),ct)),view.Page("touProducts"));
             await Matches($"{view.Name} power hours match their page",()=>Direct(view,"power hours",(c,ct)=>schedules.PowerCatalog(c,view.Pin(view.Selected),ct)),view.Page("powerCatalog"));
+            // A working party page captures a cutoff at its frame's date; a direct read under that same view binds it.
+            foreach(var (kind,page) in view.Page("parties").AsObject())
+            {
+                var party=view.Context is {} selected?TradingView.Retained(view.Selected,selected):new TradingView(view.Selected,page!["context"].Deserialize<ScheduleContext>(Json)!,true);
+                Same($"{view.Name} {kind} parties match their page",await Direct(view,"parties",(c,ct)=>parties.Catalog(c,party,kind,ct),binds:true),page);
+            }
             Console.WriteLine($"PASS {view.Name} reads bind exactly their pin");
         }
+        // A party read binds exactly its view's cutoff: one known just before the parties were published lists none of them.
+        var cutoff=working.Page("parties")["legal_entity"]!["context"].Deserialize<ScheduleContext>(Json)!;
+        var first=working.Page("parties")["legal_entity"]!["versions"]!.AsArray().Min(v=>SchedulePreview.ParseAt(v!["knownAt"]!.GetValue<string>()));
+        var unpublished=(await Read((c,ct)=>new KnowledgeStore(database.Manifest.CatalogId).Capture(c,new(cutoff.EffectiveOn,first.AddTicks(-10).ToString("O",CultureInfo.InvariantCulture),"at"),ct))).Context;
+        if((await Read((c,ct)=>parties.Catalog(c,new(working.Selected,unpublished,false),"legal_entity",ct))).Versions.GetArrayLength()!=0)
+            throw new Exception("A party read must bind exactly its view's cutoff.");
+        Console.WriteLine("PASS a party read binds exactly its view's cutoff");
+        // Party editing follows its permission, and only on working data.
+        foreach(var (who,edit) in new[]{("editor",true),("trader",false)})
+        {
+            Task<PartyRead> As(TradingView view)=>database.WithIdentity(who,"ReadTradeParties",(c,ct)=>parties.Catalog(c,view,"legal_entity",ct),CancellationToken.None);
+            if((await As(new(working.Selected,cutoff,true))).CanEdit!=edit||(await As(TradingView.Retained(historical.Selected,historical.Context!))).CanEdit)
+                throw new Exception($"{who} party editing must follow its permission, on working data only.");
+        }
+        Console.WriteLine("PASS party editing follows its permission, on working data only");
+        await Rejects("snapshot_missing","a trading view refuses a missing frame",()=>Task.FromResult(new TradingView(null,cutoff,true)));
+        await Rejects("snapshot_missing","a historical trading view refuses a frame of another view",()=>Task.FromResult(TradingView.Retained(working.Selected,historical.Context!)));
+        await Rejects("snapshot_missing","a captured trading view refuses a retained frame",()=>Read((c,ct)=>TradingView.Capture(c,new KnowledgeStore(database.Manifest.CatalogId),historical.Selected,ct)));
+        await Rejects("temporal_context","a trading view refuses a cutoff without its publication prefix",()=>Task.FromResult(new TradingView(working.Selected,cutoff with{KnownThrough=null},true)));
+        await Rejects("temporal_context","a trading view binds only its stored context's coordinates",()=>Read((c,ct)=>parties.Catalog(c,new(working.Selected,cutoff with{KnownThrough=cutoff.KnownThrough+1},true),"legal_entity",ct)));
         var effective=DateWorkspace.Date(historical.Context!.EffectiveOn);
         bool Later(WorkspaceRead read)=>read.Data.Observations.Any(o=>DateOnly.FromDateTime(o.Instant("observed_at").UtcDateTime)>effective);
         if(!Later(await Read((c,ct)=>reads.Workspace(c,working.Pin(),false,ct)))||Later(await Read((c,ct)=>reads.Workspace(c,historical.Pin(),false,ct))))
