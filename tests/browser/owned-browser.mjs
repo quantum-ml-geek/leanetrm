@@ -130,7 +130,8 @@ export async function withOwnedBrowser(targetFile,browserPath,run){
     async function set(selector,value){await evaluate(`(()=>{const n=document.querySelector(${JSON.stringify(selector)});n.value=${JSON.stringify(value)};n.dispatchEvent(new Event('input',{bubbles:true}));n.dispatchEvent(new Event('change',{bubbles:true}));})()`);}
     async function submit(selector){await evaluate(`document.querySelector(${JSON.stringify(selector)}).requestSubmit()`);await wait(idle);}
     async function persona(id){await click('#profile-open');await set('#profile',id);await click('#open');}
-    async function check(label,expression){if(!await evaluate(expression))throw Error('FAIL '+label);passed++;console.log('PASS '+label);}
+    // An optional detail expression reports observed state only when the check fails.
+    async function check(label,expression,detail){if(!await evaluate(expression))throw Error('FAIL '+label+(detail===undefined?'':' · observed '+JSON.stringify(await evaluate(detail).catch(error=>'unavailable: '+error.message))));passed++;console.log('PASS '+label);}
     async function shot(name){if(!/^[a-z-]+$/.test(name))throw Error('Invalid screenshot name');const result=await command('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});await writeFile(join(root,name+'.png'),Buffer.from(result.data,'base64'));}
     await command('Emulation.setTimezoneOverride',{timezoneId:'UTC'});
     await run({command,evaluate,wait,click,set,submit,persona,check,shot,idle,errors,url:url.origin});
