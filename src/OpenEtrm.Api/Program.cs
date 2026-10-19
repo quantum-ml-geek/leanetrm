@@ -433,12 +433,16 @@ api.MapPost("/market/current",(Func<HttpContext,Task<IResult>>)(c=>Locked(c,asyn
     await database.WithIdentity(Profile(session),"ReadMarketData",(_,_)=>Task.FromResult(true),c.RequestAborted);
     session.MarketContext=null;return Results.Ok(new {mode="explicit_input_pins"});
 })));
+object WorkspaceProjection(PreviewSession session,WorkspaceRead read,bool catalogOnly)
+{
+    var data=read.Data;
+    return new {unitCatalog=read.Units,unitCatalogError=read.Units is null?"unit_catalog":null,context=session.MarketContext,profile=session.Profile,example=database.Manifest.Example,futuresConvention=database.Manifest.FuturesConvention,curveNames=read.CurveNames,definitions=data.Definitions,references=data.References,referenceScope=catalogOnly?"definition_closure":"all_visible",observations=catalogOnly?ImmutableArray<JsonElement>.Empty:data.Observations,observationScope=catalogOnly?"on_demand":"all_visible",
+        frames=session.Frames.Values.Where(f=>f.ContextId==session.MarketContext?.ContextId).OrderBy(f=>f.At).ToArray(),initialFrameIds=session.MarketContext is null?session.InitialFrames:session.Frames.Values.Where(f=>f.ContextId==session.MarketContext.ContextId).Select(f=>f.Id).ToArray()};
+}
 Task<IResult> Workspace(HttpContext c,bool catalogOnly)=>Locked(c,async session=>
 {
     var read=await database.WithIdentity(Profile(session),"ReadMarketData",(connection,ct)=>marketReads.Workspace(connection,Pin(session),catalogOnly,ct),c.RequestAborted);
-    var data=read.Data;
-    return Results.Ok(new {unitCatalog=read.Units,unitCatalogError=read.Units is null?"unit_catalog":null,context=session.MarketContext,profile=session.Profile,example=database.Manifest.Example,futuresConvention=database.Manifest.FuturesConvention,curveNames=read.CurveNames,definitions=data.Definitions,references=data.References,referenceScope=catalogOnly?"definition_closure":"all_visible",observations=data.Observations,observationScope=catalogOnly?"on_demand":"all_visible",
-        frames=session.Frames.Values.Where(f=>f.ContextId==session.MarketContext?.ContextId).OrderBy(f=>f.At).ToArray(),initialFrameIds=session.MarketContext is null?session.InitialFrames:session.Frames.Values.Where(f=>f.ContextId==session.MarketContext.ContextId).Select(f=>f.Id).ToArray()});
+    return Results.Ok(WorkspaceProjection(session,read,catalogOnly));
 });
 api.MapGet("/workspace",(Func<HttpContext,Task<IResult>>)(c=>Workspace(c,false)));
 api.MapGet("/workspace/catalog",(Func<HttpContext,Task<IResult>>)(c=>Workspace(c,true)));
@@ -463,9 +467,9 @@ api.MapGet("/reference/catalog",(Func<HttpContext,Task<IResult>>)(c=>Locked(c,se
 api.MapPost("/evaluate",(HttpContext c,BuildRequest body)=>Locked(c,async session=>
 {
     var pin=Pin(session,body.SnapshotId);
-    var read=await database.WithIdentity(Profile(session),"ReadMarketData",(connection,ct)=>marketReads.Evaluate(connection,pin,body.Curve,ct),c.RequestAborted);
+    var read=await database.WithIdentity(Profile(session),"ReadMarketData",(connection,ct)=>marketReads.Evaluate(connection,pin,body.Curve,ct,body.IncludeWorkspace),c.RequestAborted);
     var result=read.Result;
-    if(pin.Context is not null || body.IncludeSources)
+    if(pin.Context is not null || body.IncludeSources || body.IncludeWorkspace)
     {
         var json=System.Text.Json.Nodes.JsonNode.Parse(JsonSerializer.Serialize(result,new JsonSerializerOptions{PropertyNamingPolicy=JsonNamingPolicy.CamelCase}))!.AsObject();
         if(pin.Context is {} view)json["context"]=JsonSerializer.SerializeToNode(view,new JsonSerializerOptions{PropertyNamingPolicy=JsonNamingPolicy.CamelCase});
@@ -474,6 +478,7 @@ api.MapPost("/evaluate",(HttpContext c,BuildRequest body)=>Locked(c,async sessio
             json["observations"]=JsonSerializer.SerializeToNode(read.Observations);
             json["observationScope"]="selected_frame";
         }
+        if(body.IncludeWorkspace)json["workspace"]=JsonSerializer.SerializeToNode(WorkspaceProjection(session,read.Workspace??throw new InvalidOperationException("The requested workspace projection is missing."),true),new JsonSerializerOptions{PropertyNamingPolicy=JsonNamingPolicy.CamelCase});
         return Results.Ok(json);
     }
     return Results.Ok(result);
@@ -740,7 +745,7 @@ public sealed record AdminCreate(Guid OperationId,string? Login,string? Name,str
 public sealed record AdminUpdate(Guid OperationId,Guid Id,int ExpectedVersion,string? Name,bool? Enabled,string[]? Roles);
 public sealed record ProfileRequest(string Profile);
 public sealed record LocalTimeRequest(string? LocalTime,string? TimeZone);
-public sealed record BuildRequest(Guid SnapshotId,string Curve,bool IncludeSources=false);
+public sealed record BuildRequest(Guid SnapshotId,string Curve,bool IncludeSources=false,bool IncludeWorkspace=false);
 public sealed record HistoryRequest(Guid SnapshotId,string Curve,Guid? ContractId=null,Guid? SeriesId=null);
 public sealed record CorrectionRequest(Guid SnapshotId,Guid ObservationId,string Value);
 public sealed record SelectionRequest(Guid SnapshotId,Guid ObservationId);

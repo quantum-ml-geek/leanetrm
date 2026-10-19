@@ -7,7 +7,7 @@ namespace OpenEtrm.Api;
 
 public sealed record CurveName(string Code,string Name);
 public sealed record WorkspaceRead(PreviewData Data,UnitCatalogData? Units,ImmutableArray<CurveName>? CurveNames);
-public sealed record PriceRead(object Result,ImmutableArray<JsonElement> Observations);
+public sealed record PriceRead(object Result,ImmutableArray<JsonElement> Observations,WorkspaceRead? Workspace=null);
 public sealed record HistorySample(DateTimeOffset At,string? Value,Guid SnapshotId,Guid[] ObservationIds,string? UnavailableReason);
 
 // Market and reference reads callable without an HTTP request or workspace session. Each
@@ -25,6 +25,11 @@ public sealed class MarketReads(PreviewDatabase database)
     public async Task<WorkspaceRead> Workspace(NpgsqlConnection connection,PinnedContext pin,bool catalogOnly,CancellationToken ct)
     {
         var data=await Data(connection,pin,ct,catalogOnly?ImmutableArray<Guid>.Empty:null,catalogOnly?ReferenceReadScope.DefinitionClosure:ReferenceReadScope.AllVisible);
+        return await WorkspaceMetadata(connection,data,catalogOnly,ct);
+    }
+
+    async Task<WorkspaceRead> WorkspaceMetadata(NpgsqlConnection connection,PreviewData data,bool catalogOnly,CancellationToken ct)
+    {
         UnitCatalogData? units;
         try { units=await database.ReadUnitCatalog(connection,data,ct); }
         catch(MarketDataException e) when(e.Code=="unit_catalog") { units=null; }
@@ -54,13 +59,14 @@ public sealed class MarketReads(PreviewDatabase database)
         return await database.ReadReferencePage(connection,table,offset,search,ct);
     }
 
-    public async Task<PriceRead> Evaluate(NpgsqlConnection connection,PinnedContext pin,string curve,CancellationToken ct)
+    public async Task<PriceRead> Evaluate(NpgsqlConnection connection,PinnedContext pin,string curve,CancellationToken ct,bool includeWorkspace=false)
     {
         var frame=pin.RequireFrame();
         if(pin.Context is {} selected && DateOnly.FromDateTime(frame.At.UtcDateTime)!=DateWorkspace.Date(selected.EffectiveOn))
             throw new MarketDataException("market_date","Choose inputs for the selected context date. No earlier market date is substituted.");
         var data=await Data(connection,pin,ct,frame.ObservationIds);
-        return new(data.Result(frame,curve),data.Observations);
+        var result=data.Result(frame,curve);
+        return new(result,data.Observations,includeWorkspace?await WorkspaceMetadata(connection,data,true,ct):null);
     }
 
     // Rebuilds the given frames of the pinned view; the pinned frame replaces the frame at its instant.

@@ -124,7 +124,7 @@ function renderBrowse(){
   const owner=directory();
   $('curves').replaceChildren(...groups.map(group=>{const section=el('details'),key=prefs.browseBy+'|'+group.name;section.className='curve-group';section.open=!prefs.collapsedCurveGroups.includes(key);section.append(el('summary',group.name));
     section.ontoggle=()=>{if(!section.isConnected||navigation!==owner)return;const closed=prefs.collapsedCurveGroups.includes(key);if(closed===!section.open)return;prefs.collapsedCurveGroups=section.open?prefs.collapsedCurveGroups.filter(k=>k!==key):[...prefs.collapsedCurveGroups,key].slice(-64);persist();};
-    group.curves.forEach(c=>{const button=el('button');button.className='curve-button'+(c.code===curve?' selected':'');button.disabled=busy;button.setAttribute('aria-pressed',String(c.code===curve));button.append(el('span',curveName(c.code)),el('small',marketTypeName(c.marketType)));button.onclick=()=>void act(async()=>{curve=c.code;clearPrices();await loadWorkspace();renderContext();if(select('snapshot').value)await build();});section.append(button);});return section;}));
+    group.curves.forEach(c=>{const button=el('button');button.className='curve-button'+(c.code===curve?' selected':'');button.disabled=busy;button.setAttribute('aria-pressed',String(c.code===curve));button.append(el('span',curveName(c.code)),el('small',marketTypeName(c.marketType)));button.onclick=()=>void act(async()=>{curve=c.code;clearPrices();if(select('snapshot').value)await build();else{await loadWorkspace();renderContext();}});section.append(button);});return section;}));
   if(!groups.length)$('curves').append(el('p','No curves match these choices.'));
 }
 function renderContext(){
@@ -182,11 +182,15 @@ function renderPrices(){
 }
 async function build(){
   if(contextDirty)throw Error('Apply the changed context before viewing prices.');
-  await loadWorkspace();const owner=data(),started=marketGeneration,scope=marketSelection();
-  const f=frame();if(!curve)throw Error('Choose a curve first.');const next=await api<CurveResult>('evaluate',{snapshotId:f.id,curve,includeSources:true});
-  if(workspace!==owner||started!==marketGeneration||scope!==marketSelection())throw Error('The account or market selection changed. Reload before continuing.');
+  const owner=directory(),previousWorkspace=workspace,includeWorkspace=!workspace,started=marketGeneration,scope=marketSelection();
+  const f=frame();if(!curve)throw Error('Choose a curve first.');
+  const {workspace:includedWorkspace,...next}=await api<CurveResult & {workspace?:Workspace}>('evaluate',{snapshotId:f.id,curve,includeSources:true,...(includeWorkspace?{includeWorkspace:true}:{})});
+  if(navigation!==owner||workspace!==previousWorkspace||started!==marketGeneration||scope!==marketSelection())throw Error('The account or market selection changed. Reload before continuing.');
   if(next.snapshotId!==f.id||next.curve!==curve||next.observationScope!=='selected_frame'||!Array.isArray(next.observations))throw Error('The selected price sources are missing or inconsistent. Refresh and try again.');
-  data().observations=next.observations;result=next;renderPrices();
+  if(includeWorkspace!==!!includedWorkspace)throw Error('The requested market catalog is missing or inconsistent. Refresh and try again.');
+  const hydrated=includeWorkspace?validateWorkspace(includedWorkspace!,owner,started,scope):previousWorkspace!;
+  try{workspace=hydrated;renderContext();data().observations=next.observations;result=next;renderPrices();}
+  catch(error){clearPrices();if(includeWorkspace)workspace=undefined;throw error;}
 }
 function renderHistory(){
   if(!result||!historyData)return;const p=result.points.find(p=>pointIdentity(p)===contract);if(!p)throw Error('Please select this sample again.');const rates=result.kind==='rates';$('history-card').hidden=false;text('history-title',`${rates?displayDate(pointDate(p)):deliveryLabel(p.deliveryFrom!,p.deliveryTo!)} · ${rates?'rate':'price'} history`);
@@ -317,10 +321,7 @@ async function loadReference(offset=0,search=''){
   referencePage=next;try{renderReference();}catch(error){clearReference();throw error;}
 }
 function marketSelection(){return JSON.stringify([administrationScope,currentProfile,select('snapshot').value,curve,contextDirty]);}
-async function loadWorkspace(){
-  if(workspace)return;
-  const owner=directory(),started=marketGeneration,scope=marketSelection();
-  const next=await api<Workspace>('workspace/catalog');
+function validateWorkspace(next:Workspace,owner:MarketNavigation,started:number,scope:string){
   if(next.referenceScope!=='definition_closure'||next.observationScope!=='on_demand'||!Array.isArray(next.observations)||next.observations.length||!Array.isArray(next.curveNames))throw Error('The market catalog is missing or inconsistent. Refresh and try again.');
   const revision=next.definitions?.revisions?.[0];
   const sameRevision=revision&&val(revision,'catalog_id')===owner.definitionRevision.catalogId&&val(revision,'id')===owner.definitionRevision.revisionId&&val(revision,'reference_catalog_id')===owner.referenceRevision.catalogId&&val(revision,'reference_revision_id')===owner.referenceRevision.revisionId;
@@ -329,7 +330,12 @@ async function loadWorkspace(){
      JSON.stringify((next as Workspace & {context?:Context}).context??null)!==JSON.stringify(owner.context)||JSON.stringify(summaries)!==JSON.stringify(owner.frames)||
      JSON.stringify(next.initialFrameIds)!==JSON.stringify(owner.initialFrameIds)||next.futuresConvention!==owner.futuresConvention)
     throw Error('The account or market selection changed, or the market catalog is inconsistent. Reload before continuing.');
-  workspace=next;
+  return next;
+}
+async function loadWorkspace(){
+  if(workspace)return;
+  const owner=directory(),started=marketGeneration,scope=marketSelection();
+  const next=await api<Workspace>('workspace/catalog');workspace=validateWorkspace(next,owner,started,scope);
 }
 async function loadNavigation(){
   const started=++marketGeneration,profile=currentProfile,scope=administrationScope;
@@ -391,7 +397,7 @@ async function loadIdentity(initialAccess?:unknown){
 }
 $('open').onclick=()=>void act(async()=>{text('environment-context-note','Current workspace · exact selected inputs');const next=select('profile').value;await api('profile',{profile:next});currentProfile=next;await loadIdentity();await profileChoices();$<HTMLDialogElement>('profile-dialog').close();});
 $('snapshot').onchange=()=>void act(async()=>{parties.reset();futures.reset();clearPrices();if(select('snapshot').value){if(page==='parties')await parties.load();else if(page==='futures')await futures.load();else if(page==='power'){power.reset();await power.load();}else if(page==='market'&&curve)await build();}});
-$('example').onclick=()=>void act(async()=>{await currentInputs();const example=directory().example;if(!example)throw Error('No sample is configured.');const f=directory().frames.find(f=>directory().initialFrameIds.includes(f.id)&&new Date(f.at).getTime()===new Date(example.at).getTime());if(!f)throw Error('These sample prices are unavailable.');prefs.commodity='all';prefs.marketType='all';prefs.tab='prices';persist();curve=example.curve;clearPrices();renderFrames(f.id);await loadWorkspace();renderContext();await build();});
+$('example').onclick=()=>void act(async()=>{curve='';clearPrices();await currentInputs();const example=directory().example;if(!example)throw Error('No sample is configured.');const f=directory().frames.find(f=>directory().initialFrameIds.includes(f.id)&&new Date(f.at).getTime()===new Date(example.at).getTime());if(!f)throw Error('These sample prices are unavailable.');prefs.commodity='all';prefs.marketType='all';prefs.tab='prices';persist();curve=example.curve;clearPrices();renderFrames(f.id);await build();});
 $('browse-by').onchange=()=>void act(async()=>updateFilters());$('commodity').onchange=()=>void act(async()=>updateFilters());
 document.querySelectorAll<HTMLButtonElement>('[data-type]').forEach(b=>b.onclick=()=>void act(async()=>{prefs.marketType=b.dataset.type as Preferences['marketType'];updateFilters();}));
 document.querySelectorAll<HTMLButtonElement>('.tab').forEach(b=>b.onclick=()=>{if(busy)return;prefs.tab=b.dataset.view as Preferences['tab'];persist();showView(prefs.tab);});
