@@ -252,6 +252,7 @@ td.numeric{text-align:right;font-family:var(--mono);font-variant-numeric:tabular
 #mappings>p{font-size:13px;color:var(--text-2);margin-top:14px}
 .flow-summary{display:flex;align-items:baseline;justify-content:space-between;gap:15px;flex-wrap:wrap;margin:0 0 10px;color:var(--text-2);font-size:13px}
 .flow-summary strong{font:600 18px var(--mono);color:var(--accent-text)}
+.pricing-flow.single-source{padding:8px 0}.single-source .flow-summary{justify-content:flex-start;gap:12px 24px;margin-bottom:4px}.single-source .field-help{margin:0}
 .flow-legend{display:flex;gap:18px;color:var(--text-3);font-size:12px;margin-bottom:10px}
 .flow-legend span::before{content:'';display:inline-block;vertical-align:middle;width:20px;border-top:2px solid var(--accent);margin-right:7px}
 .flow-legend .spread::before{border-color:var(--spread)}
@@ -296,6 +297,10 @@ td.numeric{text-align:right;font-family:var(--mono);font-variant-numeric:tabular
 .sheet-connection.active{stroke:#0f4a33;stroke-width:3;opacity:1}
 .workbook-wires text{font:10px var(--font);fill:var(--text-2);paint-order:stroke;stroke:#fbfcfb;stroke-width:4px;stroke-linejoin:round}
 .workbook-view>.field-help{position:sticky;left:0;width:100%;padding:9px 12px;background:var(--surface-2);margin:0;border-top:1px solid var(--border)}
+.workbook-view.workbook-simple{background:none;border:0;border-radius:0}
+.workbook-sheets{display:flex;flex-wrap:wrap;align-items:flex-start;gap:16px}
+.workbook-simple .workbook-table{position:static;width:max-content;border:1px solid var(--border);box-shadow:none}
+.workbook-simple .sheet-caption,.workbook-simple .workbook-table.output .sheet-caption{height:auto;min-height:0}
 
 /* Forms */
 .schedule-fields.three{grid-template-columns:repeat(3,1fr)}
@@ -576,6 +581,10 @@ dialog label{margin-top:16px}
 /* Custom curve authoring retains a compact, typed graph above evaluated data. */
 .custom-curve-heading{max-width:80ch;color:var(--muted,#697b66)}
 .custom-curve-workspace{display:grid;grid-template-columns:170px minmax(360px,1fr) 260px;gap:16px;align-items:start;margin-bottom:18px}
+.custom-curve-panel-tools{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 10px}.custom-curve-panel-tools button{font-size:12px;padding:6px 10px}
+.custom-curve-workspace.palette-collapsed{grid-template-columns:minmax(0,1fr) 260px}
+.custom-curve-workspace.inspector-collapsed{grid-template-columns:170px minmax(0,1fr)}
+.custom-curve-workspace.palette-collapsed.inspector-collapsed{grid-template-columns:minmax(0,1fr)}
 .custom-curve-workspace>.card{margin:0;padding:16px;min-width:0}
 .custom-curve-palette #custom-curves-operators{display:flex;flex-direction:column;gap:8px}
 .custom-curve-palette button{text-align:left;white-space:normal;width:100%;background:#f3f7f0;color:#345945;border:1px solid #d9e5d1}
@@ -597,5 +606,5 @@ dialog label{margin-top:16px}
 .custom-curve-inspector h4{margin:14px 0 8px}.custom-curve-inspector p{font-size:12px;color:#6c7e63}.custom-curve-inspector label{display:block;margin-bottom:12px;font-size:12px}.custom-curve-inspector input:not([type=checkbox]),.custom-curve-inspector select{display:block;width:100%;margin-top:5px}.custom-curve-inspector input[type=checkbox]{margin-left:8px}.custom-curve-inspector small{display:block;color:#6c7e63;margin-top:5px}.custom-curve-inspector pre{max-height:180px;overflow:auto;font-size:11px;white-space:pre-wrap;overflow-wrap:anywhere}
 #custom-curves-expression textarea{display:block;width:100%;margin:8px 0 12px;font-family:ui-monospace,monospace;resize:vertical}
 #custom-curves-sql select{display:block;width:100%;margin:8px 0}#custom-curves-lineage pre,#custom-curves-sql pre{max-height:300px;overflow:auto;font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere}
-@media(max-width:1200px){.custom-curve-workspace{grid-template-columns:140px minmax(300px,1fr)}.custom-curve-inspector{grid-column:1/-1}.custom-curve-inspector #custom-curves-properties{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 18px}.custom-curve-inspector h4,.custom-curve-inspector p{grid-column:1/-1}}
-@media(max-width:760px){.custom-curve-workspace{grid-template-columns:1fr}.custom-curve-inspector{grid-column:auto}.custom-curve-inspector #custom-curves-properties{display:block}.custom-curve-palette #custom-curves-operators{flex-direction:row;flex-wrap:wrap}.custom-curve-palette button{width:auto}.custom-curve-board{height:350px}}
+@media(max-width:1200px){.custom-curve-workspace,.custom-curve-workspace.inspector-collapsed{grid-template-columns:140px minmax(0,1fr)}.custom-curve-workspace.palette-collapsed{grid-template-columns:minmax(0,1fr)}.custom-curve-inspector{grid-column:1/-1}.custom-curve-inspector #custom-curves-properties{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 18px}.custom-curve-inspector h4,.custom-curve-inspector p{grid-column:1/-1}}
+@media(max-width:760px){.custom-curve-workspace,.custom-curve-workspace.inspector-collapsed{grid-template-columns:minmax(0,1fr)}.custom-curve-inspector{grid-column:auto}.custom-curve-inspector #custom-curves-properties{display:block}.custom-curve-palette #custom-curves-operators{flex-direction:row;flex-wrap:wrap}.custom-curve-palette button{width:auto}.custom-curve-board{height:350px}}

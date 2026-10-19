@@ -50,6 +50,8 @@ class CheckAllTests(unittest.TestCase):
         self.assertTrue(any('--custom-curves-check' in c and '--browser-check' in c for c in commands))
         self.assertTrue(any('--market-dates-check' in c and '--browser-check' in c for c in commands))
         self.assertTrue(any('--jobs-check' in c and '--browser-check' in c for c in commands))
+        self.assertTrue(any('tools/check_reference_editing.py' in c for c in commands))
+        self.assertTrue(any('--reference-check' in c and '--browser-check' in c for c in commands))
         for command in commands:
             if '--pg-bin' in command:
                 self.assertEqual(command[command.index('--pg-bin') + 1], '/stock postgres/bin')

@@ -15,11 +15,20 @@ await withOwnedBrowser(target,process.argv[3],async({command,evaluate,wait,set,c
   await check('signed-in startup uses its fresh bootstrap access projection without an access round trip',"JSON.stringify(window.__hostedStartupAccess)===JSON.stringify(['true'])&&!window.__hostedStartupReads.includes('/api/access')&&window.__hostedStartupReads.includes('/api/workspace/navigation')&&document.querySelector('#error').hidden");
   await check('verified hosted mode identifies the private pilot and qualifies generated marks',"document.querySelector('#workspace-host-mode').textContent==='Private pilot'&&document.querySelector('#workspace-footer').textContent.includes('Generated marks and sample trades')&&!/disposable|local preview/i.test(document.querySelector('.side-note').textContent+document.querySelector('#workspace-footer').textContent)");
   await click('#nav-delivery');
-  await check('configured delivery-price sources and paused scheduler are visible',"document.querySelector('#delivery-price-source').options.length===2 && document.querySelector('#delivery-price-jobs').textContent.includes('paused')");
-  await evaluate("document.querySelector('#delivery-price-source').selectedIndex=1");
+  await check('delivery filters begin with commodity without silently selecting a feed',"document.querySelector('#delivery-price-commodity').options.length===2&&document.querySelector('#delivery-price-commodity').value===''&&document.querySelector('#delivery-price-source').disabled&&document.querySelector('#delivery-price-jobs').textContent.includes('paused')");
+  async function firstChoice(id){const value=await evaluate(`document.querySelector(${JSON.stringify(id)}).options[1].value`);await set(id,value);}
+  await firstChoice('#delivery-price-commodity');
+  await check('commodity reveals operators while later filters remain empty',"document.querySelector('#delivery-price-provider').options.length===2&&document.querySelector('#delivery-price-market').disabled&&document.querySelector('#delivery-price-source').disabled");
+  await firstChoice('#delivery-price-provider');await firstChoice('#delivery-price-market');await firstChoice('#delivery-price-location');await firstChoice('#delivery-price-source');
+  await check('the selected source explains its explicit delivery clock and inclusive dates',"document.querySelector('#delivery-price-clock').textContent.includes('America/New_York')&&document.querySelector('#delivery-price-clock').textContent.includes('both dates are included')");
   await set('#delivery-price-from','2026-11-02');await set('#delivery-price-through','2026-11-02');
   await submit('#delivery-price-form');
   await check('delivery-price history is served with exact typed amounts and complete interval coverage',"document.querySelectorAll('#delivery-price-results tbody tr').length===24 && document.querySelector('#delivery-price-results').textContent.includes('-17.125')");
+  await check('collection history explains import attempts and includes their delivery ranges',"document.querySelector('#delivery-price-attempts').textContent.includes('Delivery date from')&&document.querySelector('#delivery-price-attempts').textContent.includes('Finished')&&document.querySelector('#delivery-page').textContent.includes('Failed attempts do not publish prices')");
+  await set('#delivery-price-from','2026-11-03');
+  await check('changing the delivery range clears prices from the prior range',"document.querySelector('#delivery-price-results').children.length===0");
+  await set('#delivery-price-commodity','');
+  await check('changing a parent filter clears all dependent selections',"['provider','market','location','source'].every(x=>document.querySelector('#delivery-price-'+x).value===''&&document.querySelector('#delivery-price-'+x).disabled)");
   await evaluate("document.querySelector('#profile-open').click()");
   await wait("document.querySelector('#profile-dialog').open");
   await check('hosted profile has sign out and no selectable demo identities',"document.querySelector('#preview-access').hidden && !document.querySelector('#sign-out').hidden");

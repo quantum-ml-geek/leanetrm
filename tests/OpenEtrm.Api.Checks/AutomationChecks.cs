@@ -20,6 +20,16 @@ static class AutomationChecks
         var request = new JobCreate(Guid.NewGuid(), "Synthetic readiness", "worker_check", now,
             now.AddHours(1), null, "UTC", "run_once", "forbid", 30, 2, null, null);
         request.Validate();
+        var update = new JobUpdate(Guid.NewGuid(), Guid.NewGuid(), 2, "Synthetic amended schedule", now,
+            now.AddHours(2), 600, "UTC", "run_once", "forbid", 45, 3);
+        update.Validate();
+        foreach (var invalid in new[] { update with { Id = Guid.Empty }, update with { ExpectedVersion = 0 },
+            update with { TimeZone = "Asia/Tokyo" }, update with { DueAt = now.ToOffset(TimeSpan.FromHours(9)) },
+            update with { ExpiresAt = now }, update with { TimeoutSeconds = 0 }, update with { IntervalSeconds = 30 } })
+        {
+            try { invalid.Validate(); throw new Exception("Accepted incomplete job amendment terms"); }
+            catch (AutomationException e) when (e.Code == "job_input") { }
+        }
         foreach (var invalid in new[] {
             request with { Name = "" }, request with { TimeZone = "" },
             request with { Operation = "unknown" }, request with { ExpiresAt = now },

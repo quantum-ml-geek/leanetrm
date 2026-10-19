@@ -64,8 +64,14 @@ export function setupCustomCurves(host:HTMLElement,o:Options){
  const sql=el('div');sql.id='custom-curves-sql';sql.hidden=true;const transforms=el('select');transforms.id='custom-curves-transform';const sqlDescription=el('p');sqlDescription.className='field-help';const addSql=button('Add transformation','custom-curves-add-transform',()=>{if(o.busy())return;const operation=catalog?.operators.find(op=>op.kind==='sql_transform');if(!operation||!transforms.value)return;addNode(operation,{sqlTransformCode:transforms.value});});const sqlEvidence=el('details');sqlEvidence.append(el('summary','Registered SQL source'));const sqlSource=el('pre');sqlEvidence.append(sqlSource);sqlEvidence.hidden=true;sql.append(label('Registered transformation',transforms),sqlDescription,sqlEvidence,addSql);
  centre.append(tabs,graphTools,board,expression,sql,el('p','Drag cards to arrange the graph. Click any card to edit its fields and connections in Selected operation.'));
  const inspector=card('Selected operation');inspector.classList.add('custom-curve-inspector');const properties=el('div');properties.id='custom-curves-properties';inspector.append(properties);workspace.append(palette,centre,inspector);
+ const panelTools=el('div');panelTools.className='custom-curve-panel-tools';panelTools.setAttribute('role','group');panelTools.setAttribute('aria-label','Graph panels');
+ for(const [key,panel,title] of [['palette',palette,'operations'],['inspector',inspector,'properties']]as const){
+  panel.id='custom-curves-'+key;
+  const toggle=button('Hide '+title,'custom-curves-toggle-'+key,()=>{panel.hidden=!panel.hidden;workspace.classList.toggle(key+'-collapsed',panel.hidden);toggle.textContent=(panel.hidden?'Show ':'Hide ')+title;toggle.setAttribute('aria-expanded',String(!panel.hidden));positionCanvas();});
+  toggle.className='secondary';toggle.setAttribute('aria-controls',panel.id);toggle.setAttribute('aria-expanded','true');panelTools.append(toggle);
+ }
  const result=card('Preview');result.id='custom-curves-result';const receipt=el('p');receipt.id='custom-curves-receipt';receipt.className='field-help';const chart=el('div');chart.id='custom-curves-chart';chart.className='chart';const table=el('div');table.id='custom-curves-values';table.className='table-wrap';const lineage=el('details');lineage.id='custom-curves-lineage';lineage.append(el('summary','Inputs and dependencies'));const lineageBody=el('div');lineage.append(lineageBody);result.append(receipt,chart,table,lineage);result.hidden=true;
- host.replaceChildren(heading,top,workspace,result);
+ host.replaceChildren(heading,top,panelTools,workspace,result);
  function guard(){return {generation,identity:o.identity()};}function current(request:{generation:number;identity:string}){return generation===request.generation&&o.identity()===request.identity;}
  function notifyMarketScope(){if(initialized)o.marketScopeChanged?.();}
  function dateDefinition():CurveDefinition|undefined{return catalog&&!formulaDirty&&definition.nodes.length?clone(definition):undefined;}

@@ -6,7 +6,8 @@ using OpenEtrm.MarketData;
 namespace OpenEtrm.Api;
 
 public sealed record CurveName(string Code,string Name);
-public sealed record WorkspaceRead(PreviewData Data,UnitCatalogData? Units,ImmutableArray<CurveName>? CurveNames);
+public sealed record WorkspaceRead(PreviewData Data,UnitCatalogData? Units,ImmutableArray<CurveName>? CurveNames,
+    ReferenceDisplayData? ReferenceDisplay=null,ReferenceDisplayData? UnitReferenceDisplay=null);
 public sealed record PriceRead(object Result,ImmutableArray<JsonElement> Observations,WorkspaceRead? Workspace=null);
 public sealed record HistorySample(DateTimeOffset At,string? Value,Guid SnapshotId,Guid[] ObservationIds,string? UnavailableReason);
 
@@ -33,7 +34,9 @@ public sealed class MarketReads(PreviewDatabase database)
         UnitCatalogData? units;
         try { units=await database.ReadUnitCatalog(connection,data,ct); }
         catch(MarketDataException e) when(e.Code=="unit_catalog") { units=null; }
-        return new(data,units,catalogOnly?await Names(connection,ct):null);
+        var display=await ReferenceEditors.Display(connection,data.ReferenceRevision,ct);
+        var unitDisplay=units is null?null:units.Revision==data.ReferenceRevision?display:await ReferenceEditors.Display(connection,units.Revision,ct);
+        return new(data,units,catalogOnly?await Names(connection,ct):null,display,unitDisplay);
     }
 
     public async Task<NavigationRead> Navigation(NpgsqlConnection connection,PinnedContext pin,CancellationToken ct)
@@ -43,7 +46,13 @@ public sealed class MarketReads(PreviewDatabase database)
         var curves=await MarketNavigation.ReadCurves(connection,database.Manifest,ct);
         var names=await Names(connection,ct);
         await MarketBundle.RequireReferenceVisibility(connection,database.Manifest,ct);
-        return new(pins.Definitions,pins.References,curves,names);
+        var display=await ReferenceEditors.Display(connection,pins.References,ct);
+        if(display is not null && display.References.TryGetValue("commodities",out var labels))
+        {
+            var namesByCode=labels.Where(r=>r.TryGetProperty("name",out _)).ToDictionary(r=>r.Text("code"),r=>r.Text("name"));
+            curves=[..curves.Select(c=>namesByCode.TryGetValue(c.Category.Code,out var name)?c with{Category=c.Category with{Name=name}}:c)];
+        }
+        return new(pins.Definitions,pins.References,curves,names,display);
     }
 
     // Stored display names for every curve in this catalog, for screens that show curve codes from any bundle.
