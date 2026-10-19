@@ -16,6 +16,6 @@ public static class CommonRoles
             Permission.WriteReferenceData, Permission.ReadTradeParties, Permission.WriteTradeParties, Permission.CreateDelegations, Permission.RunJobs),
         Template("market_data_approver", Permission.ReadMarketData, Permission.SealMarketDefinitions, Permission.SealReferenceData,
             Permission.ApproveMarketData, Permission.PublishMarketData, Permission.RunJobs),
-        Template("access_administrator", Permission.ManageIdentities, Permission.ManageAccess, Permission.CreateDelegations, Permission.RunJobs, Permission.ManageJobs)
+        Template("access_administrator", Permission.ManageIdentities, Permission.ManageAccess, Permission.CreateDelegations, Permission.RunJobs, Permission.ManageJobs, Permission.ManageModelProviders)
     ];
 }

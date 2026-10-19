@@ -24,6 +24,7 @@ if (args is ["--hosted-access"])
 }
 if(args is ["--power-collection"]){Environment.ExitCode=await PowerImportChecks.MalformedCollection();return;}
 if(args is ["--direct-reads",var readFixture]){await DirectReadChecks.Run(readFixture);return;}
+if(args is ["--stored-credentials",var credentialFixture]){CredentialCustodyChecks.Stored(credentialFixture);return;}
 if (args is ["--power-imports"])
 {
     PowerImportChecks.Run();return;
@@ -33,6 +34,7 @@ if (args is ["--schedules"])
 {
     FuturesExecutionChecks.Run();
     HostedAccessChecks.Run();
+    CredentialCustodyChecks.Run();
     PowerImportChecks.Run();
     SchedulePreviewChecks.Run();
     DateWorkspaceChecks.Run();
