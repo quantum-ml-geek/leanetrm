@@ -123,7 +123,7 @@ Logical modules:
 
 Presentation uses familiar business names. Market data provides futures and
 forward curves with commodity-first or market-type-first browsing. A compact
-market date/time selector sits in the header; user profiles hold time zone and
+market-close calendar sits in the header (D161); user profiles hold time zone and
 other remembered display preferences. Minutes are enough for ordinary display;
 exact retained instants and selected versions remain unchanged underneath. Repeated
 local clock times must remain distinguishable, for example by showing an offset
@@ -182,6 +182,13 @@ application service and standard PostgreSQL. Exact dependency versions are chose
 and pinned during setup. A separate native calculation service is not required
 for the first slice. A measured bottleneck can justify moving an implementation
 behind the existing calculation contract later.
+
+Custom curve authoring uses a typed graph shared by visual and formula editors
+(D160). Exact source and date-reference bindings are persisted as normalized
+foreign keys; calculation uses immutable multi-date typed inputs and returns
+exact rational prices with observation and factor lineage. A qualified SQL
+transformation may aggregate only its supplied panel. The initial workspace and
+its explicit limits are described in [custom curves](custom-curves.md).
 
 Add a table, configuration value or dependency only with a named current consumer
 or a concrete executable baseline use case. A seed row or a viewer alone is not

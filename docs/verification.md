@@ -38,6 +38,40 @@ runner uses fresh temporary profiles and accepts only the launcher's verified
 owned target. Normal completion removes the owned application, browser and database
 resources. Unconfirmed teardown retains the private directory and fails the check.
 
+Custom-curve qualification on 2026-10-19 passed the complete local command on
+macOS arm64 with .NET 10.0.402, Node 24.22.0, stock PostgreSQL 16.14 and Chrome
+155.0.8059.80. The 132 frontend checks and managed suites include independent
+rolling/locked rational means, inclusive daily-forward BALMO, single/parallel
+factor shocks, frozen history, unit/multiplier preservation, typed formula
+roundtrips, strict gaps and registered SQL output/count validation. The new
+owned HTTP checks cover exact source/schedule references, current scope
+revocation, immutable published relationships, certified knowledge cutoffs,
+historical corrections and explicit frozen final-settlement inputs. The 25
+custom-curve browser checks cover visual edits, raw per-tenor history charts,
+formula/SQL parity, uncertain-save retry, permissions and narrow-screen bounds.
+The standard preview's 268 browser checks and the existing isolated suites also
+passed. Disposable test resources completed teardown. All 31 Python checks and
+the additional history-panel preview startup with eight futures and sixteen swap
+examples also passed. This establishes the bounded local workspace; it does not
+qualify production throughput, bookable custom indices or historical VaR.
+
+The subsequent editor and market-calendar changes passed the complete command
+on the same toolchain, including 136 frontend checks, 33 custom-curve browser
+checks and 22 calendar browser checks. Scoped HTTP checks qualify full curve
+dependencies and recipe history windows, exact snapshot/version choices,
+user-zone dates, certified historical contexts and current reference authority.
+Browser checks cover disabled unavailable days, explicit multiple-close choice,
+graph-preserving snapshot changes, stale-response fencing, permission-denial
+cleanup, keyboard navigation and narrow-screen bounds. Independent review found
+no remaining blocker. All owned disposable resources completed teardown.
+
+The final combined check with migration 0042 also passed after integrating the
+reference-read authorization changes. It includes all 279 standard browser
+checks, current-authority checks for API and raw mutation-response replay,
+independent receipt foreign-key rejection checks and the complete editor/calendar
+suites. Restoring reference access permits the original accepted retry without
+creating a second publication.
+
 ## Hosted job
 
 [The workflow](../.github/workflows/ci.yml) uses `ubuntu-24.04` hosted runners on

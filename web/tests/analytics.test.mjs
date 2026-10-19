@@ -42,3 +42,4 @@ test('position bars use a zero baseline while price lines can scale to their ran
  assert.equal(chartOptions({...spec,kind:'bar'}).yAxis.scale,false);
  assert.equal(chartOptions({...spec,kind:'line'}).yAxis.scale,true);
 });
+test('custom curve chart accepts the served category axis name',()=>{const option=chartOptions({title:'Rolling curve',axis:'category',axisName:'Contract position',unit:'USD/MMBtu',series:[]});assert.equal(option.xAxis.name,'Contract position');});

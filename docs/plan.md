@@ -3,6 +3,21 @@
 Status: design baseline approved for implementation on 2026-10-16. Milestone 0 is complete; no
 application implementation milestones below are complete.
 
+The local custom-curve workspace implements typed visual graphs, formula
+roundtrips, exact multi-date sampling, explicit date/schedule references and
+separate save/publish operations (D160). Prompt, inclusive daily-forward BALMO
+and per-tenor historical-average templates have executable synthetic consumers.
+A registered panel-only SQL mean shares the exact units/lineage contract.
+[Custom curves](custom-curves.md) records the supported policies and limits.
+Integration into booked instruments, cross-revision rolling histories and
+historical VaR/covariance remain later work.
+
+The header's As of calendar qualifies available exact snapshots through the
+managed backend (D161), including all inputs of a custom graph's history window.
+It disables unavailable dates, preserves the user's display zone and requires an
+explicit choice among multiple closes or saved versions. Changing only the
+snapshot preserves the active custom graph and clears its old calculations.
+
 The [verification workflow](verification.md) now defines a single local/CI command
 covering the existing managed, frontend, database and browser suites. The complete
 command passed on the Ubuntu 24.04 hosted runner on 2026-10-17; verification

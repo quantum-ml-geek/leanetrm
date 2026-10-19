@@ -72,7 +72,8 @@ app.Use(async (context,next)=>
             PostgresException p when p.SqlState is "23502" or "23514" or "22P02" or "22007" or "22008" or "22003" && apiPath.StartsWithSegments("/api/jobs") => (422,"job_input","The job contract has missing, malformed or unsupported fields."),
             PostgresException p when p.MessageText is "job_input" or "job_transition" or "job_limit" => (422,p.MessageText,"Supply a supported job contract or an available action within its limits."),
             AntiforgeryValidationException => (400,"request_token","Reload the preview to obtain a valid request token."),
-            MarketDataException m when m.Code is "shortcut_conflict" or "tou_conflict" or "table_view_conflict" or "futures_revision_conflict" or "swap_revision_conflict" => (409,m.Code,m.Message),
+            MarketDataException m when m.Code is "shortcut_conflict" or "tou_conflict" or "table_view_conflict" or "futures_revision_conflict" or "swap_revision_conflict" or "custom_curve_conflict" => (409,m.Code,m.Message),
+            PostgresException p when p.SqlState is "23505" or "40001" && apiPath.StartsWithSegments("/api/custom-curves") => (409,"custom_curve_conflict","This curve or request changed. Reload or reconcile the original request."),
             PostgresException p when p.SqlState=="P0001" && p.MessageText=="party_conflict" => (409,p.MessageText,"This party or request changed. Reload the latest revision or retry the original request."),
             PostgresException p when p.SqlState=="P0001" && p.MessageText is "party_input" or "party_limit" => (422,p.MessageText,"Supply a stable code, name and an effective time at or after the preceding version. Party codes cannot change."),
             PostgresException p when p.SqlState is "23505" or "40001" && apiPath.StartsWithSegments("/api/tou-products") => (409,"tou_conflict","This TOU product changed or its code already exists. Reload before editing."),
@@ -216,6 +217,18 @@ PinnedContext Pin(PreviewSession session,Guid? frame=null)
     return session.MarketContext is {} context?PinnedContext.Retained(context,selected):PinnedContext.Current(selected);
 }
 InputFrame Frame(PreviewSession session,Guid id)=>Pin(session).Require(session.Frames.GetValueOrDefault(id));
+api.MapMarketDates(database,(c,work)=>Locked(c,session=>
+    database.WithIdentity(Profile(session),"ReadMarketData",(connection,ct)=>
+        work(connection,Pin(session),[..session.Frames.Values.Where(frame=>frame.ContextId==session.MarketContext?.ContextId)],ct),c.RequestAborted)));
+api.MapCustomCurves(database,(c,permission,snapshotId,work)=>Locked(c,session=>
+    database.WithIdentity(Profile(session),permission,async(connection,ct)=>
+    {
+        var pin=Pin(session,snapshotId);
+        await pin.Bind(connection,database.Manifest.CatalogId,ct);
+        if(permission is "WriteMarketDefinitions" or "SealMarketDefinitions" && pin.Context is not null)
+            throw new MarketDataException("custom_curve_historical","Author and publish curves in the current workspace.");
+        return await work(connection,pin,ct);
+    },c.RequestAborted)));
 api.MapPost("/profile",(HttpContext c,ProfileRequest body)=>Locked(c,session=>
 {
     if(hosted is not null)throw new PreviewDeniedException();

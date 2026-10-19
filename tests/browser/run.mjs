@@ -17,11 +17,13 @@ import {run as jobs} from './jobs.mjs';
 import {run as startupRequests} from './startup-requests.mjs';
 import {run as startupAccess} from './startup-access.mjs';
 import {run as reference} from './reference.mjs';
+import {run as customCurves} from './custom-curves.mjs';
+import {run as marketDates} from './market-dates.mjs';
 async function marketNavigation(browser){await startupRequests(browser);await startupAccess(browser);await reference(browser);await marketContext(browser);}
 async function tradingNavigation(browser){await futuresLoading(browser);await futuresAdmission(browser);await futures(browser);}
-if(process.argv.length!==4&&!(process.argv.length===5&&['--units','--parties-power','--exchange','--jobs'].includes(process.argv[4])))throw Error('Invoke through tools/run_preview.py --browser-check --browser /path/to/browser');
+if(process.argv.length!==4&&!(process.argv.length===5&&['--units','--parties-power','--exchange','--jobs','--custom-curves','--market-dates'].includes(process.argv[4])))throw Error('Invoke through tools/run_preview.py --browser-check --browser /path/to/browser');
 let total=0;
-for(const [name,run] of (process.argv[4]==='--jobs'?[['jobs',jobs]]:process.argv[4]==='--exchange'?[['exchange futures',exchange]]:process.argv[4]==='--units'?[['units and precision',units]]:process.argv[4]==='--parties-power'?[['power TOUs',power],['party editors',parties]]:[['market navigation',marketNavigation],['administration',administration],['power TOUs',power],['party editors',parties],['futures',tradingNavigation],['risk',risk],['trade editor',tradeEditor],['financial swaps',swaps],['table interactions',tableInteractions],['units and precision',units]])){
+for(const [name,run] of (process.argv[4]==='--market-dates'?[['market close calendar',marketDates]]:process.argv[4]==='--custom-curves'?[['custom curves',customCurves]]:process.argv[4]==='--jobs'?[['jobs',jobs]]:process.argv[4]==='--exchange'?[['exchange futures',exchange]]:process.argv[4]==='--units'?[['units and precision',units]]:process.argv[4]==='--parties-power'?[['power TOUs',power],['party editors',parties]]:[['market navigation',marketNavigation],['administration',administration],['power TOUs',power],['party editors',parties],['futures',tradingNavigation],['risk',risk],['trade editor',tradeEditor],['financial swaps',swaps],['table interactions',tableInteractions],['units and precision',units]])){
   const passed=await withOwnedBrowser(process.argv[2],process.argv[3],run);total+=passed;console.log(`${passed} ${name} browser checks passed.`);
 }
 if(process.argv.length===4)total+=await checkProfileLifetime(process.argv[2],process.argv[3]);
