@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.FileProviders;
 using Npgsql;
 using OpenEtrm.Api;
+using OpenEtrm.Automation;
 using OpenEtrm.MarketData;
 
 if(args is ["--render-power-days",var calendarInput,var calendarOutput]){PowerDayCalendar.Run(calendarInput,calendarOutput);return;}
@@ -62,6 +63,14 @@ app.Use(async (context,next)=>
         var (status,code,message)=e switch
         {
             PreviewDeniedException => (403,"access_denied","The selected test identity cannot perform this operation."),
+            AutomationException a => (422,a.Code,a.Message),
+            PostgresException p when p.MessageText is "job_conflict" => (409,p.MessageText,"The job or request changed. Refresh or reconcile the original request."),
+            PostgresException p when p.MessageText is "infrastructure_busy" => (409,p.MessageText,"Wait for active workloads or pending maintenance to finish before requesting node maintenance."),
+            PostgresException p when p.MessageText is "infrastructure_conflict" => (409,p.MessageText,"The node changed. Refresh infrastructure before requesting another action."),
+            PostgresException p when p.SqlState=="23505" && apiPath.StartsWithSegments("/api/infrastructure") => (409,"infrastructure_busy","Cluster maintenance is already queued, running or awaiting reconciliation."),
+            PostgresException p when p.MessageText is "infrastructure_input" => (422,p.MessageText,"Supply a supported infrastructure operation and exact target version."),
+            PostgresException p when p.SqlState is "23502" or "23514" or "22P02" or "22007" or "22008" or "22003" && apiPath.StartsWithSegments("/api/jobs") => (422,"job_input","The job contract has missing, malformed or unsupported fields."),
+            PostgresException p when p.MessageText is "job_input" or "job_transition" or "job_limit" => (422,p.MessageText,"Supply a supported job contract or an available action within its limits."),
             AntiforgeryValidationException => (400,"request_token","Reload the preview to obtain a valid request token."),
             MarketDataException m when m.Code is "shortcut_conflict" or "tou_conflict" or "table_view_conflict" or "futures_revision_conflict" or "swap_revision_conflict" => (409,m.Code,m.Message),
             PostgresException p when p.SqlState=="P0001" && p.MessageText=="party_conflict" => (409,p.MessageText,"This party or request changed. Reload the latest revision or retry the original request."),
@@ -101,6 +110,7 @@ app.Use(async (context,next)=>
             NpgsqlException when context.Items.ContainsKey("swap_attempted") => (503,"swap_outcome_unknown","The trade request outcome is unknown. Reconcile or retry its retained operation identity."),
             OperationCanceledException when context.Items.ContainsKey("futures_attempted") => (503,"futures_outcome_unknown","The trade request outcome is unknown. Reconcile or retry the retained operation identity."),
             NpgsqlException when context.Items.ContainsKey("futures_attempted") => (503,"futures_outcome_unknown","The trade request outcome is unknown. Reconcile or retry the retained operation identity."),
+            Exception when context.Items.ContainsKey("automation_attempted") && e is NpgsqlException or OperationCanceledException => (503,"job_outcome_unknown","The operation outcome is unknown. Inspect current state or retry the retained exact request identity."),
             OperationCanceledException => (503,"request_cancelled","The request was cancelled or exceeded its time limit."),
             BadHttpRequestException or JsonException => (400,"request_format","The request is incomplete or malformed."),
             _ => (500,"preview_error","The preview could not complete the operation.")
@@ -657,6 +667,16 @@ api.MapPost("/futures/book",(HttpContext c,FuturesBookRequest body)=>Locked(c,as
 }));
 api.MapPost("/futures/status",(HttpContext c,FuturesStatusRequest body)=>Locked(c,session=>database.WithIdentity(Profile(session),"ReadTrades",async(connection,ct)=>
     Results.Ok(await futuresStore.Status(connection,body.OperationId,ct)),c.RequestAborted)));
+api.MapGet("/jobs",(HttpContext c,int? page)=>Locked(c,session=>database.WithIdentity(Profile(session),null,
+    async(connection,ct)=>Results.Ok(await JobOperations.List(connection,ct,page??0)),c.RequestAborted)));
+api.MapPost("/infrastructure/availability",(HttpContext c,NodeCommand body)=>Locked(c,session=>database.WithIdentity(Profile(session),null,
+    async(connection,ct)=>{c.Items["automation_attempted"]=true;return Results.Ok(await JobOperations.NodeAction(connection,body,ct));},c.RequestAborted)));
+api.MapPost("/infrastructure/resolve",(HttpContext c,NodeResolution body)=>Locked(c,session=>database.WithIdentity(Profile(session),null,
+    async(connection,ct)=>{c.Items["automation_attempted"]=true;return Results.Ok(await JobOperations.ResolveNode(connection,body,ct));},c.RequestAborted)));
+api.MapPost("/jobs/create",(HttpContext c,JobCreate body)=>Locked(c,session=>database.WithIdentity(Profile(session),"RunJobs",
+    async(connection,ct)=>{c.Items["automation_attempted"]=true;return Results.Ok(await JobOperations.Create(connection,body,ct));},c.RequestAborted)));
+api.MapPost("/jobs/control",(HttpContext c,JobControl body)=>Locked(c,session=>database.WithIdentity(Profile(session),null,
+    async(connection,ct)=>{c.Items["automation_attempted"]=true;return Results.Ok(await JobOperations.Control(connection,body,ct));},c.RequestAborted)));
 api.MapGet("/access",(Func<HttpContext,Task<IResult>>)(c=>Locked(c,session=>
     database.WithIdentity(Profile(session),null,async(connection,ct)=>
     {

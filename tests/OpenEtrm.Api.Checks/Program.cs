@@ -4,6 +4,15 @@ using System.Globalization;
 using OpenEtrm.Api;
 using OpenEtrm.MarketData;
 
+if (args is ["--automation"])
+{
+    AutomationChecks.Run();return;
+}
+if(args is ["--automation-controller",var connectionFile,var profileId])
+{
+    await AutomationChecks.Controller(connectionFile,profileId);return;
+}
+
 if (args is ["--hosted-access"])
 {
     HostedAccessChecks.Run();

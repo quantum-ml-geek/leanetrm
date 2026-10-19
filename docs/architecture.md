@@ -39,8 +39,18 @@ in [hosted pilot operations](hosted-pilot.md); the synthetic local preview stays
 ## 2. Application structure and deployment
 
 Start with a modular monolith and three tiers: browser, application and database.
-Initially there are two server components to operate: the application and the
-database. The application serves the built browser assets and business API.
+The application serves the built browser assets and business API. Local preview
+uses this repository's application and an isolated stock PostgreSQL database.
+The required deployment and container-execution backend is Docker Swarm. Durable
+scheduling and the trusted execution controller add separately supervised
+processes while retaining the same managed business modules and operations.
+Implement the scheduler as a .NET Worker Service in this repository, with an
+independently deployed image and placement on a separate Swarm node when selected.
+It uses ordinary PostgreSQL connections; no scheduler extension is required.
+A bounded durable worker, container controller and shared infrastructure view are
+implemented locally; see [automation](automation.md) for executable operations and
+limits. Real Swarm qualification, full agent execution and deployment migration
+remain work; the local preview does not establish those capabilities.
 
 ```mermaid
 flowchart TD
@@ -66,6 +76,7 @@ Logical modules:
 | Market data | Primitive factors, observations, curve definitions and snapshots |
 | Calculation | Schedules, pricer execution, scenarios, risk and calculation receipts |
 | Agent operations | Discoverable tools, task execution, provider adapters and execution limits |
+| Automation execution | Durable scheduling, authorized job admission and Swarm workload reconciliation |
 | Presentation | Browser screens, reports and export views over the business operations |
 
 Presentation uses familiar business names. Market data provides futures and
@@ -139,10 +150,10 @@ availability does not justify unused catalogs or inherited defaults. Numerical
 policies remain explicit without changing exact monetary arithmetic. Broader
 calendar/FX work stays in the plan until its workflow is implemented.
 
-Long computations use durable jobs. A worker can eventually be deployed
-separately without changing permissions, inputs or result contracts. Separate
-services are introduced for measured operational needs, not as a prerequisite to
-modular code.
+Long computations use durable jobs without changing permissions, inputs or result
+contracts. Scheduler, trusted controller and container workers have the execution
+boundaries in section 11; business modules remain shared. Further service splits
+require a concrete operational need.
 
 ## 3. Domain vocabulary and ownership
 
@@ -1377,6 +1388,308 @@ publication is rejected; confirmed termination produces the cancelled state.
 Physical work may continue until it cooperates or is terminated, and its resource
 usage remains visible. Test both orderings and prevent a stale worker from
 overwriting either terminal outcome.
+
+### 11.1 Schedules, temporary jobs and agent execution
+
+Required end-state behavior. The [bounded automation implementation](automation.md)
+supports UTC once/fixed-interval jobs, a separate .NET worker and approved finite
+container processes. Full scheduled agent/tool execution remains work. People and authorized agents can create, inspect, amend, pause and
+cancel recurring schedules and temporary jobs through the same versioned business
+operations exposed by the UI, API and MCP. A job can invoke a registered managed
+operation, launch an agent task with an explicit assignment and allowed tools, or
+run a bounded container workload through an approved execution profile.
+Agent tasks can create further jobs or request child agents when policy permits.
+Prompts are task input; validated execution contracts govern admission and effects.
+These automation schedules govern execution and are distinct from economic/date
+schedules for delivery, observation or payment. Market-definition authoring rights
+do not authorize automation scheduling or agent launch.
+
+The scheduler is an independently supervised .NET Worker Service, outside the web
+API process, built and versioned in this repository. It consumes the same managed
+timing, authorization and job-admission operations as other entry points; it does
+not duplicate domain rules. Persist schedule cursors, admitted occurrences, claims
+and dispatch in stock PostgreSQL through a restricted service role. In-memory
+timers and optional wake-up notifications are hints; durable due-work queries and
+explicit reconciliation recover missed wake-ups and restarts. The service keeps
+admitting already-authorized schedules while the web API restarts, provided its
+required persistence, authorization and execution dependencies are available.
+
+Swarm placement constraints can assign the scheduler to a separately operated
+eligible node. When separate placement is selected, enforce disjoint eligible
+node sets for the API and scheduler; absence of a suitable node leaves the
+service pending rather than silently co-locating it. It needs authenticated
+private connectivity to PostgreSQL and the admitted-work dispatch path, without
+Docker management access. Replica count,
+poll cadence, claim lifetime, renewal and recovery policy are explicit deployment
+settings. Atomic occurrence admission and renewable fenced ownership prevent
+duplicate logical work during rolling upgrades, overlapping replicas or node
+failure; losing a claim or database access prevents further admission/dispatch
+until ownership and current authority are re-established. Node locality and a
+configured replica count are not distributed locks. Admission and claim expiry
+use a shared trusted database time, not a worker node's wall clock; local clocks
+drive wake-up hints only. Renewals validate the current server-issued claim epoch
+and cannot revive expired or superseded ownership. Keep the privileged execution
+controller separate, with the ownership and late-command rules in section 11.2.
+
+Schedule definitions, due occurrences and execution attempts have separate
+identities. Definitions retain their version, owner/scope, creator, executing
+principal, delegation, timing and task contract. Timing includes an explicit zone,
+recurrence or one-time due instant, end/expiry, missed-run policy, overlap policy
+and retry limits. Missing or conflicting choices produce structured errors.
+Temporary jobs are durable one-time or bounded-lifetime work: they survive process
+restarts until completion, cancellation or expiry. Expiry prevents new admissions;
+running work follows bounded cancellation and current-authority rules. Expiring a
+job does not erase its business effects or retained audit/result receipts.
+
+The server derives immutable creation/delegation lineage for agent-created
+schedules, jobs and every future occurrence. A caller cannot select a new root,
+budget owner or parent relationship to bypass inherited controls. Completing an
+agent task does not itself cancel a separately authorized recurring schedule or
+extend its authority. Automation that survives the creating task's cancellation
+requires an explicit separately authorized operation and durable grant defining
+that independent lifetime and cancellation policy; retain its creation lineage.
+
+Schedule management, job submission, agent launch, child delegation and the actual
+business operations require distinct authority. Permission to create a schedule
+does not grant permission to read its inputs, launch an agent or publish results.
+Dispatch uses a separately authorized service identity; its infrastructure rights
+never become the launched agent's business rights. Each agent run binds an agent
+principal and explicit delegation and records the creator, scheduler, effective
+delegator and parent run. A task's requested identity or scope is untrusted input.
+
+Child work can use only explicitly permitted redelegation, with authority no
+broader or longer-lived than the originating grant and every intervening bound.
+Every relevant principal/grant/delegation must remain current at admission, tool
+use and publication, with the authorization fence from section 9. Long-lived
+schedules require explicit durable automation authority; storing a session token
+or resuming an old prompt cannot preserve expired authority. Changes to ownership,
+execution identity, delegation, task or schedule require authorized versioned
+updates; they never silently transfer the creator's rights to another principal.
+
+Jobs declare how business/effective time, knowledge cutoff, market inputs and model
+versions are selected. Each occurrence resolves that policy to retained exact
+inputs before business execution; calculation retries preserve those pins. Child
+work inherits the retained context unless an explicit authorized operation selects
+and records a different context. Historical inputs never restore historical
+permissions. Agent text is not a deterministic calculation result or an approval:
+every proposed effect uses the normal validated operation and applicable approval
+policy, including exact-payload approval where required.
+
+Execution contracts bound outstanding jobs, recurrence frequency, concurrent
+agents, child depth/fan-out, elapsed time, steps, provider usage/cost and retries.
+Enforce applicable aggregate limits across descendants and accounting periods;
+spawning children or creating new schedules cannot reset a parent's limits.
+Provider/model routing and protected credentials follow section 10. Missing
+authority or limits block admission rather than selecting a successful default.
+
+Due occurrence admission and child-job requests are idempotent, with atomic
+execution/audit records and durable dispatch. Worker fencing prevents duplicate
+or stale attempts from publishing. External provider calls and business effects
+retain their own idempotency/reconciliation contracts; an uncertain response is
+not permission to spawn another logical run or repeat a financial effect.
+Pause, cancel, expiry and descendant handling have explicit contracts covering
+queued children and future occurrences of agent-created schedules. A parent cannot
+evade those controls by deferring creation until a later occurrence. Authorized job views
+show ownership, schedule, expiry, next due occurrence, parent/child runs, progress,
+usage, results and failures without exposing credentials or private model reasoning.
+
+### 11.2 Docker Swarm and image-based execution
+
+Required deployment/execution contract; not implemented or deployment-qualified.
+The .NET scheduler service owns due-time policy, admission and durable run state in
+stock PostgreSQL. Swarm owns container placement and task lifecycle. A trusted
+execution controller reconciles admitted run attempts into Swarm resources;
+Swarm task state does not replace the business job state or authorization checks.
+
+```mermaid
+flowchart LR
+    Caller[Person or authorized agent] --> Operations[Shared business operations]
+    Operations --> Jobs[Durable schedules and jobs]
+    Jobs --> Scheduler[Authorized occurrence admission]
+    Scheduler --> Controller[Trusted execution controller]
+    Controller --> Swarm[Docker Swarm manager]
+    Swarm --> Workload[Agent or bounded container workload]
+    Workload --> Operations
+```
+
+Starting an image means running containers from it. Each request names an exact
+version of an approved execution profile with a registered image digest, supported
+platform, task protocol, permitted arguments, network/storage/secret bindings,
+placement constraints and explicit resource/restart/time limits. Resolve and
+retain that complete contract before launch; retries preserve it. Missing or
+revoked profiles and unresolved images fail admission; mutable tags cannot select
+a different image during recovery. Digest identity establishes content identity,
+not permission or trust. Image registration/approval and image build/push rights
+are separate from workload launch and agent delegation. Launch never implies an
+image build or an arbitrary registry, command or host configuration request.
+
+Agents request launches, schedules and child jobs through the same authorized
+operations as people. Only the trusted controller holds Swarm management access.
+Agent workloads receive neither Docker sockets/manager credentials, registry
+administration credentials nor database logins. Profiles cannot grant privileged
+containers, host namespaces, arbitrary host mounts or access to control-plane and
+database networks. Use non-root workloads, restricted capabilities and explicitly
+bounded writable storage, egress, CPU, memory and process counts. Unsupported
+required controls reject the profile on that deployment rather than silently
+weakening it. Workloads that execute untrusted code require a separately qualified
+host/isolation boundary; containers alone do not establish that qualification.
+
+Each physical task authenticates through protected, short-lived credential
+exchange bound to the admitted run, current execution fence, agent identity and
+delegation. Authenticate bootstrap against a trusted controller/runtime binding;
+caller-supplied task IDs and labels are not proof of identity. Each replacement,
+including an automatic Swarm restart within one logical attempt, must acquire a
+new exclusive server-issued task fence before any business call. Invalidate the
+old task's authority atomically with replacement admission. Never bake credentials
+into an image or put them in prompts, service labels or public artifacts.
+Renewal rechecks current authority and the original
+expiry/budget bounds. Agents access business data and effects only through the
+authorized operations; a container result is untrusted input to normal validation.
+
+Persist the exact run/attempt-to-service/task binding and an exclusive durable
+controller lease/epoch. Check current ownership and run state before commands;
+lease loss prevents further commands or task credential admission. A command
+already in flight may still complete after lease loss or cancellation. The current
+controller reconciles such late resources against their pre-recorded exact owned
+identity and contract, denies task admission and removes obsolete resources
+without reverting a newer run's desired state. Reconcile a timed-out create by
+inspecting that owned resource before another create. Swarm rescheduling may leave an old physical
+task running: every business call and result publication checks the current
+execution fence, and all overlapping physical work remains accounted for. Reserve
+budget for uncertain/superseded tasks until termination is verified; replacement
+admission must fit that aggregate reservation or wait for recovery. A task's
+exit code or Swarm completion alone is not a committed business success. The
+controller must reconcile a validated result receipt and durable terminal state.
+Swarm restarts cannot reset job expiry, delegation, retry or descendant budgets.
+Automatic restarts require qualified pre-reserved bounds on physical overlap;
+denying credentials does not stop CPU/storage consumption. If those bounds cannot
+be enforced, require controller-admitted replacement rather than automatic restart.
+
+Accepting cancellation atomically blocks new tool/effect/result admissions by all
+affected tasks and stops future dispatch, even without manager access. Effects
+already committed retain their outcomes. Request termination of all owned live
+tasks, including superseded attempts. Reconcile until termination is confirmed;
+loss of manager access leaves cancellation pending and accounting active.
+Cleanup targets only resources whose persisted ownership and current identity
+match, with explicit workspace/artifact retention; never perform a broad prune.
+Run finite work with qualified Swarm replicated-job semantics and explicit bounded
+replica/concurrency counts, separately from long-lived services. Global-job mode
+is not a bounded run across cluster membership changes and is not admitted for
+these jobs. Pin and test the supported Engine/API version and task mode before use.
+
+Swarm hosting must define controller placement, worker trust boundaries, protected
+management access, image availability, secrets, ingress and recovery. Stateful
+PostgreSQL storage, backups and recovery need their own verified policy;
+rescheduling a database container does not establish data durability or HA.
+Existing standalone deployment mechanisms need an explicit migration and retained
+release/admission guarantees before Swarm promotion. Local preview stays isolated.
+
+Docker's public contracts describe [Swarm services and image digests](https://docs.docker.com/engine/swarm/services/),
+[finite jobs](https://docs.docker.com/reference/cli/docker/service/create/#running-as-a-job)
+and the privileged [daemon control boundary](https://docs.docker.com/engine/security/#docker-daemon-attack-surface).
+They do not supply the application's business authority or exactly-once effects.
+
+### 11.3 Infrastructure administration and node maintenance
+
+Required end-state behavior. Shared approved node status and typed availability
+commands are implemented under the [bounded automation contract](automation.md).
+Real Swarm enforcement/recovery, host operations and deployment remain unqualified.
+A shared Jobs & Infrastructure view is available to all authenticated application
+members in ordinary navigation. Shared status exposes approved node labels,
+readiness, availability, resource capacity and aggregate workload/maintenance
+status; detailed cluster/service inspection still follows resource permissions.
+Do not expose host addresses, credentials, raw configuration or another scope's
+job payloads, logs or results through the shared view or aggregate drill-downs.
+Observations retain source/time and explicit stale/unknown states; missing
+telemetry is not healthy status. The UI, API and MCP use the same scoped queries
+and authorized operations; visibility of the screen grants no mutation authority.
+
+Members can inspect and control their own jobs and schedules, including pause,
+resume, cancel and permitted retry/restart. Administrators with explicit
+installation-wide job-management authority can control all jobs. Ownership is
+assigned by the authorized creation operation from trusted identity/delegation
+evidence; caller-supplied owner IDs and knowing a run ID grant no control.
+Agent-created schedules and descendants retain their existing ownership,
+delegation and lineage rules. Own-job or administrator control never expands a
+run's business permissions, restores revoked authority or bypasses approval,
+maintenance, expiry, retry, image or budget limits. Managing another member's job
+does not by itself grant access to its private inputs, logs, results or business
+data. Content access requires current read authority even for the job's owner.
+Own-job actions target that run and its exclusive resources; they cannot restart
+a shared worker/service or disrupt another member's jobs. Return per-resource
+permitted actions for the UI, and enforce them again inside each backend operation.
+
+Initial controls include pause, drain and activate nodes, governed placement-label
+changes, and restart of a selected owned service under its exact retained execution
+profile. Swarm mutations pass through the trusted controller's typed operations.
+Distinguish service-task restart, Docker Engine restart and host reboot
+in the operation contract and UI. A service restart does not update its image or
+reset job authority/budgets. Finite jobs use their explicit retry/reconciliation
+operation; a generic restart cannot replay already completed business effects.
+
+Swarm controls node availability and service tasks; host reboot and Docker Engine
+restart require a separately configured trusted host-management adapter. Bind
+each registered Swarm node to an authenticated exact machine/provider identity;
+hostname, network address or caller-supplied command is not sufficient. Permit
+only typed bounded maintenance actions, with protected scoped credentials and
+idempotent request/status protocols. No arbitrary remote shell, caller-selected
+endpoint or privileged administration container is exposed to users or agents.
+An installation lacking that adapter reports host actions as unsupported.
+
+Infrastructure inspection, node availability, protected placement changes,
+workload restart and host maintenance require separate cluster/node/service
+capabilities for detailed inspection and shared-resource mutations. Basic shared
+status and own-job controls do not require infrastructure-administrator status.
+Node/host controls do not follow from owning a job or managing all jobs, trading,
+scheduling, agent launch or general workspace administration. Authorized agents
+may request only explicitly delegated
+infrastructure operations, subject to the same current authority, policy and
+applicable exact-action approvals as people. Cluster-wide effects require authority
+over every affected workload/tenant or a separately granted cluster-operator
+mandate; a workspace grant cannot drain a shared node. Infrastructure authority
+does not grant business-data access. Keep host-management and Docker credentials
+inside their trusted control boundaries, separate from scheduler/agent workloads.
+
+Maintenance is a durable operation with exact target identity, action, requester,
+delegation, inspected versions, affected workloads, policy/approval evidence and
+per-phase outcomes. Preview and revalidate current cluster/node state, placement
+eligibility, replacement capacity, running jobs, stateful volumes and manager
+quorum before each disruptive step. Serialize disruptive maintenance through
+cluster-scoped fenced ownership so concurrent requests cannot independently
+consume the same capacity/quorum margin. Missing or conflicting facts block
+execution. Node role changes, join/removal, forced recovery and destructive storage
+operations remain disabled until separately specified and qualified.
+
+Maintenance gates and capacity reservations are shared durable admission state.
+Scheduler dispatch, controller launch/replacement/reconciliation, service restart
+and label/placement changes must honor the current fenced maintenance phase and
+reserve capacity atomically through the same admission contract. They cannot
+consume reserved replacement capacity or recreate work intentionally stopped by
+maintenance. Retain legitimate application desired state for authorized resumption;
+maintenance cannot be bypassed by a normal job launch or another controller.
+
+The selected maintenance policy defines admission pause, workload handoff or
+cancellation, drain, confirmed stop/replacement readiness, host action, post-action
+health checks and explicit restoration of availability. Draining does not prove
+every host process stopped: account for standalone containers and other host
+services as well as Swarm tasks. Never treat drain as a database failover or move
+node-local data implicitly. Protect the database and control plane with their
+own recovery rules. A node must not reboot just because a drain command returned.
+
+Recheck authority, ownership and preconditions before dispatching a host command.
+An accepted reboot/restart command may finish after connectivity or ownership is
+lost; cancellation cannot promise to undo it. Reconcile the exact provider request
+and host boot/Engine identity before retrying, returning to service or releasing
+maintenance reservations. Report uncertain or intervention-required outcomes
+truthfully; stale controllers cannot issue follow-up steps. Maintenance that
+disrupts its own controller/API/database requires a qualified independent control
+and recovery path; retain an authenticated external operator path for outages.
+Persist redacted audit and operation receipts without host credentials or tokens.
+
+Docker documents [node availability and labels](https://docs.docker.com/engine/swarm/manage-nodes/),
+[drain's limits](https://docs.docker.com/engine/swarm/swarm-tutorial/drain-node/)
+and [manager quorum/recovery](https://docs.docker.com/engine/swarm/admin_guide/).
+These are infrastructure operations with effects beyond an individual agent job.
 
 ## 12. Extension boundaries
 

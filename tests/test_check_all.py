@@ -36,11 +36,15 @@ class CheckAllTests(unittest.TestCase):
                    Path('/browser executable'), run=run)
         restored = {c[c.index('restore') + 1] for c in commands if 'restore' in c}
         executed = {c[c.index('--project') + 1] for c in commands if '--project' in c}
-        self.assertEqual(restored, expected)
+        self.assertEqual(restored, expected | {'src/OpenEtrm.Worker/OpenEtrm.Worker.csproj'})
         self.assertEqual(executed, expected)
         schedule_commands = [c for c in commands if '--project' in c and 'Api.Checks' in c[c.index('--project') + 1]]
-        self.assertEqual(len(schedule_commands), 1)
+        self.assertEqual(len(schedule_commands), 2)
         self.assertEqual(schedule_commands[0][-2:], ['--', '--schedules'])
+        self.assertEqual(schedule_commands[1][-2:], ['--', '--automation'])
+        self.assertTrue(any('build' in c and 'src/OpenEtrm.Worker/OpenEtrm.Worker.csproj' in c for c in commands))
+        self.assertTrue(any('tools/check_automation.py' in c and '--dotnet' in c for c in commands))
+        self.assertTrue(any('--jobs-check' in c and '--browser-check' in c for c in commands))
         for command in commands:
             if '--pg-bin' in command:
                 self.assertEqual(command[command.index('--pg-bin') + 1], '/stock postgres/bin')

@@ -86,10 +86,12 @@ jobs:
         run: |
           dotnet restore src/OpenEtrm.Api/OpenEtrm.Api.csproj --locked-mode
           dotnet publish src/OpenEtrm.Api/OpenEtrm.Api.csproj --no-restore --no-self-contained --configuration Release --output "$RUNNER_TEMP/api"
+          dotnet restore src/OpenEtrm.Worker/OpenEtrm.Worker.csproj --locked-mode
+          dotnet publish src/OpenEtrm.Worker/OpenEtrm.Worker.csproj --no-restore --no-self-contained --configuration Release --output "$RUNNER_TEMP/worker"
           npm ci --prefix web --ignore-scripts
           npm run build --prefix web
           mkdir "$RUNNER_TEMP/release"
-          python3 tools/package_release.py --api "$RUNNER_TEMP/api" --web web/dist \
+          python3 tools/package_release.py --api "$RUNNER_TEMP/api" --worker "$RUNNER_TEMP/worker" --web web/dist \
             --output "$RUNNER_TEMP/release/openetrm-release.tar.gz" \
             --repository "$GITHUB_REPOSITORY" --commit "$GITHUB_SHA" \
             --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT"

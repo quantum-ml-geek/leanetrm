@@ -95,7 +95,7 @@ provider outages and longer-run recovery still require operator qualification.
 The publisher job runs after successful CI for a push to the protected `master`
 branch, only when `RELEASE_PUBLICATION_ENABLED` is explicitly enabled. The
 `hosted-release` GitHub environment restricts publishing to that branch. It builds
-the API/browser image with pinned public dependencies and preserves the project,
+the API/browser/worker image with pinned public dependencies and preserves the project,
 Npgsql and browser dependency notices. A data-only GitHub Release contains the
 Docker save archive, exact migration hashes and Compose evidence. The complete
 bundle has a GitHub build-provenance attestation; private configuration, credentials,
