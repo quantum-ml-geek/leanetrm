@@ -18,19 +18,23 @@ public sealed record FuturesMarketBinding
     public FuturesContract Instrument { get; }
     public FuturesSeriesSpecification Series => Instrument.Series;
     public QuoteSpecification Quote { get; }
-    public DateTimeOffset FirstTrading => Series.FirstTradingAt;
+    public DateTimeOffset EligibleFrom { get; }
     public string SettlementMethod => Series.SettlementMethod;
     public Guid Id { get; }
     public Quantity UnitQuantity => Instrument.UnitQuantity;
     public ImmutableArray<CurveRequest> Dependencies => [Market];
     public FuturesMarketBinding(Guid id, CurveRequest market, MarketContract contract, FuturesSeriesSpecification series,
-        QuoteSpecification quote, string settlementMethod, string implementation, FuturesContract? instrument = null)
+        QuoteSpecification quote, string settlementMethod, string implementation, FuturesContract? instrument = null,DateTimeOffset? eligibleFrom = null)
     {
         if (contract is null || series is null || quote is null)
             throw Error("futures_definition", "Explicit dated contract, series and quote terms are required.");
         if (!Supported(implementation) || settlementMethod != series.SettlementMethod ||
             implementation == Implementation && (settlementMethod != "cash" || series.LotBasis != LotBasis.FixedTotal || series.LotQuantity != series.QuoteQuantity || quote.Kind != QuoteKind.Outright))
             throw Error("futures_convention", "Select the supported fixed-total cash convention with identical lot and quote quantity bases.");
+        var from=eligibleFrom??series.FirstTradingAt;
+        if(from is not {} resolved||!TradingInstant.IsSupported(resolved)||resolved>=contract.Expiry||series.FirstTradingAt is {} sourceFirst&&resolved<sourceFirst)
+            throw Error("futures_definition","Explicit qualified eligibility is required when the source first-trading instant is unknown.");
+        EligibleFrom=resolved;
         if (id == Guid.Empty || contract.Key.Id == Guid.Empty || contract.Key.Revision.CatalogId == Guid.Empty ||
             contract.Key.Revision.RevisionId == Guid.Empty || contract.Kind != ContractKind.Future || market.Contract != contract.Key ||
             market.Curve.Revision != contract.Key.Revision || string.IsNullOrWhiteSpace(market.Curve.Code) ||
@@ -44,7 +48,7 @@ public sealed record FuturesMarketBinding
             quote.Minimum.CompareTo(quote.Maximum) > 0 ||
             series.DeliveryFrom != contract.DeliveryFrom || series.DeliveryTo != contract.DeliveryTo || series.LastTradingAt != contract.Expiry ||
             contract.DeliveryFrom >= contract.DeliveryTo || contract.DeliveryTo >= new DateOnly(9999, 12, 31) ||
-            !TradingInstant.IsSupported(series.FirstTradingAt) || !TradingInstant.IsSupported(contract.Expiry) || series.FirstTradingAt >= contract.Expiry)
+            series.FirstTradingAt is {} first&&(!TradingInstant.IsSupported(first)||first>=contract.Expiry) || !TradingInstant.IsSupported(contract.Expiry))
             throw Error("futures_definition", "The exact dated contract, quote, series and trading interval must agree.");
         _ = PriceUnit.FromQuote(quote);
         Id = id; Market = market; Contract = contract; Instrument = instrument ?? new(series);
@@ -92,8 +96,8 @@ public sealed record FuturesContract : Instrument
     {
         if (series is null || series.SettlementMethod is not ("cash" or "physical") || !Enum.IsDefined(series.LotBasis) ||
             series.ContractSize.CompareTo(default) <= 0 || series.Multiplier.CompareTo(default) <= 0 || series.TradingTick.CompareTo(default) <= 0 ||
-            series.DeliveryFrom >= series.DeliveryTo || !TradingInstant.IsSupported(series.FirstTradingAt) ||
-            !TradingInstant.IsSupported(series.LastTradingAt) || series.FirstTradingAt >= series.LastTradingAt)
+            series.DeliveryFrom >= series.DeliveryTo ||
+            series.FirstTradingAt is {} first&&(!TradingInstant.IsSupported(first)||first>=series.LastTradingAt) || !TradingInstant.IsSupported(series.LastTradingAt))
             throw FuturesMarketBinding.Error("futures_definition", "An exact supported futures series and settlement convention are required.");
         foreach (var key in new[] {series.Key,series.QuoteQuantity,series.Currency,series.Location,series.DeliveryProfile,series.LotQuantity})
             if (key.Revision != series.Key.Revision || string.IsNullOrWhiteSpace(key.Code)) throw FuturesMarketBinding.Error("futures_definition", "Contract terms require one exact reference revision.");
@@ -181,7 +185,7 @@ public sealed record FuturesPosition
         if (!lots.IsMultipleOf(ExactDecimal.Parse("1")) || lots == default ||
             lots.CompareTo(ExactDecimal.Parse("-100000")) < 0 || lots.CompareTo(ExactDecimal.Parse("100000")) > 0)
             throw FuturesMarketBinding.Error("futures_lots", "Supply nonzero signed integer lots between -100000 and 100000.");
-        if (id == Guid.Empty || retainedInstrumentId == Guid.Empty || !TradingInstant.IsSupported(executedAt) || executedAt < side.FirstTrading || executedAt >= side.Contract.Expiry ||
+        if (id == Guid.Empty || retainedInstrumentId == Guid.Empty || !TradingInstant.IsSupported(executedAt) || executedAt < side.EligibleFrom || executedAt >= side.Contract.Expiry ||
             executionPrice.Unit != PriceUnit.FromQuote(side.Quote) || !executionPrice.Value.IsMultipleOf(side.Quote.TradingTick))
             throw FuturesMarketBinding.Error("futures_execution", "Execution requires an exact identity, supported trading instant, price unit and trading tick.");
         if (settlement != FuturesSettlementState.Unprocessed)
@@ -260,7 +264,7 @@ public static class FuturesHoldings
             market.Model.RequireFuturesDefinition(side.Market, side.Contract, side.Series, side.Quote);
             if (position.ExecutedAt > snapshot.ValuationAt)
                 throw FuturesMarketBinding.Error("futures_effective", "An execution cannot enter a valuation before its exact effective instant.");
-            if (snapshot.ValuationAt < side.FirstTrading || snapshot.ValuationAt >= side.Contract.Expiry)
+            if (snapshot.ValuationAt < side.EligibleFrom || snapshot.ValuationAt >= side.Contract.Expiry)
                 throw FuturesMarketBinding.Error("futures_lifecycle", "Pricing beyond the supported live interval requires explicit lifecycle processing.");
             if (!prices.TryGetValue(side.Market, out var value))
                 throw FuturesMarketBinding.Error("missing_observation", "The exact held contract price is required; no prompt contract is substituted.");

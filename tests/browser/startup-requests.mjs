@@ -39,6 +39,7 @@ export async function run({command,evaluate,wait,click,submit,persona,check,idle
   await check('initial profile choices reuse the initial bootstrap',"window.__startupRequests.filter(path=>path==='/api/bootstrap').length===1");
   await check('startup hydrates stored curve names without a separate directory request',"!window.__startupRequests.includes('/api/curve-names')&&document.querySelectorAll('.curve-button').length>0");
   await check('independent dataset and session bootstrap reads overlap',"window.__bootstrapOverlapsExamples===true");
+  await check('verified local preview is labeled from its explicit bootstrap mode',"document.querySelector('#workspace-host-mode').textContent==='Synthetic preview'&&document.querySelector('#workspace-footer').textContent.includes('disposable local preview')");
   await click('#profile-open');
   await check('opening Profile still refreshes current profile choices',"window.__startupRequests.filter(path=>path==='/api/bootstrap').length===2&&!document.querySelector('#profile-dialog').hidden&&document.querySelector('#profile-dialog').open");
   await click('#profile-close');
@@ -62,6 +63,11 @@ export async function run({command,evaluate,wait,click,submit,persona,check,idle
     await command('Page.navigate',{url:url+'/'});await wait("!document.querySelector('#error').hidden&&"+idle);
     await check('a missing stored-name directory fails initial hydration without a ready mark or fallback',"performance.getEntriesByName('leanetrm:workspace-ready','mark').length===0&&document.querySelectorAll('.curve-button').length===0&&!window.__startupRequests.includes('/api/curve-names')");
   }finally{await command('Page.removeScriptToEvaluateOnNewDocument',{identifier:failure.identifier});}
+  const unavailable=await command('Page.addScriptToEvaluateOnNewDocument',{source:`const earlier=window.fetch;window.fetch=(input,...args)=>String(input)==='/api/bootstrap'?Promise.resolve(new Response(JSON.stringify({code:'request_failed'}),{status:503})):earlier(input,...args);`});
+  try{
+    await command('Page.navigate',{url:url+'/'});await wait("!document.querySelector('#error').hidden&&"+idle);
+    await check('unverified bootstrap leaves neutral workspace labels without local-preview claims',"document.querySelector('#workspace-host-mode').textContent==='Workspace'&&!/synthetic|disposable|private pilot/i.test(document.querySelector('.side-note').textContent+document.querySelector('#workspace-footer').textContent)");
+  }finally{await command('Page.removeScriptToEvaluateOnNewDocument',{identifier:unavailable.identifier});}
   }finally{
     await command('Page.removeScriptToEvaluateOnNewDocument',{identifier});
   }

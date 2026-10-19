@@ -23,7 +23,7 @@
       <button id="nav-futures" class="nav-item" aria-label="Blotter" title="Blotter" hidden><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 8h13l-3-3M20 16H7l3 3"/></svg></span><span class="nav-text">Blotter</span></button>
     </nav></details>
   </div>
-  <div class="side-note"><strong><span class="dot" aria-hidden="true"></span>Synthetic preview</strong><p>Sample markets on a disposable local database.</p></div>
+  <div class="side-note"><strong><span class="dot" aria-hidden="true"></span><span id="workspace-host-mode">Workspace</span></strong><p id="workspace-mode-description">Verifying workspace information.</p></div>
 </aside>
 <main>
   <header>
@@ -168,7 +168,7 @@
     <div id="admin-pending" class="profile-note" hidden><p>A request is retained for reconciliation. Check accounts and recent changes before retrying. Retry sends the original command with the same request identity.</p><button id="admin-retry" type="button" class="secondary">Retry original request</button><button id="admin-discard" type="button" class="secondary">Discard retained request</button></div></div>
     <div class="card"><h2>Recent access changes</h2><p class="field-help">Latest 100 committed changes in this workspace. Earlier audit records remain in storage.</p><div id="admin-audit" class="table-wrap"></div></div>
   </section>
-  <footer>Synthetic sample data. Every change stays in this disposable local preview.</footer>
+  <footer id="workspace-footer">Workspace information has not been verified.</footer>
 </main>
 <dialog id="trade-kind" aria-labelledby="trade-kind-title"><div class="dialog-heading"><h2 id="trade-kind-title">New trade</h2><button id="trade-kind-close" type="button" class="icon-button" aria-label="Close trade choices">×</button></div><div class="trade-kind-actions"><button id="trade-kind-future" type="button">Futures</button><button id="trade-kind-swap" type="button">Financial swap</button></div></dialog>
 <dialog id="swap-editor" class="trade-editor swap-editor" aria-labelledby="swap-title">

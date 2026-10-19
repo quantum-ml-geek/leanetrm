@@ -47,6 +47,18 @@ Business reads follow the definition bundle's declared reference relationships;
 the reference inspector loads its selected table separately in bounded pages
 under the same authorization and temporal rules (D144).
 
+Exchange first-trading facts and application execution eligibility are distinct
+(D157). A sourced date never becomes a fabricated exchange event instant. The
+actual timestamp may remain unknown; sample execution requires a separate exact
+admission under a named rule and supported convention, with generated-mark and
+qualification source hashes. A next-native-day admission pins its approved
+instant, clock offset and tzdb release. The managed clock and database both reject
+a boundary inconsistent with the declared zone/date. Existing precise synthetic
+facts retain their exact first-trading boundary. Source-series foreign keys
+establish lineage; they do not assert equality of every sourced and qualified
+term. Eligibility remains outside reusable instrument identity and is retained in
+the selected market binding, lifecycle checks and risk context.
+
 ## 2. Application structure and deployment
 
 Start with a modular monolith and three tiers: browser, application and database.

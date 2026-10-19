@@ -78,7 +78,7 @@ export function setupShortcutEditor(run:(work:()=>Promise<void>)=>Promise<void>,
     const selected=source();get('schedule-source-panel').hidden=!selected;if(!selected)return;
     get('schedule-coverage').textContent=`Test coverage: ${displayInstant(selected.from,zone())} to ${displayInstant(selected.to,zone())} (end not included). Trading times shown in ${zone()}.`;
     renderRegularTable(get('schedule-contracts'),'schedule-contracts',JSON.stringify(selected),
-      ['Order','Contract','Delivery start','Delivery end · not included','First trading','Last trading'],
+      ['Order','Contract','Delivery start','Delivery end · not included','Trading eligibility','Last trading'],
       selected.entries.map(e=>[String(e.ordinal),e.label,displayDate(e.deliveryFrom),displayDate(e.deliveryTo),displayInstant(e.eligibleFrom,zone()),displayInstant(e.rollAt,zone())]),[],isBusy);
     const boundary=get<HTMLSelectElement>('schedule-boundary');boundary.replaceChildren(...selected.entries.map(e=>{const o=el('option',e.label);o.value=e.contractId;return o;}));
   }

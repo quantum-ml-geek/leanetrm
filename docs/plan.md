@@ -17,6 +17,16 @@ daily/final settlement, variation-margin transitions and generic futures PV rema
 unimplemented. Quantities, quote scales, numerical policy and exact inputs stay in
 the managed backend.
 
+Sample futures execution admits explicitly qualified candidate terms and generated
+trader marks under D157. Actual first-trading timestamps can remain unknown when
+only a source date exists; the selected eligibility record supplies a separate
+supported boundary. Missing/conflicting admissions, wrong mark roles, missing
+source hashes and inconsistent clock offsets reject. This does not enable
+official settlement, variation margin or delivery. Migration 0038 introduces the
+exact-version admission schema; 0039 tightens its clock and conflicting-receipt
+checks. Installations that already provisioned those objects require qualified
+existing-object adoption rather than re-executing table creation.
+
 The shared managed valuation path is implemented (D145–148): risk creates
 immutable scenarios and compares returned book/holding values. Instruments own
 unit pricing and report factors through `MarketFactors(context)`. Books apply

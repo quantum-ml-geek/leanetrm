@@ -191,7 +191,7 @@ export function setupFutures(options:{api:Api;act:(work:()=>Promise<void>)=>Prom
       })});
     }
   }
-  function rejection(error:unknown){return ((error as {code?:string}).code??'').startsWith('swap_')&&!(error as {code?:string}).code?.endsWith('outcome_unknown')||['trade_operation_conflict','futures_revision_conflict','futures_amendment','futures_no_change','futures_trade','futures_conflict','futures_input','futures_lots','futures_execution','futures_convention','futures_book','futures_definition','futures_limit','historical_read_only','access_denied','request_format','request_token','numeric_format','price_domain','quote_specification'].includes((error as {code?:string}).code??'');}
+  function rejection(error:unknown){return ((error as {code?:string}).code??'').startsWith('swap_')&&!(error as {code?:string}).code?.endsWith('outcome_unknown')||['trade_operation_conflict','futures_revision_conflict','futures_amendment','futures_no_change','futures_trade','futures_conflict','futures_input','futures_lots','futures_execution','futures_convention','futures_book','futures_definition','futures_admission','futures_limit','historical_read_only','access_denied','request_format','request_token','numeric_format','price_domain','quote_specification'].includes((error as {code?:string}).code??'');}
   async function send(command:RequestCommand){
     const retrying=uncertain;uncertain=true;store();
     try{await api(command.path,{...command.body,operationId:command.operationId});}

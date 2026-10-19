@@ -47,7 +47,7 @@ public sealed record FuturesSeriesSpecification(
     ExactDecimal Multiplier, ExactDecimal TradingTick, ReferenceKey Location,
     ReferenceKey DeliveryProfile, DateOnly DeliveryFrom, DateOnly DeliveryTo,
     DateTimeOffset LastTradingAt, ReferenceKey LotQuantity,
-    ExactDecimal ContractSize, LotBasis LotBasis, DateTimeOffset FirstTradingAt, string SettlementMethod,FuturesLotResolution? LotResolution=null,FuturesBasisSettlement? BasisSettlement=null);
+    ExactDecimal ContractSize, LotBasis LotBasis, DateTimeOffset? FirstTradingAt, string SettlementMethod,FuturesLotResolution? LotResolution=null,FuturesBasisSettlement? BasisSettlement=null);
 
 // Identity mapping is the first supported delivery mapping. Explicitly named
 // pairs are required even where source and target delivery periods are equal.

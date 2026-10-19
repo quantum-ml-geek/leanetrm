@@ -4,6 +4,8 @@ using System.Globalization;
 using OpenEtrm.Api;
 using OpenEtrm.MarketData;
 
+if(args is ["--futures-admission"]){FuturesAdmissionChecks.Run();return;}
+
 if (args is ["--automation"])
 {
     AutomationChecks.Run();return;

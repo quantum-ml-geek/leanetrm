@@ -34,19 +34,18 @@ public sealed partial class FuturesStore(PreviewManifest manifest)
     public static FuturesMarketBinding Binding(PreviewData data,string curve,Guid contractId,Guid id,string implementation)
     {
         var c=One(data.Definitions["curves"].Where(c=>c.Text("code")==curve));
-        if(c.Text("rule")!="direct" || c.OptionalText("direct_role")!="daily_settlement" ||
+        if(c.Text("rule")!="direct" ||
             !data.Definitions["curve_members"].Any(m=>m.Text("curve_code")==curve&&m.Id("contract_id")==contractId))
             throw Error("futures_definition","Select an exact dated member of a directly observed futures curve.");
         var contract=data.Contracts.SingleOrDefault(c=>c.Key.Id==contractId)??throw Error("futures_definition","Select a retained futures contract.");
         if(contract.FuturesSeries is not {} key)throw Error("futures_definition","The selected member is not a future.");
         var series=One(data.References["futures_series"].Where(s=>s.Text("code")==key.Code));
         var product=One(data.References["futures_products"].Where(p=>p.Text("code")==series.Text("product_code")));
-        if(series.Text("definition_state")!="synthetic" || product.Text("definition_state")!="synthetic")
-            throw Error("futures_convention","Only explicitly synthetic qualified terms are enabled in this preview.");
+        var eligibleFrom=data.Admission.Require(product,series,c,implementation);
         if(product.Text("location_code")!=c.Text("location_code") || product.Text("commodity_code")!=c.Text("commodity_code"))
             throw Error("futures_definition","The selected futures curve must preserve the exact product commodity and location.");
         var quote=data.Quotes.Single(q=>q.Key.Code==c.Text("quote_code"));
-        return data.Model.BindFutures(id,new(new(contract.Key.Revision,curve),contract.Key),product.Text("settlement_method"),implementation);
+        return data.Model.BindFutures(id,new(new(contract.Key.Revision,curve),contract.Key),product.Text("settlement_method"),implementation,eligibleFrom);
     }
     public async Task<ImmutableArray<JsonElement>> Books(NpgsqlConnection connection,CancellationToken ct)=>
         await PreviewDatabase.Rows(connection,"""
@@ -59,7 +58,7 @@ public sealed partial class FuturesStore(PreviewManifest manifest)
     {
         var contracts=data.Definitions["curve_members"].Where(m=>data.Contracts.Any(c=>c.Key.Id==m.Id("contract_id")&&c.Kind==ContractKind.Future))
             .Select(m=>Binding(data,m.Text("curve_code"),m.Id("contract_id"),m.Id("contract_id"),manifest.FuturesConvention))
-            .Where(s=>s.FirstTrading<=frame.At&&frame.At<s.Contract.Expiry).OrderBy(s=>s.Contract.DeliveryFrom).ToArray();
+            .Where(s=>s.EligibleFrom<=frame.At&&frame.At<s.Contract.Expiry).OrderBy(s=>s.Contract.DeliveryFrom).ToArray();
         var market=contracts.Length==0?null:data.Model.Build(data.Snapshot(frame),contracts.Select(s=>s.Market).ToImmutableArray());
         return new {books=await Books(connection,ct),bookingActor=await TradeAnnotations.Actor(connection,manifest.CatalogId,ct),legalEntities=await TradeParties.Catalog(connection,manifest.CatalogId,true,ct),counterparties=await TradeParties.Catalog(connection,manifest.CatalogId,false,ct),contracts=contracts.Select(s=>
         {
@@ -71,9 +70,9 @@ public sealed partial class FuturesStore(PreviewManifest manifest)
             var source=data.References["sources"].SingleOrDefault(v=>v.Text("code")==product.Text("code"));
             var index=data.References["futures_product_terms"].SingleOrDefault(v=>v.Text("product_code")==product.Text("code"));
             return new {quoteKind=s.Quote.Kind==QuoteKind.Basis?"basis":"outright",basisSettlement=s.Series.BasisSettlement,sourceUrl=source.ValueKind==JsonValueKind.Undefined?null:source.Text("locator"),index=s.Series.BasisSettlement?.Index.Code??(index.ValueKind==JsonValueKind.Undefined?null:index.OptionalText("index_code")),
-                eligibilityNote=manifest.FuturesConvention==FuturesMarketBinding.GeneralImplementation?"Synthetic admission starts on 1 October 2026; this is not the exchange first-listing date. Prices and available date range are illustrative. Exchange product facts and published lot totals are retained separately.":null,
+                eligibilityNote=product.Text("definition_state")=="candidate"?"Sourced contract terms admitted for sample trading with generated closing marks. Eligibility is separate from the exchange first-trade timestamp. Official settlements, variation margin and delivery are not processed.":manifest.FuturesConvention==FuturesMarketBinding.GeneralImplementation?"Synthetic admission starts on 1 October 2026; this is not the exchange first-listing date. Prices and available date range are illustrative. Exchange product facts and published lot totals are retained separately.":null,
                 id=s.Contract.Key.Id,instrumentId=s.Instrument.Id,curve=s.Market.Curve.Code,name=product.Text("name"),deliveryFrom=Date(s.Contract.DeliveryFrom),deliveryTo=Date(s.Contract.DeliveryTo),
-                firstTrading=Instant(s.FirstTrading),lastTrading=Instant(s.Contract.Expiry),contractSize=s.LotSize.Amount.ToString(),nominalSize=s.Series.ContractSize.ToString(),nominalUnit=One(data.References["units"].Where(u=>u.Text("code")==product.Text("lot_unit_code"))).Text("symbol"),lotFactor=s.Series.LotResolution?.Factor.ToString(),lotResolution=s.Series.LotResolution?.Implementation,
+                firstTrading=s.Series.FirstTradingAt is {} first?Instant(first):null,eligibleFrom=Instant(s.EligibleFrom),lastTrading=Instant(s.Contract.Expiry),contractSize=s.LotSize.Amount.ToString(),nominalSize=s.Series.ContractSize.ToString(),nominalUnit=One(data.References["units"].Where(u=>u.Text("code")==product.Text("lot_unit_code"))).Text("symbol"),lotFactor=s.Series.LotResolution?.Factor.ToString(),lotResolution=s.Series.LotResolution?.Implementation,
                 unit=unit.Text("symbol"),currency=currency.Text("display_code"),quoteMultiplier=s.Quote.Multiplier.ToString(),tick=s.Quote.TradingTick.ToString(),
                 clearingIncrement=s.Quote.ClearingIncrement.ToString(),minimumPrice=s.Quote.Minimum.ToString(),maximumPrice=s.Quote.Maximum.ToString(),
                 contract=s.Contract.Key,series=s.Series.Key,quote=s.Quote.Key,lotQuantity=s.Series.LotQuantity,
@@ -172,7 +171,7 @@ public sealed partial class FuturesStore(PreviewManifest manifest)
         var instrument=side.Instrument;
         var position=new FuturesPosition(Guid.NewGuid(),side,ExactDecimal.Parse(Text(body.Lots)),new UnitPrice(ExactDecimal.Parse(Text(body.ExecutionPrice)),side.Quote),
             frame.At,FuturesSettlementState.Unprocessed);
-        if(position.ExecutedAt>frame.At || frame.At>=side.Contract.Expiry || frame.At<side.FirstTrading)
+        if(position.ExecutedAt>frame.At || frame.At>=side.Contract.Expiry || frame.At<side.EligibleFrom)
             throw Error("futures_execution","Execution and selected market date must be in the retained trading interval, with execution no later than the market date.");
         TradeAnnotations.ValidateShape(body.TraderId,body.TraderRevision,body.Memo);
         await using var command=ScheduleStore.Command(connection,"SELECT security.book_futures_with_parties($1,$2,$3,$4,$5,$6,$7,$8,$9::numeric,$10::numeric,$11,$12,$13,$14,$15::jsonb)::text",
