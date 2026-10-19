@@ -1,4 +1,5 @@
 import {setupPowerImports} from './power-imports-view.js';
+import {setupJobs} from './jobs-view.js';
 import {setupPartyEditors} from './party-view.js';
 import {amountText,prepareAmountDisplay} from './amount-display.js';
 import {setupUnitConverter} from './units-view.js';
@@ -48,7 +49,7 @@ function syncControls(){
   if(!busy){$('save').toggleAttribute('disabled',!canCorrect());select('snapshot').disabled=page==='admin';}
   for(const id of ['source-contract','pricing-contract'])select(id).disabled=busy||showAllContracts||!result?.points.length;
   for(const id of ['source-all','pricing-all'])$<HTMLButtonElement>(id).disabled=busy||!result||!result.points.length||(result.points.length<2&&!showAllContracts);
-  futures.sync();parties.sync();document.body.setAttribute('aria-busy',String(busy));
+  futures.sync();parties.sync();jobs.sync();document.body.setAttribute('aria-busy',String(busy));
 }
 function renderWorkspaceMode(){
   const historical=!!(workspace as (Workspace & {context?:Context})|undefined)?.context;
@@ -74,7 +75,7 @@ async function api<T>(path:string,body?:unknown):Promise<T>{
 async function act(work:()=>Promise<void>){
   // Context changes, writes and reads are serialized. Never retry a mutation.
   if(busy)return;busy=true;syncControls();$('error').hidden=true;text('status','Loading…');
-  try{await work();text('status',page==='futures'?'Trading blotter · saved market inputs.':page==='admin'?'Workspace identity and access administration.':page==='schedules'?'Reusable schedule shortcuts.':result?`Prices for ${instant(result.at)}`:'Choose a curve and a market date to get started.');}
+  try{await work();text('status',page==='jobs'?'Jobs and infrastructure · current authority.':page==='futures'?'Trading blotter · saved market inputs.':page==='admin'?'Workspace identity and access administration.':page==='schedules'?'Reusable schedule shortcuts.':result?`Prices for ${instant(result.at)}`:'Choose a curve and a market date to get started.');}
   catch(error){text('error',error instanceof Error?error.message:'Something went wrong. Please refresh the page.');$('error').hidden=false;text('status','Please check the message above.');}
   finally{busy=false;syncControls();}
 }
@@ -89,11 +90,11 @@ function table(target:string,headers:string[],rows:(string|HTMLElement)[][],nume
 
 function clearPrices(){result=undefined;pricingContract='';contract='';historyData=undefined;$('history-card').hidden=true;clearChart($('history-chart'));input='';draftFor='';$('revision-card').hidden=true;text('build-info','');text('price-date','Choose a market date to view prices.');if(curve)renderSummary();clearChart($('curve-chart'),'Choose a market date above.');$('curve-chart').classList.add('empty');$('contracts').replaceChildren();$('inputs').replaceChildren();if(curve)renderDependencies();}
 function setPage(next:string){
-  page=next;$('delivery-page').hidden=next!=='delivery';$('parties-page').hidden=next!=='parties';$('futures-page').hidden=next!=='futures';$('power-page').hidden=next!=='power';select('snapshot').closest<HTMLElement>('.date-control')!.hidden=next==='admin';$('market-page').hidden=next!=='market';$('reference-page').hidden=next!=='reference';$('schedules-page').hidden=next!=='schedules';$('curve-date-editor').hidden=next!=='configuration';$('date-context').hidden=next==='admin';$('admin-page').hidden=next!=='admin';$('no-access-page').hidden=true;
-  text('page-section',next==='futures'?'TRADING':next==='admin'?'ADMINISTRATION':['configuration','schedules','power','reference'].includes(next)?'WORKSPACE SETTINGS':'MARKET DATA');text('header-calculation-time','');text('page-title',next==='delivery'?'Delivery prices':next==='parties'?'Entities & counterparties':next==='futures'?'Blotter':next==='power'?'Power TOUs':next==='admin'?'Users & access':next==='market'?'Curves & prices':next==='configuration'?'Contract definitions':next==='schedules'?'Schedules':'Reference data');
-  for(const name of ['market','delivery','power','reference','configuration','schedules','admin','futures','parties'])$('nav-'+name).classList.toggle('active',next===name);
+  page=next;$('jobs-page').hidden=next!=='jobs';$('delivery-page').hidden=next!=='delivery';$('parties-page').hidden=next!=='parties';$('futures-page').hidden=next!=='futures';$('power-page').hidden=next!=='power';select('snapshot').closest<HTMLElement>('.date-control')!.hidden=['admin','jobs'].includes(next);$('market-page').hidden=next!=='market';$('reference-page').hidden=next!=='reference';$('schedules-page').hidden=next!=='schedules';$('curve-date-editor').hidden=next!=='configuration';$('date-context').hidden=['admin','jobs'].includes(next);$('admin-page').hidden=next!=='admin';$('no-access-page').hidden=true;
+  text('page-section',next==='jobs'?'WORKSPACE':next==='futures'?'TRADING':next==='admin'?'ADMINISTRATION':['configuration','schedules','power','reference'].includes(next)?'WORKSPACE SETTINGS':'MARKET DATA');text('header-calculation-time','');text('page-title',next==='jobs'?'Jobs & Infrastructure':next==='delivery'?'Delivery prices':next==='parties'?'Entities & counterparties':next==='futures'?'Blotter':next==='power'?'Power TOUs':next==='admin'?'Users & access':next==='market'?'Curves & prices':next==='configuration'?'Contract definitions':next==='schedules'?'Schedules':'Reference data');
+  for(const name of ['market','delivery','power','reference','configuration','schedules','admin','futures','parties','jobs'])$('nav-'+name).classList.toggle('active',next===name);
   if(next==='reference')renderReference();
-  text('status',next==='futures'?'Trading blotter · saved market inputs.':next==='admin'?'Workspace identity and access administration.':next==='schedules'?'Reusable schedule shortcuts.':result?`Prices for ${instant(result.at)}`:'Choose a curve and a market date to get started.');syncControls();
+  text('status',next==='jobs'?'Jobs and infrastructure · current authority.':next==='futures'?'Trading blotter · saved market inputs.':next==='admin'?'Workspace identity and access administration.':next==='schedules'?'Reusable schedule shortcuts.':result?`Prices for ${instant(result.at)}`:'Choose a curve and a market date to get started.');syncControls();
 }
 function showView(view:Preferences['tab']){document.querySelectorAll<HTMLElement>('.view').forEach(n=>n.hidden=n.id!==`view-${view}`);document.querySelectorAll<HTMLButtonElement>('.tab').forEach(b=>{const active=b.dataset.view===view;b.classList.toggle('active',active);b.setAttribute('aria-selected',String(active));});}
 function renderLayout(){
@@ -305,6 +306,7 @@ $('preferences-form').onsubmit=event=>{event.preventDefault();void act(async()=>
 async function profileChoices(){const boot=await api<{mode:string;profiles:{id:string;name:string}[];customProfiles:{id:string;name:string}[]}>('bootstrap');hostedPilot=boot.mode==='hosted-pilot';$('preview-access').hidden=hostedPilot;$('sign-out').hidden=!hostedPilot;choose('profile',[...boot.profiles,...boot.customProfiles.filter(p=>!boot.profiles.some(base=>base.id===p.id))].map(p=>({value:p.id,name:p.name})),currentProfile);const name=select('profile').selectedOptions[0]?.textContent??'Current user';text('profile-label',name);text('profile-avatar',name.slice(0,1));text('profile-title',name);text('profile-access','Current permissions: '+(permissions.length?permissions.map(p=>friendly(p.replace(/([a-z])([A-Z])/g,'$1 $2'))).join(', '):'No workspace access'));$('profile-open').setAttribute('aria-label','Profile · '+name);}
 $('sign-out').onclick=()=>void act(async()=>{await api('logout',{});location.assign('/auth');});
 async function loadIdentity(){
+  jobs.reset();$('jobs-page').hidden=true;
   deliveryPrices.reset();$('delivery-page').hidden=true;parties.reset();unitConverter.reset();futures.reset();power.reset();touProducts.reset();schedules.reset();dateEditor.reset();administration.reset();contextDirty=false;$('parties-page').hidden=true;$('power-page').hidden=true;$('futures-page').hidden=true;$('no-access-page').hidden=true;
   curve='';clearPrices();workspace=undefined;setCurveNames([]);permissions=[];choose('snapshot',[{value:'',name:'Choose a date…'}],'');select('snapshot').closest<HTMLElement>('.date-control')!.hidden=true;$('reference').replaceChildren();$('curves').replaceChildren();$('market-page').hidden=true;$('reference-page').hidden=true;$('schedules-page').hidden=true;$('curve-date-editor').hidden=true;$('admin-page').hidden=true;$('date-context').hidden=true;
   permissions=(await api<{permissions:string[]}>('access')).permissions;loadProfile();renderTimeZones();
@@ -343,6 +345,8 @@ async function currentInputs(){parties.reset();unitConverter.reset();futures.res
 $('current-view-context').onclick=()=>void act(currentInputs);
 $('return-working').onclick=()=>void act(currentInputs);
 const deliveryPrices=setupPowerImports({api,act,busy:()=>busy,instant});
+const jobs=setupJobs({api,act,busy:()=>busy,identity:()=>administrationScope+':'+currentProfile,instant});
+$('nav-jobs').onclick=()=>void act(async()=>{setPage('jobs');await jobs.load();});
 $('nav-delivery').onclick=()=>void act(async()=>{if(contextDirty)await applyContext();setPage('delivery');await deliveryPrices.load();});
 const power=setupPowerView({api,act,zone:()=>prefs.timeZone,name:curveName,source:()=>{if(contextDirty)throw Error('Apply the changed market context first.');const f=frame();return {snapshotId:f.id,curve,name:instant(f.at)};}});
 const unitConverter=setupUnitConverter({api,act,busy:()=>busy});

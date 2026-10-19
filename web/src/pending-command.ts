@@ -1,4 +1,4 @@
-export type RequestCommand={operationId:string;path:string;body:Record<string,unknown>};
+export type RequestCommand={operationId:string;path:string;body:Record<string,unknown>;uncertain?:boolean};
 
 // Once sent, a command keeps its identity and economics through uncertain replies.
 export class PendingCommand {

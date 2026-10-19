@@ -111,6 +111,87 @@ delegation ID, security revision, scope, permission and check time. It is eviden
 not a reusable bearer capability. Durable audit must retain both identities and
 commit the operation/outcome alongside its economic context when commands exist.
 
+### Scheduled and child agent authority
+
+The required [scheduled job and agent contract](architecture.md#111-schedules-temporary-jobs-and-agent-execution)
+extends the target architecture; it does not make chained delegation or unattended
+agent execution supported by the current security slice. Schedule management,
+job submission, agent launch, redelegation and business actions are distinct
+capabilities with exact resource scopes. The authorized operations must validate
+the executing principal and delegation rather than accepting identity claims from
+task text. Scheduling for another identity requires explicit authority over that
+identity and delegation; an owner field is not an impersonation capability.
+
+All launched agents and child jobs remain within their originating authority,
+delegation expiry, provider/tool restrictions and aggregate resource limits.
+Admission, tool use and publication recheck current authority and serialize effects
+with revocation. Authority revocation or grant/delegation expiry blocks new work
+and publication; bounded cancellation tracks physical work still running. Job or
+schedule expiry follows its explicitly selected admission/cancellation policy and
+does not extend authority. Durable automation needs an
+explicit grant that supports the intended lifetime; a short-lived session or
+delegation cannot be silently renewed by a timer. Own-job control and management
+of another principal's jobs are separately authorized. Job/result discovery also
+requires current access and must not reveal another scope's runs or payloads.
+Server-derived creation/delegation lineage covers agent-created schedules and
+their future occurrences. Independent durable automation requires a separately
+authorized operation and grant; caller-supplied parent/root fields cannot detach
+work from inherited cancellation or aggregate limits.
+
+### Container execution authority
+
+The required [Swarm execution contract](architecture.md#112-docker-swarm-and-image-based-execution)
+places Docker management access in a trusted execution controller. Image/profile
+approval, build/push, workload launch, agent delegation and business operations
+need distinct capabilities. An approved digest is necessary but does not grant
+permission to run it in any scope. Reject caller-supplied raw Docker specs, host
+mounts, privileged settings, arbitrary secrets and management-network attachments.
+Workloads have no Docker socket, manager credentials or database login; their
+short-lived business credentials are bound to a specific admitted run and current
+execution fence. Authenticate bootstrap through a trusted runtime binding, never
+caller-supplied task IDs/labels. Each physical replacement, including a Swarm
+restart within the same attempt, acquires a new exclusive task fence and
+invalidates its predecessor's authority atomically.
+Revocation and accepted cancellation block new tool/effect/result admissions even
+while container termination is pending or the manager is unreachable. A durable
+exclusive controller lease/epoch governs management commands; late commands from
+a former owner cannot authorize a task or supersede newer desired state. Reconcile
+their exact owned resources. No production isolation or Swarm capability is
+implied by this design.
+
+### Infrastructure administration authority
+
+The required [node maintenance contract](architecture.md#113-infrastructure-administration-and-node-maintenance)
+provides a shared Jobs & Infrastructure view to authenticated members. Approved
+shared status is distinct from protected node details and job inputs/logs/results.
+Members can control their own jobs; explicit installation-wide job-management
+authority lets administrators control all jobs. Derive ownership from trusted
+creation/delegation evidence and reauthorize each query/action on the actual
+resource. Cross-owner management does not imply permission to read business data
+or private execution content; even the owner needs current content read authority.
+Own-job controls cannot restart a shared worker or another run. Retry/restart
+requires the run's current business authority, approvals and bounds. Backend enforcement cannot depend on
+hidden buttons or caller-supplied owner/scope/parent IDs.
+
+Detailed infrastructure inspection, availability/placement changes, shared
+service restart and host maintenance have separate capabilities. Owning a job or
+managing all jobs does not grant node/host control. A workspace administrator or
+agent-launch grant is
+not cluster administration. Shared-node actions require an explicit cluster-wide
+mandate or authority covering every affected tenant/workload; infrastructure
+rights do not grant business-data access. Govern placement labels as security
+policy, since relabeling can move a workload across trust boundaries.
+
+Typed node/host operations bind exact registered cluster, node, machine/provider
+and service identities, current versions and applicable approval evidence.
+Host credentials stay in a protected adapter; clients/agents cannot submit raw
+shell commands, arbitrary endpoints or privileged container specifications.
+Reauthorize each maintenance phase and serialize disruptive cluster operations
+with fenced ownership. An accepted external command may continue after revocation
+or cancellation: block further phases, reconcile it and retain uncertain status
+until observed. Outage recovery requires an independent authenticated operator
+path; the application cannot guarantee its own availability during maintenance.
+
 ## Remaining integration gates
 
 1. Implement verified authentication and protected capability exchange on separate
@@ -130,6 +211,9 @@ those are trusted server inputs. The SQL fence protects database transactions,
 not arbitrary external work. RLS is complementary to application business rules.
 
 ## Schedule authoring boundary
+
+This section governs economic/date schedules, not automation jobs. These market
+definition permissions do not authorize execution scheduling or agent launch.
 
 The independent schedule editor uses existing WriteMarketDefinitions for draft
 saves and SealMarketDefinitions for publication. Readers can inspect published
@@ -201,3 +285,29 @@ authority before evaluating new economic or calendar terms. Remembered exact IDs
 do not preserve revoked access. Actor-owned accepted-command replay/status remain
 current trade-control operations. Discount-default reads additionally retain the
 selected historical reference/market-definition visibility.
+
+
+## Implemented automation boundary
+
+The [bounded jobs/controller implementation](automation.md) uses forced RLS on
+all automation tables and narrow identity-derived operations. `RunJobs` admits
+owner jobs; `ManageJobs` controls workspace jobs. A separate explicit installation
+registration permits cross-scope job management. Container launch additionally
+requires `LaunchWorkloads`, a current approved profile and any required delegation.
+The worker is bound to a restricted actual database login and service principal,
+with no direct business-data access, runtime/authenticator membership or RLS bypass.
+
+Infrastructure control requires current `ManageInfrastructure` authority and an
+unexpired installation operator registration. Ordinary administrators receive
+neither implicitly. Agents can schedule only through their own current grants and
+exact delegations; agent infrastructure control is rejected. UI visibility grants
+no access to other owners' rows, payloads or host configuration.
+
+Epoch admission, post-lock time/authority checks and monotonic claims fence stale
+publication. External dispatch admission commits before Docker commands and is
+serialized against revocation. An admitted command can finish later; cleanup and
+unknown-state accounting remain separate from new execution authority. Shared
+cluster admission serializes workload launch and maintenance; prepared unremoved
+work prevents maintenance, including uncertain outcomes. The controller has
+privileged mTLS manager access; image processes receive no credentials. This is
+not full agent credential exchange or qualified hostile-code isolation.

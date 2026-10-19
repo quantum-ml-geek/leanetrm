@@ -20,6 +20,22 @@ in-memory operations only. Date-set operations remain coding utilities. The name
 described below is a domain consumer with exact contract identities. Monthly anchor generation and durable schedule authoring are now consumers. Project instructions
 now require TDD, DRY, simple code and an explicit quality review before check-in.
 
+## Durable jobs and shared infrastructure
+
+The [automation implementation](automation.md) adds a separate .NET worker and
+trusted controller over stock PostgreSQL. It includes owner/admin job controls,
+explicit agent delegation checks, forced RLS, database-time claims and fences,
+quota enforcement across workspaces, fair reconciliation and exact-request replay.
+Jobs & Infrastructure is ordinary navigation; shared status grants no mutation
+rights. Node availability requires both explicit identity permission and an
+installation operator registration. The worker stack is separately configurable.
+
+Synthetic Docker responses exercise approved digest/platform launch, strict
+service/task identity, unknown outcomes and individual cleanup. Real Engine
+execution and recovery remain unqualified. Full agent/tool execution, financial
+job contexts and host management are still work. No runtime credentials or
+installation-specific configuration are seeded or included in this repository.
+
 ## Role-tailored workbench and reference-driven choices
 
 The browser shell uses one token-based stylesheet, a compact market-view chip

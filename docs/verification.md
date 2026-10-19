@@ -7,7 +7,7 @@ synthetic fixtures. No existing database or application is a verification target
 
 - The exact .NET SDK in `global.json`.
 - The exact Node version in `.node-version`, including its bundled npm.
-- Python 3 with assertions enabled; the hosted job uses Ubuntu's Python 3.12.
+- Python 3.11+ with assertions enabled; the hosted job uses Ubuntu's Python 3.12.
 - Installed stock PostgreSQL 16+ binaries, including `initdb`, `pg_ctl` and `psql`.
 - An installed Chromium-compatible browser. Keep its normal sandbox enabled.
 
@@ -25,7 +25,9 @@ python3 tools/check_all.py \
 The command checks its orchestration, standalone dependency boundaries and owned
 process cleanup; installs the locked frontend dependencies without install scripts;
 builds and checks the frontend; restores every managed check project in locked mode;
-and runs the managed, rate, temporal and schedule checks. It then runs the stock
+and runs the managed, rate, temporal, schedule and automation checks. It builds the
+separate .NET worker and tests its durable execution and controller lifecycle in a
+new private PostgreSQL cluster, with synthetic Docker responses. It then runs the stock
 database schema suite, standard HTTP/storage/adapter checks, owned browser scenarios
 and mixed-period HTTP checks. A failing child command stops the run with a nonzero
 status. Python optimization is rejected because it disables assertions used by the
@@ -717,3 +719,16 @@ original rows and certified facts. The stored-name migration still refuses
 populated unnamed catalogs, so these checks do not qualify an automatic upgrade
 of such retained installations. Runtime deployment is separate from this source
 integration.
+
+
+The automation checkpoint on 2026-10-18 passed the full local command on macOS
+26.6.2 arm64, .NET 10.0.402, Node 24.22.0, PostgreSQL 16.14 and Chrome
+155.0.8059.80. Final targeted checks passed after the request-retry and worker
+configuration refinements: 110 frontend checks, nine owned jobs/infrastructure
+browser checks, actual worker/controller lifecycle and RLS checks in a fresh
+private database, cross-workspace quota races, service-authority expiry during
+lock waits, gateway response-body deadlines and exact service/task/image identity.
+Worker and existing deployment templates pass render-only validation. Owned
+previews and databases completed teardown. This qualifies the bounded local
+[automation contract](automation.md), without qualifying real Swarm execution,
+production deployment, full agent execution or host reboot/Engine restart.
