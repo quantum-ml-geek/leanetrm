@@ -61,6 +61,9 @@ It reads no observations, economic model or unit-conversion catalog. Full
 workspace inspection remains available and is loaded explicitly before a screen
 consumes its definitions, references or source pins. The browser keeps these two
 contracts separate and rejects hydration from a changed identity or selection.
+First pricing can explicitly include the complete catalog projection from its
+same authorized model read, avoiding a second model load. Selected source facts
+remain separate from the catalog's empty, on-demand observation projection.
 An explicit Blotter directory may return an empty report without constructing a
 valuation model only after both product revision tables have no visible rows
 under the selected trading context. Exact bundle/reference visibility, selected

@@ -852,6 +852,10 @@ selected pins, bundle/reference visibility, view/books and current authority
 remain mandatory. Nonempty authorized revision sets use the full existing path.
 These narrow contracts defer unused economic validation without treating absent
 economic inputs as successful calculations.
+First pricing may explicitly request complete catalog metadata from the same
+authorized evaluation read, with unchanged default evaluation behavior and
+separate selected-source versus catalog-observation projections. Verify one
+context bind, exact metadata/source validation and first-use chart readiness.
 Reference reads avoid a duplicate permissive scope check only where the mandatory
 restrictive visibility policy already checks the same current authority per row.
 Exact policy/helper guards and expiry, scope, historical and policy-composition

@@ -864,6 +864,14 @@ Hydration must match the same account, selection, context and revision pins;
 late responses cannot restore an earlier view. Existing full workspace endpoints
 retain their response contracts.
 
+First dated-curve pricing explicitly requests complete workspace metadata with
+the evaluation. Both projections share one bound authorized model read; catalog
+observations remain empty while the price response retains its selected source
+facts. The browser validates both before accepting either and renders the exact
+unit/header before the chart. Evaluation without this explicit request preserves
+its existing response and avoids metadata-only reads. No-date curve details and
+reference inspection continue to use the full catalog endpoint.
+
 An explicit Blotter directory first checks whether either raw futures or swap
 revision table contains a visible row under its already bound trading context.
 Any such row retains the full valuation path. An empty set uses the same report

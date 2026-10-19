@@ -832,6 +832,9 @@ and administration-only access cannot produce a successful market directory.
 Owned browser checks cover initial readiness without background full hydration,
 first pricing/reference use, no-date selection, delayed hydration after a changed
 selection, preference refresh and reset before navigation completes.
+The optional first-pricing projection preserves default evaluation responses and
+compares complete catalog metadata under working and retained contexts. Delayed
+or inconsistent metadata/source responses cannot publish a partial pricing view.
 
 Empty-directory checks compare complete legacy trades/pivot reports and booking
 metadata under the same retained context. They reject missing selected pins,
