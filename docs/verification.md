@@ -923,3 +923,29 @@ futures-only and swaps-only holdings retain complete valuation reads; failed
 report joins cannot establish emptiness. These checks use disposable resources
 and synthetic material. They establish scoped read contracts; larger-workload,
 cold-process and hosted latency qualification remain separate measurements.
+
+## Plan-independent page reads
+
+Definition, reference and unit-catalog reads had no `ORDER BY`. Without
+statistics PostgreSQL read them through index scans, often on unique keys other
+than the primary key; after autovacuum's first `ANALYZE`, about a minute into a
+disposable cluster, it switched to heap scans. A page recorded before that pass
+and its later direct read then returned the same rows in another order. The
+direct-read check now repeats every direct read with index scans disabled and
+with sequential and bitmap scans disabled. Against the unordered reads it failed:
+six definition, thirteen reference and six unit-catalog tables differed only in
+row order. An explicit `ANALYZE` between the recorded pages and the direct reads
+also reproduced the original failure.
+
+Each read now orders its rows by the table's primary key within its revision;
+both passes and the `ANALYZE` reproduction match their pages. The recorded
+reference page links units, commodities and measurement bases, so it also fails
+when a linked read is unordered. The power catalog, which inherited contract
+order, now lists each curve's contracts by delivery date. Its check over the
+exchange example's name-based contract identities failed first. The complete
+command passed on 2026-10-19 on macOS 26.6.2 arm64 with .NET 10.0.402, Node
+24.22.0, stock PostgreSQL 16.14 and Chrome for Testing 153.0.8010.12, including
+330 standard and 8 exchange browser checks. Disposable resources completed
+teardown. Swap-catalog daily months still follow contract-identity order, and
+the power-import lists, automation directories and tied discount defaults depend
+on incidental order or ties; they need separate checks.

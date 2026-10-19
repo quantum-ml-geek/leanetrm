@@ -862,7 +862,9 @@ The browser retains navigation separately from the full workspace and hydrates
 the latter only for consumers of its definitions, references or source pins.
 Hydration must match the same account, selection, context and revision pins;
 late responses cannot restore an earlier view. Existing full workspace endpoints
-retain their response contracts.
+retain their response contracts. Every definition and reference read orders its
+rows by the table's primary key within the selected revision, so identical pins
+give identical arrays whatever plan the database chooses.
 
 First dated-curve pricing explicitly requests complete workspace metadata with
 the evaluation. Both projections share one bound authorized model read; catalog
