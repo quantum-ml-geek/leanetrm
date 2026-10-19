@@ -137,6 +137,8 @@ def run_checks(url,query,manifest,direct_reads):
     check_admin(Client,check)
     from check_power_preview import run_checks as check_power
     check_power(Client,check)
+    from check_empty_trading_directory import run_checks as check_empty_directory
+    check_empty_directory(c,check,query,manifest)
     from check_futures_preview import run_checks as check_futures
     check_futures(Client,check)
     from check_trading_directory import run_checks as check_trading_directory

@@ -100,3 +100,4 @@ def run_checks(url):
     before_move = c.call('trading/blotter', {'context': {**shared, 'knowledgeMode': 'retained', 'contextId': blotter['context']['contextId']}, 'view': trades})
     check('book filters follow latest head while retained knowledge preserves earlier book membership', not any(h['tradeId'] == result['tradeId'] for h in now['holdings']) and any(h['tradeId'] == result['tradeId'] and h['bookId'] == body['bookId'] for h in before_move['holdings']))
     print(f'{passed} swap HTTP checks passed.', flush=True)
+    return c

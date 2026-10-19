@@ -547,7 +547,8 @@ api.MapPost("/table-views/blotter",(HttpContext c,SaveTableView body)=>Locked(c,
 api.MapPost("/table-views/blotter/delete",(HttpContext c,DeleteTableView body)=>Locked(c,session=>
     database.WithIdentity(Profile(session),"ReadTrades",async(connection,ct)=>{await TableViews.Delete(connection,body,ct);return Results.Ok(new {deleted=true});},c.RequestAborted)));
 var futuresStore=new FuturesStore(database.Manifest);
-Task<IResult> FuturesRead(HttpContext c,FuturesReadRequest body,Func<NpgsqlConnection,PreviewData,InputFrame,CancellationToken,Task<object>> read,bool scenario=false,Guid? headTrade=null,bool amendmentPreview=false,string? expectedConvention=null,bool dealRisk=false,bool combinedWorkspace=false)=>
+Task<IResult> FuturesRead(HttpContext c,FuturesReadRequest body,Func<NpgsqlConnection,PreviewData,InputFrame,CancellationToken,Task<object>> read,bool scenario=false,Guid? headTrade=null,bool amendmentPreview=false,string? expectedConvention=null,bool dealRisk=false,bool combinedWorkspace=false,
+    Func<NpgsqlConnection,InputFrame,CancellationToken,Task<object?>>? readWithoutMarket=null)=>
     Locked(c,session=>database.WithIdentity(Profile(session),"ReadTrades",async(connection,ct)=>
     {
         if(expectedConvention is SwapStore.Convention or TradingBlotter.Convention){if(body.Convention!=expectedConvention)throw new MarketDataException("swap_context","Select the explicit supported swap valuation convention.");}
@@ -576,8 +577,12 @@ Task<IResult> FuturesRead(HttpContext c,FuturesReadRequest body,Func<NpgsqlConne
         else throw new MarketDataException("futures_context","Choose current knowledge explicitly or supply the exact retained context.");
         await MarketContextStore.Bind(connection,database.Manifest.CatalogId,selected,ct);
         await using(var bind=ScheduleStore.Command(connection,"SELECT security.use_trading_context($1,$2)",database.Manifest.CatalogId,frame.At))await bind.ExecuteNonQueryAsync(ct);
-        var data=await database.Read(connection,ct,observationIds:frame.ObservationIds);
-        var value=await read(connection,data,frame,ct);
+        var value=readWithoutMarket is null?null:await readWithoutMarket(connection,frame,ct);
+        if(value is null)
+        {
+            var data=await database.Read(connection,ct,observationIds:frame.ObservationIds);
+            value=await read(connection,data,frame,ct);
+        }
         if(scenario && !await HasPermission(connection,"RunScenario",ct)||dealRisk && !await HasPermission(connection,"RunDealRisk",ct))throw new PreviewDeniedException();
         await using(var check=ScheduleStore.Command(connection,"SELECT security.trading_access($1,'ReadTrades')",database.Manifest.CatalogId))
             if(!Equals(await check.ExecuteScalarAsync(ct),true))throw new PreviewDeniedException();
@@ -643,7 +648,15 @@ api.MapPost("/trading/workspace",(HttpContext c,TradingWorkspaceRequest body)=>
  if(body.BookingCatalog is not(null or "directory" or "priced_contracts"))throw new MarketDataException("blotter_view","Choose an available booking catalog projection.");
  return FuturesRead(c,body.Context??throw new MarketDataException("blotter_view","Supply the selected context."),
   async(connection,data,frame,ct)=>new{catalog=body.BookingCatalog=="directory"?await futuresStore.Directory(connection,ct):await futuresStore.Catalog(connection,data,frame,ct),
-   blotter=await tradingBlotter.Read(connection,data,frame,body.View,ct)},expectedConvention:TradingBlotter.Convention,combinedWorkspace:true);
+   blotter=await tradingBlotter.Read(connection,data,frame,body.View,ct)},expectedConvention:TradingBlotter.Convention,combinedWorkspace:true,
+   readWithoutMarket:body.BookingCatalog!="directory"?null:async(connection,frame,ct)=>
+   {
+    var report=await tradingBlotter.ReadEmptyDirectory(connection,frame,body.View,ct);
+    if(report is null)return null;
+    var catalog=await futuresStore.Directory(connection,ct);
+    await MarketBundle.RequireReferenceVisibility(connection,database.Manifest,ct);
+    return new{catalog,blotter=report};
+   });
 });
 api.MapPost("/trading/blotter",(HttpContext c,FuturesBlotterRequest body)=>FuturesRead(c,body.Context??throw new MarketDataException("blotter_view","Supply the selected context."),
  (connection,data,frame,ct)=>tradingBlotter.Read(connection,data,frame,body.View,ct),expectedConvention:TradingBlotter.Convention));
