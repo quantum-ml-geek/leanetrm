@@ -44,6 +44,50 @@ explicit trusted proxy network may supply them. Proxy-network membership is not 
 authenticated application identity. Route an exact hostname and maintain a valid
 certificate plus a renewal reload hook. Do not expose the synthetic persona mode.
 
+## Public homepage and workspace routing
+
+The open-source homepage is the buildless content in [site](../site/README.md).
+Its three deployable files are separate from the authenticated application's
+browser assets. The gateway template `deploy/nginx.conf.template` requires seven
+explicit substitutions: `PUBLIC_HOST`, `CERTIFICATE_CHAIN`, `CERTIFICATE_KEY`,
+`UPSTREAM_ADDRESS`, `UPSTREAM_PORT`, `LANDING_ROOT` and `LANDING_HEADERS`.
+`LANDING_ROOT` names the installed three-file public directory and
+`LANDING_HEADERS` names the installed `site/headers.inc`. Substitute only these
+placeholders; preserve nginx's own `$request_uri`, `$is_args`, `$args`,
+`$remote_addr` and `$openetrm_backend` variables. Keep rendered configuration,
+certificate keys and installation addresses outside source control.
+
+Only `/`, `/_landing/site.css` and `/_landing/favicon.svg` serve public files,
+with GET/HEAD, restrictive public-content headers and no JavaScript. Unknown
+paths under `/_landing/` return 404. `/app` proxies to the application's existing
+root, preserving the raw query; `/app/` redirects to `/app`. Successful login's
+upstream `Location: /` becomes `/app` only on the exact `/auth/login` endpoint.
+Failed login and other upstream redirects retain their original destinations.
+All remaining application assets, authentication and API routes use the existing
+upstream, including its account checks and overwritten trusted forwarding headers.
+No application authentication or business operation moves into the public page.
+
+Run the isolated gateway qualification explicitly with an installed stock nginx
+that supports TLS and HTTP/2, plus OpenSSL:
+
+```sh
+python3 tools/check_public_routes.py --nginx /path/to/nginx
+```
+
+It starts only an owned temporary nginx process and a synthetic loopback
+application, creates disposable certificates, and checks public routes, private
+routes, queries, redirects and proxy headers. It does not connect to an existing
+application or deployment. Standard unit discovery checks source content and
+placeholder rendering without requiring nginx; passing those checks alone does
+not qualify gateway routing. The owned check does not establish real hosted
+authentication, account isolation, certificate renewal or production readiness.
+
+Install the reviewed public files and header include read-only, review the exact
+rendered template, and qualify nginx syntax plus real hosted authentication before
+an explicitly authorized activation. Automatic application-image distribution
+retains its existing strict release envelope and does not install or activate
+the public site or gateway configuration.
+
 ## Delivery prices and scheduling
 
 Supported feeds are PJM `da_hrl_lmps` / `rt_hrl_lmps` at 60 minutes and ERCOT
