@@ -4,8 +4,9 @@ type Cell=string|HTMLElement;
 type Filters={scope:string;query:string;columns:(string|null)[];expanded:boolean};
 const filters=new Map<string,Filters>();
 const clean=(value:string)=>publicText(value).toLocaleLowerCase('en').trim();
-export function matchesTableRow(cells:string[],query:string,columns:(string|null)[]){
-  const shown=cells.map(publicText),values=shown.map(clean),terms=clean(query).split(/\s+/).filter(Boolean);
+// Search terms match displayed cells only; column filters apply to hidden columns too.
+export function matchesTableRow(cells:string[],query:string,columns:(string|null)[],visible?:boolean[]){
+  const shown=cells.map(publicText),values=shown.flatMap((value,i)=>visible?.[i]===false?[]:[clean(value)]),terms=clean(query).split(/\s+/).filter(Boolean);
   return terms.every(term=>values.some(value=>value.includes(term)))&&columns.every((term,i)=>term===null||shown[i]===term);
 }
 export const columnValues=(values:string[])=>[...new Set(values.map(publicText))];
@@ -37,7 +38,7 @@ export function renderRegularTable(host:HTMLElement,key:string,scope:string,head
   thead.append(heading,columnRow);table.append(thead);const tbody=el('tbody'),elements:HTMLTableRowElement[]=[],searchable:string[][]=[];
   rows.forEach(values=>{const tr=el('tr');values.forEach((value,i)=>{const td=el('td');if(typeof value==='string'){td.textContent=publicText(options?.displayRows?.[elements.length]?.[i]??value);if(options?.displayRows?.[elements.length]?.[i]!==undefined)td.title=value;}else td.append(value);if(numeric.includes(i))td.className='numeric';td.hidden=options?.visible?.[i]===false;tr.append(td);});tbody.append(tr);elements.push(tr);searchable.push(values.map((v,i)=>headers[i]?publicText(typeof v==='string'?v:v.textContent??''):''));});
   table.append(tbody);scroll.append(table);const empty=el('p');empty.className='table-filter-empty';empty.setAttribute('role','status');
-  function apply(){let visible=0;for(let i=0;i<rows.length;i++){const match=matchesTableRow(searchable[i],state.query,state.columns);elements[i].hidden=!match;if(match)visible++;}
+  function apply(){let visible=0;for(let i=0;i<rows.length;i++){const match=matchesTableRow(searchable[i],state.query,state.columns,options?.visible);elements[i].hidden=!match;if(match)visible++;}
     count.textContent=`${visible} of ${rows.length} rows`;clear.hidden=!state.query&&!state.columns.some(v=>v!==null);empty.hidden=visible>0;
     empty.textContent=rows.length?'No rows match your filters.':'No details to show.';
   }
@@ -48,6 +49,6 @@ export function renderRegularTable(host:HTMLElement,key:string,scope:string,head
   host.replaceChildren(toolbar,scroll,empty);apply();
   return {state:()=>({query:state.query,columns:state.columns.slice()}),visibleRows:()=>{
     if(!current())throw Error('Refresh this table before exporting.');
-    return searchable.filter(row=>matchesTableRow(row,state.query,state.columns)).map(row=>row.filter((_,i)=>options?.visible?.[i]!==false));
+    return searchable.filter(row=>matchesTableRow(row,state.query,state.columns,options?.visible)).map(row=>row.filter((_,i)=>options?.visible?.[i]!==false));
   }};
 }

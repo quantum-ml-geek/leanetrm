@@ -870,8 +870,9 @@ state per demo persona in the browser; they do not change permissions or inputs.
 
 Every regular table provides **Filter rows**, **Column filters**, a matching-row
 count and **Clear filters**. Case-insensitive search matches words across displayed
-cells; column dropdowns list their distinct available values and match selected
-whole-cell values exactly. Column selections combine with that search. Matching uses displayed strings,
+cells; text in hidden columns is not searched. Column dropdowns list their distinct
+available values and match selected whole-cell values exactly, and a column filter
+stays active while its column is hidden. Column selections combine with that search. Matching uses displayed strings,
 including exact decimals, without parsing or rounding financial values. Filters
 only hide table rows. Charts, calculations, selected market inputs and connected
 worksheet tables remain complete.

@@ -53,8 +53,8 @@ export function renderDataGrid(host:HTMLElement,key:string,scope:string,headers:
       event.detail>0&&gesture&&(gesture.cancelled||gesture.row!==row.getElement()))return;
     openRow(row);
   });
-  function matches(row:Record<string,string>){return matchesTableRow(headers.map((_,i)=>row[field(i)]),state.query,state.columns);}
-  function update(){const shown=values.filter(row=>matchesTableRow(row,state.query,state.columns)).length;count.textContent=`${shown} of ${values.length} rows`;clear.hidden=!state.query&&!state.columns.some(v=>v!==null);}
+  function matches(row:Record<string,string>){return matchesTableRow(headers.map((_,i)=>row[field(i)]),state.query,state.columns,options.visible);}
+  function update(){const shown=values.filter(row=>matchesTableRow(row,state.query,state.columns,options.visible)).length;count.textContent=`${shown} of ${values.length} rows`;clear.hidden=!state.query&&!state.columns.some(v=>v!==null);}
   function apply(){update();if(ready&&alive)table.setFilter(matches);}
   function layout():GridLayout{return {order:table.getColumns().map(c=>options.keys[Number(c.getField().slice(1))]),widths:Object.fromEntries(table.getColumns().map(c=>[options.keys[Number(c.getField().slice(1))],Math.max(40,Math.min(3000,Math.round(c.getWidth()||120)))])),sort:table.getSorters().map(s=>({key:options.keys[Number(s.field.slice(1))],direction:s.dir}))};}
   table.on('tableBuilt',()=>{if(!alive){table.destroy();return;}ready=true;apply();options.onReady?.();});
