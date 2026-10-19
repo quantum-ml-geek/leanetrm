@@ -7,11 +7,12 @@ import {setTimeout as delay} from 'node:timers/promises';
 
 export const idle="document.body?.getAttribute('aria-busy')==='false'";
 
-export async function waitForBrowserPort(directory,chrome){
+// A cold first launch on a busy CI runner can take longer than ten seconds.
+export async function waitForBrowserPort(directory,chrome,deadline=60000){
   let spawnError;
   const failed=error=>{spawnError=error;};chrome.on('error',failed);
   try{
-    for(let i=0;i<100;i++){
+    for(const until=performance.now()+deadline;performance.now()<until;){
       if(spawnError)throw spawnError;
       if(chrome.exitCode!==null||chrome.signalCode!==null)throw Error('Owned browser exited before readiness.');
       let content='';try{content=await readFile(join(directory,'DevToolsActivePort'),'utf8');}catch{}
