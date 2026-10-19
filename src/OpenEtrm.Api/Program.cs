@@ -1,11 +1,13 @@
 using OpenEtrm.Shared.Temporal;
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
+using System.IO.Compression;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.Extensions.FileProviders;
 using Npgsql;
 using OpenEtrm.Api;
@@ -31,6 +33,8 @@ else {HostedAuthentication.Configure(builder,hosted);builder.Services.AddSinglet
 builder.Services.AddSingleton<IAntiforgeryAdditionalDataProvider,PreviewAntiforgeryScope>();
 builder.Services.AddAntiforgery(o=> { o.HeaderName="X-Preview-CSRF"; o.Cookie.Name=hosted is null?"openetrm_preview_csrf":"__Host-openetrm_csrf"; o.Cookie.HttpOnly=true; o.Cookie.SameSite=SameSiteMode.Strict; o.Cookie.SecurePolicy=hosted is null?CookieSecurePolicy.None:CookieSecurePolicy.Always; });
 builder.Services.ConfigureHttpJsonOptions(o=>{o.SerializerOptions.PropertyNamingPolicy=JsonNamingPolicy.CamelCase;o.SerializerOptions.Converters.Add(new ExactDecimalJsonConverter());});
+builder.Services.AddResponseCompression(o=>{o.EnableForHttps=true;o.Providers.Add<GzipCompressionProvider>();o.MimeTypes=["application/json"];});
+builder.Services.Configure<GzipCompressionProviderOptions>(o=>o.Level=CompressionLevel.Fastest);
 var app=builder.Build();
 var httpContext=hosted is null?null:app.Services.GetRequiredService<IHttpContextAccessor>();
 await using var database=new PreviewDatabase(root,hosted:hosted,hostedSession:hosted is null?null:()=>HostedAuthentication.SessionDigest(httpContext!.HttpContext??throw new PreviewDeniedException()));
@@ -150,6 +154,8 @@ app.Use(async(c,next)=>
     }
     await next(c);
 });
+
+app.UseWhen(c=>c.Request.Method=="POST"&&c.Request.Path.Equals("/api/trading/workspace",StringComparison.Ordinal),branch=>branch.UseResponseCompression());
 
 await using var exchangeDatabase=hosted is null&&File.Exists(Path.Combine(root,"exchange-manifest.json"))?new PreviewDatabase(root,"exchange-manifest.json"):null;
 MapPreview(app.MapGroup("/api").WithMetadata(new PreviewScope("baseline")),database,hosted is null?"openetrm_preview":"__Host-openetrm_workspace");

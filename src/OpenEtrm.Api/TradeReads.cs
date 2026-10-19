@@ -30,7 +30,9 @@ public sealed class TradeReads
             return new{catalog,blotter=empty};
         }
         return Read(connection,view,async data=>new{catalog=directory?await futures.Directory(connection,ct):await futures.Catalog(connection,data,view.Frame,ct),
-            blotter=await blotter.Read(connection,data,view.Frame,report,ct)},ct,directory?EmptyDirectory:null);
+            blotter=await blotter.Read(connection,data,view.Frame,report,ct)},ct,directory?EmptyDirectory:null,
+            referenceScope:directory?ReferenceReadScope.DefinitionClosure:ReferenceReadScope.TradeValuation,
+            observationScope:directory?ObservationReadScope.FactHistory:ObservationReadScope.ExactPins);
     }
     public Task<object> Blotter(NpgsqlConnection connection,TradingView view,FuturesBlotterView report,CancellationToken ct)=>
         Read(connection,view,data=>blotter.Read(connection,data,view.Frame,report,ct),ct);
@@ -42,12 +44,14 @@ public sealed class TradeReads
 
     // The one trading read path: a read of the view's frame under its cutoff and trading context. A
     // read that can answer without the frame's market data goes first, and falls back with null.
-    internal async Task<object> Read(NpgsqlConnection connection,TradingView view,Func<PreviewData,Task<object>> read,CancellationToken ct,Func<Task<object?>>? readWithoutMarket=null)
+    internal async Task<object> Read(NpgsqlConnection connection,TradingView view,Func<PreviewData,Task<object>> read,CancellationToken ct,Func<Task<object?>>? readWithoutMarket=null,
+        ReferenceReadScope referenceScope=ReferenceReadScope.DefinitionClosure,
+        ObservationReadScope observationScope=ObservationReadScope.FactHistory)
     {
         var catalog=database.Manifest.CatalogId;
         await view.Bind(connection,catalog,ct);
         await using(var bind=ScheduleStore.Command(connection,"SELECT security.use_trading_context($1,$2)",catalog,view.Frame.At))await bind.ExecuteNonQueryAsync(ct);
-        var value=(readWithoutMarket is null?null:await readWithoutMarket())??await read(await database.Read(connection,ct,observationIds:view.Frame.ObservationIds));
+        var value=(readWithoutMarket is null?null:await readWithoutMarket())??await read(await database.Read(connection,ct,observationIds:view.Frame.ObservationIds,referenceScope:referenceScope,observationScope:observationScope));
         await using var check=ScheduleStore.Command(connection,"SELECT security.trading_access($1,'ReadTrades')",catalog);
         return Equals(await check.ExecuteScalarAsync(ct),true)?value:throw new PreviewDeniedException();
     }

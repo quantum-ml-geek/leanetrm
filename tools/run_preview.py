@@ -333,6 +333,11 @@ def main():
                         raise RuntimeError('Owned browser checks failed')
                 from check_swaps_preview import run_checks as check_swaps
                 swap_client=check_swaps(url)
+                from check_trading_pin_reads import run_supplemental_checks as check_supplemental_pins
+                def check_pin(name,condition=True):
+                    if not condition:raise AssertionError(name)
+                    print('PASS '+name,flush=True)
+                check_supplemental_pins(swap_client,check_pin,query,manifest)
                 from check_empty_trading_directory import run_nonempty_checks
                 run_nonempty_checks(swap_client,query,manifest)
                 from check_swap_payment_rules import run_checks as check_swap_payment_rules
