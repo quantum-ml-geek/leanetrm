@@ -7,7 +7,7 @@ type Factor={seriesId:string;quote:string;curves:string[];deliveryFrom:string;de
 type Catalog={factors:Factor[];bumpConvention:string;convention:string;numericalPolicy:string};
 type Scope={context:unknown;bookIds:string[];portfolioIds:string[]};
 type Values={base:string;up:string;down:string;upPnl:string;downPnl:string;delta:string;gamma:string;currency:string;currencyReference:unknown;deltaUnit:string;gammaUnit:string};
-type Report={context:{contextId:string};snapshotId:string;heldContracts:number;work:{positionCount:number;uniqueValuations:number;scenarioCount:number;unitPricerCalls:number;rebuiltCurveNodes:number;reusedCurveNodes:number};factors:{factor:Factor;bump:string;totals:{bookId:string;book:string;values:Values}[];positions:{book:string;curve:string;deliveryFrom:string;deliveryTo:string;values:Values}[]}[]};
+type Report={context:{contextId:string};snapshotId:string;heldContracts:number;work:{positionCount:number;uniqueValuations:number;scenarioCount:number;unitPricerCalls:number;rebuiltCurveNodes:number;reusedCurveNodes:number;repeatedInstrumentReferences:number;quantityApplications:number};factors:{factor:Factor;bump:string;totals:{bookId:string;book:string;values:Values}[];positions:{book:string;curve:string;deliveryFrom:string;deliveryTo:string;values:Values}[]}[]};
 
 export function setupRisk(options:{api:Api;act:(work:()=>Promise<void>)=>Promise<void>;busy:()=>boolean;canRun:()=>boolean;scope:()=>Scope;onDenied:()=>void}){
   const get=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id) as T;
@@ -19,7 +19,7 @@ export function setupRisk(options:{api:Api;act:(work:()=>Promise<void>)=>Promise
   function sync(){get<HTMLFieldSetElement>('risk-fields').disabled=options.busy();get<HTMLButtonElement>('blotter-risk').disabled=options.busy()||!options.canRun();get('blotter-risk').title=options.canRun()?'Revalue selected books under shared market shocks':'Scenario execution requires the Risk Analyst role.';get<HTMLButtonElement>('risk-export').disabled=options.busy()||!lastRequest;get('risk-results').inert=options.busy();}
   async function call<T>(path:string,body:unknown):Promise<T>{try{return await options.api<T>(path,body);}catch(error){results();if((error as {code?:string}).code==='access_denied'){reset();options.onDenied();}throw error;}}
   async function open(){
-    reset();scope=structuredClone(options.scope());catalog=await call<Catalog>('futures/risk/catalog',scope.context);
+    reset();scope=structuredClone(options.scope());catalog=await call<Catalog>('futures/risk/catalog',scope);
     select.replaceChildren(new Option('Choose a factor…',''),...catalog.factors.map(f=>new Option(publicText(`${f.curves.map(curveName).join(' / ')} · ${deliveryLabel(f.deliveryFrom,f.deliveryTo)}`),f.seriesId)));
     get('risk-card').hidden=false;sync();get('risk-card').scrollIntoView({block:'start',behavior:'smooth'});
   }
@@ -47,7 +47,7 @@ export function setupRisk(options:{api:Api;act:(work:()=>Promise<void>)=>Promise
       let ready=false;details.ontoggle=()=>{if(!details.isConnected||!details.open||ready)return;ready=true;const keys=['book','market','contract','currency','base','upPnl','downPnl','delta','deltaUnit','gamma','gammaUnit'];
         grids.push(renderDataGrid(rows,`risk-positions-${factorIndex}`,report.snapshotId,['Book','Market','Contract','Currency','Base execution P&L','Up change','Down change','Delta','Delta unit','Gamma','Gamma unit'],item.positions.map(p=>[p.book,curveName(p.curve),deliveryLabel(p.deliveryFrom,p.deliveryTo),p.values.currency,p.values.base,p.values.upPnl,p.values.downPnl,p.values.delta,p.values.deltaUnit,p.values.gamma,p.values.gammaUnit]),[4,5,6,7,9],options.busy,{keys,layout:{order:[],widths:{},sort:[]},onLayout:()=>{}}));};
     }
-    const w=report.work;get('risk-work').textContent=`${w.positionCount} holdings · ${report.heldContracts} held contracts · ${w.uniqueValuations} unit valuations · ${w.scenarioCount} scenarios · ${w.unitPricerCalls} pricer calls · ${w.rebuiltCurveNodes} curve nodes evaluated · ${w.reusedCurveNodes} reused. Includes base evaluation.`;
+    const w=report.work;get('risk-work').textContent=`${w.positionCount} holdings · ${report.heldContracts} held contracts · ${w.uniqueValuations} unit valuations · ${w.scenarioCount} scenarios · ${w.unitPricerCalls} pricer calls · ${w.repeatedInstrumentReferences} additional quantity references · ${w.quantityApplications} quantity applications · ${w.rebuiltCurveNodes} curve nodes evaluated · ${w.reusedCurveNodes} reused. Includes base evaluation.`;
     get('risk-export').hidden=false;
   }
   select.onchange=()=>{results();const factor=catalog?.factors.find(f=>f.seriesId===select.value);get('risk-unit').textContent=factor?`Base input ${factor.value} · bump unit: ${factor.unit}. Absolute symmetric up/down; all other selected inputs stay fixed.`:'';};

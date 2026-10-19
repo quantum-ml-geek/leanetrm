@@ -684,7 +684,7 @@ api.MapPost("/futures/draft-risk",(HttpContext c,FuturesDraftRiskRequest body)=>
 api.MapPost("/swaps/price",(HttpContext c,SwapDraftRequest body)=>FuturesRead(c,body.Context??throw new MarketDataException("draft_context","Choose the draft market context."),(connection,data,frame,ct)=>swapStore.PriceDraft(connection,data,frame,body,ct),expectedConvention:SwapStore.Convention));
 api.MapPost("/swaps/draft-risk",(HttpContext c,SwapDraftRiskRequest body)=>FuturesRead(c,body.Draft?.Context??throw new MarketDataException("draft_context","Choose the draft and market context."),(connection,data,frame,ct)=>swapStore.RiskDraft(connection,data,frame,body,ct),expectedConvention:SwapStore.Convention,dealRisk:true));
 var futuresRisk=new FuturesRiskPreview(futuresStore);
-api.MapPost("/futures/risk/catalog",(HttpContext c,FuturesReadRequest body)=>FuturesRead(c,body,futuresRisk.Catalog,scenario:true));
+api.MapPost("/futures/risk/catalog",(HttpContext c,FuturesRiskCatalogRequest body)=>FuturesRead(c,body.Context??throw new MarketDataException("risk_context","Select the shared financial context."),(connection,data,frame,ct)=>futuresRisk.Catalog(connection,data,frame,body,ct),scenario:true));
 api.MapPost("/futures/risk",(HttpContext c,FuturesRiskRequest body)=>FuturesRead(c,
     body.Context??throw new MarketDataException("risk_context","Select the shared financial context."),
     (connection,data,frame,ct)=>futuresRisk.Calculate(connection,data,frame,body,ct),scenario:true));

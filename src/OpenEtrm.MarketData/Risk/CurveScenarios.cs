@@ -23,11 +23,21 @@ public sealed partial class CurveModel
     public CurveScenarioSet BuildScenarios(MarketSnapshot snapshot,ImmutableArray<CurveRequest> requests,
         ImmutableArray<QuoteBump> bumps,CancellationToken cancellation=default)
     {
-        if(bumps.IsDefaultOrEmpty || bumps.Length>16 || bumps.Select(b=>b.Input).Distinct().Count()!=bumps.Length)
+        if(bumps.IsDefaultOrEmpty || bumps.Length>16 || bumps.Any(b=>b is null) || bumps.Select(b=>b.Input).Distinct().Count()!=bumps.Length)
             Fail("risk_bump","Select between one and sixteen distinct explicit quote-input bumps.");
         cancellation.ThrowIfCancellationRequested();
         var @base=Build(snapshot,requests,null,[],cancellation);
-        var factors=ImmutableArray.CreateBuilder<FactorScenarios>();
+        return new(@base,Scenarios(@base,bumps,cancellation).ToImmutableArray());
+    }
+    // Stream one shared factor pair at a time: a broad risk vector must not retain
+    // hundreds of whole market graphs or rebuild its base for every batch.
+    public IEnumerable<FactorScenarios> Scenarios(CurveBuild @base,ImmutableArray<QuoteBump> bumps,CancellationToken cancellation=default)
+    {
+        if(!ReferenceEquals(@base.Model,this)||@base.Shock is not null||@base.NumericalPolicy!=NumericalPolicy)
+            Fail("snapshot_pin","Scenario reuse requires this model's immutable unshocked base build.");
+        if(bumps.IsDefaultOrEmpty||bumps.Length>4096||bumps.Any(b=>b is null)||bumps.Select(b=>b.Input).Distinct().Count()!=bumps.Length)
+            Fail("risk_bump","Select one to 4096 distinct explicit quote-input bumps.");
+        var snapshot=@base.Snapshot;var requests=@base.Values.Select(v=>v.Request).ToImmutableArray();
         foreach(var bump in bumps)
         {
             cancellation.ThrowIfCancellationRequested();
@@ -59,8 +69,7 @@ public sealed partial class CurveModel
             var up=Build(snapshot,requests,new(bump,true),reusable,cancellation);
             cancellation.ThrowIfCancellationRequested();
             var down=Build(snapshot,requests,new(bump,false),reusable,cancellation);
-            factors.Add(new(bump,up,down));
+            yield return new(bump,up,down);
         }
-        return new(@base,factors.ToImmutable());
     }
 }

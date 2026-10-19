@@ -732,3 +732,25 @@ Worker and existing deployment templates pass render-only validation. Owned
 previews and databases completed teardown. This qualifies the bounded local
 [automation contract](automation.md), without qualifying real Swarm execution,
 production deployment, full agent execution or host reboot/Engine restart.
+
+## Common book valuation and factor discovery checkpoint
+
+On 2026-10-19, 276 managed core checks passed, including an independent Release
+run during adversarial review. New checks cover shared unit values across books,
+exact summary netting beyond intermediate range, futures validation without
+holding-P&L projection, restricted side inputs, invalid-context parity,
+pre-cancelled base construction, typed instrument factor declarations and rejection
+of omitted/extra/altered factor metadata. The multilevel basis oracle independently
+checks actual swap PV, hedges, all-in independence and MWh/kWh cash/risk dimensions.
+Existing schedule checks retain 23/24/25-hour and fractional interval coverage.
+
+The owned stock-PostgreSQL preview integration suite passed with scoped relevant
+factor catalogs, 17-factor streamed book summaries, detailed/summary reconciliation,
+retained historical inputs, cancellation/authority boundaries and existing booking,
+amendment, swap, schedule and storage checks. The managed API checks and 111 frontend
+checks passed. API/web builds completed without errors. No existing database or
+production runtime was used. The [Release benchmark](risk-benchmark.md) separately
+records 50,000-position workload, unit/scenario counts, memory and measured phase
+costs. Service capacity, durable runs and complete futures settlement PV remain
+unqualified. The isolated PR candidate preserves the current public reference-data and
+scheduler contracts.

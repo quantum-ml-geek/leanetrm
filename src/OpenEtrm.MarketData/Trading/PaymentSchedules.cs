@@ -88,17 +88,22 @@ public sealed class SideValuationContext
 {
     private readonly CurveBuild? market;
     private readonly IReadOnlyDictionary<CurveRequest, BuiltValue> prices;
+    private readonly ImmutableHashSet<CurveRequest>? permitted;
     public MarketSnapshot Snapshot { get; }
     public ISideDiscounting Discounting { get; }
     public string CurveNumericalPolicy => CurveModel.NumericalPolicy;
     public SideValuationContext(MarketSnapshot snapshot, ISideDiscounting discounting)
+    {
+        Validate(snapshot,discounting);
+        Snapshot = snapshot; Discounting = discounting; prices = ImmutableDictionary<CurveRequest, BuiltValue>.Empty;
+    }
+    internal static void Validate(MarketSnapshot snapshot,ISideDiscounting discounting)
     {
         if (snapshot is null || snapshot.Id == Guid.Empty || snapshot.Definitions.CatalogId == Guid.Empty ||
             snapshot.Definitions.RevisionId == Guid.Empty || !TradingInstant.IsSupported(snapshot.ValuationAt) ||
             !TradingInstant.IsSupported(snapshot.MarketCutoff) || snapshot.MarketCutoff > snapshot.ValuationAt ||
             snapshot.SelectionPolicy != InputSelectionPolicy.ExactPinnedFinalObservationsNoAgeFiltering || !snapshot.HasCoherentSelections() || discounting is null)
             throw new MarketDataException("side_context", "An exact supported snapshot and explicit side discounting operation are required.");
-        Snapshot = snapshot; Discounting = discounting; prices = ImmutableDictionary<CurveRequest, BuiltValue>.Empty;
     }
     public SideValuationContext(CurveBuild market, ISideDiscounting discounting)
         : this(market?.Snapshot ?? throw new MarketDataException("swap_context", "A built market scenario is required."), discounting)
@@ -107,12 +112,23 @@ public sealed class SideValuationContext
             throw new MarketDataException("side_context", "Use the exact supported curve numerical policy.");
         this.market = market; prices = market.Values.ToDictionary(v => v.Request);
     }
+    // The portfolio owns this already validated scenario and shared lookup.
+    // A unit receives only its declared access fence, without rebuilding or
+    // rescanning the entire scenario for every instrument.
+    internal SideValuationContext(CurveBuild market,ISideDiscounting discounting,
+        IReadOnlyDictionary<CurveRequest,BuiltValue> prices,ImmutableArray<CurveRequest> dependencies)
+    {
+        this.market=market;Snapshot=market.Snapshot;Discounting=discounting;
+        this.prices=prices;permitted=dependencies.ToImmutableHashSet();
+    }
     internal ResolvedSchedulePrice Resolve(SchedulePriceTerm term)
     {
         if (term.FixedPrice is { } fixedPrice) return new(term, fixedPrice, []);
         if (market is null) throw new MarketDataException("side_market_inputs", "This side requires its declared built commodity market inputs.");
         var lookup = term.Lookup!;
         market.Model.RequireIndexProjection(lookup.Market, lookup.Contract, lookup.Index, lookup.Quote);
+        if (permitted is not null && !permitted.Contains(lookup.Market))
+            throw new MarketDataException("risk_dependency", "A side requested an undeclared market input.");
         if (!prices.TryGetValue(lookup.Market, out var value) || value.Quote != lookup.Quote.Key)
             throw new MarketDataException("missing_observation", "Every exact scheduled index projection is required in the selected market scenario.");
         return new(term, value.Price, value.Lineage);

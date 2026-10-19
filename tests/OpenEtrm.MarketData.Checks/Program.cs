@@ -368,6 +368,8 @@ passed += SwapChecks.Run();
 passed += PaymentRuleChecks.Run();
 passed += IndependentSideChecks.Run();
 passed += RiskChecks.Run();
+passed += BookValuationChecks.Run();
+passed += BasisRiskChecks.Run();
 Console.WriteLine($"{passed} managed core checks passed.");
 
 sealed class Fixture

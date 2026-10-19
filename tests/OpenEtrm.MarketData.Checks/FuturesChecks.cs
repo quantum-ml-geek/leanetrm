@@ -323,6 +323,21 @@ internal static class FuturesChecks
             var context = new SideValuationContext(f.Snapshot(), new ExplicitDiscounting(ExactDecimal.Parse("1"), DiscountFactorSource.Undiscounted));
             Reject("futures_pv_unsupported", () => instrument.Instrument.PV(context));
         });
+        Check("book-only futures risk nets exact cash before bounded holding output",()=>
+        {
+            var wide=quote with{Maximum=ExactDecimal.Parse("999999999999999999999999")};
+            var bound=new FuturesMarketBinding(Guid.NewGuid(),side.Market,contract,series,wide,"cash",FuturesMarketBinding.Implementation);
+            var inputs=Mark("900000000000000000000000");
+            var model=new CurveModel(f.Revision,f.Reference,[f.Quantities[0]],[wide],[contract],[f.Curves[0]],[series],[],[new(f.S(1),contract.Key,wide.Key,null)]);
+            inputs=inputs with{Selections=[inputs.Selections.Single(s=>s.Input.Series==f.S(1))]};
+            FuturesTrade Offset(string lots)=>new(Guid.NewGuid(),bookA,[new(Guid.NewGuid(),bound,ExactDecimal.Parse(lots),new UnitPrice(default,wide),inputs.ValuationAt,FuturesSettlementState.Unprocessed)]);
+            var held=ImmutableArray.Create(Offset("1"),Offset("-1"));
+            var bump=new QuoteBump(new(f.S(1),InputUse.Variable),wide.Key,PriceUnit.FromQuote(wide),ExactDecimal.Parse("0.01"),QuoteBump.Convention);
+            var risk=FuturesRisk.Calculate(held,inputs,model,[bump],FuturesRisk.Implementation,RiskEngine.NumericalPolicy,detail:RiskDetail.Books);
+            var total=risk.Factors[0].Totals.Single();
+            Equal(total.Base.Amount.ToString(),"0");Equal(total.Delta.Value.ToString(),"0");Equal(total.Gamma.Value.ToString(),"0");
+            Reject("numeric_range",()=>FuturesRisk.Calculate(held,inputs,model,[bump],FuturesRisk.Implementation,RiskEngine.NumericalPolicy));
+        });
         Console.WriteLine($"{count} futures checks passed."); return count;
     }
 }

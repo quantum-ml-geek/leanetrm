@@ -504,7 +504,8 @@ once to those completed side PVs, and trade scaling happens afterward. A side PV
 may require more decimal places or a larger range than the final Money format;
 never round or reject it prematurely when exact aggregation/scaling yields a
 representable trade value. The final conversion enforces the selected monetary
-policy. Quantity scalability remains an explicit product capability.
+policy. Unit-level valuation and external trade quantities are mandatory for
+every instrument (D146).
 
 FixedSide and FloatingSide now implement independent GenerateSchedule and PV
 operations. Each currently generates one payment; their delivery/payment dates
@@ -783,7 +784,7 @@ The execution sequence is:
 3. Construct the base scenario and sparse up/down overlays on primitive factors.
 4. Rebuild affected dependent values in dependency order under each scenario.
 5. Invoke each affected unique valuation computation against those values.
-6. Apply eligible instrument quantities held by trades and membership coefficients.
+6. Apply external instrument quantities held by trades and membership coefficients.
 7. Aggregate by authorized book/portfolio/currency and persist a result receipt.
 8. Recheck current access before returning or exporting results.
 
@@ -804,6 +805,62 @@ portfolio result.
 The initial engine supports trusted built-in operators. An extension interface
 does not authorize tenants or agents to load arbitrary executable code.
 
+The required portfolio boundary is `Book.PV(context)`, returning typed values
+keyed by trade/instrument binding as well as book and currency (D145). The book
+delegates through its trades to the common `Instrument.PV(context)` contract;
+each instrument owns its pricing methodology, including delegation to a selected
+internal pricer. The risk calculator creates immutable base/up/down market
+scenarios, asks the book for values under each context, and compares matching
+holding results. It does not inspect instrument subclasses, schedules, strikes
+or settlement formulas, or reconstruct holding values from execution bases.
+Quantity application, lifecycle state and unit-value reuse belong to the
+valuation path. Declared dependencies support planning and reuse without
+exposing product-specific formulas to risk. Every instrument is unit-level;
+there is no optional quantity-scaling capability or alternative trade layout.
+
+The common valuation declaration identifies the exact market dependencies for
+the selected context. Dependencies include the
+transitive inputs consumed through derived curves; frozen inputs remain pinned.
+An explicitly market-independent value can declare an empty set. Missing or
+incomplete declarations are errors, not evidence that a valuation is unaffected.
+Zero observed sensitivity does not remove a declared dependency.
+
+The book's valuation planner can reuse a base value when a scenario changes none
+of its declared inputs. Within an authorized run it can also share a unit
+calculation when complete economics, pricing bindings, model versions, numerical
+policy, selected measure, lifecycle inputs and scenario context match. Holding
+quantity never enters this unit calculation or its cache key. Resolve each shared
+instrument once in that context, value it once per scenario, then apply each
+trade binding's quantity outside the instrument. Conflicting resolutions for one
+instrument/context are errors. Separate trade/binding results remain traceable,
+and reuse never establishes access permission.
+
+The managed `ValuationPortfolio` is the authorized projection of persisted
+trade/instrument quantity bindings. Its scenario valuation calls each affected
+`Instrument.Value(context)` once; the default delegates to `Instrument.PV`, while
+the futures override accepts only explicitly selected execution P&L. `Book.PV`
+applies holding bases/quantities and returns values by binding and currency.
+Book-only detail compiles exact net quantities and costs by book/unit once, then
+applies scenario unit values to those groups. Detailed output retains independent
+holding results. The generic risk calculator only compares these returned values.
+Full futures settlement PV, variation margin and lifecycle transitions remain
+unsupported; execution P&L does not substitute for those measures.
+
+Each instrument also implements the common `MarketFactors(context)` method.
+Its immutable `QuoteFactor` results identify exact dated series/use, contract,
+quote/unit, selected observation and source. The base implementation resolves the
+implementer's complete declared curve inputs through a shared context helper;
+models can override the method. The book validates and deduplicates returned
+references, rather than inspecting instrument subclasses. A hedge or locally zero
+delta never removes a factor. Discovery currently covers live commodity quotes;
+rates remain fixed and other factor families require explicit supported contracts.
+
+Policy `exact_18_fractional_book_repricing_v2` retains rational cash and quantities
+until the selected holding or book output, which must be exactly representable in
+the working decimal range. Summary output can therefore succeed when oversized or
+recurring individual holding projections cancel exactly. A detailed request still
+rejects unrepresentable holding results. No rounding is silently introduced.
+
 Reports consume the same authorized calculations as screens and agent operations.
 A day-over-day P&L request identifies its books/portfolio, opening and closing
 market/effective instants, both knowledge contexts, reporting currency policy and
@@ -822,8 +879,9 @@ affected base-plan reuse, restricted black-box unit pricers and exact central
 differences. Its current trading consumer measures unprocessed futures execution
 P&L/open sensitivity, rather than full futures PV. See the qualified boundaries in
 [implemented scope](implementation.md#shared-quote-input-scenarios-and-open-futures-sensitivity).
-Durable jobs/receipts, broader shock conventions and integration of full
-instrument PV into risk remain design requirements below.
+Generic side-based instrument PV is exercised through the shared path in managed
+checks. The persisted portfolio API currently consumes futures execution P&L.
+Durable risk jobs/receipts and broader shock families remain work.
 
 Apply a factor shock once per scenario, independent of how many computations
 consume it. This does not imply that every different pricer can share one
@@ -836,7 +894,7 @@ same shocked market. This separation is essential.
 Zero observed delta does not mean that a computation lacks a dependency. A future
 option or optimizer may respond only to larger or one-sided changes.
 
-### 5.2 Quantity scaling
+### 5.2 Unit instruments and external quantities
 
 Keep three concepts separate:
 
@@ -844,9 +902,9 @@ Keep three concepts separate:
 | --- | --- |
 | Dependency | A factor or derived input can affect a computation |
 | Market linearity | Value responds linearly to a specified market input under specified assumptions |
-| Quantity scalability | Changing a trade's instrument quantity scales value without changing the unit computation |
+| Unit-level valuation | Every instrument values one unit; its holding quantity is external and multiplies that value |
 
-For an eligible composition:
+For every trade, with side aggregation where the instrument is composed:
 
 ```text
 InstrumentUnitValue(instrument, scenario) =
@@ -858,9 +916,12 @@ TradeValue(scenario) = sum over Trade's bindings of
 ```
 
 The normalized shape, contractual terms and valuation context belong to the unit
-calculation. Quantity is factored out only when the pricer's contract guarantees
-this relationship for the requested quantity basis and domain. Validate this
-property with tests; do not infer it from a product label.
+calculation. Every trade stores instrument references with external quantities:
+`trade_1 -> [instrument_1: qty1, instrument_2: qty2]` and
+`trade_2 -> [instrument_2: qty3]`. In one shared context, instrument_2 is evaluated
+once for the base scenario and once for each up/down scenario. Its result is
+reused for both references; the book/trade valuation path applies qty2 and qty3
+independently. This is a mandatory instrument contract, not a capability flag.
 
 For each instrument, every `UnitSideValue` is expressed per the same instrument
 quantity basis and in the same output currency. Sides may retain different native
@@ -905,15 +966,15 @@ direction. The descriptive membership role does not apply another sign. Nested
 composition coefficients obey the same rule; do not apply pay/receive direction
 again from a label or side kind.
 
-The baseline enables quantity scaling for supported linear products. Future
-nonlinear market payoffs may also be quantity scalable: a holding of identical
-ordinary options can scale by contract count even though its market response is
-nonlinear. This does not make options at different strikes equivalent.
+Future nonlinear market payoffs obey the same unit-level contract: a holding of
+identical ordinary options multiplies one unit value by external contract count,
+even though the response to market prices is nonlinear. Options at different
+strikes remain different instrument definitions.
 
-Minimum fees, quantity tiers, capacity constraints, market impact and other
-size-dependent rules can invalidate simple scaling. Fixed cash amounts are
-separate components. Do not force them into a unit multiplier or silently reuse a
-result outside its declared domain.
+Fixed fees and cash amounts require explicit components and external quantities.
+Behavior that cannot satisfy unit-level valuation remains unsupported until it
+has a compatible explicit model; it does not introduce another trade layout or
+pass the booked holding quantity into an instrument's unit calculation.
 
 ### 5.3 Sensitivities, scenario P&L and explain
 
@@ -1255,8 +1316,8 @@ Optimize duplicate work and data movement before distributing services:
 
 A cache key includes the pricer and schema version, normalized contractual terms,
 normalized schedule, relevant dependency content/versions, valuation context,
-scenario definition and numerical policy. It includes quantity where scaling is
-not valid. Cache identity must not depend on a mutable alias alone.
+scenario definition and numerical policy. Booked quantity is always excluded
+from the unit-valuation key. Cache identity must not depend on a mutable alias alone.
 
 Begin with safe within-run reuse. Cross-run reuse is introduced only after
 dependency completeness, invalidation and authorization are demonstrated.
