@@ -50,7 +50,7 @@ Two operations are executable:
 
 ## Identity and database boundaries
 
-Migrations 0034 and 0035 seed no workers, operators, profiles, credentials or jobs.
+Migrations 0035 and 0036 seed no workers, operators, profiles, credentials or jobs.
 Every automation table has enabled and forced RLS. Runtime accounts cannot write
 the tables directly. Narrow database operations derive actor, owner and scope
 from a verified transaction context; caller-supplied ownership is rejected.

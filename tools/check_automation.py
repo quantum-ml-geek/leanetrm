@@ -17,6 +17,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def checks(query, worker_once=None, controller_once=None):
     assert query("SELECT to_regclass('automation.jobs') IS NOT NULL;") == 't', 'Durable jobs are missing'
+    assert query("""SELECT
+      NOT pg_has_role('openetrm_scheduler','openetrm_reference_importer','MEMBER')
+      AND NOT pg_has_role('openetrm_reference_importer','openetrm_scheduler','MEMBER')
+      AND NOT has_function_privilege('openetrm_scheduler','security.import_reference_capture(uuid,uuid,jsonb)','EXECUTE')
+      AND NOT has_function_privilege('openetrm_reference_importer','automation.claim_next(uuid,integer)','EXECUTE');
+      """) == 't', 'Independent service executors must not inherit each other\'s authority'
     tenant, workspace, alice, bob, admin, worker = [str(uuid4()) for _ in range(6)]
     query(f"""INSERT INTO security.tenants VALUES('{tenant}','synthetic_automation');
     INSERT INTO security.workspaces VALUES('{tenant}','{workspace}','synthetic_jobs');
