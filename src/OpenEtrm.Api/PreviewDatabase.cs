@@ -94,20 +94,19 @@ public sealed class PreviewDatabase : IAsyncDisposable
         await using (var bind = new NpgsqlCommand(administration?"SELECT security.use_administration_context($1)":"SELECT security.use_context($1)", connection, transaction))
         { bind.Parameters.AddWithValue(token); await bind.ExecuteNonQueryAsync(ct); }
         if(hostedSession is not null)await using(var sessionCheck=new NpgsqlCommand("SELECT security.require_hosted_session()",connection,transaction))await sessionCheck.ExecuteNonQueryAsync(ct);
-        if(permission is not null) await using (var check = new NpgsqlCommand("SELECT security.has_permission($1)", connection, transaction))
-        {
-            check.Parameters.AddWithValue(permission);
-            if (!Equals(await check.ExecuteScalarAsync(ct), true)) throw new PreviewDeniedException();
-        }
+        if(permission is not null && !await HasPermission(connection,permission,ct)) throw new PreviewDeniedException();
         var result = await operation(connection, ct);
         if(hostedSession is not null)await using(var sessionCheck=new NpgsqlCommand("SELECT security.require_hosted_session()",connection,transaction))await sessionCheck.ExecuteNonQueryAsync(ct);
-        if(permission is not null) await using (var finalCheck = new NpgsqlCommand("SELECT security.has_permission($1)", connection, transaction))
-        {
-            finalCheck.Parameters.AddWithValue(permission);
-            if (!Equals(await finalCheck.ExecuteScalarAsync(ct), true)) throw new PreviewDeniedException();
-        }
+        if(permission is not null && !await HasPermission(connection,permission,ct)) throw new PreviewDeniedException();
         await transaction.CommitAsync(ct);
         return result;
+    }
+
+    // Whether the request context bound to this connection currently holds a permission.
+    public static async Task<bool> HasPermission(NpgsqlConnection connection,string permission,CancellationToken ct)
+    {
+        await using var command=ScheduleStore.Command(connection,"SELECT security.has_permission($1)",permission);
+        return Equals(await command.ExecuteScalarAsync(ct),true);
     }
 
     public async Task ValidateHostedBoundary(CancellationToken ct)

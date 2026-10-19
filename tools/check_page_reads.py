@@ -1,23 +1,27 @@
 """Bounded page-read checks for an owned synthetic preview."""
-from check_market_reads import page_view
+from check_direct_reads import PROFILE, page_view
+
+HISTORICAL = {'effectiveOn': '2020-12-17', 'mode': 'current', 'selection': 'latest_correction'}
 
 
 def run_checks(c, check, direct_reads):
+    c.call('profile', {'profile': PROFILE})
+    views = [page_view(c, 'working'),
+             page_view(c, 'historical', c.call('market/context', HISTORICAL)['context'])]
+    check('a historical view refuses current-only TOU products and power hours',
+          views[1]['touProducts'] == views[1]['powerCatalog'] == 'power_historical')
+    direct_reads(views)
     c.call('profile', {'profile': 'viewer'})
-    views = [page_view(c, 'working')]
     catalog = c.call('workspace/catalog')
     full = c.call('workspace')
     check('navigation carries the exact authorized cross-bundle curve-name directory',
           catalog.get('curveNames') == c.call('curve-names'))
-    context = c.call('market/context', {'effectiveOn': '2020-12-17', 'mode': 'current',
-                                        'selection': 'latest_correction'})['context']
+    context = c.call('market/context', HISTORICAL)['context']
     historical = c.call('workspace/catalog')
     check('navigation directory preserves the selected effective and knowledge context',
           historical.get('curveNames') == c.call('curve-names')
           and historical['context'] == context)
-    views.append(page_view(c, 'historical', context))
     c.call('market/current', {})
-    direct_reads(views)
     check('navigation catalog omits observation history explicitly',
           catalog['observationScope'] == 'on_demand' and catalog['observations'] == [])
     check('navigation preserves exact definitions and input frames',

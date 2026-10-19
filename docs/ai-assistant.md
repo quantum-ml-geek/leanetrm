@@ -1,9 +1,12 @@
 # Page assistant, phase 1: local-preview core
 
 Status: design proposal; implementation follows §12. Implemented so far, from step 2: the
-market and reference page reads, extracted into `MarketReads` under a page-view
-`PinnedContext` (a retained context, or working data that binds nothing). The turn's
-working-data pin (§7.2), which binds a captured context, is not implemented.
+market and reference page reads (`MarketReads`) and the schedule library, TOU product and
+power hour catalog reads (`ScheduleReads`), extracted under a page-view `PinnedContext`
+(a retained context, or working data that binds nothing). Other page operations are
+still page handlers, among them contract shortcuts, date resolution, the date picker
+catalog, the power hour calculation, trade parties and trades. The turn's working-data
+pin (§7.2), which binds a captured context, is not implemented.
 
 The page assistant ships in three phases, each with its own design:
 
@@ -91,8 +94,9 @@ Facts the body relies on and does not restate:
   global advisory lock 730849102 (D134), held to commit; a catalog retains at most
   4096 contexts, never reclaimed (`knowledge_limit`), and each current-mode capture
   adds one.
-- **Authorization.** Market and reference page reads call `MarketReads` with a
-  `PinnedContext`; the other page reads are still `MapPreview` handlers bound to the
+- **Authorization.** Market and reference page reads and the schedule library, TOU
+  product and power hour catalog reads call `MarketReads` or `ScheduleReads` with a
+  `PinnedContext`; other page operations are still `MapPreview` handlers bound to the
   HTTP request, session and frames. `security.has_permission` for an agent principal
   requires the agent's permission, an unexpired, unrevoked delegation listing it, the
   delegator's current permission and `CreateDelegations`, and enabled principals; it

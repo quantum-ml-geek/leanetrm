@@ -1,14 +1,16 @@
 using System.Collections.Immutable;
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Npgsql;
 using OpenEtrm.Api;
 using OpenEtrm.MarketData;
+using OpenEtrm.Shared.Temporal;
 
-// Market and reference reads run without an HTTP request or workspace session. Given the
-// pinned context a page used, a direct caller receives exactly the page's read, and each read
-// binds exactly its pin: a retained context for the request, or nothing for working data.
-internal static class MarketReadChecks
+// Page reads run without an HTTP request or workspace session. Given the pinned context a
+// page used, a direct caller receives exactly the page's read or refusal, and each read binds
+// exactly its pin: a retained context for the request, or nothing for working data.
+internal static class DirectReadChecks
 {
     static readonly JsonSerializerOptions Json=new(JsonSerializerDefaults.Web){Converters={new ExactDecimalJsonConverter()}};
 
@@ -17,6 +19,7 @@ internal static class MarketReadChecks
         await using var database=new PreviewDatabase(Path.GetFullPath(Environment.GetEnvironmentVariable("OPENETRM_PREVIEW_ROOT")
             ??throw new InvalidOperationException("Run through tools/run_preview.py.")));
         var reads=new MarketReads(database);
+        var schedules=new ScheduleReads(database);
         using var fixture=JsonDocument.Parse(File.ReadAllText(fixturePath));
         var profile=fixture.RootElement.GetProperty("profile").GetString()!;
         var views=fixture.RootElement.GetProperty("views").EnumerateArray().Select(v=>new View(v)).ToArray();
@@ -50,6 +53,10 @@ internal static class MarketReadChecks
             var history=view.Page("history");
             Same($"{view.Name} history matches its page",await Direct(view,"history",(c,ct)=>reads.History(c,view.Pin(view.Selected),view.Initial,history["curve"]!.GetValue<string>(),history["contractId"]!.GetValue<Guid>(),null,ct)),
                 history["response"]!["points"]);
+            Same($"{view.Name} schedule library matches its page",await Direct(view,"schedule library",(c,ct)=>schedules.Library(c,view.Pin(),ct)),view.Page("schedules"),
+                "knownThrough","versions","canEdit","canPublish","calendars");
+            await Matches($"{view.Name} TOU products match their page",()=>Direct(view,"TOU products",(c,ct)=>schedules.TouProducts(c,view.Pin(),ct)),view.Page("touProducts"));
+            await Matches($"{view.Name} power hours match their page",()=>Direct(view,"power hours",(c,ct)=>schedules.PowerCatalog(c,view.Pin(view.Selected),ct)),view.Page("powerCatalog"));
             Console.WriteLine($"PASS {view.Name} reads bind exactly their pin");
         }
         var effective=DateWorkspace.Date(historical.Context!.EffectiveOn);
@@ -57,7 +64,41 @@ internal static class MarketReadChecks
         if(!Later(await Read((c,ct)=>reads.Workspace(c,working.Pin(),false,ct)))||Later(await Read((c,ct)=>reads.Workspace(c,historical.Pin(),false,ct))))
             throw new Exception("A direct retained read must hide observations after its effective date that working data shows.");
         Console.WriteLine("PASS a direct retained read hides observations after its effective date");
+        // A retained library reads its own view, never current data: a context known just before the
+        // latest publication lists only versions published through its prefix and in force on its date.
+        var head=await Read((c,ct)=>schedules.Library(c,working.Pin(),ct));
+        var latest=head.Versions.Where(v=>v.State=="published").MaxBy(v=>v.PublicationOrder);
+        if(latest is null||!head.Versions.Any(v=>v.State=="published"&&v.PublicationOrder<latest.PublicationOrder&&v.EffectiveFrom<=latest.EffectiveFrom&&latest.EffectiveFrom<v.EffectiveTo))
+            throw new Exception("The fixture needs an earlier publication in force on the latest publication's first day.");
+        var before=(await Read((c,ct)=>new KnowledgeStore(database.Manifest.CatalogId).Capture(c,new(latest.EffectiveFrom.ToString("yyyy-MM-dd",CultureInfo.InvariantCulture),
+            latest.PublishedAt!.Value.AddTicks(-10).ToString("O",CultureInfo.InvariantCulture),"at"),ct))).Context;
+        var past=await Read((c,ct)=>schedules.Library(c,PinnedContext.Retained(before),ct));
+        if(past.KnownThrough!=before.KnownThrough||past.KnownThrough>=head.KnownThrough||past.Versions.IsEmpty||past.Versions.Any(v=>v.State!="published"
+            ||v.PublicationOrder>past.KnownThrough||v.Temporal?.Contains(latest.EffectiveFrom,SchedulePreview.ParseAt(before.KnownAt))!=true))
+            throw new Exception("A retained schedule library must list only versions in force on its date and published through its prefix.");
+        Console.WriteLine("PASS a retained schedule library lists its own view, not current data");
+        // Authoring follows each permission, and only in working data.
+        foreach(var (who,edit,publish) in new[]{("editor",true,false),("approver",false,true)})
+        {
+            Task<T> As<T>(Func<NpgsqlConnection,CancellationToken,Task<T>> read)=>database.WithIdentity(who,"ReadMarketData",read,CancellationToken.None);
+            var (current,old,tou)=(await As((c,ct)=>schedules.Library(c,working.Pin(),ct)),await As((c,ct)=>schedules.Library(c,historical.Pin(),ct)),
+                await As((c,ct)=>schedules.TouProducts(c,working.Pin(),ct)));
+            if((current.CanEdit,current.CanPublish,tou.CanEdit,tou.CanPublish,old.CanEdit,old.CanPublish)!=(edit,publish,edit,publish,false,false))
+                throw new Exception($"{who} authoring must follow each permission, in working data only.");
+        }
+        Console.WriteLine("PASS schedule and TOU authoring follow each permission, in working data only");
         await Rejects("snapshot_missing","a frame-consuming read refuses a pin without a frame",()=>Read((c,ct)=>reads.Evaluate(c,working.Pin(),"local_power",ct)));
+        await Rejects("snapshot_missing","power hours refuse a pin without a frame",()=>Read((c,ct)=>schedules.PowerCatalog(c,working.Pin(),ct)));
+        await Rejects("power_historical","power hours refuse a historical pin before asking for its frame",()=>Read((c,ct)=>schedules.PowerCatalog(c,historical.Pin(),ct)));
+        await Rejects("power_historical","published TOU products refuse a historical pin",()=>Read((c,ct)=>schedules.PublishedProducts(c,historical.Pin(),ct)));
+        var retained=historical.Context!;
+        foreach(var (field,partial) in new[]{("id",retained with{ContextId=null}),("effective date",retained with{EffectiveOn=null}),
+            ("knowledge time",retained with{KnownAt=null}),("publication prefix",retained with{KnownThrough=null})})
+            await Rejects("temporal_context","a retained pin refuses a context without its "+field,()=>Task.FromResult(PinnedContext.Retained(partial)));
+        foreach(var (field,forged) in new[]{("effective date",retained with{EffectiveOn=effective.AddDays(-1).ToString("yyyy-MM-dd",CultureInfo.InvariantCulture)}),
+            ("knowledge time",retained with{KnownAt=SchedulePreview.ParseAt(retained.KnownAt).AddTicks(-10).ToString("O",CultureInfo.InvariantCulture)}),
+            ("publication prefix",retained with{KnownThrough=retained.KnownThrough+1})})
+            await Rejects("temporal_context","a retained pin binds only its stored context's "+field,()=>Read((c,ct)=>schedules.Library(c,PinnedContext.Retained(forged),ct)));
         await Rejects("snapshot_missing","a retained pin refuses a working frame",()=>Task.FromResult(PinnedContext.Retained(historical.Context!,working.Selected)));
         await Rejects("snapshot_missing","a working pin refuses a retained frame",()=>Task.FromResult(PinnedContext.Current(historical.Selected)));
         await Rejects("snapshot_missing","history refuses a frame outside its pinned context",()=>Read((c,ct)=>reads.History(c,historical.Pin(historical.Selected),[..historical.Initial,working.Selected],"local_power",null,null,ct)));
@@ -94,10 +135,20 @@ internal static class MarketReadChecks
         Console.WriteLine("PASS "+name);
     }
 
+    // A page's read is its value, or the code it refused with.
+    static async Task Matches<T>(string name,Func<Task<T>> read,JsonNode page)
+    {
+        if(page is JsonValue refusal)await Rejects(refusal.GetValue<string>(),name,read);
+        else Same(name,await read(),page);
+    }
+
     static async Task Rejects<T>(string code,string name,Func<Task<T>> read)
     {
+        string? refused=null;
         try{await read();}
-        catch(MarketDataException e) when(e.Code==code){Console.WriteLine("PASS "+name);return;}
-        throw new Exception($"{name}: expected {code}.");
+        catch(MarketDataException e){refused=e.Code;}
+        catch(TemporalException e){refused=e.Code;}
+        if(refused!=code)throw new Exception($"{name}: expected {code}, got {refused??"a result"}.");
+        Console.WriteLine("PASS "+name);
     }
 }
