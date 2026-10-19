@@ -945,7 +945,7 @@ order, now lists each curve's contracts by delivery date. Its check over the
 exchange example's name-based contract identities failed first. The complete
 command passed on 2026-10-19 on macOS 26.6.2 arm64 with .NET 10.0.402, Node
 24.22.0, stock PostgreSQL 16.14 and Chrome for Testing 153.0.8010.12, including
-300 standard and 8 exchange browser checks. Disposable resources completed
+330 standard and 8 exchange browser checks. Disposable resources completed
 teardown. Swap-catalog daily months still follow contract-identity order, and
 the power-import lists, automation directories and tied discount defaults depend
 on incidental order or ties; they need separate checks.
