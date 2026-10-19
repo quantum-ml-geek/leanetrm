@@ -109,6 +109,15 @@ process group has stopped. A regression checks that a live descendant can still
 finish writing after the browser parent exits; parent exit alone does not permit
 profile deletion.
 
+Debugger startup now qualifies the port, HTTP endpoint and page target within
+one shared 60-second readiness budget. Read-only probes tolerate transient
+startup unavailability; attachment requires the exact owned loopback port.
+Fifteen harness checks cover delayed readiness, deadline cancellation, process
+exit, rejected foreign targets and confirmed TERM/KILL cleanup. Cleanup failures
+retain the original error. The standard 298 browser checks, descendant-profile
+check and isolated hosted HTTPS/browser suite passed with this owner. Disposable
+resources completed teardown.
+
 Local qualification on 2026-10-17 passed the complete command from a fresh macOS
 arm64 checkout with empty npm/NuGet caches, .NET 10.0.402, Node 24.22.0 and stock
 PostgreSQL 16.14. This included 198 standard and 24 mixed HTTP checks, 49 browser

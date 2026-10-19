@@ -24,6 +24,72 @@ export async function waitForBrowserPort(directory,chrome,deadline=60000){
   }finally{chrome.off('error',failed);}
 }
 
+export async function waitForBrowserPage(directory,chrome,deadline=60000){
+  const until=performance.now()+deadline;
+  let port;
+  try{port=await waitForBrowserPort(directory,chrome,deadline);}
+  catch(error){throw Error('Owned browser debugger port readiness failed.',{cause:error});}
+  const controller=new AbortController();
+  const exited=()=>controller.abort(Error('Owned browser exited during debugger readiness.'));
+  const failed=error=>controller.abort(Error('Owned browser failed during debugger readiness.',{cause:error}));
+  const timeout=setTimeout(()=>controller.abort(Error('Owned browser debugger did not become ready before the startup deadline.')),Math.max(0,until-performance.now()));
+  chrome.once('exit',exited);chrome.once('error',failed);
+  let lastFailure;
+  try{
+    for(;;){
+      if(chrome.exitCode!==null||chrome.signalCode!==null)exited();
+      controller.signal.throwIfAborted();
+      let targets;
+      try{
+        const response=await fetch(`http://127.0.0.1:${port}/json/list`,{signal:controller.signal});
+        if(response.ok)targets=await response.json();
+        else{lastFailure=Error('Debugger target list returned HTTP '+response.status);await response.body?.cancel();}
+      }catch(error){lastFailure=error;controller.signal.throwIfAborted();}
+      if(targets!==undefined){
+        if(!Array.isArray(targets))throw Error('Owned browser debugger returned an invalid target list.');
+        const page=targets.find(target=>target.type==='page');
+        if(page){
+          let socketUrl;
+          try{socketUrl=new URL(page.webSocketDebuggerUrl);}catch{throw Error('Owned browser debugger returned an invalid page URL.');}
+          if(socketUrl.protocol!=='ws:'||socketUrl.hostname!=='127.0.0.1'||socketUrl.port!==String(port)||socketUrl.username||socketUrl.password||socketUrl.search||socketUrl.hash||!/^\/devtools\/page\/[^/]+$/.test(socketUrl.pathname))
+            throw Error('Browser debugger page URL does not match the exact owned loopback port.');
+          controller.signal.throwIfAborted();
+          return socketUrl.href;
+        }
+        lastFailure=Error('Debugger target list has no page yet.');
+      }
+      await delay(100,undefined,{signal:controller.signal});
+    }
+  }catch(error){
+    if(controller.signal.aborted)throw Error(controller.signal.reason.message,{cause:lastFailure??controller.signal.reason});
+    throw error;
+  }finally{clearTimeout(timeout);chrome.off('exit',exited);chrome.off('error',failed);}
+}
+
+export async function stopOwnedBrowser(chrome,primaryError,grace=5000){
+  if(chrome.exitCode!==null||chrome.signalCode!==null||!chrome.pid)return;
+  try{
+    await new Promise((accept,reject)=>{
+      let timeout,lastFailure;
+      const finished=()=>{clearTimeout(timeout);chrome.off('exit',finished);chrome.off('error',failed);accept();};
+      const failed=error=>{lastFailure=error;};
+      const signal=name=>{try{chrome.kill(name);}catch(error){lastFailure=error;}};
+      chrome.once('exit',finished);chrome.on('error',failed);
+      timeout=setTimeout(()=>{
+        timeout=setTimeout(()=>{
+          chrome.off('exit',finished);chrome.off('error',failed);
+          reject(Error('Owned browser shutdown could not be confirmed after SIGKILL.',{cause:lastFailure}));
+        },grace);
+        signal('SIGKILL');
+      },grace);
+      signal('SIGTERM');
+    });
+  }catch(error){
+    if(primaryError)throw new AggregateError([primaryError,error],'Browser check failed and owned browser cleanup failed.',{cause:primaryError});
+    throw error;
+  }
+}
+
 export async function withOwnedBrowser(targetFile,browserPath,run){
   const root=dirname(resolve(targetFile)),target=JSON.parse(await readFile(targetFile,'utf8'));
   const url=new URL(target.url);
@@ -32,7 +98,9 @@ export async function withOwnedBrowser(targetFile,browserPath,run){
     (await readFile(join(root,'.openetrm-preview'),'utf8'))!==target.runId||!(await stat(join(root,'data/postmaster.pid'))).isFile())throw Error('Browser checks require the newly owned preview target.');
   const control=new URL(hosted?target.controlUrl:target.url);
   if(control.protocol!=='http:'||control.hostname!=='127.0.0.1'||!control.port||control.pathname!=='/'||control.search||control.hash||control.username||control.password)throw Error('Invalid owned control target.');
-  const health=await(await fetch(new URL('/api/health',control),{signal:AbortSignal.timeout(5000)})).json();
+  let health;
+  try{health=await(await fetch(new URL('/api/health',control),{signal:AbortSignal.timeout(5000)})).json();}
+  catch(error){throw Error('Owned preview health check failed before browser startup.',{cause:error});}
   if(health.mode!=='local-synthetic-preview'||health.runId!==target.runId)throw Error('HTTP target does not match the owned preview.');
   const certificateFlags=[];
   if(hosted){
@@ -44,12 +112,10 @@ export async function withOwnedBrowser(targetFile,browserPath,run){
   if(!(await stat(browserPath)).isFile())throw Error('Configure an installed Chromium-compatible browser executable.');
   const directory=await mkdtemp(join(root,'browser-'));
   const chrome=spawn(browserPath,[...certificateFlags,'--headless=new','--no-first-run','--disable-background-networking','--disable-component-update','--disable-sync','--disable-extensions','--disable-default-apps','--metrics-recording-only',`--user-data-dir=${directory}`,'--remote-debugging-port=0','about:blank'],{stdio:'ignore'});
-  let socket,sequence=0,passed=0;
+  let socket,sequence=0,passed=0,primaryError;
   const pending=new Map(),errors=[];
   try{
-    const port=await waitForBrowserPort(directory,chrome);
-    const targets=await(await fetch(`http://127.0.0.1:${port}/json/list`,{signal:AbortSignal.timeout(5000)})).json();
-    socket=new WebSocket(targets.find(t=>t.type==='page').webSocketDebuggerUrl);
+    socket=new WebSocket(await waitForBrowserPage(directory,chrome));
     await new Promise((accept,reject)=>{const timeout=setTimeout(()=>reject(Error('Browser connection timed out')),5000);socket.onopen=()=>{clearTimeout(timeout);accept();};socket.onerror=error=>{clearTimeout(timeout);reject(error);};});
     socket.onmessage=event=>{
       const message=JSON.parse(event.data);
@@ -70,10 +136,11 @@ export async function withOwnedBrowser(targetFile,browserPath,run){
     await run({command,evaluate,wait,click,set,submit,persona,check,shot,idle,errors,url:url.origin});
     if(errors.length)throw Error('Uncaught browser exceptions: '+JSON.stringify(errors));
     return passed;
-  }finally{
+  }catch(error){primaryError=error;throw error;}
+  finally{
     socket?.close();
     for(const p of pending.values()){clearTimeout(p.timeout);p.reject(Error('Browser check finished'));}pending.clear();
-    if(chrome.exitCode===null&&chrome.signalCode===null&&chrome.pid){chrome.kill('SIGTERM');await new Promise((accept,reject)=>{const timeout=setTimeout(()=>{chrome.kill('SIGKILL');reject(Error('Browser shutdown timed out'));},5000);chrome.once('exit',()=>{clearTimeout(timeout);accept();});});}
+    await stopOwnedBrowser(chrome,primaryError);
     // run_preview.py removes profiles after stopping the entire owned process group.
   }
 }
