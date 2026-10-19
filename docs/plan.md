@@ -23,6 +23,13 @@ covering the existing managed, frontend, database and browser suites. The comple
 command passed on the Ubuntu 24.04 hosted runner on 2026-10-17; verification
 records the exact run and environment. Production deployment remains unqualified.
 
+The public landing source and hosted gateway route contract are available
+separately from the authenticated workspace (D163). An owned nginx check exercises
+static routes, native application routing and a synthetic sign-in upstream.
+This is gateway routing qualification, not verification of a real installation's
+identity service or authorization. Landing/gateway activation remains an explicit
+operator step outside automatic application-image updates.
+
 The implemented trading workspace now has a shared Blotter with individual trade
 rows, managed pivots, account-saved layouts, exact-data exports and shared charts.
 Eight synthetic weekday futures bookings cover the four standard market frames.

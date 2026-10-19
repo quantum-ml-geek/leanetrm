@@ -36,6 +36,14 @@ and a pinned local pull operator; schema and infrastructure changes require a
 separate qualified baseline (D135). Hosted authentication and collection boundaries are described
 in [hosted pilot operations](hosted-pilot.md); the synthetic local preview stays isolated.
 
+The public buildless homepage lives in `site/`, separately from the authenticated
+workspace assets. The hosted gateway serves only its exact homepage and two public
+assets; `/app` forwards to the application's native root with its query intact.
+Only successful sign-in redirects to that native root are rewritten to `/app`.
+All other application and API paths retain the authenticated upstream routing.
+The site and gateway configuration require a separately reviewed installation;
+the application-image updater does not deploy them (D163).
+
 Schema releases retain the immutable reference-intake migration before the
 durable-job and Swarm migrations (D141). Import and scheduling executor roles
 remain independent; an image update cannot silently adopt a different schema.
