@@ -13,6 +13,7 @@ import subprocess
 import tempfile
 import time
 from urllib.request import urlopen
+from urllib.parse import urlencode
 from uuid import uuid4
 
 from owned_process import stop_owned_group
@@ -44,14 +45,16 @@ def main():
     parser.add_argument('--browser', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True, help='Private report path outside the repository')
     parser.add_argument('--additional-observations', type=int, default=12000)
+    parser.add_argument('--additional-reference-locations', type=int, default=4000)
+    parser.add_argument('--additional-futures-series', type=int, default=2000)
     parser.add_argument('--samples', type=int, default=5)
     parser.add_argument('--workspace-endpoint', choices=['workspace', 'workspace/catalog'], default='workspace/catalog')
     parser.add_argument('--latency-ms', type=float, default=40, help='Explicit browser request latency; 0 for loopback')
     parser.add_argument('--budget-ms', type=float, default=1000)
     parser.add_argument('--enforce-budget', action='store_true', help='Fail this benchmark when any page p95 exceeds its budget')
     args = parser.parse_args()
-    if not 1 <= args.samples <= 20 or not 0 <= args.additional_observations <= 50000 or not 0 <= args.latency_ms <= 1000 or args.budget_ms <= 0:
-        parser.error('Choose 1–20 samples, 0–50000 additional observations and explicit nonnegative latency/positive budget.')
+    if not 1 <= args.samples <= 20 or not 0 <= args.additional_observations <= 50000 or not 0 <= args.additional_reference_locations <= 20000 or not 0 <= args.additional_futures_series <= 10000 or not 0 <= args.latency_ms <= 1000 or args.budget_ms <= 0:
+        parser.error('Choose 1–20 samples, 0–50000 additional observations, 0–20000 additional reference locations, 0–10000 additional futures series and explicit nonnegative latency/positive budget.')
     if args.output.resolve().is_relative_to(ROOT):
         parser.error('Keep generated benchmark reports outside the repository.')
     bins = {n: args.pg_bin.resolve()/n for n in ('initdb', 'pg_ctl', 'psql')}
@@ -88,9 +91,34 @@ def main():
              shlex.join(['-k', str(temporary), '-h', '', '-p', '55439', '-c', 'track_commit_timestamp=on']), 'start'])
         if Path(query('SHOW data_directory')).resolve() != data:
             raise RuntimeError('Owned database directory does not match; refusing to seed.')
-        for migration in sorted((ROOT/'db/migrations').glob('[0-9][0-9][0-9][0-9]_*.sql')):
-            query(migration.read_text())
+        migrations = sorted((ROOT/'db/migrations').glob('[0-9][0-9][0-9][0-9]_*.sql'))
+        applied_migrations = []
+        for migration in migrations:
+            content = migration.read_bytes()
+            query(content.decode())
+            applied_migrations.append({'name': migration.name, 'sha256': hashlib.sha256(content).hexdigest()})
         reference, market, security, manifest = fixture(ROOT)
+        # The reference inspector consumes this larger pinned catalog. Locations
+        # add no pricing exposure and never enter the selected contract bindings.
+        extra_locations = f"""INSERT INTO ref_data.locations
+          SELECT (jsonb_populate_record(NULL::ref_data.locations,to_jsonb(t)||jsonb_build_object(
+            'code','benchmark_location_'||n,'name','Synthetic benchmark location '||n))).*
+          FROM ref_data.locations t CROSS JOIN generate_series(1,{args.additional_reference_locations})n
+          WHERE t.catalog_id='{manifest['referenceCatalogId']}' AND t.revision_id='{manifest['referenceRevisionId']}'
+            AND t.code='test_hub_a';\n"""
+        extra_futures = f"""INSERT INTO ref_data.futures_series
+          SELECT (jsonb_populate_record(NULL::ref_data.futures_series,to_jsonb(t)||jsonb_build_object(
+            'code','benchmark_series_'||n,'series_label','Synthetic benchmark series '||n))).*
+          FROM ref_data.futures_series t CROSS JOIN generate_series(1,{args.additional_futures_series})n
+          WHERE t.catalog_id='{manifest['referenceCatalogId']}' AND t.revision_id='{manifest['referenceRevisionId']}'
+            AND t.code='test_gas_202102';
+          INSERT INTO ref_data.futures_milestones
+          SELECT (jsonb_populate_record(NULL::ref_data.futures_milestones,to_jsonb(t)||jsonb_build_object(
+            'series_code','benchmark_series_'||n))).*
+          FROM ref_data.futures_milestones t CROSS JOIN generate_series(1,{args.additional_futures_series})n
+          WHERE t.catalog_id='{manifest['referenceCatalogId']}' AND t.revision_id='{manifest['referenceRevisionId']}'
+            AND t.series_code='test_gas_202102';\n"""
+        market = market.replace('UPDATE ref_data.revisions SET', extra_locations+extra_futures+'UPDATE ref_data.revisions SET', 1)
         from swap_fixture import fixture as swap_fixture
         swap_market, swap_manifest = swap_fixture()
         for sql in [reference, market, swap_market, security, trading_fixture(manifest['catalogId'], swap_defaults=True)]:
@@ -154,9 +182,34 @@ def main():
         reference_tables = query("SELECT tablename FROM pg_tables WHERE schemaname='ref_data' ORDER BY tablename").splitlines()
         reference_counts = ' UNION ALL '.join('SELECT count(*) n FROM ref_data."'+name.replace('"', '""')+'"' for name in reference_tables)
         counts['referenceRows'] = int(query('SELECT sum(n) FROM ('+reference_counts+') counts'))
+        added_series = int(query(f"SELECT count(*) FROM ref_data.futures_series WHERE catalog_id='{manifest['referenceCatalogId']}' AND revision_id='{manifest['referenceRevisionId']}' AND code LIKE 'benchmark_series_%'"))
+        added_locations = int(query(f"SELECT count(*) FROM ref_data.locations WHERE catalog_id='{manifest['referenceCatalogId']}' AND revision_id='{manifest['referenceRevisionId']}' AND code LIKE 'benchmark_location_%'"))
+        if (added_series, added_locations) != (args.additional_futures_series, args.additional_reference_locations):
+            raise RuntimeError('The explicit synthetic reference workload was not seeded completely.')
+        counts['additionalFutureMilestones'] = int(query(f"SELECT count(*) FROM ref_data.futures_milestones WHERE catalog_id='{manifest['referenceCatalogId']}' AND revision_id='{manifest['referenceRevisionId']}' AND series_code LIKE 'benchmark_series_%'"))
         client = PreviewClient(url)
         client.bootstrap()
         client.call('profile', {'profile': 'viewer'})
+        inspector = []
+        for table in ['locations', 'futures_series']:
+            expected = json.loads(query(f"SELECT coalesce(json_agg(code ORDER BY code),'[]'::json) FROM ref_data.{table} WHERE catalog_id='{manifest['referenceCatalogId']}' AND revision_id='{manifest['referenceRevisionId']}'"))
+            if len(expected) <= 200:
+                continue
+            pages = []
+            for offset in [0, 200]:
+                start = time.perf_counter()
+                page = client.call('reference/catalog?' + urlencode({'table': table, 'offset': offset}))
+                elapsed = round((time.perf_counter()-start)*1000, 2)
+                if ([row['code'] for row in page['rows']] != expected[offset:offset+200]
+                        or page['hasMore'] != (len(expected) > offset+200)
+                        or page['offset'] != offset or page['pageSize'] != 200):
+                    raise RuntimeError('Reference pagination changed the exact selected catalog: '+table)
+                pages.append({'offset': offset, 'rows': len(page['rows']), 'readyMs': elapsed})
+            found = client.call('reference/catalog?' + urlencode({'table': table, 'search': expected[-1]}))
+            if expected[-1] not in {row['code'] for row in found['rows']}:
+                raise RuntimeError('Reference search did not inspect records beyond the first page: '+table)
+            inspector.append({'table': table, 'catalogRows': len(expected), 'pages': pages,
+                              'searchBeyondFirstPageVerified': True})
         timings = []
         workspace = None
         for _ in range(args.samples):
@@ -187,16 +240,19 @@ def main():
                                   'postgres': run([bins['psql'], '--version']).stdout.strip(),
                                   'browser': run([args.browser, '--version']).stdout.strip(),
                                   'source': source_identity,
+                                  'databaseMigrations': applied_migrations,
                                   'apiFilesSha256': artifact_hash(temporary/'api'),
                                   'webFilesSha256': artifact_hash(temporary/'web'),
                                   'apiRssKiB': int(run(['ps', '-o', 'rss=', '-p', str(api.pid)]).stdout.strip())},
                   'workload': {**counts, 'additionalUnselectedObservations': args.additional_observations,
+                               'additionalReferenceLocations': args.additional_reference_locations,
+                               'additionalFuturesSeries': args.additional_futures_series,
                                'uniquePinnedInputs': len({o for f in manifest['frames'] for o in f['observationIds']}),
                                'scenarios': 0, 'apiCurveEvaluatedConstituents': result['evaluated'],
                                'apiDatabaseTransport': 'local Unix socket; stock PostgreSQL; runtime RLS enabled'},
                   'api': {'workspace': {**summary(timings), 'endpoint': args.workspace_endpoint, 'decodedJsonBytes': len(json.dumps(workspace).encode()),
                                        'observationsReturned': len(workspace['observations'])},
-                          'evaluate': summary(evaluation)}, 'browser': browser_report,
+                          'evaluate': summary(evaluation), 'referenceInspector': inspector}, 'browser': browser_report,
                   'limits': 'Single client, synthetic standard contracts. Browser latency is explicit. No hosted TLS/proxy, concurrency or production qualification claim.'}
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(report, indent=2)+'\n')

@@ -132,6 +132,37 @@ def run_checks(query, psql, environment, manifest, url):
         visible = query(runtime(issue('viewer'), bind+f"SELECT count(*) FROM market_data.observations WHERE catalog_id='{catalog}' AND observed_at>='2020-12-18';"))
         check('bound temporal RLS hides later market observation dates', visible == '0')
         check('bound reference reads retain only exact certified bundle versions', query(runtime(issue('viewer'), bind+"SELECT count(DISTINCT revision_id) FROM ref_data.units;")) == '1')
+        reference_catalog = str(UUID(manifest['referenceCatalogId']))
+        reference_revision = str(UUID(manifest['referenceRevisionId']))
+        reference_visible = f"security.reference_version_visible('{reference_catalog}','{reference_revision}')"
+        for mode in ['force_generic_plan', 'force_custom_plan']:
+            check('reference visibility preserves the bound bundle and caller planning policy: '+mode,
+                  query(runtime(issue('viewer'), bind+f"SET LOCAL plan_cache_mode={mode}; SELECT {reference_visible}; "
+                                "SELECT current_setting('plan_cache_mode');")) == 't\n'+mode)
+        # Current catalog scopes are separate authorities. A historical receipt
+        # cannot restore either one after admission. Roll back each injected
+        # revocation together with its bound request in this disposable cluster.
+        for table, scoped_catalog in [('market_catalog_scopes', catalog),
+                                      ('reference_catalog_scopes', reference_catalog)]:
+            revoked = (bind+"SET SESSION AUTHORIZATION preview_owner; "
+                       f"DELETE FROM security.{table} WHERE catalog_id='{scoped_catalog}' "
+                       f"AND tenant_id='{tenant}' AND workspace_id='{workspace}'; "
+                       "SET SESSION AUTHORIZATION preview_runtime; "
+                       f"SELECT NOT {reference_visible} AND NOT EXISTS(SELECT 1 FROM ref_data.units);")
+            check('bound reference visibility rechecks current '+table,
+                  query(runtime(issue('viewer'), revoked).replace(' COMMIT;', ' ROLLBACK;')) == 't')
+        check('reference visibility rechecks token expiry during a statement',
+              query(runtime(issue('viewer', seconds=1), bind+
+                    f"WITH checked AS MATERIALIZED(SELECT n,{reference_visible} AS allowed FROM "
+                    "(SELECT n,pg_sleep((n-1)*1.1) FROM generate_series(1,2)n) delayed) "
+                    "SELECT array_agg(allowed ORDER BY n) FROM checked;")).strip() == '{t,f}')
+        check('visibility helpers retain authority metadata and their explicit local planning policy',
+              query("SELECT bool_and(provolatile='v' AND prosecdef AND NOT proisstrict "
+                    "AND pg_get_userbyid(proowner)='openetrm_security_owner' "
+                    "AND proconfig @> ARRAY['search_path=pg_catalog','plan_cache_mode=force_generic_plan'] "
+                    "AND cardinality(proconfig)=2) FROM pg_proc "
+                    "WHERE oid IN ('security.market_fact_visible(uuid,uuid,uuid)'::regprocedure,"
+                    "'security.reference_version_visible(uuid,uuid)'::regprocedure);") == 't')
         query(runtime(issue('viewer'), bind+expect(f"PERFORM security.use_market_context('{catalog}','{ctx}');", '42501')))
         check('a request cannot rebind its historical scope after reading')
         check('historical editor has no database write context', query(runtime(issue('editor'),bind+"SELECT security.market_access('"+catalog+"','ImportObservations');")) == 'f')

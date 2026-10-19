@@ -39,6 +39,13 @@ in [hosted pilot operations](hosted-pilot.md); the synthetic local preview stays
 Schema releases retain the immutable reference-intake migration before the
 durable-job and Swarm migrations (D141). Import and scheduling executor roles
 remain independent; an image update cannot silently adopt a different schema.
+Historical visibility uses indexed exact publication lookups without caching
+current authority. Blotter reads its catalog and report in one bound operation
+and returns their shared context (D143). This database function upgrade requires
+the same separately qualified schema baseline as other migrations.
+Business reads follow the definition bundle's declared reference relationships;
+the reference inspector loads its selected table separately in bounded pages
+under the same authorization and temporal rules (D144).
 
 ## 2. Application structure and deployment
 
