@@ -42,6 +42,7 @@ def run_checks(pg_bin, dotnet, browser, *, run=subprocess.run):
     check('managed automation contracts',[str(dotnet),'run','--no-restore','--project','tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj','--','--automation'])
     check('managed preview data',[str(dotnet),'run','--no-restore','--project','tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj','--','--preview-data'])
     check('owned automation database',[sys.executable,'tools/check_automation.py','--pg-bin',str(pg_bin),'--dotnet',str(dotnet)])
+    check('owned reference metadata database',[sys.executable,'tools/check_reference_editing.py','--pg-bin',str(pg_bin)])
     check('stock database schema', [sys.executable, 'tools/check_reference_schema.py',
                                    '--pg-bin', str(pg_bin), '--market', '--security'])
     preview = [sys.executable, 'tools/run_preview.py', '--pg-bin', str(pg_bin),
@@ -56,6 +57,7 @@ def run_checks(pg_bin, dotnet, browser, *, run=subprocess.run):
     check('isolated exchange futures browser', [*preview, '--exchange-check', '--browser-check', '--browser', str(browser)])
     check('isolated hosted authentication and browser', [*preview, '--hosted-check', '--browser-check', '--browser', str(browser)])
     check('isolated jobs and infrastructure browser', [*preview, '--jobs-check', '--browser-check', '--browser', str(browser)])
+    check('isolated reference metadata editor',[*preview,'--reference-check','--browser-check','--browser',str(browser)])
     check('mixed-period preview', [*preview, '--example', 'mixed-gas'])
     print('All synthetic verification suites passed.', flush=True)
 

@@ -8,10 +8,10 @@ public sealed record NavigationCategory(string Code,string Name);
 public sealed record NavigationCurve(string Code,string Name,string MarketType,NavigationCategory Category);
 public sealed record NavigationFrame(Guid Id,string Name,DateTimeOffset At);
 public sealed record NavigationRead(DefinitionRevision DefinitionRevision,ReferenceRevision ReferenceRevision,
-    ImmutableArray<NavigationCurve> Curves,ImmutableArray<CurveName> CurveNames);
+    ImmutableArray<NavigationCurve> Curves,ImmutableArray<CurveName> CurveNames,ReferenceDisplayData? ReferenceDisplay=null);
 public sealed record MarketNavigation(string Profile,ScheduleContext? Context,DefinitionRevision DefinitionRevision,
     ReferenceRevision ReferenceRevision,string FuturesConvention,PreviewExample? Example,ImmutableArray<Guid> InitialFrameIds,
-    ImmutableArray<NavigationFrame> Frames,ImmutableArray<CurveName> CurveNames,ImmutableArray<NavigationCurve> Curves)
+    ImmutableArray<NavigationFrame> Frames,ImmutableArray<CurveName> CurveNames,ImmutableArray<NavigationCurve> Curves,ReferenceDisplayData? ReferenceDisplay=null)
 {
     public string Kind=>"market_navigation";
 

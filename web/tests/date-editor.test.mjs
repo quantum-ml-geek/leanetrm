@@ -1,11 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {contractExampleRows,calendarSummary,visibleVersions,calendarKey} from '../dist/date-editor.js';
-test('example bindings refer to schedule occurrences rather than copied dates',()=>{
-  const rows=contractExampleRows('oe.ng',3,'15:30');
-  assert.equal(rows.length,3);
-  assert.deepEqual(rows[1],{label:'Contract 2',start:'oe.ng[1]',end:'oe.ng[2]',lastTrading:'oe.ng[1] - 3bd',cutoffUtc:'15:30'});
-});
+import {calendarSummary,visibleVersions,calendarKey} from '../dist/date-editor.js';
 test('a reference calendar is described from its served weekend days, overrides and half-open coverage',()=>{
   const calendar={reference:{catalogId:'c',revisionId:'r',code:'test_business'},coverageFrom:'2019-01-01',coverageTo:'2022-01-01',weekendDays:['Saturday','Sunday'],closedDates:['2021-01-01','2021-03-15'],openDates:[]};
   assert.equal(calendarSummary(calendar),'Closed Saturday and Sunday · 2 closed dates · covers Jan 1, 2019 – Dec 31, 2021');

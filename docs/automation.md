@@ -19,6 +19,7 @@ The managed API exposes:
 | --- | --- |
 | `GET /api/jobs?page=0` | Authorized jobs, 100 per page, recent run metadata, profiles and shared infrastructure |
 | `POST /api/jobs/create` | Exact request identity and explicit execution terms |
+| `POST /api/jobs/update` | Amend an idle active/paused job's name, next due time, expiry, interval and run limits, with its expected version |
 | `POST /api/jobs/control` | Pause, resume, cancel or run again, with expected job version |
 | `POST /api/infrastructure/availability` | Pause/resume scheduling or drain an idle approved worker node, with exact node version |
 | `POST /api/infrastructure/resolve` | Preserve observed availability and fence a previous uncertain conditional node update |
@@ -29,6 +30,23 @@ Exact retries return the retained result; changed payloads conflict. A known fir
 rejection can discard its pending request. Once a response is uncertain, later
 authorization/policy rejections preserve that original identity until reconciled. The UI retains uncertain requests in
 session storage, separately for each signed-in workspace/account.
+
+Click a job name to open its saved terms. The backend supplies whether editing is
+currently available and the read-only reason. Owners and current job managers use
+the same update operation; neither the displayed role name nor browser controls
+grant authority. Updates retain ownership, delegation, operation and the exact
+approved execution-profile version. They preserve active/paused state and existing
+runs, increment the job version and retain the request, response and audit action.
+Stale versions and changed replays conflict. Current actor and owner execution
+authority are checked again after lock waits, including before a saved response
+is replayed. Running work and physical work awaiting cleanup block editing.
+Terminal, blocked and expired jobs remain inspectable without amendment controls.
+An update cannot reuse a due instant already retained for that job's occurrence.
+
+Job scheduling is a current operational view, independent of the market As of
+selection. Entry and editing display the user's time zone and use the managed
+resolver for repeated or missing wall clocks; persisted instants and elapsed
+recurrence remain UTC. Editing does not create a historical market-data workflow.
 
 The supported schedule is explicitly UTC, once or a fixed interval of 60 through
 31,536,000 seconds. Its selected policies are `run_once` for misfires and `forbid`
@@ -221,6 +239,6 @@ the Swarm template. No existing application/database/Swarm is used for testing.
 Remaining work includes real disposable Swarm failure/recovery qualification,
 host reboot and Docker Engine restart through an explicitly selected management
 provider, full agent/provider execution and scoped tool-credential exchange,
-child-agent ancestry/budget enforcement, broader schedule editing/calendars,
+child-agent ancestry/budget enforcement, broader recurrence/calendar authoring,
 scheduled financial operations with pinned historical contexts, external stop
 attestations, workload artifacts/logs and a qualified Swarm release migration.

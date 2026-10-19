@@ -32,10 +32,12 @@ def main():
     parser.add_argument('--draft-check',action='store_true',help='Qualify temporary deal pricing and exposure')
     parser.add_argument('--hosted-check',action='store_true',help='Qualify local credential persistence in an owned database')
     parser.add_argument('--jobs-check',action='store_true',help='Qualify owned jobs and the shared infrastructure screen')
+    parser.add_argument('--reference-check',action='store_true',help='Qualify reference metadata authoring and reviewed display activation')
     parser.add_argument('--booking-check',action='store_true',help='Qualify backend-owned immutable trade booking facts')
     parser.add_argument('--unit-check', action='store_true', help='Run amount/unit integration checks in the owned standard fixture')
     parser.add_argument('--execution-check',action='store_true',help='Qualify standard futures execution policies in an owned synthetic fixture')
     parser.add_argument('--custom-curves-check',action='store_true',help='Qualify custom curve definitions and calculations in an owned synthetic fixture')
+    parser.add_argument('--market-read-check',action='store_true',help='Qualify per-row market authority in the owned standard fixture')
     parser.add_argument('--market-dates-check',action='store_true',help='Qualify scoped market-close availability and the calendar in an owned fixture')
     parser.add_argument('--with-custom-curves',action='store_true',help='Load synthetic monthly and daily NG panels for the custom curve editor')
     parser.add_argument('--exchange-check',action='store_true',help='Qualify the independent exchange futures dataset')
@@ -47,10 +49,12 @@ def main():
     parser.add_argument('--browser',type=Path,help='Installed Chromium-compatible executable; used only with --browser-check')
     parser.add_argument('--example', choices=['standard','mixed-gas'], default='standard', help='Explicit synthetic dataset')
     args = parser.parse_args()
-    if args.identity_check or args.unit_check or args.party_check or args.exchange_check or args.booking_check or args.draft_check or args.hosted_check or args.jobs_check or args.execution_check or args.assistant_check or args.custom_curves_check or args.market_dates_check:
+    if args.identity_check or args.unit_check or args.party_check or args.exchange_check or args.booking_check or args.draft_check or args.hosted_check or args.jobs_check or args.reference_check or args.execution_check or args.assistant_check or args.custom_curves_check or args.market_dates_check or args.market_read_check:
         args.check = True
         if args.example != 'standard' or args.identity_check and args.browser_check:
             parser.error('--identity-check requires the standard fixture without --browser-check')
+        if args.market_read_check and args.browser_check:
+            parser.error('--market-read-check has no browser scenarios; omit --browser-check')
         if args.assistant_check and args.browser_check:
             parser.error('--assistant-check has no browser scenarios yet; omit --browser-check')
     if not 0 <= args.port <= 65535:
@@ -230,6 +234,10 @@ def main():
             from seed_preview_swaps import seed_swaps
             seed_swaps(url,run_id,temporary)
             print('Loaded eight futures and sixteen financial swap examples across four weekdays.',flush=True)
+            if not args.check:
+                from seed_schedule_examples import seed_schedule_examples
+                seed_schedule_examples(url,run_id,temporary)
+                print('Published the synthetic monthly gas date schedule; daily power contract dates are backend-loadable session candidates.',flush=True)
         if args.with_exchange and not args.check:
             from seed_exchange_positions import seed_positions as seed_exchange
             seed_exchange(url,run_id,temporary)
@@ -256,6 +264,14 @@ def main():
             elif args.execution_check:
                 from check_futures_execution import run_checks as check_execution
                 check_execution(url,query,manifest)
+            elif args.reference_check:
+                from check_reference_display_http import run_checks as check_reference_display
+                check_reference_display(url,query)
+                if args.browser_check:
+                    target=temporary/'browser-target.json'
+                    target.write_text(json.dumps({'suite':'business_browser_v1','url':url,'runId':run_id}))
+                    browser_process=subprocess.Popen(['node',str(ROOT/'tests/browser/run.mjs'),str(target),str(args.browser.resolve()),'--reference-editor'],cwd=ROOT,env=env,start_new_session=True)
+                    if browser_process.wait(timeout=180):raise RuntimeError('Owned reference-editor browser checks failed')
             elif args.jobs_check:
                 from check_jobs_http import run_checks as check_jobs
                 check_jobs(url,query)
@@ -306,6 +322,9 @@ def main():
                     target.write_text(json.dumps({'suite':'business_browser_v1','url':url,'runId':run_id}))
                     browser_process=subprocess.Popen(['node',str(ROOT/'tests/browser/run.mjs'),str(target),str(args.browser.resolve()),'--units'],cwd=ROOT,env=env,start_new_session=True)
                     if browser_process.wait(timeout=60):raise RuntimeError('Owned unit browser checks failed')
+            elif args.market_read_check:
+                from check_market_read_authority import run_checks as check_market_authority
+                check_market_authority(query,manifest)
             elif args.assistant_check:
                 from check_model_providers import run_checks as check_model_providers
                 check_model_providers(url,query,psql,manifest,temporary,app_env,dotnet)
@@ -331,6 +350,8 @@ def main():
                 check_temporal_storage(query,psql,env,manifest,url)
                 from check_reference_policy_storage import run_checks as check_reference_policy_storage
                 check_reference_policy_storage(query,manifest)
+                from check_market_read_authority import run_checks as check_market_authority
+                check_market_authority(query,manifest)
                 from check_futures_storage import run_checks as check_futures_storage
                 check_futures_storage(query,manifest,psql,env)
                 from check_futures_amendments import run_checks as check_amendments
@@ -340,6 +361,10 @@ def main():
                 subprocess.run([str(dotnet),'run','--project','tests/OpenEtrm.Api.Checks','--',str(adapter_fixture)],cwd=ROOT,env=env,check=True,timeout=60)
                 from check_seeded_preview import run_checks as check_seeded_preview
                 check_seeded_preview(url,run_id,temporary)
+                from check_reference_display_http import run_checks as check_reference_display
+                check_reference_display(url,query)
+                from check_schedule_examples import run_checks as check_schedule_examples
+                check_schedule_examples(url,run_id,temporary)
                 if args.browser_check:
                     target=temporary/'browser-target.json'
                     target.write_text(json.dumps({'suite':'business_browser_v1','url':url,'runId':run_id}))

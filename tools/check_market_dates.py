@@ -65,4 +65,51 @@ def run_checks(url,query=None,manifest=None):
     duplicate=client.call('market/dates',{'curve':'ng_monthly','timeZone':'UTC'})
     closes=next(row for row in duplicate['dates'] if row['date']=='2020-12-18')['frames']
     assert {frame['id'],changed['id']}<={row['id'] for row in closes}
+    if query and manifest:
+        # An observation outside every offered exact snapshot cannot affect a
+        # built-in calendar. Custom history intentionally has a broader read.
+        offered=client.bootstrap()['frames']
+        pins={identifier for saved in offered for identifier in saved['observationIds']}
+        selected=','.join("'"+str(identifier)+"'::uuid" for identifier in pins)
+        unused=query(f"SELECT id FROM market_data.observations WHERE catalog_id='{manifest['catalogId']}' AND definition_revision_id='{manifest['revisionId']}' AND NOT(id=ANY(ARRAY[{selected}])) ORDER BY id LIMIT 1;")
+        if not unused:
+            # Append a valid same-value correction without adding it to a session
+            # frame. Existing immutable observations and prices are unchanged.
+            unused=str(uuid4())
+            query(f"""INSERT INTO market_data.observations
+              (catalog_id,id,definition_revision_id,series_id,reference_catalog_id,reference_revision_id,source_code,
+               source_event_id,source_revision_id,role,publication_state,observed_at,received_at,value,corrects_id)
+              SELECT catalog_id,'{unused}',definition_revision_id,series_id,reference_catalog_id,reference_revision_id,source_code,
+               source_event_id,'{uuid4()}',role,publication_state,observed_at,clock_timestamp(),value,id
+              FROM market_data.observations o WHERE catalog_id='{manifest['catalogId']}' AND definition_revision_id='{manifest['revisionId']}'
+              AND NOT EXISTS(SELECT 1 FROM market_data.observations child WHERE child.catalog_id=o.catalog_id AND child.corrects_id=o.id)
+              ORDER BY id LIMIT 1;""")
+        requests=[{'curve':code,'timeZone':'UTC'} for code in (None,'ng_monthly','interest_rates')]
+        before=[client.call('market/dates',body) for body in requests]
+        query(f"""CREATE FUNCTION public.synthetic_unused_calendar_observation(id uuid) RETURNS boolean
+          LANGUAGE plpgsql VOLATILE AS $$BEGIN
+          IF id='{unused}'::uuid THEN RAISE EXCEPTION 'Synthetic unused calendar observation read' USING ERRCODE='42501';END IF;
+          RETURN true;END$$;
+          CREATE POLICY synthetic_unused_calendar_observation ON market_data.observations AS RESTRICTIVE
+          FOR SELECT TO openetrm_runtime USING(public.synthetic_unused_calendar_observation(id));""")
+        try:
+            for body,expected in zip(requests,before):
+                assert client.call('market/dates',body)==expected, 'Built-in availability must use only all offered frame pins.'
+            client.call('market/dates',{'curve':None,'definition':templates['ng_average']['definition'],'timeZone':'UTC'},expected=403)
+        finally:
+            query('DROP POLICY synthetic_unused_calendar_observation ON market_data.observations;DROP FUNCTION public.synthetic_unused_calendar_observation(uuid);')
+        # A required pin for any offered frame cannot be silently substituted,
+        # including when the selected curve would not itself consume that fact.
+        anchor=next(iter(frame['observationIds']))
+        affected={saved['id'] for saved in offered if anchor in saved['observationIds']}
+        query(f"CREATE POLICY synthetic_hidden_calendar_observation ON market_data.observations AS RESTRICTIVE FOR SELECT TO openetrm_runtime USING(id<>'{anchor}'::uuid);")
+        try:
+            for body,expected in zip(requests,before):
+                actual=client.call('market/dates',body)
+                expected_ids={saved['id'] for day in expected['dates'] for saved in day['frames']}-affected
+                assert {saved['id'] for day in actual['dates'] for saved in day['frames']}==expected_ids
+        finally:
+            query('DROP POLICY synthetic_hidden_calendar_observation ON market_data.observations;')
+        assert all(client.call('market/dates',body)==expected for body,expected in zip(requests,before))
+        print('PASS built-in calendar reads exact pins across all frames, rates and corrections; hidden pins never fall back and custom history retains its broader read',flush=True)
     print('PASS market calendar availability: exact curve dependencies, complete recipe windows, user-zone days, explicit duplicate snapshots, certified context and current reference authority',flush=True)

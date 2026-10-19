@@ -22,6 +22,15 @@ prefixes; exact UTC knowledge cutoffs now use retained engine commit certificate
 for exact storage, permissions, engine pins and remaining limits. Earlier design
 examples below describe broader potential operations, not an implemented grammar.
 
+The example loader gets its explicit terms from the managed backend. The ordinary
+owned standard preview publishes `oe.sample_gas_months` through the same schedule
+save and publish operations. It binds the exact synthetic reference calendar and
+is visible to separate authorized sessions. The monthly gas contract example
+requires an explicitly chosen published schedule and retains its date references.
+The daily power example supplies two fixed literal delivery periods and UTC
+cutoffs. Contract examples remain session candidates; loading or keeping one does
+not publish a price curve, exchange instrument or daily schedule generator.
+
 ## Agreed behavior
 
 For a configured sequence of dated contracts, the current contract advances to

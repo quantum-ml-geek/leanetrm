@@ -54,7 +54,7 @@ public sealed class FuturesExecutionPolicies
                 case "after_source_first_trade_date_v1":
                     if(sourceFirst is not null||first.Text("value_state")!="known"||policy.OptionalText("source_date_offset_seconds") is not {} retainedOffset)throw Invalid();
                     var clockRow=One(clocks[first.Text("clock_code")]);
-                    var clock=new ClockRule(clockRow.Text("code"),clockRow.Text("kind"),clockRow.OptionalText("fixed_offset_seconds") is {} seconds?int.Parse(seconds,CultureInfo.InvariantCulture):null,clockRow.OptionalText("iana_zone"),clockRow.OptionalText("tzdb_version"));
+                    var clock=ReferenceClockJson.Read(clockRow);
                     var next=DateOnly.ParseExact(first.Text("business_date"),"yyyy-MM-dd",CultureInfo.InvariantCulture).AddDays(1);
                     if(!resolvedClocks.TryGetValue(clock.Code,out var resolvedClock))
                     {resolvedClock=PowerClock.FromRule(clock,TimeZoneDatabase.Installed());resolvedClocks.Add(clock.Code,resolvedClock);}

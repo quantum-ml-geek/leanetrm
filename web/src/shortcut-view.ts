@@ -33,6 +33,7 @@ export function scheduleErrorMessage(code:string):string|undefined{
     temporal_context:'Choose consistent context coordinates; retained contexts cannot be changed.',
     schedule_context:'Choose an exact context date and a captured publication view.',
     schedule_unpublished:'No published schedule version covers this context and publication view. Publish a version, then explicitly select the current published view.',
+    schedule_example:'Choose a supported contract-date example and its explicit published schedule when required.',
     schedule_definition:'Choose an occurrence selection rule and a nonempty effective interval.',
     schedule_conflict:'This schedule changed or its stable reference already exists. Reload the saved version before editing.',
     schedule_engine:'The retained schedule engine version is unavailable; it cannot be silently reinterpreted.',

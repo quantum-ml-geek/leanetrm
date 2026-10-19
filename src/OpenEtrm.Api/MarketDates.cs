@@ -42,7 +42,12 @@ public static class MarketDates
         foreach(var frame in frames)_=pin.Require(frame);
         await pin.Bind(connection,database.Manifest.CatalogId,ct);
         await RequireAccess(database,connection,ct);
-        var data=await database.Read(connection,ct,includeCalendarDays:false);
+        // Built-in curves consume every offered frame's exact snapshot pins.
+        // Custom recipes retain their broader historical correction policy.
+        var data=request.Definition is null&&!frames.IsEmpty
+            ?await database.Read(connection,ct,observationIds:[..frames.SelectMany(frame=>frame.ObservationIds).Distinct()],
+                includeCalendarDays:false,observationScope:ObservationReadScope.ExactPins)
+            :await database.Read(connection,ct,includeCalendarDays:false);
         var curveCodes=data.Definitions["curves"].Select(row=>row.Text("code")).ToHashSet(StringComparer.Ordinal);
         var rateCodes=data.Definitions["rate_curves"].Select(row=>row.Text("code")).ToHashSet(StringComparer.Ordinal);
         if(request.Curve is {} curve&&!curveCodes.Contains(curve)&&!rateCodes.Contains(curve))

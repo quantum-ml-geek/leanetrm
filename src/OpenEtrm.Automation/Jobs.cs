@@ -17,13 +17,36 @@ public sealed record JobCreate(Guid RequestId, string Name, string Operation, Da
 {
     public void Validate()
     {
-        if (RequestId == Guid.Empty || string.IsNullOrWhiteSpace(Name) || Name.Length > 80 ||
-            Operation is not ("worker_check" or "swarm_job") || DueAt.Offset != TimeSpan.Zero ||
-            ExpiresAt.Offset != TimeSpan.Zero || DueAt == default || ExpiresAt <= DueAt ||
-            IntervalSeconds is < 60 or > 31536000 || TimeZone != "UTC" || Misfire != "run_once" ||
-            Overlap != "forbid" || TimeoutSeconds is < 1 or > 3600 || MaximumAttempts is < 1 or > 3 ||
+        JobValidation.Schedule(RequestId, Name, DueAt, ExpiresAt, IntervalSeconds, TimeZone, Misfire, Overlap, TimeoutSeconds, MaximumAttempts);
+        if (Operation is not ("worker_check" or "swarm_job") ||
             (Operation == "worker_check" ? ProfileId is not null || ProfileVersion is not null :
                 ProfileId is null || ProfileId == Guid.Empty || ProfileVersion is null or < 1))
+            throw new AutomationException("job_input", "Supply a complete supported job contract, explicit UTC times and execution limits.");
+    }
+}
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record JobUpdate(Guid RequestId, Guid Id, int ExpectedVersion, string Name, DateTimeOffset DueAt,
+    DateTimeOffset ExpiresAt, [property: JsonRequired] int? IntervalSeconds, string TimeZone, string Misfire, string Overlap,
+    int TimeoutSeconds, int MaximumAttempts)
+{
+    public void Validate()
+    {
+        JobValidation.Schedule(RequestId, Name, DueAt, ExpiresAt, IntervalSeconds, TimeZone, Misfire, Overlap, TimeoutSeconds, MaximumAttempts);
+        if (Id == Guid.Empty || ExpectedVersion < 1)
+            throw new AutomationException("job_input", "Select the current job version before editing its schedule.");
+    }
+}
+
+internal static class JobValidation
+{
+    public static void Schedule(Guid requestId, string name, DateTimeOffset dueAt, DateTimeOffset expiresAt,
+        int? intervalSeconds, string timeZone, string misfire, string overlap, int timeoutSeconds, int maximumAttempts)
+    {
+        if (requestId == Guid.Empty || string.IsNullOrWhiteSpace(name) || name.Length > 80 ||
+            dueAt.Offset != TimeSpan.Zero || expiresAt.Offset != TimeSpan.Zero || dueAt == default || expiresAt <= dueAt ||
+            intervalSeconds is < 60 or > 31536000 || timeZone != "UTC" || misfire != "run_once" || overlap != "forbid" ||
+            timeoutSeconds is < 1 or > 3600 || maximumAttempts is < 1 or > 3)
             throw new AutomationException("job_input", "Supply a complete supported job contract, explicit UTC times and execution limits.");
     }
 }
@@ -84,6 +107,12 @@ public static class JobOperations
     {
         request.Validate();
         return Read(connection, "SELECT automation.control_job($1::jsonb)::text", JsonSerializer.Serialize(request, Json), ct);
+    }
+
+    public static Task<JsonElement> Update(NpgsqlConnection connection, JobUpdate request, CancellationToken ct)
+    {
+        request.Validate();
+        return Read(connection, "SELECT automation.update_job($1::jsonb)::text", JsonSerializer.Serialize(request, Json), ct);
     }
 
     private static async Task<JsonElement> Read(NpgsqlConnection connection, string sql, string? request, CancellationToken ct)

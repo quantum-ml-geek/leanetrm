@@ -74,9 +74,23 @@ public static class PowerPreview
         // The hour engine settles energy in MWh; the quote must be an outright price per MWh of the curve's own commodity.
         return quantity.Text("commodity_code")==c.Text("commodity_code") && quantity.Text("unit_code")=="megawatt_hour" && quote.Text("kind")=="outright";
     }
+    // Unit eligibility only. Opening a power check still validates its selected
+    // contract, settlement index, product, calendar and numerical policy.
+    public static ImmutableArray<string> CurveCodes(PreviewData data)=>
+        [..data.Definitions["curves"].Where(c=>PerMwhOutright(data,c)).Select(c=>c.Text("code"))];
     public static object Catalog(PreviewData data,InputFrame frame,ProductSet set)
     {
         var products=set.Available;
+        var eligible=CurveCodes(data).ToHashSet(StringComparer.Ordinal);
+        // Only contracts with one explicit settlement index are offered, by delivery date;
+        // each carries its holiday calendar and exact reference commodity identity.
+        var curves=data.Definitions["curves"].Where(c=>eligible.Contains(c.Text("code"))).Select(c=>new {
+            code=c.Text("code"),commodityCode=c.Text("commodity_code"),
+            contracts=data.Contracts.Where(k=>frame.CurveContracts.TryGetValue(c.Text("code"),out var members)&&members.Contains(k.Key.Id)).OrderBy(k=>k.DeliveryFrom)
+                .Select(k=>(Contract:k,Index:IndexCode(data,c,k))).Where(k=>k.Index is not null).Select(k=>new {
+                    id=k.Contract.Key.Id,from=k.Contract.DeliveryFrom.ToString("yyyy-MM-dd",CultureInfo.InvariantCulture),to=k.Contract.DeliveryTo.ToString("yyyy-MM-dd",CultureInfo.InvariantCulture),
+                    holidayCalendar=Calendar(data,Index(data,k.Index!)).Text("code")}).ToArray()}).Where(c=>c.contracts.Length>0).ToArray();
+        var commodities=curves.Select(c=>c.commodityCode).ToHashSet(StringComparer.Ordinal);
         return new
         {
             products=products.Select(p=>new {p.Code,p.Name,p.Version,clock=p.Clock.Code}),
@@ -92,15 +106,10 @@ public static class PowerPreview
                         he=$"HE{i*minutes/60+1:D2}"+(minutes==60?"":$" +{i*minutes%60:D2}m"),
                         hb=$"HB{i*minutes/60:D2}"+(minutes==60?"":$" +{i*minutes%60:D2}m")}).ToArray()};
             }))),
-            // Only contracts with one explicit settlement index are offered, by delivery date; each carries its holiday calendar.
-            curves=data.Definitions["curves"].Where(c=>PerMwhOutright(data,c)).Select(c=>new {code=c.Text("code"),
-                contracts=data.Contracts.Where(k=>frame.CurveContracts.TryGetValue(c.Text("code"),out var members)&&members.Contains(k.Key.Id)).OrderBy(k=>k.DeliveryFrom)
-                    .Select(k=>(Contract:k,Index:IndexCode(data,c,k))).Where(k=>k.Index is not null).Select(k=>new {
-                        id=k.Contract.Key.Id,from=k.Contract.DeliveryFrom.ToString("yyyy-MM-dd",CultureInfo.InvariantCulture),to=k.Contract.DeliveryTo.ToString("yyyy-MM-dd",CultureInfo.InvariantCulture),
-                        holidayCalendar=Calendar(data,Index(data,k.Index!)).Text("code")}).ToArray()}).Where(c=>c.contracts.Length>0),
+            curves,
             weekdays=new[]{"Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"},
-            quantityChoices=data.References["quantity_specifications"].Where(q=>q.Text("commodity_code")=="test_power" && q.Text("unit_code") is "megawatt" or "megawatt_hour")
-                .Select(q=>new{basis=q.Text("unit_code")=="megawatt"?"flat_power":"total_energy",
+            quantityChoices=data.References["quantity_specifications"].Where(q=>commodities.Contains(q.Text("commodity_code")) && q.Text("unit_code") is "megawatt" or "megawatt_hour")
+                .Select(q=>new{commodityCode=q.Text("commodity_code"),basis=q.Text("unit_code")=="megawatt"?"flat_power":"total_energy",
                     label=(q.Text("unit_code")=="megawatt"?"Flat MW over selected hours":"Total MWh for the delivery period")+" · "+q.Text("basis_code").Replace('_',' '),
                     specification=new ReferenceKey(data.ReferenceRevision,q.Text("code"))}),
             display=new PowerDisplayInput(3,4,3),
