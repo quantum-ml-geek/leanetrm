@@ -4,8 +4,8 @@ import json
 from preview_client import PreviewClient
 
 
-def run_checks(url, query, manifest):
-    c = PreviewClient(url); c.bootstrap(); c.call('profile', {'profile': 'trader'})
+def run_checks(url, query, manifest, client=None):
+    c = client or PreviewClient(url); c.bootstrap(); c.call('profile', {'profile': 'trader'})
     frame = next(f for f in c.call('workspace')['frames'] if f['at'].startswith('2020-12-18'))
     context = {'snapshotId': frame['id'], 'convention': 'fixed_total_cash_execution_pnl_v1', 'knowledgeMode': 'current'}
     catalog = c.call('futures/catalog', context)

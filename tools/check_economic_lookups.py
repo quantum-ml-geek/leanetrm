@@ -5,17 +5,17 @@ from preview_client import PreviewClient
 from preview_fixture import trade_booking
 
 
-def run_checks(url, query, manifest):
-    c = PreviewClient(url); c.bootstrap(); c.call('profile', {'profile': 'trader'})
+def run_checks(url, query, manifest, client=None):
+    c = client or PreviewClient(url); c.bootstrap(); c.call('profile', {'profile': 'trader'})
     frame = next(f for f in c.call('workspace')['frames'] if f['at'].startswith('2020-12-18'))
     context = {'snapshotId': frame['id'], 'convention': 'independent_side_financial_swap_v2', 'knowledgeMode': 'current'}
     future_context = {**context, 'convention': 'fixed_total_cash_execution_pnl_v1'}
     futures = c.call('futures/catalog', future_context)
     member = futures['contracts'][0]
-    viewer=PreviewClient(url);viewer.bootstrap();viewer.call('profile',{'profile':'viewer'})
-    view_frame=next(f for f in viewer.call('workspace')['frames'] if f['at'].startswith('2020-12-18'))
-    market=viewer.call('evaluate',{'snapshotId':view_frame['id'],'curve':member['curve']})
+    c.call('profile',{'profile':'viewer'})
+    market=c.call('evaluate',{'snapshotId':frame['id'],'curve':member['curve']})
     assert next(p for p in market['points'] if p['contractId']==member['id'])['instrumentId']==member['instrumentId']
+    c.call('profile',{'profile':'trader'})
     future_body = {**future_context, **trade_booking(), 'operationId': str(uuid4()), 'bookId': futures['books'][0]['id'],
                    'curve': member['curve'], 'contractId': member['id'],
                    'lots': '2', 'executionPrice': '3'}

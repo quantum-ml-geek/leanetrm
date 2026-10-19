@@ -346,38 +346,39 @@ def main():
                     browser_process=subprocess.Popen(['node',str(ROOT/'tests/browser/run.mjs'),str(target),str(args.browser.resolve())],cwd=ROOT,env=env,start_new_session=True)
                     if browser_process.wait(timeout=360):
                         raise RuntimeError('Owned browser checks failed')
+                # Preview sessions are capped, so the checks below share this session instead of each opening one.
                 from check_swaps_preview import run_checks as check_swaps
-                swap_client=check_swaps(url)
+                session=check_swaps(url)
                 from check_trading_pin_reads import run_supplemental_checks as check_supplemental_pins
                 def check_pin(name,condition=True):
                     if not condition:raise AssertionError(name)
                     print('PASS '+name,flush=True)
-                check_supplemental_pins(swap_client,check_pin,query,manifest)
+                check_supplemental_pins(session,check_pin,query,manifest)
                 from check_empty_trading_directory import run_nonempty_checks
-                run_nonempty_checks(swap_client,query,manifest)
+                run_nonempty_checks(session,query,manifest)
                 from check_swap_payment_rules import run_checks as check_swap_payment_rules
-                check_swap_payment_rules(url)
+                check_swap_payment_rules(url,session)
                 from check_booking_facts import run_checks as check_booking_facts
-                check_booking_facts(url,query,manifest)
+                check_booking_facts(url,query,manifest,session)
                 from check_draft_pricing import run_checks as check_draft
-                seed_client=check_draft(url,query,manifest)
+                check_draft(url,query,manifest,session)
                 from check_definition_publication import run_checks as check_definition_publication
                 check_definition_publication(query,manifest)
                 from check_trade_annotations import run_checks as check_trade_annotations
-                check_trade_annotations(url)
+                check_trade_annotations(url,session)
                 from check_trade_parties import run_checks as check_trade_parties
-                check_trade_parties(url,query,manifest)
+                check_trade_parties(url,query,manifest,session)
                 from check_units_preview import run_checks as check_units
-                check_units(url)
+                check_units(url,client=session)
                 from check_trading_reference_access import run_checks as check_reference_authority
                 check_reference_authority(query,manifest)
                 from check_economic_lookups import run_checks as check_identities
-                check_identities(url,query,manifest)
+                check_identities(url,query,manifest,session)
                 from check_swaps_storage import run_checks as check_swaps_storage
                 check_swaps_storage(query,manifest,psql,env)
                 from seed_preview_swaps import seed_swaps
-                seeded=seed_swaps(url,run_id,temporary,seed_client)
-                assert len(seeded)==16 and seeded==seed_swaps(url,run_id,temporary,seed_client)
+                seeded=seed_swaps(url,run_id,temporary,session)
+                assert len(seeded)==16 and seeded==seed_swaps(url,run_id,temporary,session)
                 print('PASS sixteen synthetic swap examples seed idempotently across all four weekdays',flush=True)
         else:
             child.wait()
