@@ -4,8 +4,8 @@ from fractions import Fraction as F
 from preview_client import PreviewClient
 
 
-def run_checks(url, query, manifest):
-    c = PreviewClient(url); c.bootstrap(); c.call('profile', {'profile': 'trader'})
+def run_checks(url, query, manifest, client=None):
+    c = client or PreviewClient(url); c.bootstrap(); c.call('profile', {'profile': 'trader'})
     w = c.call('workspace'); frame = next(f for f in w['frames'] if f['at'].startswith('2020-12-18'))
     context = {'snapshotId': frame['id'], 'convention': 'independent_side_financial_swap_v2', 'knowledgeMode': 'current'}
     catalog = c.call('swaps/catalog', context)
@@ -87,4 +87,3 @@ def run_checks(url, query, manifest):
     c.call('swaps/draft-risk', request, expected=403)
     assert before == query("SELECT count(*)::text||':'||(SELECT count(*) FROM trading.publications)::text FROM trading.trades;")
     print('PASS unbooked deal price/risk: independent base/basis/all-in and signed exposures, exact 31-day rational sensitivities, therm conversion, pinned replay, explicit policies, denied authority and no booking writes', flush=True)
-    return c

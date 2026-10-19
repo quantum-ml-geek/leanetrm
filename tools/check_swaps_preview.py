@@ -56,8 +56,9 @@ def run_checks(url):
     c.call('swaps/book', {**body, 'operationId': str(uuid4()), 'floating': {**body['floating'], 'averaging': 'unknown'}}, expected=422)
     c.call('swaps/book', {**body, 'operationId': str(uuid4()), 'discounting': None}, expected=422)
     check('stale heads unsupported conventions currencies and missing policies reject', True)
-    risk = PreviewClient(url); risk.bootstrap(); risk.call('profile', {'profile': 'risk'})
-    risk.call('swaps/book', {**body, 'operationId': str(uuid4())}, expected=403)
+    c.call('profile', {'profile': 'risk'})
+    c.call('swaps/book', {**body, 'operationId': str(uuid4())}, expected=403)
+    c.call('profile', {'profile': 'trader'})
     check('read-only risk authority cannot book', True)
     for curve, strike, expected in [('daily_gas', '3', '16'), ('daily_power', '40', '160')]:
         daily = next(i for i in catalog['indices'] if i['curve'] == curve)

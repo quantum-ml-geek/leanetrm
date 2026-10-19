@@ -18,7 +18,8 @@ def run_checks(url, run_id, owned_root):
     check('the standard example contains December 15 through 18 only', [f['at'][:10] for f in frames] == ['2020-12-15','2020-12-16','2020-12-17','2020-12-18'])
     view = {'snapshotId': frames[0]['id'], 'convention': 'fixed_total_cash_execution_pnl_v1', 'knowledgeMode': 'current'}
     earlier = client.call('futures/holdings', view)['context']
-    first = seed_positions(url, run_id, owned_root)
+    first = seed_positions(url, run_id, owned_root, client)
+    # A repeated load is a new loader run, so it seeds from a session of its own.
     second = seed_positions(url, run_id, owned_root)
     ids = {r['tradeId'] for r in first}
     check('repeated seeding returns the same eight committed trades', first == second and len(ids) == 8)

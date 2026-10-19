@@ -27,14 +27,14 @@ def execution_frames(workspace):
     return frames
 
 
-def seed_positions(url, run_id, owned_root):
+def seed_positions(url, run_id, owned_root, client=None):
     root = Path(owned_root).resolve()
     if not (root/'data/postmaster.pid').is_file() or (root/'.openetrm-preview').read_text() != run_id:
         raise ValueError('Seeding requires the matching owner marker and live disposable database.')
     manifest = json.loads((root/'manifest.json').read_text())
     if (manifest.get('mode'), manifest.get('catalogId'), manifest.get('revisionId'), manifest.get('workspaceId'), manifest.get('example', {}).get('curve')) != ('local-synthetic-preview', CAT, REV, WORKSPACE, 'local_power'):
         raise ValueError('Only the explicitly supported standard synthetic example can be populated.')
-    client = PreviewClient(url)
+    client = client or PreviewClient(url)
     if client.call('health') != {'mode':'local-synthetic-preview','runId':run_id}:
         raise ValueError('The HTTP application does not match the owned preview.')
     boot = client.bootstrap()
