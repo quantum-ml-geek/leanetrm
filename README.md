@@ -57,6 +57,8 @@ existing database.
 
 ## Docs
 
+- [Public website source and checks](site/README.md)
+
 **Design**
 
 - [Architecture and domain contracts](docs/architecture.md)
