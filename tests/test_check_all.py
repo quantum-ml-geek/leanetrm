@@ -45,6 +45,7 @@ class CheckAllTests(unittest.TestCase):
         self.assertEqual(schedule_commands[2][-2:], ['--', '--preview-data'])
         self.assertTrue(any('build' in c and 'src/OpenEtrm.Worker/OpenEtrm.Worker.csproj' in c for c in commands))
         self.assertTrue(any('tools/check_automation.py' in c and '--dotnet' in c for c in commands))
+        self.assertIn(['node','--test','tests/browser/owned-browser.test.mjs'],commands)
         self.assertTrue(any('--execution-check' in c for c in commands))
         self.assertTrue(any('--jobs-check' in c and '--browser-check' in c for c in commands))
         for command in commands:
