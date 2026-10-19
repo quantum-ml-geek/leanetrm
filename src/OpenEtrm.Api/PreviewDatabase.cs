@@ -38,6 +38,7 @@ public sealed class PreviewDatabase : IAsyncDisposable
         "delivery_profiles", "settlement_targets", "cash_rounding_conventions",
         "futures_products", "futures_series", "futures_milestones", "futures_lot_resolutions", "futures_product_terms", "futures_basis_settlements"];
     private static readonly string[] DefinitionTables = ["revisions", "contracts", "curves", "series", "curve_members", "curve_inputs", "constituent_mappings", "rate_curves", "rate_curve_points", "revision_periods"];
+    private static readonly string[] UnitTables = ["dimensions", "units", "unit_conversions", "commodities", "measurement_bases", "quantity_specifications"];
 
     public PreviewDatabase(string root,string manifestName="manifest.json", HostedConfiguration? hosted=null,Func<string>? hostedSession=null)
     {
@@ -119,7 +120,7 @@ SELECT NOT(rolsuper OR rolbypassrls OR rolcreatedb OR rolcreaterole) AND pg_has_
         }
     }
 
-    public async Task<PreviewData> Read(NpgsqlConnection connection, CancellationToken ct,Guid? selectedRevision=null,PreviewData? sharedReferences=null)
+    public async Task<PreviewData> Read(NpgsqlConnection connection, CancellationToken ct,Guid? selectedRevision=null,PreviewData? sharedReferences=null,ImmutableArray<Guid>? observationIds=null)
     {
         if(selectedRevision is {} requested&&requested!=Manifest.RevisionId&&!(Manifest.SwapMarkets??[]).Any(m=>m.RevisionId==requested))throw new PreviewDeniedException();
         var selectedManifest=selectedRevision is {} id?Manifest with {RevisionId=id}:Manifest;
@@ -143,14 +144,38 @@ SELECT NOT(rolsuper OR rolbypassrls OR rolcreatedb OR rolcreaterole) AND pg_has_
             foreach(var table in ReferenceTables)loaded[table]=await Rows(connection,$"SELECT row_to_json(t)::text FROM(SELECT * FROM ref_data.{table} WHERE catalog_id=$1 AND revision_id=$2)t",[selectedManifest.ReferenceCatalogId,selectedManifest.ReferenceRevisionId],ct);
             references=loaded;
         }
-        var observations = await Rows(connection, "SELECT row_to_json(t)::text FROM (SELECT * FROM market_data.observations WHERE catalog_id=$1 AND definition_revision_id=$2 ORDER BY observed_at,received_at,id) t", [selectedManifest.CatalogId, selectedManifest.RevisionId], ct);
+        var observations = observationIds is {} pins
+            ? await ReadObservationFacts(connection, selectedManifest, pins, ct)
+            : await Rows(connection, "SELECT row_to_json(t)::text FROM (SELECT * FROM market_data.observations WHERE catalog_id=$1 AND definition_revision_id=$2 ORDER BY observed_at,received_at,id) t", [selectedManifest.CatalogId, selectedManifest.RevisionId], ct);
         return new PreviewData(selectedManifest, definitions, references, observations);
+    }
+
+    private static Task<ImmutableArray<JsonElement>> ReadObservationFacts(NpgsqlConnection connection,PreviewManifest manifest,ImmutableArray<Guid> pins,CancellationToken ct)
+    {
+        if(pins.IsEmpty)return Task.FromResult(ImmutableArray<JsonElement>.Empty);
+        // Both the anchor pins and their same-fact versions pass the bound RLS
+        // and historical context. This does not select a newer pricing input.
+        return Rows(connection,"""
+            WITH pins AS MATERIALIZED (
+                SELECT DISTINCT series_id,source_code,source_event_id,observed_at,role
+                FROM market_data.observations
+                WHERE catalog_id=$1 AND definition_revision_id=$2 AND id=ANY($3::uuid[])
+            )
+            SELECT row_to_json(t)::text FROM (
+                SELECT o.* FROM market_data.observations o
+                WHERE o.catalog_id=$1 AND o.definition_revision_id=$2
+                  AND EXISTS(SELECT 1 FROM pins p WHERE
+                    (p.series_id,p.source_code,p.source_event_id,p.observed_at,p.role)=
+                    (o.series_id,o.source_code,o.source_event_id,o.observed_at,o.role))
+                ORDER BY o.observed_at,o.received_at,o.id
+            ) t
+            """,[manifest.CatalogId,manifest.RevisionId,pins.ToArray()],ct);
     }
 
     public async Task<UnitCatalogData> ReadUnitCatalog(NpgsqlConnection connection,PreviewData selected,CancellationToken ct)
     {
         if(Manifest.UnitCatalog is not {} configured)
-            return new(selected.ReferenceRevision,selected.References);
+            return new(selected.ReferenceRevision,UnitTables.ToImmutableDictionary(table=>table,table=>selected.References[table]));
         var revision=new ReferenceRevision(Manifest.ReferenceCatalogId,configured.ReferenceRevisionId);
         // This exact published bundle must be visible under the same bound
         // effective/knowledge context. Never substitute the current unit version.
@@ -158,7 +183,7 @@ SELECT NOT(rolsuper OR rolbypassrls OR rolcreatedb OR rolcreaterole) AND pg_has_
         if(visible.Length!=1 || visible[0].Id("reference_catalog_id")!=revision.CatalogId || visible[0].Id("reference_revision_id")!=revision.RevisionId)
             throw new MarketDataException("unit_catalog","The exact configured unit catalog is unavailable in this context.");
         var references=ImmutableDictionary.CreateBuilder<string,ImmutableArray<JsonElement>>();
-        foreach(var table in new[]{"dimensions","units","unit_conversions","commodities","measurement_bases","quantity_specifications"})
+        foreach(var table in UnitTables)
             references.Add(table,await Rows(connection,$"SELECT row_to_json(t)::text FROM(SELECT * FROM ref_data.{table} WHERE catalog_id=$1 AND revision_id=$2)t",[revision.CatalogId,revision.RevisionId],ct));
         return new(revision,references.ToImmutable());
     }
@@ -171,7 +196,7 @@ SELECT NOT(rolsuper OR rolbypassrls OR rolcreatedb OR rolcreaterole) AND pg_has_
             await using var available=ScheduleStore.Command(connection,"SELECT count(*) FROM market_data.revisions WHERE catalog_id=$1 AND id=$2",Manifest.CatalogId,market.RevisionId);
             if((long)(await available.ExecuteScalarAsync(ct))! == 0)continue;
             var seed=market.Frames.SingleOrDefault(f=>f.At==selected.At)??throw new MarketDataException("swap_context","No explicit daily-market frame exists for the selected As of time.");
-            var data=await Read(connection,ct,market.RevisionId,sharedReferences);
+            var data=await Read(connection,ct,market.RevisionId,sharedReferences,seed.ObservationIds.ToImmutableArray());
             var frame=new InputFrame(selected.Id,"Selected swap market",selected.At,seed.ObservationIds.ToImmutableArray(),seed.CurveContracts.ToImmutableDictionary(p=>p.Key,p=>p.Value.ToImmutableArray()),selected.ContextId);
             result.Add((data,data.SelectPinned(frame)));
         }

@@ -1221,6 +1221,20 @@ versions are part of schedules, valuation manifests and result identities.
 
 ## 8. Performance and result reuse
 
+Business pages have a target of less than one second from navigation to usable
+authorized data. Measure initial application readiness separately from subsequent
+page navigation, and include price rows, charts and populated grids rather than
+only the document shell. Record the workload, network conditions and measured
+distribution; a fast synthetic run does not establish an unlimited data envelope.
+
+Navigation uses an authorized catalog read without observation history.
+Evaluation can explicitly request the selected frame's source observations and
+same-fact correction versions. Both anchor pins and returned versions retain the
+same RLS and historical cutoff; calculations still consume the exact frame pins.
+The browser replaces source rows with that response and formats only displayed
+results through the managed formatter. There is no cross-request authority cache.
+The full workspace read remains available for existing inspection clients.
+
 Optimize duplicate work and data movement before distributing services:
 
 - Load a complete consistent authorized input manifest in bounded batches.

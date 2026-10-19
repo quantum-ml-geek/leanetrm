@@ -784,6 +784,24 @@ reads and actual curve/pricer execution counts. Agree measurable budgets after
 collecting the first representative results. Measure core CPU work separately
 from database, serialization and end-to-end latency.
 
+Business-page readiness has a less-than-one-second target (D142), including the
+authorized data a person can use. The owned `tools/benchmark_pages.py` workload
+measures startup, all navigation views and curve pricing with explicit network
+latency, retained observation counts, contracts and booked positions. It can
+enforce that budget separately from ordinary correctness checks. Broader
+concurrency and larger reference/contract workloads still require qualification.
+
+The five-sample bounded workload with 12,420 observations, 105 series, 92 contract
+definitions, 12 curves and 24 trades (16 swaps) passed that budget for all ten
+navigation views. It retains 160 unique initial observation pins; the priced curve
+evaluates 54 constituents with zero risk scenarios. With 40 ms browser latency,
+10 MiB/s download and 5 MiB/s upload, initial readiness was 816 ms, curve pricing
+p95 was 174 ms and the slowest page p95 was 959 ms. This run used stock PostgreSQL
+16.14, .NET 10.0.402 and Chrome 155 on macOS 26.6 arm64; API resident memory was
+321,696 KiB at the reporting instant, not a peak measurement. Its 190 reference
+rows and single client do not establish larger-catalog or concurrency limits.
+Reports retain source and frozen API/web artifact identities outside the repository.
+
 Acceptance:
 
 - Results match the independent full-repricing reference for the supported domain.

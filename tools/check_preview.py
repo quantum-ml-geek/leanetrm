@@ -15,6 +15,7 @@ def run_checks(url):
     c=Client();boot=c.bootstrap()
     check('synthetic preview boundary is explicit',boot['mode']=='local-synthetic-preview' and boot['profile'] is None)
     c.call('workspace',expected=403);check('no identity does not read workspace')
+    c.call('workspace/catalog',expected=403);check('navigation catalog requires current identity')
     c.call('profile',{'profile':'viewer'},headers={'X-Preview-CSRF':'invalid'},expected=400);check('CSRF token enforced')
     c.call('profile',{'profile':'viewer'},headers={'Origin':'https://untrusted.invalid'},expected=403);check('foreign origin rejected')
     c.call('health',headers={'Host':'untrusted.invalid'},expected=403);check('host boundary enforced')
@@ -127,6 +128,8 @@ def run_checks(url):
     check_risk(Client,check)
     from check_tou_products import run_checks as check_tou_products
     check_tou_products(Client,check)
+    from check_page_reads import run_checks as check_page_reads
+    check_page_reads(c,check)
     print(f'{passed} preview HTTP checks passed.',flush=True)
     return workspace
 
