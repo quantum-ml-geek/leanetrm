@@ -1,7 +1,7 @@
 """HTTP checks against a newly owned synthetic preview; invoked by run_preview.py."""
 from preview_client import PreviewClient
 
-def run_checks(url,query,manifest):
+def run_checks(url,query,manifest,direct_reads):
     passed=0
     class Client(PreviewClient):
         def __init__(self):
@@ -130,7 +130,7 @@ def run_checks(url,query,manifest):
     from check_tou_products import run_checks as check_tou_products
     check_tou_products(Client,check)
     from check_page_reads import run_checks as check_page_reads
-    check_page_reads(c,check)
+    check_page_reads(c,check,direct_reads)
     from check_reference_reads import run_checks as check_reference_reads,run_scope_checks
     check_reference_reads(c,check)
     run_scope_checks(c,check,query,manifest)
