@@ -835,6 +835,13 @@ measures startup, all navigation views and curve pricing with explicit network
 latency, retained observation counts, contracts and booked positions. It can
 enforce that budget separately from ordinary correctness checks. Broader
 concurrency and larger reference/contract workloads still require qualification.
+Startup requests identity metadata without the unused frame projection; the
+default full bootstrap remains available. After TypeScript checks, the pinned
+build-only esbuild dependency bundles the presentation entry to avoid repeated
+module discovery requests. Chart and table vendors retain their separate modules
+and license notices. Blotter navigation
+requests its explicit booking directory; priced futures entry loads only when
+selected, together with a refreshed report under the same context (D143).
 
 The five-sample bounded workload with 10,190 reference rows, 12,420 observations,
 105 series, 92 contract definitions, 12 curves and 24 trades (16 swaps) passed that

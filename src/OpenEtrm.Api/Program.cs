@@ -159,7 +159,7 @@ void MapPreview(RouteGroupBuilder api,PreviewDatabase database,string cookieName
 var sessions=new ConcurrentDictionary<string,PreviewSession>();
 var marketReads=new MarketReads(database);
 api.MapGet("/health",()=>new {mode=database.Manifest.Mode,runId});
-api.MapGet("/bootstrap",async (HttpContext context,IAntiforgery antiforgery)=>
+api.MapGet("/bootstrap",async (HttpContext context,IAntiforgery antiforgery,bool includeFrames=true)=>
 {
     foreach(var item in sessions.Where(x=>DateTimeOffset.UtcNow-x.Value.Created>TimeSpan.FromMinutes(30)).ToArray()) sessions.TryRemove(item.Key,out _);
     PreviewSession session;
@@ -176,7 +176,7 @@ api.MapGet("/bootstrap",async (HttpContext context,IAntiforgery antiforgery)=>
         var identity=hosted is null?null:HostedAuthentication.Current(context);
         if(identity is not null){if(session.Profile is not null&&session.Profile!=identity.Subject)throw new PreviewDeniedException();session.Profile=identity.Subject;}
         return new {mode=database.Manifest.Mode,runId,notice=hosted is null?"Disposable synthetic workspace. Test identities are simulations, not production sign-in.":"Private pilot workspace. Financial capability is limited to the supported product conventions.",profiles=identity is null?profiles:profiles.Take(0).Append(new{id=identity.Subject,name=identity.Name,description="Signed-in account"}).ToArray(),
-        profile=session.Profile,customProfiles=session.CustomProfiles.Select(p=>new{id=p.Key,name=p.Value}).ToArray(),csrfToken=antiforgery.GetAndStoreTokens(context).RequestToken,frames=session.Frames.Values.Where(f=>f.ContextId==session.MarketContext?.ContextId).OrderBy(f=>f.At).ToArray(),
+        profile=session.Profile,customProfiles=session.CustomProfiles.Select(p=>new{id=p.Key,name=p.Value}).ToArray(),csrfToken=antiforgery.GetAndStoreTokens(context).RequestToken,frames=includeFrames?session.Frames.Values.Where(f=>f.ContextId==session.MarketContext?.ContextId).OrderBy(f=>f.At).ToArray():[],
         catalogId=database.Manifest.CatalogId,tenantId=database.Manifest.TenantId,workspaceId=database.Manifest.WorkspaceId}; }
     finally { session.Gate.Release(); }
 });
@@ -624,8 +624,13 @@ api.MapPost("/futures/blotter",(HttpContext c,FuturesBlotterRequest body)=>Futur
 api.MapPost("/futures/holdings",(HttpContext c,FuturesReadRequest body)=>FuturesRead(c,body,futuresStore.Holdings));
 var swapStore=new SwapStore(database);
 var tradingBlotter=new TradingBlotter(database.Manifest,futuresStore,swapStore);
-api.MapPost("/trading/workspace",(HttpContext c,FuturesBlotterRequest body)=>FuturesRead(c,body.Context??throw new MarketDataException("blotter_view","Supply the selected context."),
- async(connection,data,frame,ct)=>new{catalog=await futuresStore.Catalog(connection,data,frame,ct),blotter=await tradingBlotter.Read(connection,data,frame,body.View,ct)},expectedConvention:TradingBlotter.Convention,combinedWorkspace:true));
+api.MapPost("/trading/workspace",(HttpContext c,TradingWorkspaceRequest body)=>
+{
+ if(body.BookingCatalog is not(null or "directory" or "priced_contracts"))throw new MarketDataException("blotter_view","Choose an available booking catalog projection.");
+ return FuturesRead(c,body.Context??throw new MarketDataException("blotter_view","Supply the selected context."),
+  async(connection,data,frame,ct)=>new{catalog=body.BookingCatalog=="directory"?await futuresStore.Directory(connection,ct):await futuresStore.Catalog(connection,data,frame,ct),
+   blotter=await tradingBlotter.Read(connection,data,frame,body.View,ct)},expectedConvention:TradingBlotter.Convention,combinedWorkspace:true);
+});
 api.MapPost("/trading/blotter",(HttpContext c,FuturesBlotterRequest body)=>FuturesRead(c,body.Context??throw new MarketDataException("blotter_view","Supply the selected context."),
  (connection,data,frame,ct)=>tradingBlotter.Read(connection,data,frame,body.View,ct),expectedConvention:TradingBlotter.Convention));
 api.MapPost("/swaps/catalog",(HttpContext c,FuturesReadRequest body)=>FuturesRead(c,body,swapStore.Catalog,expectedConvention:SwapStore.Convention));

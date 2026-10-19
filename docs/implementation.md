@@ -837,7 +837,15 @@ checks only. No deployment, commit or push has been performed.
 
 The TypeScript client in `web/` and ASP.NET host in `src/OpenEtrm.Api/` are an
 explicit **local synthetic preview**, not production authentication. Install the
-SDK pinned in `global.json`, Node with npm, and stock PostgreSQL 16+ binaries. Run:
+SDK pinned in `global.json`, Node with npm, and stock PostgreSQL 16+ binaries.
+
+The browser build typechecks with TypeScript and uses the pinned build-only
+esbuild 0.28.2 dependency to bundle the application entry. This reduces module
+requests during startup. The existing chart and table vendor modules retain
+their separate files and license notices; the deployed application needs no
+Node runtime or bundler.
+
+Run:
 
 ```sh
 python3 tools/run_preview.py \

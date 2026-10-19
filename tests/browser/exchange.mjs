@@ -15,5 +15,6 @@ export async function run({command,evaluate,wait,click,set,persona,check,shot,id
  await check('unconfirmed daily maturities are excluded from trading',"![...document.querySelector('#futures-contract').options].some(o=>o.value.includes('ice_css')||o.value.includes('ice_pda'))");
  await shot('exchange-contract-entry');
  await command('Page.navigate',{url:url+'/'});await wait("document.querySelectorAll('.curve-button').length>0&&"+idle);await persona('trader');await click('#example');await click('#nav-futures');
+ await click('#futures-new');await click('#trade-kind-future');
  await check('returning to the original example restores its independent dated catalog',"document.querySelector('#example-dataset').value==='baseline'&&document.querySelector('#futures-contract').options.length===7");
 }

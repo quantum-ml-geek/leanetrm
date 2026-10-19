@@ -21,6 +21,9 @@ public sealed record FuturesBlotterView(string? Mode,ImmutableArray<Guid> BookId
 [System.Text.Json.Serialization.JsonUnmappedMemberHandling(System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow)]
 public sealed record FuturesBlotterRequest(FuturesReadRequest Context,FuturesBlotterView View);
 
+[System.Text.Json.Serialization.JsonUnmappedMemberHandling(System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow)]
+public sealed record TradingWorkspaceRequest(FuturesReadRequest Context,FuturesBlotterView View,string? BookingCatalog=null);
+
 public sealed partial class FuturesStore(PreviewManifest manifest)
 {
     private static MarketDataException Error(string code,string message)=>new(code,message);
@@ -54,13 +57,26 @@ public sealed partial class FuturesStore(PreviewManifest manifest)
             WHERE b.catalog_id=$1 ORDER BY b.name,b.id)r
             """,[manifest.CatalogId],ct);
 
+    private sealed record BookingDirectory(ImmutableArray<JsonElement> Books,JsonElement BookingActor,
+        ImmutableArray<TradeParties.Choice> LegalEntities,ImmutableArray<TradeParties.Choice> Counterparties);
+    private async Task<BookingDirectory> ReadBookingDirectory(NpgsqlConnection connection,CancellationToken ct)=>
+        new(await Books(connection,ct),await TradeAnnotations.Actor(connection,manifest.CatalogId,ct),
+            await TradeParties.Catalog(connection,manifest.CatalogId,true,ct),await TradeParties.Catalog(connection,manifest.CatalogId,false,ct));
+
+    public async Task<object> Directory(NpgsqlConnection connection,CancellationToken ct)
+    {
+        var directory=await ReadBookingDirectory(connection,ct);
+        return new {kind="directory",directory.Books,directory.BookingActor,directory.LegalEntities,directory.Counterparties,convention=manifest.FuturesConvention};
+    }
+
     public async Task<object> Catalog(NpgsqlConnection connection,PreviewData data,InputFrame frame,CancellationToken ct)
     {
         var contracts=data.Definitions["curve_members"].Where(m=>data.ContractRows(m.Id("contract_id")).Any(c=>c.Kind==ContractKind.Future))
             .Select(m=>Binding(data,m.Text("curve_code"),m.Id("contract_id"),m.Id("contract_id"),manifest.FuturesConvention))
             .Where(s=>s.EligibleFrom<=frame.At&&frame.At<s.Contract.Expiry).OrderBy(s=>s.Contract.DeliveryFrom).ToArray();
         var prices=contracts.Length==0?null:data.Model.Build(data.Snapshot(frame),contracts.Select(s=>s.Market).ToImmutableArray()).Values.ToLookup(v=>v.Request);
-        return new {books=await Books(connection,ct),bookingActor=await TradeAnnotations.Actor(connection,manifest.CatalogId,ct),legalEntities=await TradeParties.Catalog(connection,manifest.CatalogId,true,ct),counterparties=await TradeParties.Catalog(connection,manifest.CatalogId,false,ct),contracts=contracts.Select(s=>
+        var directory=await ReadBookingDirectory(connection,ct);
+        return new {kind="priced_contracts",directory.Books,directory.BookingActor,directory.LegalEntities,directory.Counterparties,contracts=contracts.Select(s=>
         {
             var series=One(data.ReferenceRows("futures_series","code",s.Series.Key.Code));
             var product=One(data.ReferenceRows("futures_products","code",series.Text("product_code")));
