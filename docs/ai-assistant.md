@@ -754,9 +754,10 @@ reading turn's source set, so later notes inherit them; it reaches a model only 
 it passes the replay and source-access checks and the turn's grant lists every
 permission those sources used (Search notes otherwise omits it); it reaches a panel or
 the Notes view only for a user who passes the replay recheck on all of them; and it
-always appears labeled with its context, never as current values. Text a user typed is not a
-source, so a note reaches anyone but its author only after the author confirms its
-exact text in the panel. Phase 1 already stores what this needs: source sets as exact
+always appears labeled with its context, never as current values. Text a user typed is
+not a source, so a note reaches anyone but its author only after the author confirms
+its exact text in the panel. Whether an agent notebook is also kept per user is
+decided with that design. Phase 1 already stores what this needs: source sets as exact
 tool-read ids with access rows, and the pinned-context record.
 
 **Phase 3 (hosted baseline)** adds agent contexts bound to the account session, hosted
@@ -874,7 +875,8 @@ synthetic data and the fake provider. The cases that coverage does not imply:
 
 Owner decisions become D rows when recorded. Every other rule in this document is a
 design call, recorded as P rows by section and open to correction until the owner
-approves it. Phase 3's four hosted gates are undecided.
+approves it. Phase 3's four hosted gates are undecided. [decisions.md](decisions.md)
+records this section as D149–D156 and P24–P38, with the open-item updates below.
 
 **AGENTS.md exception:** model-provider vendor names (Anthropic, OpenAI, Google, xAI,
 Meta) and their public API identifiers may appear in source, documentation, fixtures
@@ -893,9 +895,9 @@ a new grant when provider or model changes, under a maximum duration; `ReadMarke
 for model administrators through an operator-assigned role; replay on the user's own
 current access; a browser-local agent choice and one agent per conversation; Meta
 visible but not enableable until confirmed; answers as completed turns, other turns'
-cost on its own line; Usage days in a viewer-picked zone over half-open ranges; the
-background indicator and unread History marker; and a phase 2 common notebook
-alongside agent notebooks.
+cost on its own line; Usage days in a viewer-picked zone prefilled from Profile, over
+half-open ranges; the background indicator and unread History marker; and a phase 2
+common notebook alongside agent notebooks.
 
 The agent reader role amends D42 (seven role templates).
 
