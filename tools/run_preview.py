@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import secrets
 import shlex
 import shutil
 import signal
@@ -38,14 +39,17 @@ def main():
     parser.add_argument('--with-exchange',action='store_true',help='Publish the independent exchange futures dataset in this newly owned database')
     parser.add_argument('--party-check', action='store_true', help='Run party-editor integration checks in an owned fixture')
     parser.add_argument('--identity-check', action='store_true', help='Run economic-key integration checks in the owned standard fixture, then clean up')
+    parser.add_argument('--assistant-check',action='store_true',help='Qualify page-assistant provider administration in an owned fixture')
     parser.add_argument('--browser-check',action='store_true',help='Run checked-in browser scenarios in the newly owned standard fixture')
     parser.add_argument('--browser',type=Path,help='Installed Chromium-compatible executable; used only with --browser-check')
     parser.add_argument('--example', choices=['standard','mixed-gas'], default='standard', help='Explicit synthetic dataset')
     args = parser.parse_args()
-    if args.identity_check or args.unit_check or args.party_check or args.exchange_check or args.booking_check or args.draft_check or args.hosted_check or args.jobs_check or args.execution_check:
+    if args.identity_check or args.unit_check or args.party_check or args.exchange_check or args.booking_check or args.draft_check or args.hosted_check or args.jobs_check or args.execution_check or args.assistant_check:
         args.check = True
         if args.example != 'standard' or args.identity_check and args.browser_check:
             parser.error('--identity-check requires the standard fixture without --browser-check')
+        if args.assistant_check and args.browser_check:
+            parser.error('--assistant-check has no browser scenarios yet; omit --browser-check')
     if not 0 <= args.port <= 65535:
         parser.error('Port must be between 0 and 65535')
     if args.browser_check and (not args.check or args.example!='standard' or args.browser is None or not args.browser.is_file()):
@@ -84,6 +88,13 @@ def main():
         raise KeyboardInterrupt
     signal.signal(signal.SIGTERM,stop_signal)
     try:
+        # Model-provider keys are sealed under two private keys made once per disposable database
+        # and passed to every API start (docs/ai-assistant.md §5.2); nothing is generated at API start.
+        credential_keys={}
+        for variable,name in (('OPENETRM_PREVIEW_CREDENTIAL_KEY','credential.key'),('OPENETRM_PREVIEW_CREDENTIAL_RETRY_KEY','credential-retry.key')):
+            with os.fdopen(os.open(temporary/name,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600),'wb') as key_file:
+                key_file.write(secrets.token_bytes(32))
+            credential_keys[variable]=str(temporary/name)
         initialized=run([bins['initdb'],'-D',data,'--auth-local=trust','--auth-host=reject','--encoding=UTF8','--locale=C','--no-instructions','--username=preview_owner'])
         if initialized.returncode:
             raise RuntimeError(initialized.stderr)
@@ -182,7 +193,8 @@ def main():
         app_env={**env,'OPENETRM_PREVIEW_ROOT':str(temporary),'OPENETRM_PREVIEW_PORT':str(port),
                  'OPENETRM_PREVIEW_WEB':str(temporary/'web'),
                  'OPENETRM_PREVIEW_RUNTIME':f'Host={temporary};Port=55439;Database=postgres;Username=preview_runtime;SSL Mode=Disable',
-                 'OPENETRM_PREVIEW_AUTHENTICATOR':f'Host={temporary};Port=55439;Database=postgres;Username=preview_authenticator;SSL Mode=Disable'}
+                 'OPENETRM_PREVIEW_AUTHENTICATOR':f'Host={temporary};Port=55439;Database=postgres;Username=preview_authenticator;SSL Mode=Disable',
+                 **credential_keys}
         # Exercise transport independently of the launcher's UTC psql sessions.
         if args.check:
             app_env['PGTZ']='America/Chicago'
@@ -270,6 +282,9 @@ def main():
                     target.write_text(json.dumps({'suite':'business_browser_v1','url':url,'runId':run_id}))
                     browser_process=subprocess.Popen(['node',str(ROOT/'tests/browser/run.mjs'),str(target),str(args.browser.resolve()),'--units'],cwd=ROOT,env=env,start_new_session=True)
                     if browser_process.wait(timeout=60):raise RuntimeError('Owned unit browser checks failed')
+            elif args.assistant_check:
+                from check_model_providers import run_checks as check_model_providers
+                check_model_providers(url,query,psql,manifest,temporary,app_env,dotnet)
             elif args.identity_check:
                 from check_units_preview import run_checks as check_units
                 check_units(url)

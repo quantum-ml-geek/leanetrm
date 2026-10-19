@@ -97,6 +97,10 @@ app.Use(async (context,next)=>
             PostgresException p when p.SqlState=="P0001" && p.MessageText=="admin_conflict" => (409,"admin_conflict","This account or request changed. Reload administration before editing."),
             PostgresException p when p.SqlState=="P0001" && p.MessageText is "last_administrator" or "self_access_change" or "admin_input" or "admin_limit" => (422,p.MessageText,"The administrative change was rejected. Keep a current administrator and supply explicit account details and roles."),
             PostgresException p when p.SqlState=="23505" && apiPath.StartsWithSegments("/api/admin") => (409,"admin_conflict","That account or request already exists. Reload administration."),
+            ModelAdministrationException m => (422,m.Code,m.Message),
+            PostgresException p when p.SqlState=="P0001" && p.MessageText=="model_admin_conflict" || p.SqlState=="23505" && context.Items.ContainsKey("model_admin_attempted")
+                => (409,"model_admin_conflict","This provider or request changed. Reload Settings › AI and replace the key under a new request."),
+            PostgresException p when p.SqlState=="P0001" && p.MessageText=="model_admin_input" => (422,p.MessageText,"Supply a supported provider, a request identity and the version you are replacing."),
             PostgresException p when p.SqlState=="P0001" && p.MessageText=="amount_format_conflict" => (409,"amount_format_conflict","This deal display changed. Reload its precision controls before saving."),
             PostgresException p when p.SqlState=="P0001" && p.MessageText is "amount_format" or "futures_lot" => (422,p.MessageText,"Supply exact supported contract lot terms or deal display precision."),
             PostgresException p when p.SqlState=="23505" => (409,"revision_conflict","This observation has already been revised. Inspect its history and explicitly select the intended revision."),
@@ -104,6 +108,8 @@ app.Use(async (context,next)=>
             PostgresException p when p.SqlState=="42501" => (403,"access_denied","Database permissions rejected this operation."),
             PostgresException p when p.SqlState is "23514" or "55000" => (422,"definition_rejected","The value or operation violates an explicit database specification."),
             PostgresException when context.Items.ContainsKey("administration_attempted") => (503,"administration_outcome_unknown","The administrative outcome cannot be confirmed. Retain the original request and inspect the audit before retrying."),
+            Exception when context.Items.ContainsKey("model_admin_attempted") && e is NpgsqlException or OperationCanceledException
+                => (503,"model_admin_outcome_unknown","The key replacement outcome is unknown. Check the provider's credential and audit, or retry with the key under the same request."),
             OperationCanceledException when context.Items.ContainsKey("party_attempted") => (503,"party_outcome_unknown","The party save outcome is unknown. Inspect versions or retry the original request identity."),
             NpgsqlException when context.Items.ContainsKey("party_attempted") => (503,"party_outcome_unknown","The party save outcome is unknown. Inspect versions or retry the original request identity."),
             OperationCanceledException when context.Items.ContainsKey("administration_attempted") => (503,"administration_outcome_unknown","The administrative outcome is unknown. Retain the request identity and inspect the audit before retrying the exact command."),
@@ -729,6 +735,18 @@ async Task<IResult> AdminMutation(HttpContext c,object body,string action)=>awai
 });
 api.MapPost("/admin/create",(HttpContext c,AdminCreate body)=>hosted is null?AdminMutation(c,body,"create"):Task.FromResult<IResult>(Results.Json(new{code="access_denied",message="Hosted accounts require a private invitation."},statusCode:403)));
 api.MapPost("/admin/update",(HttpContext c,AdminUpdate body)=>AdminMutation(c,body,"update"));
+// Settings › AI administers the page assistant, which exists only in the local preview (P37).
+if(hosted is null)
+{
+    var modelProviders=new ModelProviders(CredentialCustody.FromEnvironment(),database.Manifest);
+    api.MapGet("/settings/ai/providers",(Func<HttpContext,Task<IResult>>)(c=>Locked(c,session=>database.WithIdentity(Profile(session),"ManageModelProviders",
+        async(connection,ct)=>Results.Ok(await modelProviders.Directory(connection,ct)),c.RequestAborted))));
+    api.MapPost("/settings/ai/providers/key",(HttpContext c,ReplaceKeyRequest body)=>Locked(c,session=>
+    {
+        c.Items["model_admin_attempted"]=true;
+        return database.WithIdentity(Profile(session),"ManageModelProviders",async(connection,ct)=>Results.Ok(await modelProviders.ReplaceKey(connection,body,ct)),c.RequestAborted);
+    }));
+}
 }
 var files=new PhysicalFileProvider(webRoot);
 app.UseDefaultFiles(new DefaultFilesOptions {FileProvider=files});

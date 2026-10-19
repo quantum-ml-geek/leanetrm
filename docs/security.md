@@ -35,7 +35,7 @@ grants; these never establish a production login boundary.
 | Risk Analyst | Read, run valuations/scenarios and delegate within authority |
 | Market Data Editor | Read, import observations, write market/reference drafts and delegate within authority |
 | Market Data Approver | Read, freeze definitions and approve/publish qualified changes |
-| Access Administrator | Manage identities/access and create scoped delegations |
+| Access Administrator | Manage identities/access and model providers, and create scoped delegations |
 
 Migration 0011 adds explicit `ReadTrades` to Trader and Risk Analyst. The bounded
 futures booking, holdings and actor-owned request-status operations are implemented;
@@ -311,3 +311,21 @@ cluster admission serializes workload launch and maintenance; prepared unremoved
 work prevents maintenance, including uncertain outcomes. The controller has
 privileged mTLS manager access; image processes receive no credentials. This is
 not full agent credential exchange or qualified hostile-code isolation.
+
+## Page-assistant provider administration
+
+Migration 0042 adds `ManageModelProviders`, held by Access Administrator, for the
+page assistant's Settings › AI ([ai-assistant.md](ai-assistant.md) §5). Provider,
+credential and audit tables force RLS with no runtime table grants; three definer
+operations recheck the permission and refuse delegated agent contexts, so an agent
+never administers providers or keys. A provider key is write-only. The API
+validates it, digests it with HMAC-SHA-256 under a private retry key, bound to the
+tenant, workspace, request identity and vendor, and seals it with AES-GCM under a
+private key-encryption key, bound to the provider identity, vendor and credential
+version. Only nonce, ciphertext, tag and last four characters are stored. The audit
+keeps a redaction marker and the digest, so an identical retry returns its original
+outcome and any other reuse of the request identity in that workspace conflicts.
+The preview runner creates both 32-byte key files, readable only by their owner,
+once per database. A key file that is unset, missing, a symbolic link, of another
+length or open to anyone else, and a credential that fails authentication, are
+`credential_unavailable`. These routes do not exist under `--hosted-pilot` (P37).
