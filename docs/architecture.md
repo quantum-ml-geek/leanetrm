@@ -756,6 +756,18 @@ for these relationships; no free-text or arbitrary JSON reference substitutes.
 See [reference-data.md](reference-data.md) for futures accuracy, public placeholders,
 settlement semantics, provenance and the initial immutable revision schema.
 
+Display authoring (D164) creates an immutable metadata revision with a separate,
+explicit current-presentation activation. The backend proves that every reference
+key and non-display field remains identical. A presentation response identifies
+both the original source revision and the applied display revision; it never
+rebinds economic references, prices or trades. Historical contexts omit this
+current overlay and cannot read future edit requests. Financial-term editing and
+the associated migration of curves and prices remain separate work.
+Edit receipts carry a single typed reference-item key with source and target row
+foreign keys. Display activation also pins the exact source in its foreign key to
+the edit. A single database field descriptor drives both editor metadata and SQL
+field admission; JSON request receipts are not reference relationships.
+
 A primitive risk factor is an independently shockable market input. Its identity
 includes the market definition, actual dated contract or delivery bucket, quote
 kind and units. Observations retain source, observation time, availability

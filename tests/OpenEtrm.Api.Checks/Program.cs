@@ -95,5 +95,20 @@ if(args.Length==1)
     var listed=catalog.GetProperty("curves").EnumerateArray().Select(c=>c.GetProperty("code").GetString()).ToArray();
     if(listed.Contains("local_power_all_in") || listed.Length==0)throw new Exception("Unsupported power curve hid or polluted the catalog");
     Console.WriteLine("PASS power catalog lists only single-index curves without failing the rest");passed++;
+    // Commodity identities are reference data. Rename this one consistently in
+    // the retained fixture while preserving its exact MW/MWh specifications.
+    const string relabeledCommodity="synthetic_electricity";
+    JsonElement Relabel(JsonElement row)=>JsonSerializer.Deserialize<JsonElement>(row.GetRawText().Replace("\"test_power\"","\""+relabeledCommodity+"\"",StringComparison.Ordinal));
+    Dictionary<string,ImmutableArray<JsonElement>> RelabelRows(Dictionary<string,ImmutableArray<JsonElement>> rows)=>rows.ToDictionary(p=>p.Key,p=>p.Value.Select(Relabel).ToImmutableArray());
+    var relabeled=new PreviewData(realManifest,RelabelRows(definitions),RelabelRows(references),observations);
+    var powerCatalog=JsonSerializer.SerializeToElement(PowerPreview.Catalog(relabeled,frame,new([],[])));
+    var quantityChoices=powerCatalog.GetProperty("quantityChoices").EnumerateArray().ToArray();
+    if(!quantityChoices.Select(q=>q.GetProperty("basis").GetString()).ToHashSet().SetEquals(["flat_power","total_energy"]))
+        throw new Exception("A compatible reference commodity lost its MW/MWh quantity choices");
+    if(quantityChoices.Any(q=>q.GetProperty("commodityCode").GetString()!=relabeledCommodity)||
+        powerCatalog.GetProperty("curves").EnumerateArray().Any(c=>c.GetProperty("commodityCode").GetString()!=relabeledCommodity)||
+        !PowerPreview.CurveCodes(relabeled).Contains("local_power")||PowerPreview.CurveCodes(relabeled).Contains("base_forward"))
+        throw new Exception("Power eligibility lost its exact commodity identity or included a non-MWh curve");
+    Console.WriteLine("PASS power eligibility follows commodity references rather than fixture identifiers");passed++;
 }
 Console.WriteLine($"{passed} preview adapter checks passed.");

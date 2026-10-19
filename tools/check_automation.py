@@ -89,10 +89,33 @@ def checks(query, worker_once=None, controller_once=None):
     reject(lambda: control('bob', 'cancel', 1), 'job_denied')
     paused = control('admin', 'pause', 1)
     assert paused['state'] == 'paused'
+    edit_request=dict(requestId=str(uuid4()),id=job,expectedVersion=paused['version'],
+                      name='Synthetic revised schedule',dueAt=due,expiresAt=expiry,
+                      intervalSeconds=600,timeZone='UTC',misfire='run_once',overlap='forbid',
+                      timeoutSeconds=45,maximumAttempts=3)
+    def edit(subject,body):
+        return json.loads(user(subject,f"SELECT automation.update_job('{json.dumps(body)}'::jsonb)::text"))
+    reject(lambda:edit('bob',edit_request),'job_denied')
+    revised=edit('admin',edit_request)
+    assert revised['name']==edit_request['name'] and revised['state']=='paused' and revised['intervalSeconds']==600
+    assert revised['timeoutSeconds']==45 and revised['maximumAttempts']==3 and revised['version']==paused['version']+1
+    assert revised['canEdit'] and edit('admin',edit_request)==revised
+    query("DELETE FROM security.role_permissions WHERE permission='ManageJobs' AND role_id=(SELECT id FROM security.roles WHERE code='access_administrator');")
+    try:
+        reject(lambda:edit('admin',edit_request),'job_denied')
+    finally:
+        query("INSERT INTO security.role_permissions SELECT id,'ManageJobs' FROM security.roles WHERE code='access_administrator';")
+    reject(lambda:edit('admin',{**edit_request,'name':'Different replay'}),'job_conflict')
+    reject(lambda:edit('alice',{**edit_request,'requestId':str(uuid4())}),'job_conflict')
+    reject(lambda:edit('alice',{**edit_request,'requestId':str(uuid4()),'expectedVersion':revised['version'],'ownerId':bob}),'job_input')
+    # Restore the once-only execution terms for the existing worker lifecycle checks.
+    paused=edit('alice',{**edit_request,'requestId':str(uuid4()),'expectedVersion':revised['version'],'intervalSeconds':None})
     assert query("SET SESSION AUTHORIZATION automation_test_worker; SELECT automation.claim_next('00000000-0000-0000-0000-000000000011',20)::text;") == ''
     resumed = control('alice', 'resume', paused['version'])
     claim = json.loads(query("SET SESSION AUTHORIZATION automation_test_worker; SELECT automation.claim_next('00000000-0000-0000-0000-000000000011',20)::text;"))
     assert claim['jobId'] == job
+    assert not json.loads(user('alice','SELECT automation.job_list()::text'))['jobs'][0]['canEdit']
+    reject(lambda:edit('alice',{**edit_request,'requestId':str(uuid4()),'expectedVersion':resumed['version']}),'job_transition')
     assert query("SET SESSION AUTHORIZATION automation_test_worker; SELECT automation.claim_next('00000000-0000-0000-0000-000000000012',20)::text;") == '', 'Overlapping workers claimed one job'
     query(f"UPDATE automation.runs SET lease_until=clock_timestamp()-interval '1 second' WHERE id='{claim['id']}';")
     replacement = json.loads(query("SET SESSION AUTHORIZATION automation_test_worker; SELECT automation.claim_next('00000000-0000-0000-0000-000000000012',20)::text;"))
@@ -111,6 +134,25 @@ def checks(query, worker_once=None, controller_once=None):
                 work()
             finally:
                 blocker.result()
+    # Natural expiry while waiting for the exact job lock cannot retain admission authority.
+    waiting=create('bob',{**request,'requestId':str(uuid4()),'dueAt':query("SELECT (clock_timestamp()+interval '10 minutes')::text;")})
+    query(f"UPDATE security.role_grants SET granted_to=clock_timestamp()+interval '0.5 seconds' WHERE principal_id='{bob}';")
+    try:
+        wait_behind_job_lock(lambda:reject(lambda:edit('bob',{**edit_request,'requestId':str(uuid4()),'id':waiting['id'],'expectedVersion':waiting['version']}),'job_denied'),identifier=waiting['id'])
+    finally:
+        query(f"UPDATE security.role_grants SET granted_to='9999-12-31' WHERE principal_id='{bob}';")
+    user('bob',f"SELECT automation.control_job('{json.dumps(dict(requestId=str(uuid4()),id=waiting['id'],action='cancel',expectedVersion=waiting['version']))}'::jsonb)")
+    # A retained occurrence cannot become the next cursor again: it would be skipped
+    # forever by the scheduler's exact (job, due) identity.
+    collision=create('bob',{**request,'requestId':str(uuid4()),'intervalSeconds':60})
+    executed=json.loads(query("SET SESSION AUTHORIZATION automation_test_worker;SELECT automation.claim_next('00000000-0000-0000-0000-000000000013',20)::text;"))
+    assert executed['jobId']==collision['id']
+    next_due=query(f"SELECT ('{due}'::timestamptz+(floor(extract(epoch FROM(clock_timestamp()-'{due}'::timestamptz))/60)+1)*interval '60 seconds')::text;")
+    query(f"SET SESSION AUTHORIZATION automation_test_worker;SELECT automation.finish_run('{executed['id']}',{executed['fence']},'{executed['workerId']}',true,NULL,'{next_due}');")
+    collision_edit={**edit_request,'requestId':str(uuid4()),'id':collision['id'],'expectedVersion':collision['version']+1}
+    reject(lambda:edit('bob',collision_edit),'job_input')
+    changed=edit('bob',{**collision_edit,'requestId':str(uuid4()),'dueAt':next_due})
+    user('bob',f"SELECT automation.control_job('{json.dumps(dict(requestId=str(uuid4()),id=changed['id'],action='cancel',expectedVersion=changed['version']))}'::jsonb)")
     query(f"UPDATE automation.runs SET lease_until=clock_timestamp()+interval '0.5 seconds' WHERE id='{replacement['id']}';")
     wait_behind_job_lock(lambda: reject(lambda: finish(replacement), 'job_fence'))
     reject(lambda: finish(claim), 'job_fence')
@@ -211,6 +253,19 @@ def checks(query, worker_once=None, controller_once=None):
     fair=json.loads(query(f"SET SESSION AUTHORIZATION automation_test_worker;SELECT automation.claim_next('{image_claim['workerId']}',20)::text;"))
     assert fair['jobId']==later['id'], 'An uncertain earlier launch starved another due job'
     query(f"UPDATE automation.jobs SET state='cancelled' WHERE id='{later['id']}';UPDATE automation.runs SET state='cancelled',finished_at=clock_timestamp() WHERE job_id='{later['id']}';")
+    cleanup_job=create('alice',{**request,'requestId':str(uuid4()),'operation':'swarm_job','profileId':profile,'profileVersion':1,'maximumAttempts':1,'intervalSeconds':60})
+    cleanup_run=json.loads(query("SET SESSION AUTHORIZATION automation_test_worker;SELECT automation.claim_next('00000000-0000-0000-0000-000000000019',20)::text;"))
+    assert cleanup_run['jobId']==cleanup_job['id']
+    next_due=query(f"SELECT ('{due}'::timestamptz+(floor(extract(epoch FROM(clock_timestamp()-'{due}'::timestamptz))/60)+1)*interval '60 seconds')::text;")
+    query(f"SET SESSION AUTHORIZATION automation_test_worker;SELECT automation.authorize_workload('{cleanup_run['id']}','{cleanup_run['workerId']}',{cleanup_run['fence']},false);SELECT automation.record_service('{cleanup_run['id']}','{cleanup_run['workerId']}',{cleanup_run['fence']},'syntheticcleanupservice001');SELECT automation.finish_run('{cleanup_run['id']}',{cleanup_run['fence']},'{cleanup_run['workerId']}',true,NULL,'{next_due}');")
+    cleanup_edit={**edit_request,'requestId':str(uuid4()),'id':cleanup_job['id'],'expectedVersion':cleanup_job['version']+1,'dueAt':next_due,'maximumAttempts':1}
+    cleanup_description=json.loads(user('alice','SELECT automation.job_list()::text'))['jobs']
+    assert not next(j for j in cleanup_description if j['id']==cleanup_job['id'])['canEdit'], 'Terminal physical work awaiting cleanup became editable'
+    reject(lambda:edit('alice',cleanup_edit),'job_transition')
+    query(f"SET SESSION AUTHORIZATION automation_test_worker;SELECT automation.cleanup_workload('{cleanup_run['id']}','syntheticcleanupservice001',true);")
+    cleaned=edit('alice',cleanup_edit)
+    user('alice',f"SELECT automation.control_job('{json.dumps(dict(requestId=str(uuid4()),id=cleaned['id'],action='cancel',expectedVersion=cleaned['version']))}'::jsonb)")
+    print('PASS job amendments: current authority after waits/revocation, exact replay, optimistic versions, occurrence identity and terminal physical cleanup fence',flush=True)
     reject(lambda:node_command('admin',{**command,'requestId':str(uuid4())}),'infrastructure_busy')
     query(f"UPDATE automation.execution_profiles SET enabled=false WHERE id='{profile}';")
     rejected=json.loads(query(f"SET SESSION AUTHORIZATION automation_test_worker;SELECT automation.claim_next('{image_claim['workerId']}',20)::text;"))

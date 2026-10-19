@@ -80,6 +80,9 @@ app.Use(async (context,next)=>
             PostgresException p when p.SqlState is "23505" or "40001" && apiPath.StartsWithSegments("/api/custom-curves") => (409,"custom_curve_conflict","This curve or request changed. Reload or reconcile the original request."),
             PostgresException p when p.SqlState=="P0001" && p.MessageText=="party_conflict" => (409,p.MessageText,"This party or request changed. Reload the latest revision or retry the original request."),
             PostgresException p when p.SqlState=="P0001" && p.MessageText is "party_input" or "party_limit" => (422,p.MessageText,"Supply a stable code, name and an effective time at or after the preceding version. Party codes cannot change."),
+            MarketDataException m when m.Code=="reference_conflict" => (409,m.Code,m.Message),
+            PostgresException p when p.SqlState=="P0001" && p.MessageText=="reference_conflict" => (409,p.MessageText,"This reference version or display selection changed. Reload before editing."),
+            PostgresException p when p.SqlState=="P0001" && p.MessageText is "reference_edit" or "reference_limit" or "reference_economic_change" => (422,p.MessageText,"Supply supported display fields within the authoring limits. Financial terms must remain identical before display activation."),
             PostgresException p when p.SqlState is "23505" or "40001" && apiPath.StartsWithSegments("/api/tou-products") => (409,"tou_conflict","This TOU product changed or its code already exists. Reload before editing."),
             MarketDataException m => (422,m.Code,m.Message),
             PostgresException p when p.SqlState=="P0001" && p.MessageText is "swap_conflict" or "swap_revision_conflict" or "trade_operation_conflict" => (409,p.MessageText,"This trade or operation changed. Reconcile the original request or reload the latest revision."),
@@ -122,6 +125,7 @@ app.Use(async (context,next)=>
             OperationCanceledException when context.Items.ContainsKey("futures_attempted") => (503,"futures_outcome_unknown","The trade request outcome is unknown. Reconcile or retry the retained operation identity."),
             NpgsqlException when context.Items.ContainsKey("futures_attempted") => (503,"futures_outcome_unknown","The trade request outcome is unknown. Reconcile or retry the retained operation identity."),
             Exception when context.Items.ContainsKey("automation_attempted") && e is NpgsqlException or OperationCanceledException => (503,"job_outcome_unknown","The operation outcome is unknown. Inspect current state or retry the retained exact request identity."),
+            Exception when context.Items.ContainsKey("reference_attempted") && e is NpgsqlException or OperationCanceledException => (503,"reference_outcome_unknown","The reference change outcome is unknown. Inspect saved versions or retry the retained exact request identity."),
             OperationCanceledException => (503,"request_cancelled","The request was cancelled or exceeded its time limit."),
             BadHttpRequestException or JsonException => (400,"request_format","The request is incomplete or malformed."),
             _ => (500,"preview_error","The preview could not complete the operation.")
@@ -256,7 +260,8 @@ Task<IResult> ScheduleOperation(HttpContext c,Func<PreviewSession,PreviewData,IR
 api.MapPost("/units/convert",(HttpContext c,UnitConvertRequest body)=>Locked(c,session=>database.WithIdentity(Profile(session),"ReadMarketData",async(connection,ct)=>
 {
     var data=await marketReads.Data(connection,Pin(session),ct,[]);
-    return Results.Ok(UnitOperations.Convert(await database.ReadUnitCatalog(connection,data,ct),body));
+    var units=await database.ReadUnitCatalog(connection,data,ct);
+    return Results.Ok(UnitOperations.Convert(units,body,await ReferenceEditors.Display(connection,units.Revision,ct)));
 },c.RequestAborted)));
 api.MapPost("/amounts/display",(HttpContext c,System.Collections.Immutable.ImmutableArray<DisplayNumberRequest> body)=>Locked(c,session=>
     database.WithIdentity(Profile(session),null,(_,_)=>Task.FromResult<IResult>(Results.Ok(UnitOperations.Display(body))),c.RequestAborted)));
@@ -378,7 +383,7 @@ api.MapGet("/date-schedules",(Func<HttpContext,Task<IResult>>)(c=>Locked(c,sessi
 {
     var library=await scheduleReads.Library(connection,Pin(session),ct);
     return Results.Ok(new {library.KnownThrough,library.Versions,library.CanEdit,library.CanPublish,choices=DateWorkspace.Choices,
-        contractDefinitions=session.ContractDefinitions.Where(p=>p.Key.Owner==Profile(session)).Select(p=>p.Value).ToArray(),library.Calendars});
+        contractDefinitions=session.ContractDefinitions.Where(p=>p.Key.Owner==Profile(session)).Select(p=>p.Value).ToArray(),library.Calendars,examples=ScheduleExamples.Catalog});
 },c.RequestAborted))));
 api.MapPost("/date-schedules/preview",(HttpContext c,DateSchedulePreviewRequest body)=>DateOperation(c,"ReadMarketData",async(session,connection,ct)=>
     Results.Ok(DateWorkspace.Compile(body.Definition??throw new TemporalException("schedule_definition","Supply an explicit schedule definition."),
@@ -427,6 +432,13 @@ async Task<BoundContractDefinition> BindContracts(NpgsqlConnection connection,Pu
 }
 api.MapPost("/date-schedules/contracts/preview",(HttpContext c,PublishedContractRequest body)=>DateOperation(c,"ReadMarketData",async(session,connection,ct)=>
     Results.Ok(await BindContracts(connection,body,ct))));
+api.MapPost("/date-schedules/contracts/example",(HttpContext c,ContractExampleRequest body)=>DateOperation(c,"ReadMarketData",async(session,connection,ct)=>
+{
+    var view=await ScheduleView(connection,body.Context,ct);
+    var example=ScheduleExamples.Contracts(body,view.Versions,view.Context);
+    _=await BindContracts(connection,example.Definition,ct);
+    return Results.Ok(example);
+}));
 api.MapPost("/date-schedules/contracts/save",(HttpContext c,PublishedContractRequest body)=>DateOperation(c,"ReadMarketData",async(session,connection,ct)=>
 {
     var result=await BindContracts(connection,body,ct);var key=(Profile(session),result.Code);
@@ -463,7 +475,7 @@ api.MapPost("/market/current",(Func<HttpContext,Task<IResult>>)(c=>Locked(c,asyn
 object WorkspaceProjection(PreviewSession session,WorkspaceRead read,bool catalogOnly)
 {
     var data=read.Data;
-    return new {unitCatalog=read.Units,unitCatalogError=read.Units is null?"unit_catalog":null,context=session.MarketContext,profile=session.Profile,example=database.Manifest.Example,futuresConvention=database.Manifest.FuturesConvention,curveNames=read.CurveNames,definitions=data.Definitions,references=data.References,referenceScope=catalogOnly?"definition_closure":"all_visible",observations=catalogOnly?ImmutableArray<JsonElement>.Empty:data.Observations,observationScope=catalogOnly?"on_demand":"all_visible",
+    return new {unitCatalog=read.Units,unitCatalogError=read.Units is null?"unit_catalog":null,referenceDisplay=read.ReferenceDisplay,unitReferenceDisplay=read.UnitReferenceDisplay,context=session.MarketContext,profile=session.Profile,example=database.Manifest.Example,futuresConvention=database.Manifest.FuturesConvention,curveNames=read.CurveNames,powerCurveCodes=PowerPreview.CurveCodes(data),definitions=data.Definitions,references=data.References,referenceScope=catalogOnly?"definition_closure":"all_visible",observations=catalogOnly?ImmutableArray<JsonElement>.Empty:data.Observations,observationScope=catalogOnly?"on_demand":"all_visible",
         frames=session.Frames.Values.Where(f=>f.ContextId==session.MarketContext?.ContextId).OrderBy(f=>f.At).ToArray(),initialFrameIds=session.MarketContext is null?session.InitialFrames:session.Frames.Values.Where(f=>f.ContextId==session.MarketContext.ContextId).Select(f=>f.Id).ToArray()};
 }
 Task<IResult> Workspace(HttpContext c,bool catalogOnly)=>Locked(c,async session=>
@@ -480,7 +492,7 @@ api.MapGet("/workspace/navigation",(Func<HttpContext,Task<IResult>>)(c=>Locked(c
     return Results.Ok(new MarketNavigation(Profile(session),session.MarketContext,read.DefinitionRevision,read.ReferenceRevision,
         database.Manifest.FuturesConvention,database.Manifest.Example,
         session.MarketContext is null?[..session.InitialFrames]:[..session.Frames.Values.Where(f=>f.ContextId==session.MarketContext.ContextId).Select(f=>f.Id)],
-        [..frames.Select(f=>new NavigationFrame(f.Id,f.Name,f.At))],read.CurveNames,read.Curves));
+        [..frames.Select(f=>new NavigationFrame(f.Id,f.Name,f.At))],read.CurveNames,read.Curves,read.ReferenceDisplay));
 })));
 api.MapGet("/reference/catalog",(Func<HttpContext,Task<IResult>>)(c=>Locked(c,session=>database.WithIdentity(Profile(session),"ReadMarketData",async(connection,ct)=>
 {
@@ -488,9 +500,27 @@ api.MapGet("/reference/catalog",(Func<HttpContext,Task<IResult>>)(c=>Locked(c,se
     if(!int.TryParse(c.Request.Query.ContainsKey("offset")?requestedOffset:"0",System.Globalization.NumberStyles.None,System.Globalization.CultureInfo.InvariantCulture,out var offset))
         throw new MarketDataException("reference_page",$"Choose an offset from 0 to {PreviewDatabase.ReferenceMaximumOffset}.");
     var page=await marketReads.References(connection,Pin(session),c.Request.Query["table"].ToString(),offset,c.Request.Query["search"].ToString(),ct);
-    return Results.Ok(new {page.Table,page.Rows,page.References,page.Offset,page.PageSize,page.MaximumOffset,page.HasMore,page.Search,page.ReferenceRevision,page.DefinitionRevisionId,
+    var referenceDisplay=await ReferenceEditors.Display(connection,page.ReferenceRevision,ct);
+    return Results.Ok(new {page.Table,page.Rows,page.References,page.Offset,page.PageSize,page.MaximumOffset,page.HasMore,page.Search,page.ReferenceRevision,page.DefinitionRevisionId,referenceDisplay,
         tables=PreviewDatabase.ReferenceTables,referenceScope="selected_table",context=session.MarketContext,profile=session.Profile});
 },c.RequestAborted))));
+api.MapGet("/reference/editor",(Func<HttpContext,Task<IResult>>)(c=>Locked(c,session=>database.WithIdentity(Profile(session),"ReadMarketData",async(connection,ct)=>
+{
+    await Pin(session).Bind(connection,database.Manifest.CatalogId,ct);
+    var code=c.Request.Query.TryGetValue("code",out var selected)?selected.ToString():null;
+    return Results.Ok(await ReferenceEditors.Read(connection,database.Manifest,c.Request.Query["table"].ToString(),ct,code));
+},c.RequestAborted))));
+Task<IResult> ReferenceMutation(HttpContext c,string permission,Func<NpgsqlConnection,CancellationToken,Task<JsonElement>> work)=>Locked(c,session=>
+{
+    if(session.MarketContext is not null)throw new MarketDataException("historical_read_only","Return to working data before saving or applying reference display changes.");
+    return database.WithIdentity<IResult>(Profile(session),permission,async(connection,ct)=>
+    {
+        c.Items["reference_attempted"]=true;
+        return Results.Ok(await work(connection,ct));
+    },c.RequestAborted);
+});
+api.MapPost("/reference/save",(HttpContext c,ReferenceSaveRequest body)=>ReferenceMutation(c,"WriteReferenceData",(connection,ct)=>ReferenceEditors.Save(connection,database.Manifest,body,ct)));
+api.MapPost("/reference/apply",(HttpContext c,ReferenceApplyRequest body)=>ReferenceMutation(c,"SealReferenceData",(connection,ct)=>ReferenceEditors.Apply(connection,database.Manifest,body,ct)));
 api.MapPost("/evaluate",(HttpContext c,BuildRequest body)=>Locked(c,async session=>
 {
     var pin=Pin(session,body.SnapshotId);
@@ -720,6 +750,8 @@ api.MapPost("/jobs/create",(HttpContext c,JobCreate body)=>Locked(c,session=>dat
     async(connection,ct)=>{c.Items["automation_attempted"]=true;return Results.Ok(await JobOperations.Create(connection,body,ct));},c.RequestAborted)));
 api.MapPost("/jobs/control",(HttpContext c,JobControl body)=>Locked(c,session=>database.WithIdentity(Profile(session),null,
     async(connection,ct)=>{c.Items["automation_attempted"]=true;return Results.Ok(await JobOperations.Control(connection,body,ct));},c.RequestAborted)));
+api.MapPost("/jobs/update",(HttpContext c,JobUpdate body)=>Locked(c,session=>database.WithIdentity(Profile(session),null,
+    async(connection,ct)=>{c.Items["automation_attempted"]=true;return Results.Ok(await JobOperations.Update(connection,body,ct));},c.RequestAborted)));
 api.MapGet("/access",(Func<HttpContext,Task<IResult>>)(c=>Locked(c,session=>
     database.WithIdentity(Profile(session),null,async(connection,ct)=>
         Results.Ok(new {permissions=await CurrentPermissions(connection,ct)}),c.RequestAborted))));

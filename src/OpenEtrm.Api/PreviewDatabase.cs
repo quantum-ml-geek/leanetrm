@@ -1,7 +1,7 @@
 using System.Collections.Immutable;
 using System.Data;
 using System.Text.Json;
-using System.Text.Json.Nodes;
+using OpenEtrm.Api.Presentation;
 using Npgsql;
 using OpenEtrm.MarketData;
 using OpenEtrm.MarketData.Trading;
@@ -44,7 +44,7 @@ public sealed class PreviewDatabase : IAsyncDisposable
         "delivery_profiles", "settlement_targets", "cash_rounding_conventions",
         "futures_products", "futures_series", "futures_execution_policies", "futures_milestones", "futures_lot_resolutions", "futures_product_terms", "futures_basis_settlements"];
     private static readonly string[] DefinitionTables = ["revisions", "contracts", "curves", "series", "curve_members", "curve_inputs", "constituent_mappings", "rate_curves", "rate_curve_points", "revision_periods"];
-    private static readonly string[] UnitTables = ["dimensions", "units", "unit_conversions", "commodities", "measurement_bases", "quantity_specifications"];
+    internal static readonly ImmutableArray<string> UnitTables = ["dimensions", "units", "unit_conversions", "commodities", "measurement_bases", "quantity_specifications"];
 
     public PreviewDatabase(string root,string manifestName="manifest.json", HostedConfiguration? hosted=null,Func<string>? hostedSession=null)
     {
@@ -395,16 +395,7 @@ SELECT NOT(rolsuper OR rolbypassrls OR rolcreatedb OR rolcreaterole) AND pg_has_
         foreach (var value in parameters) command.Parameters.Add(new NpgsqlParameter { Value = value });
         await using var reader = await command.ExecuteReaderAsync(ct);
         var rows = ImmutableArray.CreateBuilder<JsonElement>();
-        while (await reader.ReadAsync(ct))
-        {
-            var row = JsonNode.Parse(reader.GetString(0))!.AsObject();
-            // Preserve database numeric lexemes over JSON. Only the ordering key
-            // is consumed as an integer; financial arithmetic stays on the server.
-            foreach (var field in row.ToArray())
-                if (field.Key != "ordinal" && field.Value is JsonValue value && value.GetValueKind() == JsonValueKind.Number)
-                    row[field.Key] = value.ToJsonString();
-            rows.Add(JsonSerializer.SerializeToElement(row));
-        }
+        while (await reader.ReadAsync(ct))rows.Add(ReferenceJson.PreserveNumericLexemes(reader.GetString(0)));
         return rows.ToImmutable();
     }
     public async ValueTask DisposeAsync() { await runtime.DisposeAsync(); await authenticator.DisposeAsync(); }

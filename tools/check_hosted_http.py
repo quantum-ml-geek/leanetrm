@@ -156,6 +156,7 @@ def run_checks(root, manifest, query, dotnet, dll, environment, browser=None, co
         assert admin_startup['access']=={'profile':administrator,'permissions':admin_access['permissions']}
         assert admin_boot['profile']==administrator and 'ManageAccess' in admin_access['permissions'] and 'ReadMarketData' not in admin_access['permissions']
         admin.call('/api/workspace/catalog',expected=403)
+        admin.call('/api/power-imports',expected=403)
         print('PASS hosted startup projects current identity permissions without granting market-data authority',flush=True)
         assert 'ManageModelProviders' in admin_access['permissions']
         admin.call('/api/settings/ai/providers',expected=404)
@@ -169,6 +170,8 @@ def run_checks(root, manifest, query, dotnet, dll, environment, browser=None, co
         client.call('/api/admin/create', {'operationId': str(uuid4()), 'login': 'forged', 'name': 'Forged', 'kind': 'human', 'roles': ['access_administrator']}, expected=403)
         access, _ = client.call('/api/access'); assert 'BookTrade' in access['permissions']
         workspace, _ = client.call('/api/workspace'); assert workspace['profile'] == first
+        from check_power_history_http import run_checks as check_power_history
+        check_power_history(client,query,manifest)
         from check_trading_compression import run_hosted_checks as check_hosted_compression
         check_hosted_compression(client,origin,cert,boot)
         client.call('/api/market/current', {}, headers={'Origin': 'https://attacker.invalid'}, expected=403)

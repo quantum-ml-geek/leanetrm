@@ -1000,3 +1000,15 @@ Full futures lifecycle and official market-data activation remain work.
 Job entry resolves user-zone wall clocks through the managed resolver (D159); UTC
 storage and elapsed-interval recurrence remain explicit. Contractual clocks and
 date-only facts are separate from timestamp presentation.
+
+Workspace usability adds editable future job schedules and limits under current
+authority, with retained request replay and physical-run cleanup guards. Reference
+display authoring (D164) saves immutable versions and separately applies reviewed
+labels to current presentation after an economic-identity proof. Financial-term
+editing, replacing curve reference pins and transporting prices into new economic
+versions remain unimplemented. The reference menu retains only categories with
+documented current consumers. Delivery-price navigation consumes authorized source
+metadata in commodity/operator/market/location order and keeps inclusive market
+delivery dates distinct from user-zone interval timestamps. Synthetic schedule
+examples use the existing monthly publication operation; literal daily contract
+examples remain session candidates, not published exchange contracts.

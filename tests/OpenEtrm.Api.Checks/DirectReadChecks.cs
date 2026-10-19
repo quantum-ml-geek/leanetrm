@@ -44,8 +44,18 @@ internal static class DirectReadChecks
             var catalog=await Direct(view,"catalog",(c,ct)=>reads.Workspace(c,view.Pin(),true,ct));
             var full=await Direct(view,"workspace",(c,ct)=>reads.Workspace(c,view.Pin(),false,ct));
             foreach(var (read,page) in new[]{(catalog,view.Page("catalog")),(full,view.Page("workspace"))})
-                Same($"{view.Name} workspace data matches its page",new{definitions=read.Data.Definitions,references=read.Data.References,observations=read.Data.Observations,unitCatalog=read.Units,curveNames=read.CurveNames},
-                    page,"definitions","references","observations","unitCatalog","curveNames");
+            {
+                if(view.Context is not null)
+                {
+                    if(read.ReferenceDisplay is not null||read.UnitReferenceDisplay is not null)
+                        throw new Exception("Historical workspace reads cannot substitute current display metadata.");
+                }
+                else if(read.ReferenceDisplay?.SourceRevision!=read.Data.ReferenceRevision||
+                    (read.Units is not null&&read.UnitReferenceDisplay?.SourceRevision!=read.Units.Revision))
+                    throw new Exception("Display metadata must retain the exact financial source revision.");
+                Same($"{view.Name} workspace data matches its page",new{definitions=read.Data.Definitions,references=read.Data.References,observations=read.Data.Observations,unitCatalog=read.Units,curveNames=read.CurveNames,referenceDisplay=read.ReferenceDisplay,unitReferenceDisplay=read.UnitReferenceDisplay},
+                    page,"definitions","references","observations","unitCatalog","curveNames","referenceDisplay","unitReferenceDisplay");
+            }
             Same($"{view.Name} curve names match their page",await Direct(view,"curve names",(c,ct)=>reads.CurveNames(c,view.Pin(),ct)),view.Page("curveNames"));
             Same($"{view.Name} reference page matches its page",await Direct(view,"reference page",(c,ct)=>reads.References(c,view.Pin(),"currencies",0,"",ct)),view.Page("references"),
                 "table","rows","references","offset","pageSize","maximumOffset","hasMore","search","referenceRevision","definitionRevisionId");
@@ -56,8 +66,8 @@ internal static class DirectReadChecks
                 var combined=await Direct(view,"prices with workspace",(c,ct)=>reads.Evaluate(c,view.Pin(view.Selected),curve.Key,ct,true));
                 var metadata=combined.Workspace??throw new Exception("An explicitly requested full workspace is missing.");
                 Same($"{view.Name} {curve.Key} combined prices preserve their page",combined.Result,Without(curve.Value!.AsObject(),"context"));
-                Same($"{view.Name} combined workspace retains the same bound catalog",new{definitions=metadata.Data.Definitions,references=metadata.Data.References,unitCatalog=metadata.Units,curveNames=metadata.CurveNames},
-                    view.Page("catalog"),"definitions","references","unitCatalog","curveNames");
+                Same($"{view.Name} combined workspace retains the same bound catalog",new{definitions=metadata.Data.Definitions,references=metadata.Data.References,unitCatalog=metadata.Units,curveNames=metadata.CurveNames,referenceDisplay=metadata.ReferenceDisplay,unitReferenceDisplay=metadata.UnitReferenceDisplay},
+                    view.Page("catalog"),"definitions","references","unitCatalog","curveNames","referenceDisplay","unitReferenceDisplay");
             }
             var history=view.Page("history");
             Same($"{view.Name} history matches its page",await Direct(view,"history",(c,ct)=>reads.History(c,view.Pin(view.Selected),view.Initial,history["curve"]!.GetValue<string>(),history["contractId"]!.GetValue<Guid>(),null,ct)),

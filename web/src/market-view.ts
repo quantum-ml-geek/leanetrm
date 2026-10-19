@@ -1,6 +1,8 @@
 export type Row = Record<string, string | number | null>;
+export type ReferenceRevision={catalogId:string;revisionId:string};
+export type ReferenceDisplay={sourceRevision:ReferenceRevision;displayRevision:ReferenceRevision;version:number;references:Record<string,Row[]>};
 export type Frame = {id:string; name:string; at:string; observationIds:string[];curveContracts:Record<string,string[]>};
-export type Workspace = {futuresConvention:string;curveNames?:{code:string;name:string}[]|null;unitCatalogError?:string|null;unitCatalog?:{revision:unknown;references:Record<string,Row[]>};profile:string;example:{at:string;curve:string}|null; definitions:Record<string,Row[]>; references:Record<string,Row[]>;referenceScope?:'definition_closure'|'all_visible';observationScope?:'on_demand';observations:Row[]; frames:Frame[]; initialFrameIds:string[]};
+export type Workspace = {futuresConvention:string;curveNames?:{code:string;name:string}[]|null;powerCurveCodes:string[];unitCatalogError?:string|null;unitCatalog?:{revision:unknown;references:Record<string,Row[]>};referenceDisplay?:ReferenceDisplay|null;unitReferenceDisplay?:ReferenceDisplay|null;profile:string;example:{at:string;curve:string}|null; definitions:Record<string,Row[]>; references:Record<string,Row[]>;referenceScope?:'definition_closure'|'all_visible';observationScope?:'on_demand';observations:Row[]; frames:Frame[]; initialFrameIds:string[]};
 import type {PricingNode} from './pricing-view.js';
 import type {FrameSummary} from './market-navigation.js';
 
@@ -17,7 +19,21 @@ export function exactRow(rows:Row[],key:string,value:string):Row {
   if(matches.length!==1)throw Error('Some market details are missing or inconsistent. Refresh and try again.');
   return matches[0];
 }
-export function commodityName(code:string,workspace:Workspace){const row=exactRow(workspace.references.commodities,'code',code);const name=publicText(val(row,'name').replace(/^Synthetic /,''));return name.charAt(0).toUpperCase()+name.slice(1);}
+// Overlay rows are for presentation only; callers retain the original financial rows.
+export function displayReferenceRows(table:string,rows:Row[],display:ReferenceDisplay|null|undefined,source:ReferenceRevision):Row[]{
+  if(!display)return rows;
+  if(display.sourceRevision.catalogId!==source.catalogId||display.sourceRevision.revisionId!==source.revisionId)throw Error('Reference display details are inconsistent. Refresh and try again.');
+  const labels=display.references[table]??[],byCode=new Map<string,Row>();
+  if(!labels.length)return rows;
+  for(const label of labels){if(typeof label.code!=='string'||byCode.has(label.code))throw Error('Reference display details are inconsistent. Refresh and try again.');byCode.set(label.code,label);}
+  return rows.map(row=>({...row,...byCode.get(String(row.code))}));
+}
+export function presentedReferences(workspace:Workspace){
+  if(!workspace.referenceDisplay)return workspace.references;
+  const revision=workspace.definitions.revisions[0],source={catalogId:val(revision,'reference_catalog_id'),revisionId:val(revision,'reference_revision_id')};
+  return Object.fromEntries(Object.entries(workspace.references).map(([table,rows])=>[table,displayReferenceRows(table,rows,workspace.referenceDisplay,source)]));
+}
+export function commodityName(code:string,workspace:Workspace){const row=exactRow(presentedReferences(workspace).commodities,'code',code);const name=publicText(val(row,'name').replace(/^Synthetic /,''));return name.charAt(0).toUpperCase()+name.slice(1);}
 export type MarketType='futures'|'forwards'|'mixed'|'rates';
 export const allCurves=(workspace:Workspace)=>[...workspace.definitions.curves,...(workspace.definitions.rate_curves??[])];
 // Display names are stored with each curve definition and served as a directory for
@@ -81,7 +97,7 @@ export function frameOptions(frames:FrameSummary[],zone:string){
 }
 export function marketTypeName(kind:MarketType){return {futures:'Futures',forwards:'Forward curves',mixed:'Mixed curves',rates:'Interest rates'}[kind];}
 export function quoteUnit(quoteCode:string,workspace:Workspace){
-  const refs=workspace.references,quote=exactRow(refs.quote_specifications,'code',quoteCode),quantity=exactRow(refs.quantity_specifications,'code',val(quote,'quantity_code'));
+  const refs=presentedReferences(workspace),quote=exactRow(refs.quote_specifications,'code',quoteCode),quantity=exactRow(refs.quantity_specifications,'code',val(quote,'quantity_code'));
   const currency=exactRow(refs.currencies,'code',val(quote,'currency_code')),unit=exactRow(refs.units,'code',val(quantity,'unit_code'));
   return `${val(currency,'display_code')} / ${val(unit,'symbol')}${quote.multiplier==='1'?'':` × ${val(quote,'multiplier')}`}`;
 }

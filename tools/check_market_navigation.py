@@ -28,14 +28,18 @@ def run_checks(c, check, query, manifest):
                 and nav['definitionRevision'] == {'catalogId': revision['catalog_id'], 'revisionId': revision['id']}
                 and nav['referenceRevision'] == {'catalogId': revision['reference_catalog_id'], 'revisionId': revision['reference_revision_id']}
                 and nav['frames'] == [{key: frame[key] for key in ['id', 'name', 'at']} for frame in workspace['frames']]
-                and all(nav[key] == workspace[key] for key in ['profile', 'context', 'example', 'futuresConvention', 'initialFrameIds'])
+                and all(nav[key] == workspace[key] for key in ['profile', 'context', 'example', 'futuresConvention', 'initialFrameIds','referenceDisplay'])
                 and nav['curveNames'] == c.call('curve-names'))
 
     check('navigation explicitly contains only its directory and frame-summary contract',
           set(navigation) == {'kind', 'profile', 'context', 'definitionRevision', 'referenceRevision',
-                              'example', 'futuresConvention', 'initialFrameIds', 'frames', 'curveNames', 'curves'}
+                              'example', 'futuresConvention', 'initialFrameIds', 'frames', 'curveNames', 'curves','referenceDisplay'}
           and navigation['kind'] == 'market_navigation'
           and all(set(frame) == {'id', 'name', 'at'} for frame in navigation['frames']))
+    check('working navigation supplies only its exact unapplied display-metadata identity',
+          navigation['referenceDisplay'] == {'sourceRevision':navigation['referenceRevision'],
+                                             'displayRevision':navigation['referenceRevision'],
+                                             'version':0,'references':{}})
     check('navigation classifications, names, exact revisions and frames match the authorized workspace', compare(navigation, full))
     check('navigation is independent of the much larger executable workspace payload',
           len(str(navigation)) * 5 < len(str(full)))
@@ -50,7 +54,8 @@ def run_checks(c, check, query, manifest):
                                        'selection': 'latest_correction'})['context']
     retained = c.call('workspace/navigation')
     check('navigation preserves exact retained effective and knowledge coordinates',
-          retained['context'] == context and compare(retained, c.call('workspace/catalog')))
+          retained['context'] == context and retained['referenceDisplay'] is None
+          and compare(retained, c.call('workspace/catalog')))
     c.call('market/current', {})
     c.call('profile', {'profile': 'admin'})
     c.call('workspace/navigation', expected=403)

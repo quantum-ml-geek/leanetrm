@@ -33,7 +33,7 @@ test('interest curves are browsed without manufacturing commodity contracts',()=
 test('retired standalone convention catalogs are not menu choices',()=>{assert.ok(![...referenceSections,...setupSections].some(s=>['day_count_conventions','compounding_conventions','fx_rate_definitions','heat_rate_definitions'].includes(s.value)));});
 
 test('execution admission inspection has an explicit category and source-code labels',()=>{
-  assert.deepEqual(dataSections(['futures_execution_policies'])[0]?.sections,[{value:'futures_execution_policies',name:'Trading eligibility'}]);
+  assert.deepEqual(dataSections(['futures_execution_policies'])[0]?.sections.map(({value,name})=>({value,name})),[{value:'futures_execution_policies',name:'Trading eligibility'}]);
   assert.deepEqual(publicColumns([{eligible_from:'2026-01-05T09:00:00Z',qualification_source_code:'source',source_series_code:'source_contract',usage_policy:'sample'}]).map(c=>c.name),['Trading eligibility from','Qualification source','Source contract code','Usage policy']);
 });
 

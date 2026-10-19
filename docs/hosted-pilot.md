@@ -123,7 +123,11 @@ and restore. Provider request slots persist across worker invocations.
 
 The Delivery prices screen exposes current source configuration, paused/scheduled
 state, recent outcomes and explicit operating-date history queries. Interval times
-use the human's display zone. Each history read retains an exact knowledge cutoff
+use the human's display zone. History formatting preserves each exact observed
+price instead of imposing a fixed decimal count. Delivery-day bounds use the
+source's declared interval and exact reference clock; source units, currency,
+commodity and location come from exact-version reference joins.
+Each history read retains an exact knowledge cutoff
 and certified context. Full historical workspace reference admission is not yet
 supported for this separate workflow; a bound historical workspace context is
 rejected. Imported delivery prices are not automatically forward marks or valuation

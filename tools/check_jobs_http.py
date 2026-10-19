@@ -44,13 +44,32 @@ def run_checks(url,query=None):
     client.call('jobs/create', {**body,'ownerId':str(uuid4())},expected=400)
     directory=client.call('jobs')
     assert any(j['id']==job['id'] for j in directory['jobs'])
+    listed=next(j for j in directory['jobs'] if j['id']==job['id'])
+    edit=dict(requestId=str(uuid4()),id=job['id'],expectedVersion=job['version'],
+              name='Synthetic revised readiness',dueAt=(now+timedelta(minutes=3)).isoformat(),
+              expiresAt=(now+timedelta(hours=2)).isoformat(),intervalSeconds=600,
+              timeZone='UTC',misfire='run_once',overlap='forbid',timeoutSeconds=45,maximumAttempts=3)
+    revised=client.call('jobs/update',edit)
+    assert revised['name']==edit['name'] and revised['intervalSeconds']==600
+    assert revised['timeoutSeconds']==45 and revised['maximumAttempts']==3
+    assert revised['version']==job['version']+1 and revised['operation']==job['operation']
+    assert client.call('jobs/update',edit)==revised, 'Exact edit replay changed the retained outcome'
+    client.call('jobs/update',{**edit,'name':'Changed replay'},expected=409)
+    client.call('jobs/update',{**edit,'requestId':str(uuid4())},expected=409)
+    client.call('jobs/update',{**edit,'requestId':str(uuid4()),'expectedVersion':revised['version'],'operation':'swarm_job'},expected=400)
+    assert listed['canEdit'] and listed['timeZone']=='UTC'
+    job=revised
     assert directory['infrastructure']['nodes'][0]['actions']==[]
     client.call('infrastructure/availability',dict(requestId=str(uuid4()),clusterId='syntheticcluster00000000001',nodeId='syntheticnode0000000000001',expectedVersion=7,availability='pause'),expected=403)
     client.call('profile', {'profile':'editor'})
     assert not any(j['id']==job['id'] for j in client.call('jobs')['jobs'])
+    client.call('jobs/update',{**edit,'requestId':str(uuid4()),'expectedVersion':job['version']},expected=403)
     control = dict(requestId=str(uuid4()),id=job['id'],action='pause',expectedVersion=job['version'])
     client.call('jobs/control',control,expected=403)
     client.call('profile',{'profile':'admin'})
+    admin_edit={**edit,'requestId':str(uuid4()),'expectedVersion':job['version'],'name':'Synthetic administrator revision'}
+    job=client.call('jobs/update',admin_edit)
+    control['expectedVersion']=job['version']
     paused = client.call('jobs/control',control)
     assert paused['state']=='paused'
     client.call('profile',{'profile':'viewer'})
@@ -58,4 +77,6 @@ def run_checks(url,query=None):
     assert resumed['state']=='active'
     cancelled=client.call('jobs/control',{**control,'requestId':str(uuid4()),'action':'cancel','expectedVersion':resumed['version']})
     assert cancelled['state']=='cancelled'
-    print('PASS HTTP job creation, idempotency, owner isolation, administrator control and cancellation',flush=True)
+    assert not cancelled['canEdit']
+    client.call('jobs/update',{**edit,'requestId':str(uuid4()),'expectedVersion':cancelled['version']},expected=422)
+    print('PASS HTTP job creation/editing, exact replays, version conflicts, owner isolation, administrator control and terminal read-only terms',flush=True)
