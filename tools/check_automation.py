@@ -304,7 +304,12 @@ def main():
                     raise RuntimeError(result.stderr)
                 return result.stdout.strip()
             for migration in sorted((ROOT/'db/migrations').glob('*.sql')):
+                if migration.name == '0035_automation_jobs.sql':
+                    query("INSERT INTO security.roles(id,code,name) VALUES(gen_random_uuid(),'synthetic_external_executor','Synthetic external executor');")
                 query(migration.read_text())
+                if migration.name == '0035_automation_jobs.sql':
+                    assert query("SELECT count(*) FROM security.roles WHERE code='synthetic_external_executor';") == '1', 'The retained custom-role fixture is required'
+                    assert query("SELECT count(*) FROM security.role_permissions p JOIN security.roles r ON r.id=p.role_id WHERE r.code='synthetic_external_executor' AND p.permission='RunJobs';") == '0', 'Existing custom roles must not silently acquire scheduling authority'
             def worker_once():
                 connection = root/'worker.connection'
                 connection.write_text(f'Host={root};Port=55439;Database=postgres;Username=automation_test_worker;SSL Mode=Disable')

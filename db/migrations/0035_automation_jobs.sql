@@ -3,7 +3,8 @@ BEGIN;
 CREATE ROLE openetrm_scheduler NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
 CREATE SCHEMA automation AUTHORIZATION openetrm_security_owner;
 INSERT INTO security.permissions VALUES('RunJobs'),('ManageJobs'),('LaunchWorkloads'),('ManageInfrastructure');
-INSERT INTO security.role_permissions SELECT id,'RunJobs' FROM security.roles;
+INSERT INTO security.role_permissions SELECT id,'RunJobs' FROM security.roles
+ WHERE code IN('viewer','trader','risk_analyst','market_data_editor','market_data_approver','access_administrator');
 INSERT INTO security.role_permissions SELECT id,'ManageJobs' FROM security.roles WHERE code='access_administrator';
 
 CREATE TABLE automation.workers(
