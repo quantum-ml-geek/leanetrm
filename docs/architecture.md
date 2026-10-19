@@ -36,6 +36,10 @@ and a pinned local pull operator; schema and infrastructure changes require a
 separate qualified baseline (D135). Hosted authentication and collection boundaries are described
 in [hosted pilot operations](hosted-pilot.md); the synthetic local preview stays isolated.
 
+Schema releases retain the immutable reference-intake migration before the
+durable-job and Swarm migrations (D141). Import and scheduling executor roles
+remain independent; an image update cannot silently adopt a different schema.
+
 ## 2. Application structure and deployment
 
 Start with a modular monolith and three tiers: browser, application and database.

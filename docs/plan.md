@@ -159,6 +159,12 @@ common roles, persisted current authority and database RLS. See [implementation.
 This does not complete any application/service milestone. Changes follow the
 publication discipline below.
 
+Release migration order retains reference-intake storage as 0034, followed by
+durable jobs (0035) and Swarm infrastructure (0036). Pinned migration identities
+and independent executor authority are verified together (D141). The trusted
+reference capture/import runner and external source documents are outside this
+release; retained native facts remain non-executable until separately qualified.
+
 The [bounded automation slice](automation.md) now implements durable UTC once/fixed-
 interval jobs, a separate .NET Worker Service, forced RLS/current identity checks,
 a shared Jobs & Infrastructure screen and a typed Swarm controller protocol.

@@ -17,6 +17,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def checks(query, worker_once=None, controller_once=None):
     assert query("SELECT to_regclass('automation.jobs') IS NOT NULL;") == 't', 'Durable jobs are missing'
+    assert query("""SELECT
+      NOT pg_has_role('openetrm_scheduler','openetrm_reference_importer','MEMBER')
+      AND NOT pg_has_role('openetrm_reference_importer','openetrm_scheduler','MEMBER')
+      AND NOT has_function_privilege('openetrm_scheduler','security.import_reference_capture(uuid,uuid,jsonb)','EXECUTE')
+      AND NOT has_function_privilege('openetrm_reference_importer','automation.claim_next(uuid,integer)','EXECUTE');
+      """) == 't', 'Independent service executors must not inherit each other\'s authority'
     tenant, workspace, alice, bob, admin, worker = [str(uuid4()) for _ in range(6)]
     query(f"""INSERT INTO security.tenants VALUES('{tenant}','synthetic_automation');
     INSERT INTO security.workspaces VALUES('{tenant}','{workspace}','synthetic_jobs');
@@ -298,7 +304,12 @@ def main():
                     raise RuntimeError(result.stderr)
                 return result.stdout.strip()
             for migration in sorted((ROOT/'db/migrations').glob('*.sql')):
+                if migration.name == '0035_automation_jobs.sql':
+                    query("INSERT INTO security.roles(id,code,name) VALUES(gen_random_uuid(),'synthetic_external_executor','Synthetic external executor');")
                 query(migration.read_text())
+                if migration.name == '0035_automation_jobs.sql':
+                    assert query("SELECT count(*) FROM security.roles WHERE code='synthetic_external_executor';") == '1', 'The retained custom-role fixture is required'
+                    assert query("SELECT count(*) FROM security.role_permissions p JOIN security.roles r ON r.id=p.role_id WHERE r.code='synthetic_external_executor' AND p.permission='RunJobs';") == '0', 'Existing custom roles must not silently acquire scheduling authority'
             def worker_once():
                 connection = root/'worker.connection'
                 connection.write_text(f'Host={root};Port=55439;Database=postgres;Username=automation_test_worker;SSL Mode=Disable')
