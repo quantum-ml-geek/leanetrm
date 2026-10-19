@@ -5,6 +5,7 @@ from pathlib import Path
 
 # An author's pages also carry authoring rights, which differ between working and historical views.
 PROFILE = 'editor'
+TRADER = 'trader'
 
 
 def page_view(c, name, context=None):
@@ -32,12 +33,44 @@ def page_view(c, name, context=None):
                                                        'contractId': contract})},
             'schedules': c.call('date-schedules'),
             'touProducts': current_only('tou-products'),
-            'powerCatalog': current_only('power/catalog', {'snapshotId': frame['id']})}
+            'powerCatalog': current_only('power/catalog', {'snapshotId': frame['id']}),
+            'parties': {kind: c.call('parties/catalog', {'snapshotId': frame['id'], 'kind': kind})
+                        for kind in ('legal_entity', 'counterparty')}}
 
 
-def run_checks(views, dotnet, environment, directory):
+def trade_view(c):
+    """Record trading pages as a trader, who may read trades: the workspace over working data
+    captured now, a re-read of that capture and a selected historical context, and the booking
+    directory, a pivoted Blotter and trade detail under the re-read."""
+    c.call('profile', {'profile': TRADER})
+    full = c.call('workspace')
+    frame = next(f for f in full['frames'] if f['at'].startswith('2020-12-18'))
+    report = {'mode': 'trades', 'bookIds': [], 'portfolioIds': [], 'groupBy': [],
+              'measures': [], 'pivotConvention': None}
+    pivot = {**report, 'mode': 'pivot', 'groupBy': ['book', 'market', 'contract'],
+             'measures': ['quantity'], 'pivotConvention': 'trading_blotter_totals_v1'}
+    current = {'snapshotId': frame['id'], 'convention': 'trading_workspace_v1', 'knowledgeMode': 'current'}
+    captured = c.call('trading/workspace', {'context': current, 'view': report})
+    reread = {**current, 'knowledgeMode': 'retained', 'contextId': captured['catalog']['context']['contextId']}
+    future = next(r for r in captured['blotter']['holdings'] if r['instrumentType'] != 'financial_swap')
+    trade = {'context': {**reread, 'convention': full['futuresConvention']}, 'tradeId': future['tradeId'], 'revision': None}
+    recorded = {'profile': TRADER, 'frames': full['frames'], 'frameId': frame['id'], 'report': report, 'pivot': pivot,
+                'captured': captured, 'reread': c.call('trading/workspace', {'context': reread, 'view': report}),
+                'directory': c.call('trading/workspace', {'context': reread, 'view': report, 'bookingCatalog': 'directory'}),
+                'pivoted': c.call('trading/blotter', {'context': reread, 'view': pivot}),
+                'trade': {'request': trade, 'response': c.call('futures/editor', trade)}}
+    selected = c.call('market/context', {'effectiveOn': '2020-12-18', 'mode': 'current', 'selection': 'latest_correction'})['context']
+    past = next(f for f in c.call('workspace')['frames'] if f['at'].startswith('2020-12-18'))
+    retained = {**current, 'snapshotId': past['id'], 'knowledgeMode': 'retained', 'contextId': selected['contextId']}
+    recorded['historical'] = {'context': selected, 'frame': past,
+                              'response': c.call('trading/workspace', {'context': retained, 'view': report})}
+    c.call('market/current', {})
+    return recorded
+
+
+def run_checks(views, trades, dotnet, environment, directory):
     fixture = Path(directory) / 'direct-reads.json'
-    fixture.write_text(json.dumps({'profile': PROFILE, 'views': views}))
+    fixture.write_text(json.dumps({'profile': PROFILE, 'views': views, 'trades': trades}))
     subprocess.run([str(dotnet), 'run', '--project', 'tests/OpenEtrm.Api.Checks', '--',
                     '--direct-reads', str(fixture)],
                    cwd=Path(__file__).resolve().parents[1], env=environment, check=True,

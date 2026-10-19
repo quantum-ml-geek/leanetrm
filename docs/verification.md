@@ -72,6 +72,13 @@ independent receipt foreign-key rejection checks and the complete editor/calenda
 suites. Restoring reference access permits the original accepted retry without
 creating a second publication.
 
+Qualification after integrating the market-navigation and trading-read extraction
+also passed the complete command: 138 frontend checks, 298 standard browser
+checks, 34 custom-curve browser checks and 22 calendar browser checks. The
+fresh-navigation regression verifies custom authoring and preview without pricing
+workspace hydration. Exact frame/context selection and stale-response guards
+remain intact. All owned disposable resources completed teardown.
+
 ## Hosted job
 
 [The workflow](../.github/workflows/ci.yml) uses `ubuntu-24.04` hosted runners on
@@ -854,3 +861,26 @@ administration-only startup, session isolation, logout and revocation. All
 resources are disposable and synthetic. These checks establish authorization
 contracts; hosted latency and retained-installation migration qualification are
 separate release checks.
+
+## Consumer-scoped navigation and empty directories
+
+Focused checks first reproduced the missing navigation operation and the empty
+directory's unnecessary dependency on economic contract reads. The distinct
+navigation contract now matches authorized full-workspace names,
+classifications, frame summaries and exact working/retained revision/context
+identities. A hidden member rejects partial classification; reference revocation
+and administration-only access cannot produce a successful market directory.
+Owned browser checks cover initial readiness without background full hydration,
+first pricing/reference use, no-date selection, delayed hydration after a changed
+selection, preference refresh and reset before navigation completes.
+The optional first-pricing projection preserves default evaluation responses and
+compares complete catalog metadata under working and retained contexts. Delayed
+or inconsistent metadata/source responses cannot publish a partial pricing view.
+
+Empty-directory checks compare complete legacy trades/pivot reports and booking
+metadata under the same retained context. They reject missing selected pins,
+withdrawn reference/trading authority and invalid views/books. Real synthetic
+futures-only and swaps-only holdings retain complete valuation reads; failed
+report joins cannot establish emptiness. These checks use disposable resources
+and synthetic material. They establish scoped read contracts; larger-workload,
+cold-process and hosted latency qualification remain separate measurements.

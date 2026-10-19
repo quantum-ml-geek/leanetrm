@@ -2,6 +2,7 @@ export type Row = Record<string, string | number | null>;
 export type Frame = {id:string; name:string; at:string; observationIds:string[];curveContracts:Record<string,string[]>};
 export type Workspace = {futuresConvention:string;curveNames?:{code:string;name:string}[]|null;unitCatalogError?:string|null;unitCatalog?:{revision:unknown;references:Record<string,Row[]>};profile:string;example:{at:string;curve:string}|null; definitions:Record<string,Row[]>; references:Record<string,Row[]>;referenceScope?:'definition_closure'|'all_visible';observationScope?:'on_demand';observations:Row[]; frames:Frame[]; initialFrameIds:string[]};
 import type {PricingNode} from './pricing-view.js';
+import type {FrameSummary} from './market-navigation.js';
 
 export type Point = {priceTick?:string;contractId?:string; seriesId?:string; maturity?:string; deliveryFrom?:string; deliveryTo?:string; expiry?:string; value:string; quote?:string; lineage:string[]; discountFactor?:string; displayDiscountFactor?:string; annualRate?:string; actualDays?:number};
 export type CurveResult = {kind?:'rates';convention?:{dayCount:string;compounding:string};availability?:'no_remaining_contracts';trace?:PricingNode[];observationScope?:'selected_frame';observations?:Row[];snapshotId:string; curve:string; at:string; points:Point[]; evaluated:number; numericalPolicy:string};
@@ -72,7 +73,7 @@ export function timeLabels(values:string[],zone:string){
   labels.forEach((label,i)=>{if(!identities.has(label))identities.set(label,new Set());identities.get(label)!.add(minutes[i]);});
   return labels.map((label,i)=>identities.get(label)!.size<2?label:`${label} ${new Intl.DateTimeFormat('en',{timeZone:zone,timeZoneName:'shortOffset'}).formatToParts(new Date(values[i])).find(p=>p.type==='timeZoneName')!.value}`);
 }
-export function frameOptions(frames:Frame[],zone:string){
+export function frameOptions(frames:FrameSummary[],zone:string){
   const totals=new Map<number,number>(),counts=new Map<number,number>(),dates=timeLabels(frames.map(f=>f.at),zone);
   const minutes=frames.map(f=>Math.floor(new Date(f.at).getTime()/60000));
   minutes.forEach(m=>totals.set(m,(totals.get(m)??0)+1));

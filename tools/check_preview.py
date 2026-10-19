@@ -33,6 +33,10 @@ def run_checks(url,query,manifest,direct_reads):
     c.call('profile',{'profile':'viewer'})
     from check_bootstrap_access import run_checks as check_bootstrap_access
     check_bootstrap_access(c,check,query)
+    from check_market_navigation import run_checks as check_market_navigation
+    check_market_navigation(c,check,query,manifest)
+    from check_first_pricing import run_checks as check_first_pricing
+    check_first_pricing(c,check)
     workspace=c.call('workspace')
     check('database timestamp transport stays UTC under a non-UTC API environment',all(m.get('event_at') is None or m['event_at'].endswith('+00:00') for m in workspace['references']['futures_milestones']))
     check('viewer reads real catalog and exact input frames',len(workspace['definitions']['curves'])==10 and len(workspace['frames'])==4)
@@ -137,6 +141,8 @@ def run_checks(url,query,manifest,direct_reads):
     check_admin(Client,check)
     from check_power_preview import run_checks as check_power
     check_power(Client,check)
+    from check_empty_trading_directory import run_checks as check_empty_directory
+    check_empty_directory(c,check,query,manifest)
     from check_futures_preview import run_checks as check_futures
     check_futures(Client,check)
     from check_trading_directory import run_checks as check_trading_directory

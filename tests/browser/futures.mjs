@@ -13,7 +13,7 @@ export async function run({command,evaluate,wait,click,set,submit,persona,check,
     if(path==='/api/futures/status'&&window.__denyReconcile){window.__denyReconcile=false;return new Response(JSON.stringify({code:'access_denied',message:'Synthetic access denial'}),{status:403,headers:{'Content-Type':'application/json'}});}
     if(path==='/api/futures/book'&&window.__denyRetry){window.__denyRetry=false;return new Response(JSON.stringify({code:'access_denied',message:'Synthetic access denial'}),{status:403,headers:{'Content-Type':'application/json'}});}
     let response=await send(input,init);
-    if(path==='/api/workspace/catalog'&&response.ok){const data=await response.json();data.curveNames.push({code:'second_future',name:'Second Future'});response=new Response(JSON.stringify(data),{status:200,headers:{'Content-Type':'application/json'}});}
+    if(path==='/api/workspace/navigation'&&response.ok){const data=await response.json();data.curveNames.push({code:'second_future',name:'Second Future'});response=new Response(JSON.stringify(data),{status:200,headers:{'Content-Type':'application/json'}});}
     if((path==='/api/futures/catalog'||path==='/api/trading/workspace')&&response.ok&&(window.__duplicateContract||window.__mismatchedWorkspace)){
       const data=await response.json(),catalog=path==='/api/trading/workspace'?data.catalog:data;
       if(window.__duplicateContract&&catalog.kind==='priced_contracts')catalog.contracts.push({...catalog.contracts[0],curve:'second_future'});

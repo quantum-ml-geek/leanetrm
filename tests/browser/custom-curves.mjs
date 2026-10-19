@@ -1,8 +1,11 @@
 /** Browser behavior over the same authorized custom-curve operations used by agents. */
 export async function run({command,evaluate,wait,click,set,persona,check,shot,idle,url}){
  await command('Runtime.enable');await command('Page.enable');await command('Emulation.setDeviceMetricsOverride',{width:1440,height:1100,deviceScaleFactor:1,mobile:false});
+ await command('Page.addScriptToEvaluateOnNewDocument',{source:`window.customAuthoringReads=[];{const original=window.fetch;window.fetch=(input,init)=>{window.customAuthoringReads.push(new URL(typeof input==='string'?input:input.url,location.href).pathname);return original(input,init);};}`});
  await command('Page.navigate',{url:url+'/'});await wait("document.querySelectorAll('.curve-button').length>0&&"+idle);
- await persona('editor');await click('#example');await click('#nav-custom-curves');
+ await persona('editor');
+ const selectedClose=await evaluate("[...document.querySelector('#snapshot').options].find(option=>option.textContent.includes('Dec 18')&&option.textContent.includes('4:00')).value");
+ await set('#snapshot',selectedClose);await wait(idle);await click('#nav-custom-curves');
  await check('custom curve editor loads backend operation and template catalogs',"!document.querySelector('#custom-curves-page').hidden&&document.querySelector('#custom-curves-template option[value=ng_prompt]')&&document.querySelectorAll('#custom-curves-operators button').length>=5");
  await set('#custom-curves-template','ng_prompt');
  await check('prompt template creates a connected editable graph',"document.querySelectorAll('.custom-curve-node').length>=4&&document.querySelectorAll('.custom-curve-wires path').length>=3");
@@ -16,6 +19,7 @@ export async function run({command,evaluate,wait,click,set,persona,check,shot,id
  await set('#custom-curve-property-first','1');
  await evaluate(`window.customCurveRequests=[];{const previous=window.fetch;window.fetch=async(...args)=>{const response=await previous(...args);if(String(args[0]).includes('/custom-curves/')){const payload=await response.clone().json().catch(()=>null);window.customCurveRequests.push({path:String(args[0]),body:args[1]?.body?JSON.parse(args[1].body):null,status:response.status,payload});if(String(args[0]).endsWith('/custom-curves/save')&&window.dropCustomSave){window.dropCustomSave=false;throw Error('Synthetic lost response');}if(String(args[0]).endsWith('/custom-curves/publish')&&window.dropCustomPublish){window.dropCustomPublish=false;throw Error('Synthetic lost publication response');}}return response;};}`);
  await click('#custom-curves-preview');
+ await check('fresh-navigation custom authoring previews without hydrating the pricing workspace',"window.customAuthoringReads.includes('/api/custom-curves')&&window.customAuthoringReads.includes('/api/custom-curves/preview')&&!window.customAuthoringReads.includes('/api/workspace/catalog')&&!window.customAuthoringReads.includes('/api/evaluate')&&!document.querySelector('#custom-curves-result').hidden&&document.querySelector('#error').hidden");
  await check('preview sends the graph and displays backend-returned prices',"window.customCurveRequests.some(r=>r.path.endsWith('/custom-curves/preview')&&r.body.definition.code==='ng_prompt'&&r.body.snapshotId&&r.status===200)&&!document.querySelector('#custom-curves-result').hidden&&document.querySelectorAll('#custom-curves-values tbody tr').length>0&&document.querySelector('#error').hidden");
  await evaluate("window.customPromptPreview=window.customCurveRequests.find(r=>r.path.endsWith('/custom-curves/preview')).payload");
  await check('preview table preserves the server result rather than recalculating values',"window.customPromptPreview.rows.every(row=>row.every(value=>value===null||document.querySelector('#custom-curves-values').textContent.includes(String(value))))");

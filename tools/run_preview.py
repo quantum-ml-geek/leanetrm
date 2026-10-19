@@ -307,7 +307,7 @@ def main():
             else:
                 from check_preview import run_checks
                 from check_direct_reads import run_checks as check_direct_reads
-                workspace=run_checks(url,query,manifest,lambda views:check_direct_reads(views,dotnet,app_env,temporary))
+                workspace=run_checks(url,query,manifest,lambda views,trades:check_direct_reads(views,trades,dotnet,app_env,temporary))
                 from check_table_views import run_checks as check_table_views
                 check_table_views(url)
                 from check_schedule_storage import run_checks as check_schedule_storage
@@ -332,7 +332,9 @@ def main():
                     if browser_process.wait(timeout=360):
                         raise RuntimeError('Owned browser checks failed')
                 from check_swaps_preview import run_checks as check_swaps
-                check_swaps(url)
+                swap_client=check_swaps(url)
+                from check_empty_trading_directory import run_nonempty_checks
+                run_nonempty_checks(swap_client,query,manifest)
                 from check_swap_payment_rules import run_checks as check_swap_payment_rules
                 check_swap_payment_rules(url)
                 from check_booking_facts import run_checks as check_booking_facts

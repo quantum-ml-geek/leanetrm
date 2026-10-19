@@ -1,5 +1,5 @@
 """Bounded page-read checks for an owned synthetic preview."""
-from check_direct_reads import PROFILE, page_view
+from check_direct_reads import PROFILE, page_view, trade_view
 
 HISTORICAL = {'effectiveOn': '2020-12-17', 'mode': 'current', 'selection': 'latest_correction'}
 
@@ -10,7 +10,7 @@ def run_checks(c, check, direct_reads):
              page_view(c, 'historical', c.call('market/context', HISTORICAL)['context'])]
     check('a historical view refuses current-only TOU products and power hours',
           views[1]['touProducts'] == views[1]['powerCatalog'] == 'power_historical')
-    direct_reads(views)
+    direct_reads(views, trade_view(c))
     c.call('profile', {'profile': 'viewer'})
     catalog = c.call('workspace/catalog')
     full = c.call('workspace')

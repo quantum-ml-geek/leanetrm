@@ -228,11 +228,11 @@ public sealed partial class SwapStore(PreviewDatabase database)
   booking=TradeParties.State(manifest.CatalogId,row),bookingFacts=TradeAnnotations.Facts(row),traderId=row.Id("booker_id"),traderRevision=int.Parse(row.Text("booker_version"),CultureInfo.InvariantCulture),trader=row.Text("booker_name"),traderCode=row.Text("booker_login"),executedAt=row.Text("booked_at"),memo=row.OptionalText("memo"),tradeId=row.Id("trade_id"),tradeReference=TradingReference.Trade(row),instrumentId=row.Id("instrument_id"),instrumentReference=TradingReference.Instrument(row),
   revision=int.Parse(row.Text("revision"),CultureInfo.InvariantCulture),eventId=row.Id("event_id"),kind=row.Text("event_kind"),effectiveAt=row.Text("effective_at"),recordedAt=row.Text("recorded_at"),reason=row.Text("reason"),
   quantity=row.Text("quantity"),terms=Terms(data,row,snapshot)};
- public async Task<object> Editor(NpgsqlConnection connection,PreviewData data,InputFrame frame,SwapEditorRequest body,CancellationToken ct)
+ public async Task<object> Editor(NpgsqlConnection connection,PreviewData data,InputFrame frame,Guid tradeId,int? revision,CancellationToken ct)
  {
-  var rows=await Rows(connection,body.TradeId,ct);if(rows.IsEmpty)throw Error("swap_trade","This trade is unavailable in the selected context.");
-  var revision=body.Revision??rows.Max(r=>int.Parse(r.Text("revision"),CultureInfo.InvariantCulture));
-  var row=One(rows.Where(r=>r.Number("revision")==ExactDecimal.Parse(revision.ToString(CultureInfo.InvariantCulture))));
+  var rows=await Rows(connection,tradeId,ct);if(rows.IsEmpty)throw Error("swap_trade","This trade is unavailable in the selected context.");
+  var selected=revision??rows.Max(r=>int.Parse(r.Text("revision"),CultureInfo.InvariantCulture));
+  var row=One(rows.Where(r=>r.Number("revision")==ExactDecimal.Parse(selected.ToString(CultureInfo.InvariantCulture))));
   var terms=Terms(data,row,frame.Id);var value=await Price(connection,data,frame,terms,row.Id("instrument_id"),row.Id("fixed_side_id"),row.Id("floating_side_id"),ct);
   ValidateProjections(value,row);
   return new{state=State(data,row,frame.Id),history=rows.Select(r=>State(data,r,frame.Id)),valuation=Value(value),catalog=await Catalog(connection,data,frame,ct),

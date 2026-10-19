@@ -55,6 +55,23 @@ Historical requests retain their selected context and remain read-only.
 Business reads follow the definition bundle's declared reference relationships;
 the reference inspector loads its selected table separately in bounded pages
 under the same authorization and temporal rules (D144).
+Initial browsing uses a distinct market-navigation response: curve names and
+explicit classifications, frame summaries and exact bundle/context identities.
+It reads no observations, economic model or unit-conversion catalog. Full
+workspace inspection remains available and is loaded explicitly before a screen
+consumes its definitions, references or source pins. The browser keeps these two
+contracts separate and rejects hydration from a changed identity or selection.
+First pricing can explicitly include the complete catalog projection from its
+same authorized model read, avoiding a second model load. Selected source facts
+remain separate from the catalog's empty, on-demand observation projection.
+An explicit Blotter directory may return an empty report without constructing a
+valuation model only after both product revision tables have no visible rows
+under the selected trading context. Exact bundle/reference visibility, selected
+observation completeness, view/book validation and final current authority still
+apply. Any visible revision retains the complete valuation path, even if report
+filters would hide it. These projections defer validation of unused economic
+material; they do not supply missing financial inputs or change pricing rules
+(D160).
 
 Exchange first-trading facts and application execution eligibility are distinct
 (D158, superseding D157's installation-specific restrictions). A sourced date
@@ -123,7 +140,7 @@ Logical modules:
 
 Presentation uses familiar business names. Market data provides futures and
 forward curves with commodity-first or market-type-first browsing. A compact
-market-close calendar sits in the header (D161); user profiles hold time zone and
+market-close calendar sits in the header (D162); user profiles hold time zone and
 other remembered display preferences. Minutes are enough for ordinary display;
 exact retained instants and selected versions remain unchanged underneath. Repeated
 local clock times must remain distinguishable, for example by showing an offset
@@ -184,7 +201,7 @@ for the first slice. A measured bottleneck can justify moving an implementation
 behind the existing calculation contract later.
 
 Custom curve authoring uses a typed graph shared by visual and formula editors
-(D160). Exact source and date-reference bindings are persisted as normalized
+(D161). Exact source and date-reference bindings are persisted as normalized
 foreign keys; calculation uses immutable multi-date typed inputs and returns
 exact rational prices with observation and factor lineage. A qualified SQL
 transformation may aggregate only its supplied panel. The initial workspace and
