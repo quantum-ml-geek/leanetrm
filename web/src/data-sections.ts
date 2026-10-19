@@ -7,6 +7,7 @@ export const referenceSections=[
   {value:'calendars',name:'Calendars'},{value:'calendar_days',name:'Calendar dates'},
   {value:'futures_products',name:'Futures products'},{value:'futures_series',name:'Futures contracts'},
   {value:'futures_milestones',name:'Contract dates'},{value:'price_index_definitions',name:'Price indexes'},
+  {value:'futures_execution_admissions',name:'Trading eligibility'},
   {value:'interest_rate_definitions',name:'Interest rates'},
   {value:'sources',name:'Data sources'}
 ];

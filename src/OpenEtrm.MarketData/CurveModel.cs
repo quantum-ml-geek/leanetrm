@@ -56,7 +56,7 @@ public sealed partial class CurveModel
             throw new MarketDataException("futures_definition", "The exact futures-series primary key is unavailable.");
         return contractInstruments.GetOrAdd(key, _ => new(terms));
     }
-    public FuturesMarketBinding BindFutures(Guid bindingId, CurveRequest request, string settlementMethod,string implementation)
+    public FuturesMarketBinding BindFutures(Guid bindingId, CurveRequest request, string settlementMethod,string implementation,DateTimeOffset? eligibleFrom=null)
     {
         var instrument = FuturesContract(request.Contract);
         if (!curves.TryGetValue(request.Curve, out var curve))
@@ -64,7 +64,7 @@ public sealed partial class CurveModel
         var quote = Quote(curve);
         RequireFuturesDefinition(request, contracts[request.Contract], instrument.Series, quote);
         return new(bindingId, request, contracts[request.Contract], instrument.Series, quote,
-            settlementMethod, implementation, instrument);
+            settlementMethod, implementation, instrument,eligibleFrom);
     }
 
     private static ImmutableDictionary<K, V> Unique<K, V>(IEnumerable<V> values, Func<V, K> key) where K : notnull
@@ -173,8 +173,7 @@ public sealed partial class CurveModel
                 }
                 if (!quantities.ContainsKey(spec.QuoteQuantity) || !quantities.TryGetValue(spec.LotQuantity, out var lot) ||
                     spec.SettlementMethod is not ("cash" or "physical") || !Positive(spec.ContractSize) || !Positive(spec.Multiplier) || !Positive(spec.TradingTick) ||
-                    spec.FirstTradingAt.Offset != TimeSpan.Zero || spec.FirstTradingAt.Ticks % 10 != 0 ||
-                    spec.FirstTradingAt >= spec.LastTradingAt ||
+                    spec.FirstTradingAt is {} first&&(first.Offset != TimeSpan.Zero || first.Ticks % 10 != 0 || first>=spec.LastTradingAt) ||
                     lot.Commodity != quantities[spec.QuoteQuantity].Commodity ||
                     contract.DeliveryFrom != spec.DeliveryFrom || contract.DeliveryTo != spec.DeliveryTo || contract.Expiry != spec.LastTradingAt)
                     Fail("futures_specification", "Dated contract conflicts with its authoritative futures specification.");
@@ -197,7 +196,7 @@ public sealed partial class CurveModel
                 if (contracts[member].FuturesSeries is { } series)
                 {
                     var spec = futures[series];
-                    if (curve.Rule != CurveRule.Direct || curve.DirectRole != ObservationRole.DailySettlement ||
+                    if (curve.Rule != CurveRule.Direct || curve.DirectRole is not (ObservationRole.DailySettlement or ObservationRole.TraderMark) ||
                         curve.Settlement.Kind != SettlementKind.FutureSeries || output.Kind != (spec.BasisSettlement is null?QuoteKind.Outright:QuoteKind.Basis) ||
                         output.Quantity != spec.QuoteQuantity || output.Currency != spec.Currency || output.Multiplier != spec.Multiplier ||
                         output.TradingTick != spec.TradingTick || curve.Location != spec.Location || curve.DeliveryProfile != spec.DeliveryProfile)

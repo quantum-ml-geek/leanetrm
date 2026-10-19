@@ -13,6 +13,8 @@ export async function run({command,evaluate,wait,click,set,submit,persona,check,
   await check('viewer schedules page is read-only lookup without authoring tools',"!document.querySelector('#schedules-page').hidden&&document.querySelector('#dates-editor').hidden&&document.querySelector('#schedule-inspector').hidden&&document.querySelector('#nav-configuration').hidden&&!document.querySelector('#date-expression-form').hidden");
   await click('#nav-market');
   await persona('editor');await click('#nav-schedules');
+  await set('#schedule-source',await evaluate("document.querySelector('#schedule-source').options[1].value"));
+  await check('schedule eligibility is labeled separately from actual first trading',"(()=>{const header=document.querySelector('#schedule-contracts thead');return header&&header.textContent.includes('Trading eligibility')&&!header.textContent.includes('First trading');})()");
   await check('editor drafts schedules against reference calendars only',"!document.querySelector('#dates-editor').hidden&&[...document.querySelectorAll('#dates-calendar option')].some(o=>o.value.endsWith('|test_business'))&&!document.querySelector('#dates-closures')&&document.querySelector('#dates-publish').hidden");
   await click('#nav-market');await click('#example');
   await set('#date-context-on','2020-12-17');await click('#date-context-latest');await click('#apply-view-context');

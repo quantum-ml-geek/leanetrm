@@ -79,7 +79,7 @@ public sealed class FuturesRiskPreview(FuturesStore store)
                     contractSize=s.LotSize.Amount.ToString(),nominalSize=s.Series.ContractSize.ToString(),lotFactor=s.Series.LotResolution?.Factor.ToString(),lotResolution=s.Series.LotResolution?.Implementation,lotQuantity=s.Series.LotQuantity,lotBasis=s.Series.LotBasis.ToString(),
                     quote=s.Quote.Key,priceUnit=PriceUnitData(PriceUnit.FromQuote(s.Quote)),tradingTick=s.Quote.TradingTick.ToString(),
                     clearingIncrement=s.Quote.ClearingIncrement.ToString(),minimumPrice=s.Quote.Minimum.ToString(),maximumPrice=s.Quote.Maximum.ToString(),
-                    s.SettlementMethod,s.FirstTrading,s.Contract.Expiry,convention=s.Convention})},
+                    s.SettlementMethod,firstTrading=s.Series.FirstTradingAt,s.EligibleFrom,s.Contract.Expiry,convention=s.Convention})},
             modelContracts=run.Contracts.Select(c=>new{c.Id,c.ModelVersion,c.Dependencies,c.Quantity,c.Currency}),
             factors=run.Factors.Select(f=>new{factor=Factor(data,available.Single(a=>a.Input==f.Bump.Input)),bump=f.Bump.Size.ToString(),bumpConvention=f.Bump.ConventionId,
                 f.UpWork,f.DownWork,totals=f.Totals.Select(t=>new{bookId=t.BookId,book=Book(t.BookId),values=Values(t.Base,t.Up,t.Down,t.UpPnl,t.DownPnl,t.Delta,t.Gamma)}),

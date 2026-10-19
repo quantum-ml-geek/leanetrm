@@ -41,7 +41,7 @@ public sealed class PreviewDatabase : IAsyncDisposable
         "exchanges", "clearing_houses", "exchange_clearing_houses",
         "interest_rate_definitions", "price_index_definitions", "sources", "product_evidence",
         "delivery_profiles", "settlement_targets", "cash_rounding_conventions",
-        "futures_products", "futures_series", "futures_milestones", "futures_lot_resolutions", "futures_product_terms", "futures_basis_settlements"];
+        "futures_products", "futures_series", "futures_execution_admissions", "futures_milestones", "futures_lot_resolutions", "futures_product_terms", "futures_basis_settlements"];
     private static readonly string[] DefinitionTables = ["revisions", "contracts", "curves", "series", "curve_members", "curve_inputs", "constituent_mappings", "rate_curves", "rate_curve_points", "revision_periods"];
     private static readonly string[] UnitTables = ["dimensions", "units", "unit_conversions", "commodities", "measurement_bases", "quantity_specifications"];
 
@@ -162,7 +162,7 @@ SELECT NOT(rolsuper OR rolbypassrls OR rolcreatedb OR rolcreaterole) AND pg_has_
     {
         var loaded=new Dictionary<string,ImmutableArray<JsonElement>>();
         var bounded=new HashSet<string>(["futures_series","futures_products","futures_milestones","futures_lot_resolutions",
-            "futures_product_terms","futures_basis_settlements","product_evidence","locations","commodity_locations","calendar_days"]);
+            "futures_product_terms","futures_basis_settlements","futures_execution_admissions","product_evidence","locations","commodity_locations","calendar_days"]);
         async Task<ImmutableArray<JsonElement>> ReadTable(string table,string? column=null,IEnumerable<string>? codes=null)
         {
             // These immutable tables are complete in every read scope. Reuse
@@ -207,7 +207,7 @@ SELECT NOT(rolsuper OR rolbypassrls OR rolcreatedb OR rolcreaterole) AND pg_has_
         var products=Codes(loaded["futures_series"],"product_code").ToArray();
         loaded["futures_products"]=await ReadTable("futures_products","code",products);
         foreach(var table in new[]{"futures_product_terms","product_evidence"})loaded[table]=await ReadTable(table,"product_code",products);
-        foreach(var table in new[]{"futures_milestones","futures_lot_resolutions"})loaded[table]=await ReadTable(table,"series_code",seen);
+        foreach(var table in new[]{"futures_milestones","futures_lot_resolutions","futures_execution_admissions"})loaded[table]=await ReadTable(table,"series_code",seen);
         var locations=Codes(definitions["curves"],"location_code")
             .Concat(Codes(loaded["futures_products"],"location_code"))
             .Concat(Codes(loaded["price_index_definitions"],"location_code")).Distinct().ToArray();
@@ -251,6 +251,7 @@ SELECT NOT(rolsuper OR rolbypassrls OR rolcreatedb OR rolcreaterole) AND pg_has_
             "exchange_clearing_houses"=>"exchange_code,clearing_house_code",
             "product_evidence"=>"product_code,source_code,fact_group",
             "futures_milestones"=>"series_code,milestone",
+            "futures_execution_admissions"=>"series_code,implementation",
             "futures_lot_resolutions" or "futures_basis_settlements"=>"series_code",
             "futures_product_terms"=>"product_code",
             _=>"code"
@@ -291,7 +292,7 @@ SELECT NOT(rolsuper OR rolbypassrls OR rolcreatedb OR rolcreaterole) AND pg_has_
         ("units",["unit_code","lot_unit_code","from_unit_code","to_unit_code","quote_unit_code","fuel_unit_code","output_unit_code"]),
         ("locations",["location_code"]),("location_types",["type_code"]),
         ("exchanges",["exchange_code"]),("clearing_houses",["clearing_house_code"]),
-        ("sources",["source_code"]),("futures_products",["product_code"]),("futures_series",["series_code"]),
+        ("sources",["source_code","qualification_source_code"]),("futures_products",["product_code"]),("futures_series",["series_code"]),
         ("clock_rules",["clock_code","market_clock_code"]),("calendars",["calendar_code","trading_calendar_code"]),
         ("quantity_specifications",["quantity_code","numerator_quantity_code","denominator_quantity_code"]),
         ("measurement_bases",["basis_code"]),("price_index_definitions",["index_a_code","index_b_code"])
@@ -394,6 +395,7 @@ public sealed class PreviewData
     private readonly PreviewManifest manifest;
     public ImmutableDictionary<string, ImmutableArray<JsonElement>> Definitions { get; }
     public ImmutableDictionary<string, ImmutableArray<JsonElement>> References { get; }
+    public FuturesAdmission Admission { get; }
     public ImmutableArray<JsonElement> Observations { get; }
     public CurveModel Model { get; }
     public ImmutableArray<MarketContract> Contracts { get; }
@@ -410,7 +412,7 @@ public sealed class PreviewData
         IReadOnlyDictionary<string, ImmutableArray<JsonElement>> references, ImmutableArray<JsonElement> observations)
     {
         RequireBundlePin(manifest,Single(definitions["revisions"]));
-        this.manifest=manifest; Definitions=definitions.ToImmutableDictionary(); References=references.ToImmutableDictionary(); Observations=observations;
+        this.manifest=manifest; Definitions=definitions.ToImmutableDictionary(); References=references.ToImmutableDictionary(); Admission=new(References); Observations=observations;
         revision=new(manifest.CatalogId,manifest.RevisionId); reference=new(manifest.ReferenceCatalogId,manifest.ReferenceRevisionId);
         var quantities=references["quantity_specifications"].Select(q => new QuantitySpecification(R(q.Text("code")),R(q.Text("commodity_code")),R(q.Text("basis_code")),R(q.Text("unit_code")),R(q.Text("dimension_code")))).ToImmutableArray();
         var quotes=Quotes=references["quote_specifications"].Select(q => new QuoteSpecification(R(q.Text("code")),q.Text("kind") switch {"outright"=>QuoteKind.Outright,"basis"=>QuoteKind.Basis,_=>throw Unsupported()},R(q.Text("currency_code")),R(q.Text("quantity_code")),q.Number("multiplier"),q.Number("trading_tick"),q.Number("clearing_increment"),q.Number("minimum"),q.Number("maximum"))).ToImmutableArray();
@@ -455,7 +457,7 @@ public sealed class PreviewData
             FuturesBasisSettlement? basisSettlement=basis.ValueKind==JsonValueKind.Undefined?null:new(R(basis.Text("index_code")),R(basis.Text("benchmark_series_code")),basis.Text("implementation"));
             return new FuturesSeriesSpecification(c.FuturesSeries!.Value,Quantity(product.Text("quote_unit_code")),R(product.Text("quote_currency_code")),product.Number("quote_multiplier"),product.Number("outright_tick_size"),R(product.Text("location_code")),R(terms.Text("profile_code")),
                 DateOnly.ParseExact(series.Text("delivery_from"),"yyyy-MM-dd",System.Globalization.CultureInfo.InvariantCulture),DateOnly.ParseExact(series.Text("delivery_to"),"yyyy-MM-dd",System.Globalization.CultureInfo.InvariantCulture),SchedulePreview.RequiredMilestoneInstant(expiry),Quantity(product.Text("lot_unit_code")),product.Number("contract_size"),
-                product.Text("lot_basis") switch {"fixed_total"=>LotBasis.FixedTotal,"per_delivery_day"=>LotBasis.PerDeliveryDay,"per_delivery_hour"=>LotBasis.PerDeliveryHour,_=>throw Unsupported()},SchedulePreview.RequiredMilestoneInstant(first),product.Text("settlement_method"),resolved,basisSettlement);
+                product.Text("lot_basis") switch {"fixed_total"=>LotBasis.FixedTotal,"per_delivery_day"=>LotBasis.PerDeliveryDay,"per_delivery_hour"=>LotBasis.PerDeliveryHour,_=>throw Unsupported()},first.OptionalText("event_at") is null?null:SchedulePreview.RequiredMilestoneInstant(first),product.Text("settlement_method"),resolved,basisSettlement);
         }).ToImmutableArray();
         var valueSpecs=references["value_specifications"].Select(v=>new ValueSpecification(R(v.Text("code")),v.Text("kind") switch {"quantity_ratio"=>NumericKind.QuantityRatio,"dimensionless"=>NumericKind.Dimensionless,_=>throw Unsupported()},v.OptionalText("numerator_quantity_code") is {} a?R(a):null,v.OptionalText("denominator_quantity_code") is {} b?R(b):null,v.Number("minimum"),v.Number("maximum"))).ToImmutableArray();
         var seriesDefinitions=definitions["series"].Select(s=>new MarketSeries(S(s.Id("id")),s.OptionalId("contract_id") is {} id?K(id):null,s.OptionalText("quote_code") is {} q?R(q):null,s.OptionalText("value_specification_code") is {} v?R(v):null)).ToImmutableArray();

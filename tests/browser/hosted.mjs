@@ -10,6 +10,7 @@ await withOwnedBrowser(target,process.argv[3],async({command,evaluate,wait,set,c
   await evaluate("document.querySelector('#signin').requestSubmit()");
   await wait("location.pathname==='/' && document.querySelector('#profile-label')?.textContent==='Synthetic hosted human'");
   await wait(idle);
+  await check('verified hosted mode identifies the private pilot and qualifies generated marks',"document.querySelector('#workspace-host-mode').textContent==='Private pilot'&&document.querySelector('#workspace-footer').textContent.includes('Generated marks and sample trades')&&!/disposable|local preview/i.test(document.querySelector('.side-note').textContent+document.querySelector('#workspace-footer').textContent)");
   await click('#nav-delivery');
   await check('configured delivery-price sources and paused scheduler are visible',"document.querySelector('#delivery-price-source').options.length===2 && document.querySelector('#delivery-price-jobs').textContent.includes('paused')");
   await evaluate("document.querySelector('#delivery-price-source').selectedIndex=1");

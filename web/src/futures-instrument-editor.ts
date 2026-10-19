@@ -1,5 +1,5 @@
 import {curveName,displayInstant,publicText} from './market-view.js';
-import type {FuturesContract} from './futures-contract.js';
+import {firstTradingText,type FuturesContract} from './futures-contract.js';
 
 // Product-specific presentation shared by booking and amendment. Catalog terms
 // and computed quantities/prices originate in the managed operations.
@@ -17,9 +17,9 @@ export function futuresInstrumentEditor(host:HTMLElement,ids:{contract:string;lo
    ['Contract size',`${c.contractSize} ${c.unit} per lot`],['Nominal size',`${c.nominalSize} ${c.nominalUnit}`],['Quantity basis',c.lotBasis],
    ['Currency',c.currency],['Settlement',c.settlementMethod],['Settlement index',c.index??'Physical delivery contract'],['Quote type',c.quoteKind??'outright'],
    ...(c.basisSettlement?[["Basis benchmark",c.basisSettlement.benchmarkSeries.code] as const]:[]),
-   ['Example admission',c.eligibilityNote??'Project-authored synthetic terms'],['Lot factor',c.lotFactor??'Fixed contract total'],['Specification source',c.sourceUrl??'Project-authored synthetic specification'],
+   ['Eligibility source',c.eligibilityNote??'No additional source note supplied'],['Lot factor',c.lotFactor??'Fixed contract total'],['Specification source',c.sourceUrl??'Source URL unavailable'],
    ['Quote multiplier',c.quoteMultiplier],['Execution tick',c.tick],['Settlement-price increment',c.clearingIncrement],['Minimum price',c.minimumPrice],['Maximum price',c.maximumPrice],
-   [`First trading · ${zone}`,displayInstant(c.firstTrading,zone)],[`Last trading (exclusive) · ${zone}`,displayInstant(c.lastTrading,zone)],['Selected curve price',mark(c.mark,c.clearingIncrement)]
+   [`Actual first trading · ${zone}`,firstTradingText(c.firstTrading,zone)],[`Trading eligibility from · ${zone}`,displayInstant(c.eligibleFrom,zone)],[`Last trading (exclusive) · ${zone}`,displayInstant(c.lastTrading,zone)],['Selected curve price',mark(c.mark,c.clearingIncrement)]
   ]:[];
   terms.replaceChildren(...rows.map(([label,value])=>{const row=document.createElement('div'),name=document.createElement('dt'),content=document.createElement('dd');row.className='side-term';name.textContent=label;content.textContent=publicText(value);row.append(name,content);return row;}));
  }};

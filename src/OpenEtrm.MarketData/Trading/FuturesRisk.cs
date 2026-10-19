@@ -34,7 +34,7 @@ public static class FuturesRisk
         var bindings=sides.GroupBy(s=>s.Instrument.Id).ToImmutableDictionary(g=>g.Key,g=>
         {
             var first=g.First();
-            if(g.Any(s=>s.Market!=first.Market||s.Series!=first.Series||s.Quote!=first.Quote||s.Convention!=first.Convention||s.FirstTrading!=first.FirstTrading))
+            if(g.Any(s=>s.Market!=first.Market||s.Series!=first.Series||s.Quote!=first.Quote||s.Convention!=first.Convention||s.EligibleFrom!=first.EligibleFrom))
                 throw new MarketDataException("valuation_binding","One instrument must resolve to one exact pricing binding in the shared context.");
             return first;
         });

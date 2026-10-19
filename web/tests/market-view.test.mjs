@@ -32,6 +32,11 @@ test('location coordinates have plain labels and preserve exact decimal text',()
 test('interest curves are browsed without manufacturing commodity contracts',()=>{const copy=structuredClone(workspace);copy.definitions.rate_curves=[{code:'interest_rates',interest_rate_code:'rate'}];assert.equal(allCurves(copy).length,4);assert.equal(marketType(copy.definitions.rate_curves[0],copy),'rates');assert.deepEqual(marketGroups(copy,'commodity','rates','rates').map(g=>g.name),['Interest rates']);assert.equal(copy.definitions.contracts.length,3);});
 test('retired standalone convention catalogs are not menu choices',()=>{assert.ok(![...referenceSections,...setupSections].some(s=>['day_count_conventions','compounding_conventions','fx_rate_definitions','heat_rate_definitions'].includes(s.value)));});
 
+test('execution admission inspection has an explicit category and source-code labels',()=>{
+  assert.deepEqual(dataSections(['futures_execution_admissions'])[0]?.sections,[{value:'futures_execution_admissions',name:'Trading eligibility'}]);
+  assert.deepEqual(publicColumns([{eligible_from:'2026-01-05T09:00:00Z',qualification_source_code:'source',source_series_code:'source_contract',usage_policy:'sample'}]).map(c=>c.name),['Trading eligibility from','Qualification source','Source contract code','Usage policy']);
+});
+
 
 test('older saved profiles acquire only presentation layout defaults',()=>{const old={version:1,timeZone:'UTC',browseBy:'commodity',commodity:'all',marketType:'all',tab:'prices'};const prefs=parsePreferences(JSON.stringify(old));assert.deepEqual(prefs,newPreferences('UTC'));});
 test('collapsed sidebar library and menus persist independently per persona',()=>{const entries=new Map(),storage={getItem:k=>entries.get(k)??null,setItem:(k,v)=>entries.set(k,v)},prefs={...newPreferences('UTC'),sidebarCollapsed:true,libraryCollapsed:true,collapsedMenus:['settings-menu'],collapsedCurveGroups:['commodity|Gas']};savePreferences(storage,'viewer',prefs);assert.deepEqual(loadPreferences(storage,'viewer','UTC'),prefs);assert.deepEqual(loadPreferences(storage,'editor','UTC').collapsedMenus,[]);});
