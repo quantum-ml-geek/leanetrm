@@ -11,11 +11,12 @@ import {type Context,setupDateEditor} from './date-editor.js';
 import {renderRegularTable,clearTableFilters} from './regular-table.js';
 import {curveWorkbook,rateWorkbook,renderWorkbook} from './curve-workbook.js';
 import {type PricingGraph,pricingGraph,pricingEquation} from './pricing-view.js';
-import {type Row,type Frame,type Workspace,type CurveResult,type PriceHistory,val,publicText,friendly,curveName,setCurveNames,exactRow,commodityName,marketType,marketGroups,displayInstant,deliveryMonth,frameOptions,quoteUnit,publicColumns,timeLabels,marketTypeName,allCurves,marketCategory,categoryName,displayDate,pointDate,pointIdentity,deliveryLabel,historyPriceLabel} from './market-view.js';
+import {type Row,type Frame,type Workspace,type CurveResult,type PriceHistory,val,publicText,friendly,curveName,setCurveNames,exactRow,commodityName,marketType,displayInstant,deliveryMonth,frameOptions,quoteUnit,publicColumns,timeLabels,marketTypeName,allCurves,marketCategory,categoryName,displayDate,pointDate,pointIdentity,deliveryLabel,historyPriceLabel} from './market-view.js';
 import {dataSections} from './data-sections.js';
 import {type Preferences,newPreferences,loadPreferences,savePreferences,validTimeZone} from './preferences.js';
 import {setupShortcutEditor,scheduleErrorMessage} from './shortcut-view.js';
 import {setupTouProducts} from './tou-products.js';
+import {validateMarketNavigation,navigationGroups,navigationCategoryName,type MarketNavigation} from './market-navigation.js';
 
 const exampleId=new URLSearchParams(location.search).get('example')??'baseline';
 if(!['baseline','exchange'].includes(exampleId))throw Error('Choose an available example.');
@@ -27,6 +28,7 @@ function el<K extends keyof HTMLElementTagNameMap>(tag:K,content?:string){const 
 function choose(id:string,options:{value:string;name:string}[],value:string){const node=select(id);node.replaceChildren(...options.map(o=>{const option=el('option',o.name);option.value=o.value;return option;}));node.value=value;}
 let csrf='',workspace:Workspace|undefined,curve='',result:CurveResult|undefined,contract='',historyData:PriceHistory|undefined,pricingContract='',showAllContracts=false,input='',draftFor='',busy=false,page='market';
 let contextDirty=false,currentProfile='',administrationScope='',permissions:string[]=[];
+let navigation:MarketNavigation|undefined,marketGeneration=0;
 type ReferencePage={table:string;rows:Row[];references:Record<string,Row[]>;offset:number;pageSize:number;maximumOffset:number;hasMore:boolean;search:string;referenceRevision:{catalogId:string;revisionId:string};definitionRevisionId:string;context:Context|null;profile:string;referenceScope:'selected_table'};
 let referencePage:ReferencePage|undefined;
 const canAdvanceReference=()=>!!referencePage&&referencePage.hasMore&&referencePage.offset+referencePage.pageSize<=referencePage.maximumOffset;
@@ -34,11 +36,13 @@ let hostedPilot=false;
 type ProfileChoices={mode:string;profiles:{id:string;name:string}[];customProfiles:{id:string;name:string}[]};
 type StartupAccess={profile:string;permissions:string[]};
 const can=(permission:string)=>permissions.includes(permission);
-const historicalContext=()=>(workspace as (Workspace & {context?:Context})|undefined)?.context;
+const historicalContext=()=>navigation?.context??undefined;
 const canCorrect=()=>can('ImportObservations')&&!historicalContext();
 let prefs:Preferences=newPreferences(Intl.DateTimeFormat().resolvedOptions().timeZone);
 const data=()=>{if(!workspace)throw Error('Market data is still loading.');return workspace;};
-const frame=()=>{const found=data().frames.find(f=>f.id===select('snapshot').value);if(!found)throw Error('Choose a market date above.');return found;};
+const directory=()=>{if(!navigation)throw Error('Market navigation is still loading.');return navigation;};
+const frame=()=>{const found=directory().frames.find(f=>f.id===select('snapshot').value);if(!found)throw Error('Choose a market date above.');return found;};
+const pricingFrame=()=>{const found=data().frames.find(f=>f.id===frame().id);if(!found)throw Error('The selected market inputs are missing. Refresh and try again.');return found;};
 const selectedCurve=()=>exactRow(allCurves(data()),'code',curve);
 const isRates=()=>!!curve&&marketType(selectedCurve(),data())==='rates';
 const row=(table:string,key:string,value:string,reference=false)=>exactRow((reference?data().references:data().definitions)[table],key,value);
@@ -58,7 +62,7 @@ function syncControls(){
   futures.sync();parties.sync();jobs.sync();document.body.setAttribute('aria-busy',String(busy));
 }
 function renderWorkspaceMode(){
-  const historical=!!(workspace as (Workspace & {context?:Context})|undefined)?.context;
+  const historical=!!historicalContext();
   text('workspace-mode-label',contextDirty?'Unapplied historical selection':historical?'Historical view · read only':'Working data · current knowledge');
   $('return-working').hidden=!historical&&!contextDirty;
   const today=new Intl.DateTimeFormat('en',{timeZone:prefs.timeZone,year:'numeric',month:'short',day:'numeric'}).format(new Date());
@@ -110,23 +114,23 @@ function renderLayout(){
   const library=$('library-toggle');library.setAttribute('aria-expanded',String(!prefs.libraryCollapsed));library.setAttribute('aria-label',prefs.libraryCollapsed?'Expand curve list':'Collapse curve list');library.title=prefs.libraryCollapsed?'Expand curve list':'Collapse curve list';$('curves').hidden=prefs.libraryCollapsed;
 }
 function renderTimeZones(){document.querySelectorAll<HTMLElement>('[data-user-time-zone]').forEach(n=>{n.textContent=prefs.timeZone;});}
-function renderFrames(value:string){const context=(data() as Workspace & {context?:Context}).context;const frames=context?data().frames.filter(f=>f.at.slice(0,10)===context.effectiveOn):data().frames;choose('snapshot',[{value:'',name:frames.length?'Choose a date…':'No inputs for this context date'},...frameOptions(frames,prefs.timeZone)],value);select('snapshot').title=`Times shown in ${prefs.timeZone}`;}
+function renderFrames(value:string){const context=historicalContext();const frames=context?directory().frames.filter(f=>f.at.slice(0,10)===context.effectiveOn):directory().frames;choose('snapshot',[{value:'',name:frames.length?'Choose a date…':'No inputs for this context date'},...frameOptions(frames,prefs.timeZone)],value);select('snapshot').title=`Times shown in ${prefs.timeZone}`;}
 function renderBrowse(){
-  const commodities=[...new Set(allCurves(data()).map(marketCategory))];
-  choose('commodity',[{value:'all',name:'All markets'},...commodities.map(c=>({value:c,name:categoryName(c,data())}))],prefs.commodity);
+  const categories=[...new Map(directory().curves.map(c=>[c.category.code,c])).values()],commodities=categories.map(c=>c.category.code);
+  choose('commodity',[{value:'all',name:'All markets'},...categories.map(c=>({value:c.category.code,name:navigationCategoryName(c)}))],prefs.commodity);
   if(!commodities.includes(prefs.commodity)&&prefs.commodity!=='all'){select('commodity').append(new Option('Saved commodity unavailable',prefs.commodity));select('commodity').value=prefs.commodity;}
   select('browse-by').value=prefs.browseBy;document.querySelectorAll<HTMLButtonElement>('[data-type]').forEach(b=>{const active=b.dataset.type===prefs.marketType;b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active));});
-  const groups=marketGroups(data(),prefs.browseBy,prefs.commodity,prefs.marketType);text('curve-count',String(groups.reduce((n,g)=>n+g.curves.length,0)));
-  const owner=data().profile;
+  const groups=navigationGroups(directory(),prefs.browseBy,prefs.commodity,prefs.marketType);text('curve-count',String(groups.reduce((n,g)=>n+g.curves.length,0)));
+  const owner=directory();
   $('curves').replaceChildren(...groups.map(group=>{const section=el('details'),key=prefs.browseBy+'|'+group.name;section.className='curve-group';section.open=!prefs.collapsedCurveGroups.includes(key);section.append(el('summary',group.name));
-    section.ontoggle=()=>{if(!section.isConnected||data().profile!==owner)return;const closed=prefs.collapsedCurveGroups.includes(key);if(closed===!section.open)return;prefs.collapsedCurveGroups=section.open?prefs.collapsedCurveGroups.filter(k=>k!==key):[...prefs.collapsedCurveGroups,key].slice(-64);persist();};
-    group.curves.forEach(c=>{const button=el('button');button.className='curve-button'+(c.code===curve?' selected':'');button.disabled=busy;button.setAttribute('aria-pressed',String(c.code===curve));button.append(el('span',curveName(val(c,'code'))),el('small',marketTypeName(marketType(c,data()))));button.onclick=()=>void act(async()=>{curve=val(c,'code');clearPrices();renderContext();if(select('snapshot').value)await build();});section.append(button);});return section;}));
+    section.ontoggle=()=>{if(!section.isConnected||navigation!==owner)return;const closed=prefs.collapsedCurveGroups.includes(key);if(closed===!section.open)return;prefs.collapsedCurveGroups=section.open?prefs.collapsedCurveGroups.filter(k=>k!==key):[...prefs.collapsedCurveGroups,key].slice(-64);persist();};
+    group.curves.forEach(c=>{const button=el('button');button.className='curve-button'+(c.code===curve?' selected':'');button.disabled=busy;button.setAttribute('aria-pressed',String(c.code===curve));button.append(el('span',curveName(c.code)),el('small',marketTypeName(c.marketType)));button.onclick=()=>void act(async()=>{curve=c.code;clearPrices();if(select('snapshot').value)await build();else{await loadWorkspace();renderContext();}});section.append(button);});return section;}));
   if(!groups.length)$('curves').append(el('p','No curves match these choices.'));
 }
 function renderContext(){
-  const example=data().example;$('example').hidden=!example;text('example-help',example?`${curveName(example.curve)} · ${instant(example.at)}`:'No market inputs have been imported.');renderLayout();renderBrowse();$('welcome').hidden=!!curve;$('curve-detail').hidden=!curve;
-  $('curve-power').hidden=!curve||marketCategory(selectedCurve())!=='test_power';
-  if(curve){const c=selectedCurve(),kind=marketType(c,data());renderSummary();const category=categoryName(marketCategory(c),data());text('curve-kind',category===marketTypeName(kind)?category:`${category} · ${marketTypeName(kind)}`);text('curve-title',curveName(curve));
+  const example=directory().example;$('example').hidden=!example;text('example-help',example?`${curveName(example.curve)} · ${instant(example.at)}`:'No market inputs have been imported.');renderLayout();renderBrowse();$('welcome').hidden=!!curve&&!!workspace;$('curve-detail').hidden=!curve||!workspace;
+  $('curve-power').hidden=!curve||directory().curves.find(c=>c.code===curve)?.category.code!=='test_power';
+  if(curve&&workspace){const c=selectedCurve(),kind=marketType(c,data());renderSummary();const category=categoryName(marketCategory(c),data());text('curve-kind',category===marketTypeName(kind)?category:`${category} · ${marketTypeName(kind)}`);text('curve-title',curveName(curve));
     const specification=kind==='rates'?row('interest_rate_definitions','code',val(c,'interest_rate_code'),true):undefined;
     text('unit',specification?`${val(row('currencies','code',val(specification,'currency_code'),true),'display_code')} · % per year`:unit(val(c,'quote_code')));
     text('chart-title',kind==='rates'?'Zero-rate curve':kind==='futures'?'Futures curve':kind==='forwards'?'Forward curve':'Mixed curve');
@@ -178,9 +182,15 @@ function renderPrices(){
 }
 async function build(){
   if(contextDirty)throw Error('Apply the changed context before viewing prices.');
-  const f=frame();if(!curve)throw Error('Choose a curve first.');const next=await api<CurveResult>('evaluate',{snapshotId:f.id,curve,includeSources:true});
+  const owner=directory(),previousWorkspace=workspace,includeWorkspace=!workspace,started=marketGeneration,scope=marketSelection();
+  const f=frame();if(!curve)throw Error('Choose a curve first.');
+  const {workspace:includedWorkspace,...next}=await api<CurveResult & {workspace?:Workspace}>('evaluate',{snapshotId:f.id,curve,includeSources:true,...(includeWorkspace?{includeWorkspace:true}:{})});
+  if(navigation!==owner||workspace!==previousWorkspace||started!==marketGeneration||scope!==marketSelection())throw Error('The account or market selection changed. Reload before continuing.');
   if(next.snapshotId!==f.id||next.curve!==curve||next.observationScope!=='selected_frame'||!Array.isArray(next.observations))throw Error('The selected price sources are missing or inconsistent. Refresh and try again.');
-  data().observations=next.observations;result=next;renderPrices();
+  if(includeWorkspace!==!!includedWorkspace)throw Error('The requested market catalog is missing or inconsistent. Refresh and try again.');
+  const hydrated=includeWorkspace?validateWorkspace(includedWorkspace!,owner,started,scope):previousWorkspace!;
+  try{workspace=hydrated;renderContext();data().observations=next.observations;result=next;renderPrices();}
+  catch(error){clearPrices();if(includeWorkspace)workspace=undefined;throw error;}
 }
 function renderHistory(){
   if(!result||!historyData)return;const p=result.points.find(p=>pointIdentity(p)===contract);if(!p)throw Error('Please select this sample again.');const rates=result.kind==='rates';$('history-card').hidden=false;text('history-title',`${rates?displayDate(pointDate(p)):deliveryLabel(p.deliveryFrom!,p.deliveryTo!)} · ${rates?'rate':'price'} history`);
@@ -189,14 +199,14 @@ function renderHistory(){
   renderChart($('history-chart'),{exportImage:download=>void act(async()=>{try{await api('history',exportHistory);}catch(error){clearPrices();throw error;}download();}),title:`${rates?'Rates':'Prices'} over time`,axis:'observation',unit:$('unit').textContent??'',series:[{name:rates?'Zero rate':'Price',points:historyData.points.map((p,i)=>({x:p.snapshotId,label:labels[i],y:p.value}))}]});
   table('history-values',['Market date',rates?'Zero rate (%)':'Price'],historyData.points.map((p,i)=>[labels[i],historyPriceLabel(p)]),[1],historyData.points.map((p,i)=>[labels[i],p.value===null?historyPriceLabel(p):amountText(p.value,'price',decimalTick())]));
 }
-async function history(){if(!result||!contract)return;clearChart($('history-chart'));historyData=undefined;$('history-card').hidden=true;historyData=await api<PriceHistory>('history',{snapshotId:result.snapshotId,curve:result.curve,...(result.kind==='rates'?{seriesId:contract}:{contractId:contract})});renderHistory();}
+async function history(){if(!result||!contract)return;const owner=result,selected=contract,started=marketGeneration,scope=marketSelection();clearChart($('history-chart'));historyData=undefined;$('history-card').hidden=true;const next=await api<PriceHistory>('history',{snapshotId:result.snapshotId,curve:result.curve,...(result.kind==='rates'?{seriesId:contract}:{contractId:contract})});if(result!==owner||contract!==selected||started!==marketGeneration||scope!==marketSelection())throw Error('The account or market selection changed. Reload before continuing.');historyData=next;renderHistory();}
 function renderInputs(){
   if(!result||!result.points.length){text('inputs',result?'No price sources are needed for an empty delivery window.':'Choose a market date to view price sources.');text('input-count','');return;}
-  const used=new Set(pricingPoints().flatMap(p=>p.lineage));if([...used].some(id=>!frame().observationIds.includes(id)))throw Error('A required source observation is missing from this market date.');const obs=[...used].map(observation);text('input-count',`${obs.length} prices & factors`);
+  const used=new Set(pricingPoints().flatMap(p=>p.lineage));if([...used].some(id=>!pricingFrame().observationIds.includes(id)))throw Error('A required source observation is missing from this market date.');const obs=[...used].map(observation);text('input-count',`${obs.length} prices & factors`);
   table('inputs',[isRates()?'Maturity':'Delivery period','Input','Source','Value','Units',''],obs.map(o=>{const series=row('series','id',val(o,'series_id')),c=series.contract_id?row('contracts','id',val(series,'contract_id')):undefined;return [c?deliveryLabel(val(c,'delivery_from'),val(c,'delivery_to')):data().definitions.rate_curve_points.some(p=>p.curve_code===curve&&p.series_id===series.id)?displayDate(val(data().definitions.rate_curve_points.find(p=>p.curve_code===curve&&p.series_id===series.id)!,'maturity')):'All months',sourceName(series),referenceName('sources',val(o,'source_code')),val(o,'value'),inputUnit(series),action(canCorrect()?'Correct price':'View versions',async()=>{input=val(o,'id');renderRevisions();})];}),[3]);renderRevisions();
 }
 function renderRevisions(){
-  if(!input||!frame().observationIds.includes(input)||!pricingPoints().some(p=>p.lineage.includes(input))){$('revision-card').hidden=true;return;}
+  if(!input||!pricingFrame().observationIds.includes(input)||!pricingPoints().some(p=>p.lineage.includes(input))){$('revision-card').hidden=true;return;}
   const o=observation(input),series=row('series','id',val(o,'series_id'));$('revision-card').hidden=false;text('correction-description',`${sourceName(series)} · ${instant(val(o,'observed_at'))} · ${inputUnit(series)}`);
   const editor=canCorrect();$('correction-form').hidden=!editor;text('changes-title',`${editor?'Correct':'Versions of'} this ${isRates()?'rate':'price'}`);
   text('edit-help',isRates()?'Enter an annual decimal rate: 0.025 means 2.5%. Earlier versions stay available.':'Earlier prices stay available. Saving adds a new version for you to view.');
@@ -296,7 +306,7 @@ function renderReference(){
   text('reference-page-status',rows.length?`Rows ${offset+1}–${offset+rows.length}${hasMore?canAdvanceReference()?' · more available':' · Refine your search to see more results.':''}`:'No rows on this page.');
 }
 async function loadReference(offset=0,search=''){
-  clearReference();if(contextDirty)throw Error('Apply the changed context first.');
+  clearReference();if(contextDirty)throw Error('Apply the changed context first.');await loadWorkspace();
   const owner=data(),selected=referenceCategory(),context=historicalContext()??null;
   const query=new URLSearchParams({table:selected,offset:String(offset),search});
   const next=await api<ReferencePage>('reference/catalog?'+query);
@@ -310,15 +320,35 @@ async function loadReference(offset=0,search=''){
     throw Error('The reference page is missing or inconsistent. Refresh and try again.');
   referencePage=next;try{renderReference();}catch(error){clearReference();throw error;}
 }
-async function loadWorkspace(){
-  const next=await api<Workspace>('workspace/catalog');
+function marketSelection(){return JSON.stringify([administrationScope,currentProfile,select('snapshot').value,curve,contextDirty]);}
+function validateWorkspace(next:Workspace,owner:MarketNavigation,started:number,scope:string){
   if(next.referenceScope!=='definition_closure'||next.observationScope!=='on_demand'||!Array.isArray(next.observations)||next.observations.length||!Array.isArray(next.curveNames))throw Error('The market catalog is missing or inconsistent. Refresh and try again.');
-  clearReference();workspace=next;setCurveNames(next.curveNames);
+  const revision=next.definitions?.revisions?.[0];
+  const sameRevision=revision&&val(revision,'catalog_id')===owner.definitionRevision.catalogId&&val(revision,'id')===owner.definitionRevision.revisionId&&val(revision,'reference_catalog_id')===owner.referenceRevision.catalogId&&val(revision,'reference_revision_id')===owner.referenceRevision.revisionId;
+  const summaries=next.frames?.map(({id,name,at})=>({id,name,at}));
+  if(navigation!==owner||started!==marketGeneration||scope!==marketSelection()||contextDirty||next.profile!==owner.profile||!sameRevision||
+     JSON.stringify((next as Workspace & {context?:Context}).context??null)!==JSON.stringify(owner.context)||JSON.stringify(summaries)!==JSON.stringify(owner.frames)||
+     JSON.stringify(next.initialFrameIds)!==JSON.stringify(owner.initialFrameIds)||next.futuresConvention!==owner.futuresConvention)
+    throw Error('The account or market selection changed, or the market catalog is inconsistent. Reload before continuing.');
+  return next;
 }
-async function reload(selected:string){await loadWorkspace();renderFrames(selected);renderContext();}
+async function loadWorkspace(){
+  if(workspace)return;
+  const owner=directory(),started=marketGeneration,scope=marketSelection();
+  const next=await api<Workspace>('workspace/catalog');workspace=validateWorkspace(next,owner,started,scope);
+}
+async function loadNavigation(){
+  const started=++marketGeneration,profile=currentProfile,scope=administrationScope;
+  workspace=undefined;navigation=undefined;clearReference();setCurveNames([]);$('curves').replaceChildren();
+  const next=validateMarketNavigation(await api<MarketNavigation>('workspace/navigation'));
+  if(started!==marketGeneration||currentProfile!==profile||administrationScope!==scope||next.profile!==profile||contextDirty)
+    throw Error('The account or market selection changed. Reload before continuing.');
+  navigation=next;setCurveNames(next.curveNames);
+}
+async function reload(selected:string){await loadNavigation();renderFrames(selected);if(curve)await loadWorkspace();renderContext();}
 function updateFilters(){
   prefs.browseBy=select('browse-by').value as Preferences['browseBy'];prefs.commodity=select('commodity').value;persist();
-  if(curve&&!marketGroups(data(),prefs.browseBy,prefs.commodity,prefs.marketType).some(g=>g.curves.some(c=>c.code===curve))){curve='';clearPrices();}
+  if(curve&&!navigationGroups(directory(),prefs.browseBy,prefs.commodity,prefs.marketType).some(g=>g.curves.some(c=>c.code===curve))){curve='';clearPrices();}
   renderContext();syncControls();
 }
 async function openProfile(){
@@ -333,7 +363,7 @@ $('sidebar-toggle').onclick=()=>{if(busy)return;prefs.sidebarCollapsed=!prefs.si
 $('library-toggle').onclick=()=>{if(busy)return;prefs.libraryCollapsed=!prefs.libraryCollapsed;renderLayout();persist();};
 for(const id of ['market-menu','settings-menu','trading-menu'])$<HTMLDetailsElement>(id).ontoggle=()=>{if(!currentProfile||prefs.sidebarCollapsed)return;const closed=prefs.collapsedMenus.includes(id),open=$<HTMLDetailsElement>(id).open;if(closed===!open)return;prefs.collapsedMenus=open?prefs.collapsedMenus.filter(k=>k!==id):[...prefs.collapsedMenus,id];persist();};
 $('profile-open').onclick=()=>void act(openProfile);for(const id of ['profile-close','profile-cancel'])$(id).onclick=()=>$<HTMLDialogElement>('profile-dialog').close();
-$('preferences-form').onsubmit=event=>{event.preventDefault();void act(async()=>{const zone=select('zone').value;if(!validTimeZone(zone))throw Error('Choose a valid time zone.');const selected=select('snapshot').value;prefs.timeZone=zone;await prepareAmountDisplay({points:result?.points,historyData},request=>transport<string[]>('amounts/display',request),decimalTick());prefs.browseBy=select('preferred-browse').value as Preferences['browseBy'];persist();if(workspace){renderFrames(selected);renderContext();renderPrices();renderReference();schedules.refresh();dateEditor.refresh();power.refresh();}renderTimeZones();jobs.refresh();administration.refresh();parties.refresh();futures.refresh();if(page==='futures'&&select('snapshot').value)await futures.load();$<HTMLDialogElement>('profile-dialog').close();});};
+$('preferences-form').onsubmit=event=>{event.preventDefault();void act(async()=>{const zone=select('zone').value;if(!validTimeZone(zone))throw Error('Choose a valid time zone.');const selected=select('snapshot').value;prefs.timeZone=zone;await prepareAmountDisplay({points:result?.points,historyData},request=>transport<string[]>('amounts/display',request),decimalTick());prefs.browseBy=select('preferred-browse').value as Preferences['browseBy'];persist();if(navigation){renderFrames(selected);renderContext();renderPrices();renderReference();schedules.refresh();dateEditor.refresh();power.refresh();}renderTimeZones();jobs.refresh();administration.refresh();parties.refresh();futures.refresh();if(page==='futures'&&select('snapshot').value)await futures.load();$<HTMLDialogElement>('profile-dialog').close();});};
 function setHostMode(mode:string){
   if(mode!=='hosted-pilot'&&mode!=='local-synthetic-preview')throw Error('The workspace mode could not be verified. Please refresh.');
   hostedPilot=mode==='hosted-pilot';
@@ -348,7 +378,7 @@ $('sign-out').onclick=()=>void act(async()=>{await api('logout',{});location.ass
 async function loadIdentity(initialAccess?:unknown){
   jobs.reset();$('jobs-page').hidden=true;
   deliveryPrices.reset();$('delivery-page').hidden=true;parties.reset();unitConverter.reset();futures.reset();power.reset();touProducts.reset();schedules.reset();dateEditor.reset();administration.reset();contextDirty=false;$('parties-page').hidden=true;$('power-page').hidden=true;$('futures-page').hidden=true;$('no-access-page').hidden=true;
-  curve='';clearPrices();clearReference();choose('reference-table',[],'');workspace=undefined;setCurveNames([]);permissions=[];choose('snapshot',[{value:'',name:'Choose a date…'}],'');select('snapshot').closest<HTMLElement>('.date-control')!.hidden=true;$('curves').replaceChildren();$('market-page').hidden=true;$('reference-page').hidden=true;$('schedules-page').hidden=true;$('curve-date-editor').hidden=true;$('admin-page').hidden=true;$('date-context').hidden=true;
+  curve='';clearPrices();clearReference();choose('reference-table',[],'');marketGeneration++;workspace=undefined;navigation=undefined;setCurveNames([]);permissions=[];choose('snapshot',[{value:'',name:'Choose a date…'}],'');select('snapshot').closest<HTMLElement>('.date-control')!.hidden=true;$('curves').replaceChildren();$('market-page').hidden=true;$('reference-page').hidden=true;$('schedules-page').hidden=true;$('curve-date-editor').hidden=true;$('admin-page').hidden=true;$('date-context').hidden=true;
   if(initialAccess===undefined)permissions=(await api<{permissions:string[]}>('access')).permissions;
   else{
     const access=initialAccess as StartupAccess|null;
@@ -361,18 +391,18 @@ async function loadIdentity(initialAccess?:unknown){
   for(const id of ['nav-market','nav-delivery','nav-power','nav-reference','nav-schedules'])$(id).hidden=!read;
   $('nav-configuration').hidden=!author;$('schedule-inspector').hidden=!author;
   $('nav-parties').hidden=!read||!permissions.includes('ReadTradeParties');$('nav-admin').hidden=!manage;$('nav-futures').hidden=!read||!permissions.includes('ReadTrades');$('trading-menu').hidden=$('nav-futures').hidden;
-  if(read){await loadWorkspace();renderFrames('');renderContext();setPage('market');}
+  if(read){await loadNavigation();renderFrames('');renderContext();setPage('market');}
   else if(manage){setPage('admin');await administration.load();renderLayout();}
   else{$('no-access-page').hidden=false;text('page-title','Workspace access');text('status','This account has no current workspace permissions.');}
 }
 $('open').onclick=()=>void act(async()=>{text('environment-context-note','Current workspace · exact selected inputs');const next=select('profile').value;await api('profile',{profile:next});currentProfile=next;await loadIdentity();await profileChoices();$<HTMLDialogElement>('profile-dialog').close();});
 $('snapshot').onchange=()=>void act(async()=>{parties.reset();futures.reset();clearPrices();if(select('snapshot').value){if(page==='parties')await parties.load();else if(page==='futures')await futures.load();else if(page==='power'){power.reset();await power.load();}else if(page==='market'&&curve)await build();}});
-$('example').onclick=()=>void act(async()=>{await currentInputs();const example=data().example;if(!example)throw Error('No sample is configured.');const f=data().frames.find(f=>data().initialFrameIds.includes(f.id)&&new Date(f.at).getTime()===new Date(example.at).getTime());if(!f)throw Error('These sample prices are unavailable.');prefs.commodity='all';prefs.marketType='all';prefs.tab='prices';persist();curve=example.curve;clearPrices();renderFrames(f.id);renderContext();await build();});
+$('example').onclick=()=>void act(async()=>{curve='';clearPrices();await currentInputs();const example=directory().example;if(!example)throw Error('No sample is configured.');const f=directory().frames.find(f=>directory().initialFrameIds.includes(f.id)&&new Date(f.at).getTime()===new Date(example.at).getTime());if(!f)throw Error('These sample prices are unavailable.');prefs.commodity='all';prefs.marketType='all';prefs.tab='prices';persist();curve=example.curve;clearPrices();renderFrames(f.id);await build();});
 $('browse-by').onchange=()=>void act(async()=>updateFilters());$('commodity').onchange=()=>void act(async()=>updateFilters());
 document.querySelectorAll<HTMLButtonElement>('[data-type]').forEach(b=>b.onclick=()=>void act(async()=>{prefs.marketType=b.dataset.type as Preferences['marketType'];updateFilters();}));
 document.querySelectorAll<HTMLButtonElement>('.tab').forEach(b=>b.onclick=()=>{if(busy)return;prefs.tab=b.dataset.view as Preferences['tab'];persist();showView(prefs.tab);});
 const schedules=setupShortcutEditor(act,{time:api,load:()=>api('schedules'),preview:draft=>api('schedules/preview',draft),keep:draft=>api('schedules/keep',draft),resolve:body=>api('schedules/resolve',body)},()=>busy,()=>prefs.timeZone);
-function dirtyContext(){deliveryPrices.reset();parties.reset();clearReference();futures.reset();power.reset();contextDirty=true;if(workspace)clearPrices();text('environment-context-note','Context changed · choose View this context to apply it.');}
+function dirtyContext(){marketGeneration++;deliveryPrices.reset();parties.reset();clearReference();futures.reset();power.reset();contextDirty=true;clearPrices();text('environment-context-note','Context changed · choose View this context to apply it.');}
 const parties=setupPartyEditors({api,act,busy:()=>busy,zone:()=>prefs.timeZone,profile:()=>administrationScope+':'+currentProfile,source:()=>{if(contextDirty)throw Error('Apply the changed context first.');return frame().id;}});
 $('nav-parties').onclick=()=>void act(async()=>{if(contextDirty)await applyContext();setPage('parties');await parties.load();});
 const administration=setupAdministration(act,api,()=>busy,()=>prefs.timeZone,()=>administrationScope+':'+currentProfile,profileChoices);
@@ -396,7 +426,7 @@ $('nav-jobs').onclick=()=>void act(async()=>{setPage('jobs');await jobs.load();}
 $('nav-delivery').onclick=()=>void act(async()=>{if(contextDirty)await applyContext();setPage('delivery');await deliveryPrices.load();});
 const power=setupPowerView({api,act,zone:()=>prefs.timeZone,name:curveName,source:()=>{if(contextDirty)throw Error('Apply the changed market context first.');const f=frame();return {snapshotId:f.id,curve,name:instant(f.at)};}});
 const unitConverter=setupUnitConverter({api,act,busy:()=>busy});
-const futures=setupFutures({api,act,busy:()=>busy,canRunRisk:()=>permissions.includes('RunScenario'),bookingUnavailableReason:()=>contextDirty?'Apply the changed historical context first.':(workspace as (Workspace & {context?:Context})|undefined)?.context?'Historical view is read-only. Return to working data to book or amend.':!permissions.includes('BookTrade')?'Your current role does not have Book Trade permission.':'Choose an As of date to book a trade.',zone:()=>prefs.timeZone,profile:()=>administrationScope+':'+currentProfile,onReadContext:(at,known)=>text('header-calculation-time',`As of ${instant(at)} · knowledge cutoff ${instant(known)}`),source:()=>{if(contextDirty)throw Error('Apply the changed market context first.');return {snapshotId:frame().id,convention:data().futuresConvention,context:(data() as Workspace & {context?:Context}).context};}});
+const futures=setupFutures({api,act,busy:()=>busy,canRunRisk:()=>permissions.includes('RunScenario'),bookingUnavailableReason:()=>contextDirty?'Apply the changed historical context first.':historicalContext()?'Historical view is read-only. Return to working data to book or amend.':!permissions.includes('BookTrade')?'Your current role does not have Book Trade permission.':'Choose an As of date to book a trade.',zone:()=>prefs.timeZone,profile:()=>administrationScope+':'+currentProfile,onReadContext:(at,known)=>text('header-calculation-time',`As of ${instant(at)} · knowledge cutoff ${instant(known)}`),source:()=>{if(contextDirty)throw Error('Apply the changed market context first.');return {snapshotId:frame().id,convention:directory().futuresConvention,context:historicalContext()};}});
 $('nav-futures').onclick=()=>void act(async()=>{if(contextDirty)await applyContext();setPage('futures');futures.reset();if(select('snapshot').value)await futures.load();});
 const touProducts=setupTouProducts(act,api,()=>busy,()=>prefs.timeZone,async()=>{power.reset();if(select('snapshot').value)await power.load();});
 $('nav-power').onclick=$('curve-power').onclick=()=>void act(async()=>{setPage('power');power.reset();await touProducts.load();if(select('snapshot').value)await power.load();});

@@ -14,7 +14,7 @@ public sealed class TradingBlotter(PreviewManifest manifest,FuturesStore futures
  public const string PivotConvention="trading_blotter_totals_v1";
  private static readonly JsonSerializerOptions Json=new(JsonSerializerDefaults.Web);
  private static MarketDataException Invalid()=>new("blotter_view","Select supported dimensions/measures and exact authorized book/portfolio scopes.");
- public async Task<object> Read(NpgsqlConnection connection,PreviewData data,InputFrame frame,FuturesBlotterView view,CancellationToken ct)
+ private static void ValidateView(FuturesBlotterView view)
  {
   if(view is null||view.Mode is not("trades" or "pivot")||view.GroupBy.IsDefault||view.Measures.IsDefault||
    view.GroupBy.Distinct().Count()!=view.GroupBy.Length||view.Measures.Distinct().Count()!=view.Measures.Length||
@@ -22,6 +22,28 @@ public sealed class TradingBlotter(PreviewManifest manifest,FuturesStore futures
    view.Measures.Any(m=>m is not("tradeCount" or "lots" or "quantity" or "executionPnl" or "presentValue"))||
    (view.Mode=="trades"?(view.GroupBy.Length!=0||view.Measures.Length!=0||view.PivotConvention is not null):
     (view.GroupBy.IsEmpty||view.Measures.IsEmpty||view.PivotConvention!=PivotConvention||view.Measures.Contains("lots")&&!view.GroupBy.Contains("contract"))))throw Invalid();
+ }
+ // The caller has already bound the exact certified market and trading cut.
+ internal async Task<object?> ReadEmptyDirectory(NpgsqlConnection connection,InputFrame frame,FuturesBlotterView view,CancellationToken ct)
+ {
+  await MarketBundle.Require(connection,manifest,ct);
+  // Base revision tables are checked before joins or report filters. A visible
+  // revision of either product requires the unchanged complete valuation path.
+  await using var command=ScheduleStore.Command(connection,"""
+   SELECT EXISTS(SELECT 1 FROM trading.trade_revisions WHERE catalog_id=$1)
+       OR EXISTS(SELECT 1 FROM trading.swap_trade_revisions WHERE catalog_id=$1)
+   """,manifest.CatalogId);
+  var hasRevisions=(bool)(await command.ExecuteScalarAsync(ct)??throw new PreviewDeniedException());
+  if(hasRevisions)return null;
+  ValidateView(view);
+  var books=await futures.Books(connection,ct);
+  FuturesStore.ValidateScope(books,view.BookIds,view.PortfolioIds);
+  await MarketBundle.RequireObservationPins(connection,manifest,frame.ObservationIds,ct);
+  return Project(view,[],0,new JsonArray(),new(0,0,0));
+ }
+ public async Task<object> Read(NpgsqlConnection connection,PreviewData data,InputFrame frame,FuturesBlotterView view,CancellationToken ct)
+ {
+  ValidateView(view);
   var tradeView=view with {Mode="trades",GroupBy=[],Measures=[],PivotConvention=null};
   var priced=JsonSerializer.SerializeToNode(await futures.Blotter(connection,data,frame,tradeView,ct),Json)!.AsObject();
   var rows=priced["holdings"]!.AsArray().Select(n=>n!.DeepClone().AsObject()).ToList();
@@ -42,6 +64,14 @@ public sealed class TradingBlotter(PreviewManifest manifest,FuturesStore futures
    row["amountFormat"]=JsonSerializer.SerializeToNode(DealAmountFormats.Resolve(selectedFormats,"trade"),Json);
    row["fixedAmountFormat"]=JsonSerializer.SerializeToNode(DealAmountFormats.Resolve(selectedFormats,"fixed"),Json);
   }
+  return Project(view,rows,priced["evaluatedContracts"]!.GetValue<int>(),priced["totals"],
+   new(swapRows.Rows.Length,swapRows.Valuations,swapRows.SupplementalMarketLoads));
+ }
+ private sealed record Work(int SwapTrades,int SwapValuations,int SupplementalMarketLoads);
+ private sealed record Report(FuturesBlotterView View,string PivotNumericalPolicy,List<JsonObject> Groups,
+  List<JsonObject> Holdings,int EvaluatedContracts,JsonNode? Totals,Work Work,bool HasSwaps,string Convention);
+ private static Report Project(FuturesBlotterView view,List<JsonObject> rows,int evaluatedContracts,JsonNode? totals,Work work)
+ {
   string? Text(JsonObject row,string key)=>row[key]?.GetValue<string>();
   ReferenceKey Key(JsonObject row,string key)=>row[key]!.Deserialize<ReferenceKey>(Json);
   var groups=new List<JsonObject>();
@@ -69,8 +99,7 @@ public sealed class TradingBlotter(PreviewManifest manifest,FuturesStore futures
    }
    groups.Add(group);
   }
-  return new{view,pivotNumericalPolicy="typed_partitioned_trade_totals_v1",groups=view.Mode=="pivot"?groups:[],holdings=rows,evaluatedContracts=priced["evaluatedContracts"]!.GetValue<int>(),totals=priced["totals"],
-   work=new{swapTrades=swapRows.Rows.Length,swapValuations=swapRows.Valuations,supplementalMarketLoads=swapRows.SupplementalMarketLoads},
-   hasSwaps=rows.Any(r=>Text(r,"instrumentType")=="financial_swap"),convention=Convention};
+  return new(view,"typed_partitioned_trade_totals_v1",view.Mode=="pivot"?groups:[],rows,evaluatedContracts,totals,
+   work,rows.Any(r=>Text(r,"instrumentType")=="financial_swap"),Convention);
  }
 }

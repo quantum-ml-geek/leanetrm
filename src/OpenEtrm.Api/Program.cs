@@ -433,15 +433,28 @@ api.MapPost("/market/current",(Func<HttpContext,Task<IResult>>)(c=>Locked(c,asyn
     await database.WithIdentity(Profile(session),"ReadMarketData",(_,_)=>Task.FromResult(true),c.RequestAborted);
     session.MarketContext=null;return Results.Ok(new {mode="explicit_input_pins"});
 })));
+object WorkspaceProjection(PreviewSession session,WorkspaceRead read,bool catalogOnly)
+{
+    var data=read.Data;
+    return new {unitCatalog=read.Units,unitCatalogError=read.Units is null?"unit_catalog":null,context=session.MarketContext,profile=session.Profile,example=database.Manifest.Example,futuresConvention=database.Manifest.FuturesConvention,curveNames=read.CurveNames,definitions=data.Definitions,references=data.References,referenceScope=catalogOnly?"definition_closure":"all_visible",observations=catalogOnly?ImmutableArray<JsonElement>.Empty:data.Observations,observationScope=catalogOnly?"on_demand":"all_visible",
+        frames=session.Frames.Values.Where(f=>f.ContextId==session.MarketContext?.ContextId).OrderBy(f=>f.At).ToArray(),initialFrameIds=session.MarketContext is null?session.InitialFrames:session.Frames.Values.Where(f=>f.ContextId==session.MarketContext.ContextId).Select(f=>f.Id).ToArray()};
+}
 Task<IResult> Workspace(HttpContext c,bool catalogOnly)=>Locked(c,async session=>
 {
     var read=await database.WithIdentity(Profile(session),"ReadMarketData",(connection,ct)=>marketReads.Workspace(connection,Pin(session),catalogOnly,ct),c.RequestAborted);
-    var data=read.Data;
-    return Results.Ok(new {unitCatalog=read.Units,unitCatalogError=read.Units is null?"unit_catalog":null,context=session.MarketContext,profile=session.Profile,example=database.Manifest.Example,futuresConvention=database.Manifest.FuturesConvention,curveNames=read.CurveNames,definitions=data.Definitions,references=data.References,referenceScope=catalogOnly?"definition_closure":"all_visible",observations=data.Observations,observationScope=catalogOnly?"on_demand":"all_visible",
-        frames=session.Frames.Values.Where(f=>f.ContextId==session.MarketContext?.ContextId).OrderBy(f=>f.At).ToArray(),initialFrameIds=session.MarketContext is null?session.InitialFrames:session.Frames.Values.Where(f=>f.ContextId==session.MarketContext.ContextId).Select(f=>f.Id).ToArray()});
+    return Results.Ok(WorkspaceProjection(session,read,catalogOnly));
 });
 api.MapGet("/workspace",(Func<HttpContext,Task<IResult>>)(c=>Workspace(c,false)));
 api.MapGet("/workspace/catalog",(Func<HttpContext,Task<IResult>>)(c=>Workspace(c,true)));
+api.MapGet("/workspace/navigation",(Func<HttpContext,Task<IResult>>)(c=>Locked(c,async session=>
+{
+    var read=await database.WithIdentity(Profile(session),"ReadMarketData",(connection,ct)=>marketReads.Navigation(connection,Pin(session),ct),c.RequestAborted);
+    var frames=session.Frames.Values.Where(f=>f.ContextId==session.MarketContext?.ContextId).OrderBy(f=>f.At).ToArray();
+    return Results.Ok(new MarketNavigation(Profile(session),session.MarketContext,read.DefinitionRevision,read.ReferenceRevision,
+        database.Manifest.FuturesConvention,database.Manifest.Example,
+        session.MarketContext is null?[..session.InitialFrames]:[..session.Frames.Values.Where(f=>f.ContextId==session.MarketContext.ContextId).Select(f=>f.Id)],
+        [..frames.Select(f=>new NavigationFrame(f.Id,f.Name,f.At))],read.CurveNames,read.Curves));
+})));
 api.MapGet("/reference/catalog",(Func<HttpContext,Task<IResult>>)(c=>Locked(c,session=>database.WithIdentity(Profile(session),"ReadMarketData",async(connection,ct)=>
 {
     var requestedOffset=c.Request.Query["offset"].ToString();
@@ -454,9 +467,9 @@ api.MapGet("/reference/catalog",(Func<HttpContext,Task<IResult>>)(c=>Locked(c,se
 api.MapPost("/evaluate",(HttpContext c,BuildRequest body)=>Locked(c,async session=>
 {
     var pin=Pin(session,body.SnapshotId);
-    var read=await database.WithIdentity(Profile(session),"ReadMarketData",(connection,ct)=>marketReads.Evaluate(connection,pin,body.Curve,ct),c.RequestAborted);
+    var read=await database.WithIdentity(Profile(session),"ReadMarketData",(connection,ct)=>marketReads.Evaluate(connection,pin,body.Curve,ct,body.IncludeWorkspace),c.RequestAborted);
     var result=read.Result;
-    if(pin.Context is not null || body.IncludeSources)
+    if(pin.Context is not null || body.IncludeSources || body.IncludeWorkspace)
     {
         var json=System.Text.Json.Nodes.JsonNode.Parse(JsonSerializer.Serialize(result,new JsonSerializerOptions{PropertyNamingPolicy=JsonNamingPolicy.CamelCase}))!.AsObject();
         if(pin.Context is {} view)json["context"]=JsonSerializer.SerializeToNode(view,new JsonSerializerOptions{PropertyNamingPolicy=JsonNamingPolicy.CamelCase});
@@ -465,6 +478,7 @@ api.MapPost("/evaluate",(HttpContext c,BuildRequest body)=>Locked(c,async sessio
             json["observations"]=JsonSerializer.SerializeToNode(read.Observations);
             json["observationScope"]="selected_frame";
         }
+        if(body.IncludeWorkspace)json["workspace"]=JsonSerializer.SerializeToNode(WorkspaceProjection(session,read.Workspace??throw new InvalidOperationException("The requested workspace projection is missing."),true),new JsonSerializerOptions{PropertyNamingPolicy=JsonNamingPolicy.CamelCase});
         return Results.Ok(json);
     }
     return Results.Ok(result);
@@ -530,7 +544,8 @@ api.MapPost("/table-views/blotter",(HttpContext c,SaveTableView body)=>Locked(c,
 api.MapPost("/table-views/blotter/delete",(HttpContext c,DeleteTableView body)=>Locked(c,session=>
     database.WithIdentity(Profile(session),"ReadTrades",async(connection,ct)=>{await TableViews.Delete(connection,body,ct);return Results.Ok(new {deleted=true});},c.RequestAborted)));
 var futuresStore=new FuturesStore(database.Manifest);
-Task<IResult> FuturesRead(HttpContext c,FuturesReadRequest body,Func<NpgsqlConnection,PreviewData,InputFrame,CancellationToken,Task<object>> read,bool scenario=false,Guid? headTrade=null,bool amendmentPreview=false,string? expectedConvention=null,bool dealRisk=false,bool combinedWorkspace=false)=>
+Task<IResult> FuturesRead(HttpContext c,FuturesReadRequest body,Func<NpgsqlConnection,PreviewData,InputFrame,CancellationToken,Task<object>> read,bool scenario=false,Guid? headTrade=null,bool amendmentPreview=false,string? expectedConvention=null,bool dealRisk=false,bool combinedWorkspace=false,
+    Func<NpgsqlConnection,InputFrame,CancellationToken,Task<object?>>? readWithoutMarket=null)=>
     Locked(c,session=>database.WithIdentity(Profile(session),"ReadTrades",async(connection,ct)=>
     {
         if(expectedConvention is SwapStore.Convention or TradingBlotter.Convention){if(body.Convention!=expectedConvention)throw new MarketDataException("swap_context","Select the explicit supported swap valuation convention.");}
@@ -559,8 +574,12 @@ Task<IResult> FuturesRead(HttpContext c,FuturesReadRequest body,Func<NpgsqlConne
         else throw new MarketDataException("futures_context","Choose current knowledge explicitly or supply the exact retained context.");
         await MarketContextStore.Bind(connection,database.Manifest.CatalogId,selected,ct);
         await using(var bind=ScheduleStore.Command(connection,"SELECT security.use_trading_context($1,$2)",database.Manifest.CatalogId,frame.At))await bind.ExecuteNonQueryAsync(ct);
-        var data=await database.Read(connection,ct,observationIds:frame.ObservationIds);
-        var value=await read(connection,data,frame,ct);
+        var value=readWithoutMarket is null?null:await readWithoutMarket(connection,frame,ct);
+        if(value is null)
+        {
+            var data=await database.Read(connection,ct,observationIds:frame.ObservationIds);
+            value=await read(connection,data,frame,ct);
+        }
         if(scenario && !await PreviewDatabase.HasPermission(connection,"RunScenario",ct)||dealRisk && !await PreviewDatabase.HasPermission(connection,"RunDealRisk",ct))throw new PreviewDeniedException();
         await using(var check=ScheduleStore.Command(connection,"SELECT security.trading_access($1,'ReadTrades')",database.Manifest.CatalogId))
             if(!Equals(await check.ExecuteScalarAsync(ct),true))throw new PreviewDeniedException();
@@ -626,7 +645,15 @@ api.MapPost("/trading/workspace",(HttpContext c,TradingWorkspaceRequest body)=>
  if(body.BookingCatalog is not(null or "directory" or "priced_contracts"))throw new MarketDataException("blotter_view","Choose an available booking catalog projection.");
  return FuturesRead(c,body.Context??throw new MarketDataException("blotter_view","Supply the selected context."),
   async(connection,data,frame,ct)=>new{catalog=body.BookingCatalog=="directory"?await futuresStore.Directory(connection,ct):await futuresStore.Catalog(connection,data,frame,ct),
-   blotter=await tradingBlotter.Read(connection,data,frame,body.View,ct)},expectedConvention:TradingBlotter.Convention,combinedWorkspace:true);
+   blotter=await tradingBlotter.Read(connection,data,frame,body.View,ct)},expectedConvention:TradingBlotter.Convention,combinedWorkspace:true,
+   readWithoutMarket:body.BookingCatalog!="directory"?null:async(connection,frame,ct)=>
+   {
+    var report=await tradingBlotter.ReadEmptyDirectory(connection,frame,body.View,ct);
+    if(report is null)return null;
+    var catalog=await futuresStore.Directory(connection,ct);
+    await MarketBundle.RequireReferenceVisibility(connection,database.Manifest,ct);
+    return new{catalog,blotter=report};
+   });
 });
 api.MapPost("/trading/blotter",(HttpContext c,FuturesBlotterRequest body)=>FuturesRead(c,body.Context??throw new MarketDataException("blotter_view","Supply the selected context."),
  (connection,data,frame,ct)=>tradingBlotter.Read(connection,data,frame,body.View,ct),expectedConvention:TradingBlotter.Convention));
@@ -718,7 +745,7 @@ public sealed record AdminCreate(Guid OperationId,string? Login,string? Name,str
 public sealed record AdminUpdate(Guid OperationId,Guid Id,int ExpectedVersion,string? Name,bool? Enabled,string[]? Roles);
 public sealed record ProfileRequest(string Profile);
 public sealed record LocalTimeRequest(string? LocalTime,string? TimeZone);
-public sealed record BuildRequest(Guid SnapshotId,string Curve,bool IncludeSources=false);
+public sealed record BuildRequest(Guid SnapshotId,string Curve,bool IncludeSources=false,bool IncludeWorkspace=false);
 public sealed record HistoryRequest(Guid SnapshotId,string Curve,Guid? ContractId=null,Guid? SeriesId=null);
 public sealed record CorrectionRequest(Guid SnapshotId,Guid ObservationId,string Value);
 public sealed record SelectionRequest(Guid SnapshotId,Guid ObservationId);

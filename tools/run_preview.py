@@ -308,7 +308,9 @@ def main():
                     if browser_process.wait(timeout=360):
                         raise RuntimeError('Owned browser checks failed')
                 from check_swaps_preview import run_checks as check_swaps
-                check_swaps(url)
+                swap_client=check_swaps(url)
+                from check_empty_trading_directory import run_nonempty_checks
+                run_nonempty_checks(swap_client,query,manifest)
                 from check_swap_payment_rules import run_checks as check_swap_payment_rules
                 check_swap_payment_rules(url)
                 from check_booking_facts import run_checks as check_booking_facts

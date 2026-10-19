@@ -13,9 +13,11 @@ export async function run({command,evaluate,wait,click,submit,persona,check,idle
       const response=await originalFetch(input,init);
       if(path==='/api/bootstrap'&&response.ok){const boot=await response.clone().json();window.__bootstrapFrameCounts.push(boot.frames.length);window.__bootstrapAccess.push({requested:requested.searchParams.get('includeAccess'),access:boot.access,profile:boot.profile});}
       if(path==='/api/examples')window.__startupExamplesPending=false;
-      if(!['/api/workspace','/api/workspace/catalog','/api/evaluate','/api/history'].includes(path)||!response.ok)return response;
+      if(!['/api/workspace/navigation','/api/workspace','/api/workspace/catalog','/api/evaluate','/api/history'].includes(path)||!response.ok)return response;
       const data=await response.json();
-      if(path==='/api/workspace/catalog'){
+      if(path==='/api/workspace/navigation'){
+        window.__startupNavigationKind=data.kind;window.__startupNavigationHasDetail=['definitions','references','observations'].some(key=>Object.hasOwn(data,key));
+      }else if(path==='/api/workspace/catalog'){
         window.__startupObservationCount=data.observations.length;window.__startupScope=data.observationScope;
       }else if(path==='/api/workspace'||path==='/api/evaluate'&&data.observationScope==='selected_frame'){
         // Unrendered history must not add formatting round trips. Preserve the
@@ -36,7 +38,7 @@ export async function run({command,evaluate,wait,click,submit,persona,check,idle
   await wait("document.querySelectorAll('.curve-button').length>0&&"+idle);
   await wait("performance.getEntriesByName('leanetrm:workspace-ready','mark').length===1");
   await check('initial hydration publishes one native ready mark after data and idle',"performance.getEntriesByName('leanetrm:workspace-ready','mark').length===1&&document.querySelectorAll('.curve-button').length>0&&"+idle);
-  await check('startup explicitly requests the catalog without observation history',"window.__startupRequests.includes('/api/workspace/catalog')&&!window.__startupRequests.includes('/api/workspace')&&window.__startupScope==='on_demand'&&window.__startupObservationCount===0");
+  await check('startup explicitly requests navigation without executable workspace detail',"window.__startupRequests.includes('/api/workspace/navigation')&&!window.__startupRequests.includes('/api/workspace/catalog')&&!window.__startupRequests.includes('/api/workspace')&&window.__startupNavigationKind==='market_navigation'&&window.__startupNavigationHasDetail===false");
   await check('workspace navigation does not format undisplayed observation history',"!window.__startupRequests.includes('/api/amounts/display')");
   await check('initial profile choices reuse the initial bootstrap',"window.__startupRequests.filter(path=>path==='/api/bootstrap').length===1");
   await check('anonymous local startup requests explicit access metadata then authorizes its chosen identity afresh',"window.__bootstrapAccess[0].requested==='true'&&window.__bootstrapAccess[0].profile===null&&window.__bootstrapAccess[0].access===null&&window.__startupRequests.includes('/api/profile')&&window.__startupRequests.includes('/api/access')");
@@ -63,7 +65,7 @@ export async function run({command,evaluate,wait,click,submit,persona,check,idle
   await check('missing selected sources fail without stale price or source fallback',"!document.querySelector('#error').hidden&&document.querySelector('#contracts').children.length===0&&document.querySelector('#inputs').children.length===0");
   await persona('editor');await persona('viewer');
   await check('later profile and market work never republishes the initial ready mark',"performance.getEntriesByName('leanetrm:workspace-ready','mark').length===1");
-  const failure=await command('Page.addScriptToEvaluateOnNewDocument',{source:`const before=window.fetch;window.fetch=async(input,...args)=>{const response=await before(input,...args);if(String(input)!=='/api/workspace/catalog'||!response.ok)return response;const data=await response.json();delete data.curveNames;return new Response(JSON.stringify(data),{status:200,headers:{'Content-Type':'application/json'}});};`});
+  const failure=await command('Page.addScriptToEvaluateOnNewDocument',{source:`const before=window.fetch;window.fetch=async(input,...args)=>{const response=await before(input,...args);if(String(input)!=='/api/workspace/navigation'||!response.ok)return response;const data=await response.json();delete data.curveNames;return new Response(JSON.stringify(data),{status:200,headers:{'Content-Type':'application/json'}});};`});
   try{
     await command('Page.navigate',{url:url+'/'});await wait("!document.querySelector('#error').hidden&&"+idle);
     await check('a missing stored-name directory fails initial hydration without a ready mark or fallback',"performance.getEntriesByName('leanetrm:workspace-ready','mark').length===0&&document.querySelectorAll('.curve-button').length===0&&!window.__startupRequests.includes('/api/curve-names')");
