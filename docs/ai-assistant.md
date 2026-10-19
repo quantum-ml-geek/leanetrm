@@ -1,0 +1,914 @@
+# Page assistant, phase 1: local-preview core
+
+Status: design proposal awaiting approval. Nothing in this document is implemented.
+
+The page assistant ships in three phases, each with its own design:
+
+1. **Local-preview core** (this document): Settings › AI, model provider adapters,
+   usage and cost, agent principals and access grants, context pinning, fixed read
+   tools plus Navigate and Show card, an in-process worker, a server-sent event
+   stream, the assistant panel, application-drawn cards and conversation memory. It
+   runs only under `--local-preview`.
+2. **Agent notes** (later design): agent notebooks plus one common notebook that every
+   agent can read and write, with versioned, sourced notes and a Notes view (§11).
+3. **Hosted baseline** (later design): the assistant under `--hosted-pilot`.
+
+Phase 1 brings a bounded slice of [Milestone 5](plan.md) forward. It does not satisfy
+Milestone 5's acceptance criteria. [architecture.md](architecture.md) §9–§12 and the
+agreed decisions in [decisions.md](decisions.md) apply unless §14 records a change.
+
+## 1. Intent and success
+
+A trader on the blotter asks which trades drive a book's execution P&L as of the
+selected date. The assistant reads the same data the page shows, under the trader's
+own authority and the context pinned at ask, answers with the values it read, opens
+the trade that matters and shows a chart of those values. Administrators connect model
+providers, allow models, record token prices, define agents and see what each model,
+user and agent cost.
+
+Phase 1 succeeds when, in the local preview:
+
+- a user on a supported page (§7.3) opens a docked panel, picks an agent and receives
+  a streamed answer grounded in server reads made under that user's authority and
+  pinned context;
+- the agent moves the user to another page, record or filter, says where and offers
+  Back;
+- answers can include cards drawn by the application from values the server returned
+  in that turn;
+- every model call records normalized token usage and an exact cost, or an explicit
+  unpriced or unknown state, from the price revision pinned when the call opened;
+- administrators manage providers, write-only credentials, models, effective-dated
+  prices and agents, and read usage by model, user and agent;
+- with no provider enabled no turn calls a model, the launcher is hidden, and existing
+  pages, reads and bookings behave as today.
+
+## 2. Scope
+
+**Goals** are the success list above, with five vendors (Anthropic, OpenAI, Google,
+xAI, Meta) through three protocol adapters (§6).
+
+**Non-goals:** agent notes (phase 2) and any hosted operation (phase 3); day-over-day
+or period P&L comparison and P&L explain (D77, O12), the next slice; monthly spending
+caps, a later slice (phase 1 bounds cost per turn and by concurrency); sensitivities
+and other calculations; agents that change business state; tools beyond the fixed set,
+external tool servers and sub-agents; agent-written code (architecture §12); embedded
+page views; tables, HTML, links or images in answer text; paging of tool reads;
+delivery-price reads; running an unsaved agent definition; billing, attachments,
+voice, pop-outs, steering and branching; administrator pause, single-turn cancellation
+and run inspection (architecture §9 Operations).
+
+**Anti-goals.** Each is a failure even if everything else works:
+
+- an agent reading or showing anything the asking user cannot currently read, or
+  reading a context other than the one pinned at ask (except §7.2's labeled
+  current-only definition reads);
+- a credential in a log, audit row, SQL parameter, model context, browser storage, URL
+  or response;
+- business data sent anywhere except the fixed endpoint of an enabled provider;
+- a cost of zero for an unpriced or unreported call, or a recorded cost changing after
+  a price edit;
+- silently switching provider or model after an error;
+- a number on a card that the server did not return.
+
+## 3. Constraints from the existing system
+
+Facts the body relies on and does not restate:
+
+- **Host.** The API runs in one mode (`Program.cs`); `--local-preview` requires the
+  loopback peer, Host `127.0.0.1` with the port and a matching Origin when sent. The
+  first middleware rejects bodies over 32 KB and cancels requests after 15 seconds; a
+  semaphore serializes each session's requests. In-memory sessions end 30 minutes
+  after creation and do not survive a restart. Two scopes, `/api` and
+  `/examples/exchange/api`, each have their own manifest, pools, sessions, cookie and
+  anti-forgery scope over one database. Request records reject unlisted JSON members.
+  The CSP allows scripts and connections only from the application origin.
+- **Context.** The As of selection is an input frame in the session (at most 128).
+  `POST /market/context` selects a historical context; `/market/current` or a profile
+  switch clears it. Every date-context capture certifies collection batches under
+  global advisory lock 730849102 (D134), held to commit; a catalog retains at most
+  4096 contexts, never reclaimed (`knowledge_limit`), and each current-mode capture
+  adds one.
+- **Authorization.** Page reads are `MapPreview` handlers bound to the HTTP request,
+  session and frames. `security.has_permission` for an agent principal requires the
+  agent's permission, an unexpired, unrevoked delegation listing it, the delegator's
+  current permission and `CreateDelegations`, and enabled principals; it does not know
+  who asked. `security.trading_access` and `security.use_market_context` also require
+  `ReadMarketData`. Control-table writes advance `security.epoch`
+  (`guard_control_change`), which `security.use_context` holds `FOR SHARE` per request
+  and which fences delivery-price collection (P18 requires throughput qualification
+  before broader use). `ReadMarketData` is held by every role except access
+  administrator, `ReadTrades` by trader and risk analyst, `ReadTradeParties` also by
+  market data editor, and `CreateDelegations` by those three and access administrator.
+- **Resources.** Each scope has runtime and authenticator pools of eight connections
+  with 5-second timeouts. Every request issues a request context, and
+  `security.request_contexts` rows are never reclaimed. Money is exact decimal with at
+  most 18 fractional digits (P15). The API makes no outbound calls; only the
+  delivery-price collector does (D133), where "provider" means a PJM or ERCOT source.
+  A new migration stops automatic hosted updates until an operator qualifies a
+  baseline (D135).
+
+## 4. Vocabulary
+
+- **Model provider** ("provider" in this document and in Settings › AI): one of the
+  five vendors with its adapter, fixed endpoint, credential and enabled state.
+  Delivery-price providers are untouched.
+- **Model**: a vendor model identifier an administrator allowed, with immutable
+  capability versions. **Price revision**: an immutable, effective-dated rate set for
+  one model in one currency.
+- **Agent**: a named assistant with its own agent principal (D40). Each save creates
+  an immutable **agent version**, a **draft** until Publish makes it **published**.
+- **Grant**: a revocable delegation from one user to one agent (§7.1).
+- **Conversation**: one user's thread with one agent, made of **turns** (a question
+  and the agent's complete response). An **answer** is a completed turn.
+- **Source set**: the tool reads whose content reached the model in a turn, including
+  reads behind earlier turns sent as history (§7.6), as exact tool-read ids.
+- **Model call**: one request attempt to a provider, by a turn or a provider test.
+
+The interface says "agent" and "assistant". Vendor names appear under the AGENTS.md
+exception in §14.
+
+## 5. Data and administration
+
+### 5.1 Tables
+
+Tables follow existing conventions: workspace scope, row-level security, exact-version
+foreign keys, audited operations with operation identities and expected versions.
+
+| Table | Contents | Mutability |
+| --- | --- | --- |
+| Providers | Vendor. Versions: retention, training-use terms and whether the account owner can view content, each with source and date. State: enabled; attestation bound to the current credential | Identity plus immutable versions |
+| Credentials | Provider, credential version, nonce, ciphertext, tag, last four characters, set by and at | Replace-only; never readable |
+| Models | Provider, vendor identifier (immutable), display name (audited presentation field). Versions: output limit, temperature support and range, reasoning control, identifier-stability source, accepted served identifiers, tool and streaming confirmation, each sourced and dated. State: enabled | Identity plus immutable versions |
+| Price revisions | Model identity, exact currency reference, rates, optional tier, `effective_from`/`effective_to`, append sequence, `recorded_at` | Immutable; corrections append |
+| Agents, agent versions | Agent: name, principal, published version, active or retired. Version: description, instructions, exact model version, temperature, reasoning, caching switch, tools, allowed roles, limits (§7.5), grant duration | Head moves forward; versions immutable |
+| Model administration audit | Operation identity, actor, target, redacted request, before and after; usage exports | Append-only |
+| Grant audit | Operation identity, delegation, delegator, agent principal and version, provider and model identity, permissions, expiry, actor, outcome, time | Append-only |
+| Conversations | Owner, agent, scope, read-through sequence | Immutable except read-through |
+| Turns | Conversation, agent version, grant, question, answer and incomplete marker, pinned-context record (§7.2), page report, source set, included earlier turns, runtime-set version, limits, state, outcome, worker generation, fencing-token digest, session binding, timestamps | States move forward only |
+| Turn events | Ordered stream events | Append-only |
+| Tool reads | Result or failure code; exact read-operation version; each catalog with the access function and permission checked; read instant for current-only reads | Immutable |
+| Cards | Validated specification, server-composed title, bound tool reads, issued targets | Immutable |
+| Model calls | Turn or test (test: administrator, token digest, parameters), attempt, start instant, exact model and provider versions, requested and served identifier, service tier, usage-mapping version, per-dimension counts and states, cost method, price revision, cost, outcome | Immutable once closed |
+| Worker generation | Current agent-worker generation (§7.4) | Advanced at worker start |
+
+Prices and the display name belong to the model identity, so a rename never leaves a
+model unpriced. Grants use the existing `security.agent_delegations` and
+`security.delegation_permissions`, with the grant audit as history.
+
+### 5.2 Credentials
+
+- A key is entered through a dedicated operation. The C# boundary removes it before
+  any SQL parameter, log or audit write; the audit keeps a redaction marker and a
+  keyed hash so an identical retry is recognized and a different one is a conflict.
+- The browser holds the key only in the form field and the in-flight request, never in
+  storage, a URL or the pending-command record, and clears the field when the request
+  settles. After an uncertain outcome the tab shows current credential status; Retry
+  asks for the key again under the same operation identity.
+- `tools/run_preview.py` generates two 32-byte secrets once per disposable database,
+  each in its own private file: an AES-GCM key-encryption key and an HMAC-SHA-256
+  retry-hash key, passed to every API start. Each seal uses a fresh 96-bit nonce from
+  `RandomNumberGenerator` and a 128-bit tag; associated data is provider identity,
+  vendor and credential version. A missing or wrong key file or a failed tag is
+  `credential_unavailable`. Nothing is generated at API start, and nothing depends on
+  ASP.NET data protection. Rotation is out of scope; losing a file means re-entering
+  every key.
+- The API returns only "set", the last four characters, who set it and when.
+- Keys travel only in headers. Provider clients follow no redirects, use a
+  `SocketsHttpHandler` with `UseProxy=false`, keep default certificate validation, and
+  take connect and idle timeouts and a response byte bound from the runtime set.
+- Each vendor endpoint is a sourced, dated HTTPS constant in its adapter. The preview
+  accepts one optional override that must be an IP-literal loopback URL, so checks can
+  reach the fake provider under `tests/`, which is not published.
+
+### 5.3 Prices and cost
+
+- Rates are exact decimals per million tokens (at most 12 fractional digits) for
+  uncached input, cache read, cache write and output. A rate may be "not offered",
+  except cache read on protocols that cache automatically.
+- Each revision binds a currency row of a sealed reference revision. The price
+  operation rechecks the actor's current `ReadMarketData` access to that catalog
+  (D131), otherwise `currency_unavailable`; choices and Usage labels use the same
+  scoped read (D124).
+- An optional long-prompt tier has a threshold and a complete second rate set. When
+  uncached input + cache read + cache write exceeds the threshold, the second set
+  prices every dimension, output included. If the pinned revision has a tier and a
+  prompt dimension is unknown, cost is unknown.
+- Prices are operational configuration, not certified knowledge (no D67). When a call
+  opens (§7.1), its transaction pins the committed revision with the highest append
+  sequence whose [`effective_from`, `effective_to`) contains the call's start instant.
+  Later appends never reprice it; Usage flags calls priced by a superseded revision.
+- No price in force refuses the call (`model_unpriced`). Tokens in a "not offered"
+  dimension store no cost (`cost_unpriced`). `usage_unrecognized` and `usage_unknown`
+  store no cost, never a partial one.
+- `token_cost_v1` computes cost once on the server and owns the tier rule. Reasoning
+  is an informational subset of output, never priced; reasoning above output is
+  `usage_unrecognized`. Costs and sums are exact at 18 digits; `token_cost_display_v1`
+  trims and groups, so nonzero never shows as zero; `token_cost_report_v1` gives cost
+  per answer and share (18 places, 2-place percentage, ties to even) and is recorded
+  with each report.
+- Totals group by exact currency reference (D72), never added across references; a
+  label adds the reference revision when two totals share a code.
+- Regional, fast, priority and cache-storage surcharges are never requested.
+
+### 5.4 Permissions, roles and agent principals
+
+| Permission | Grants | Initial roles |
+| --- | --- | --- |
+| `ManageModelProviders` | Providers, credentials, models, prices, tests, their audit | Access administrator |
+| `ManageAgents` | Agents, versions, Publish, Retire, agent principals, their audit | Access administrator |
+| `ReadModelUsage` | Usage reports and audited export | Access administrator |
+| `UseAgents` | The panel, grants and asks | Trader, risk analyst, market data editor |
+
+- `UseAgents` goes only to roles holding `CreateDelegations`, which every agent read
+  requires. Model administrators need an operator-assigned role with `ReadMarketData`
+  to price models.
+- A version's allowed roles may contain only roles holding `UseAgents` and every
+  permission its switched-on tools need; a database check enforces it
+  (`agent_role_lacks_permission`, naming role and permission).
+- A new **agent reader** role holds exactly `ReadMarketData`, `ReadTrades` and
+  `ReadTradeParties`. A database check allows it only on agent principals and allows
+  agent principals no other role. The migration fails, never revokes silently, if an
+  agent principal already holds another role.
+- Creating an agent is one `ManageAgents` security-definer operation: the principal,
+  an `agent_credential` binding at the manifest issuer with the principal id as
+  subject, its workspace membership (counted in the 256-member limit) and the agent
+  reader grant. No login or password. It appends to `security.administration_audit`.
+- Retire disables the principal, revokes its open grants and cancels its running
+  turns. It is permanent and keeps history.
+- **Control-table admission.** Creation, Retire, grant and revoke write control
+  tables. Each first runs all checks in an ordinary short read; refusals and no-ops
+  answer from it. Only a command that will write opens an exclusive admission, which
+  takes the epoch row `FOR UPDATE` before binding, then repeats the checks. The
+  existing `guard_control_change` trigger stays, so these writes fence a
+  delivery-price attempt like any role change. Provider, credential, model, price and
+  agent-version operations write no control table, use ordinary admission and check
+  their permission inside.
+- `apply_administration` refuses to create agents and any update targeting an agent
+  principal or naming the agent reader role (`agent_managed`). The directory leaves
+  that role out of assignable choices and shows agent rows without Edit.
+- Choosing providers decides which vendor account receives questions, tool results and
+  answers; editing instructions changes what an agent reads within each grant. Both
+  are audited; neither grants an application read permission.
+- Usage shows users, agents, models, counts and cost, never content. Users see only
+  their own conversations and the cost of their own turns.
+
+## 6. Provider adapters
+
+### 6.1 Contract
+
+- A provider-neutral boundary (D06) streams a response for normalized messages, a
+  system instruction, tool definitions and explicit parameters, with cancellation. It
+  yields typed events: text delta, tool request, completion with stop reason,
+  normalized usage and error category. Vendor types and response ids stay inside the
+  adapter. Adapters use the in-box HTTP client, no vendor SDKs.
+
+| Providers | Protocol | Endpoint path |
+| --- | --- | --- |
+| Anthropic | Messages API | `POST /v1/messages`, SSE |
+| OpenAI, xAI, Meta | Responses API | `POST /v1/responses`, SSE |
+| Google | `generateContent` | `POST /v1beta/models/{model}:streamGenerateContent?alt=sse` |
+
+- Every parameter whose vendor default could change behavior or billing is sent
+  explicitly, from the agent version or an adapter constant recorded with the mapping
+  version: temperature where supported, validated against the model version's range;
+  reasoning, which an adjustable model requires (`parameter_required`); the standard
+  service tier, with any other reported tier making usage `usage_unrecognized`; tool
+  choice "auto" and parallel tool calls; caching (the agent switch places explicit
+  five-minute breakpoints on the Messages API; elsewhere caching is automatic at
+  standard retention); and provider-side response storage disabled where offered.
+- A model is allowed only by an identifier its vendor documents as not repointed. A
+  served identifier that is neither requested nor accepted keeps its usage as
+  `usage_unrecognized`, storing no cost, and fails the turn with `model_mismatch`.
+- Identifiers match `^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`, optionally narrowed per
+  adapter (`model_identifier_invalid`). The `generateContent` adapter inserts the
+  identifier as one path segment and sends nothing if the built URL's scheme, host,
+  port or path prefix differ from its constants.
+- Reasoning content is never requested; any streamed anyway is discarded in the
+  adapter. Error bodies are read only to classify (§7.5) and apply not-billed
+  statuses, never stored, logged, streamed or returned. An opaque continuation value
+  (signed thinking blocks, thought signatures, encrypted reasoning items) is echoed
+  unchanged to the same model within the turn and lives only in worker memory.
+
+### 6.2 Usage normalization
+
+- Each provider (vendor plus protocol) has a versioned usage mapping with source and
+  date; providers sharing a protocol share the parser, not the mapping.
+- Dimensions are uncached input, cache read, cache write, output and reasoning. Each
+  is declared reported (source field and the event carrying its final value), not
+  billed (a sourced structural zero, never inferred from absence) or included in
+  another dimension. Each mapping states its output formula; for `generateContent`,
+  output is `candidatesTokenCount` + `thoughtsTokenCount` and reasoning is
+  `thoughtsTokenCount`.
+- Only final values count: `message_delta`, the terminal Responses event, the last
+  chunk's `usageMetadata`.
+- A normally ended stream with a missing usage block or reported dimension, an unnamed
+  nonzero field or an inconsistent total is `usage_unrecognized`. In a cancelled,
+  failed or interrupted stream, a reported dimension without its final value is
+  unknown and the call is `usage_unknown`; unknown never becomes zero.
+- Each mapping lists error statuses that are not billed. Any other status may have
+  been billed, so the attempt's input is unknown.
+
+### 6.3 Qualification
+
+- A conformance suite runs every adapter against a local fake provider, injected
+  through an `HttpMessageHandler` as `PowerImportChecks` does, replaying hand-written
+  synthetic recordings: text; tool requests; a two-step loop whose continuation value
+  must echo byte for byte; usage with cache and reasoning; reasoning and continuation
+  data that must reach no event, row or log; errors, rate limits and overloads before
+  and after streamed text; malformed events; cancellation; transport failure; a
+  response past the byte bound (`model_provider_response_too_large`); and error bodies
+  echoing request text and a masked synthetic key that must appear nowhere. The fake
+  asserts every request path. No check calls a real provider.
+- A provider is enableable only with its usage mapping confirmed from published
+  documentation; the vendor's published retention and training terms for the account
+  type and whether the account owner can view content, each sourced and dated; and an
+  administrator attestation, bound to the current credential, that the account is of
+  that type, does not permit training on submitted content and has no data-sharing
+  opt-in. Otherwise `model_provider_unqualified`. Meta is shown but unqualified until
+  its usage fields are confirmed; phase 1 is accepted without it.
+- A model is enableable only when tool calling and streaming are confirmed from
+  published documentation and pass conformance (`model_unqualified`).
+- Conformance is not real-provider qualification; O09 stays open.
+
+## 7. Agent runtime
+
+### 7.1 Authority and grants
+
+- **Current authority**, evaluated in PostgreSQL: user and membership enabled; the
+  user holds `UseAgents` and every permission the version needs; at ask the version
+  was the agent's published version and the user holds one of its allowed roles, or it
+  was the agent's newest version, still a draft, and the user holds `ManageAgents` (a
+  later Publish or save never fails a running turn); the turn's grant is unrevoked and
+  unexpired; the agent principal and membership are enabled. The **source-access
+  check**: under the agent context, each recorded access function and permission
+  passes for every catalog in the source set.
+- **Consent.** Asking without a covering grant fails with `grant_required` and the
+  panel asks: "Allow Page guide, which sends your questions and the data it reads to
+  <provider> (<model>) through the vendor account your administrators configured,
+  whose owner may be able to see them, to read trades, trade parties and market data
+  on your behalf until 2026-11-17?", naming only the permissions of the version's
+  switched-on read tools, which are what the grant lists.
+- **Grant.** The request names only the agent version; any other field is rejected and
+  writes nothing. A security-definer operation takes the delegator from the bound
+  human context and the principal, permissions and expiry (now plus the version's
+  duration, capped by the runtime set: `grant_duration_exceeded` on save) from the
+  stored version, failing with `agent_retired`, `agent_not_allowed` or
+  `grant_permission_missing`, never partially. It revokes the user's earlier grants to
+  that agent in the same transaction: one current grant per user and agent.
+- **Coverage.** A grant covers version V when unrevoked, unexpired, from the user to
+  V's agent, given for a version with V's provider and model identity, and listing
+  every permission V needs. A new model version under the same identifier does not ask
+  again, and a covering grant keeps its own expiry.
+- **Revoke** takes a delegation id, succeeds only for its delegator, needs no
+  `UseAgents`, and answers another user's id exactly like an unknown one. Revocation,
+  replacement included, cancels the grant's running turns. Each grant and revocation
+  appends a grant audit record in the same transaction; the profile dialog lists the
+  user's grants with Revoke, and `ManageIdentities` with `ManageAccess` holders see
+  all of them in Users & access.
+- **Agent context.** Every tool read runs in a request context for the agent
+  principal, issued through `security.issue_context` (login kind `agent_credential`)
+  with the turn's grant, fixed at ask and never taken from browser input, model output
+  or another turn. SQL then requires the agent's permission, the grant and the
+  delegator's current permissions. Binding a turn to its owner's grant is the server's
+  job, under the same trusted-authenticator boundary that binds a page request to its
+  session.
+- **Before the ask and every model call**: current authority and the source-access
+  check; agent active; model enabled, qualified, priced, its version still current;
+  provider enabled and qualified; credential decrypts. Failures: `access_changed`,
+  `agent_retired`, `model_changed`, `model_disabled`, `model_unqualified`,
+  `model_unpriced`, `model_provider_disabled`, `model_provider_unqualified`,
+  `credential_unavailable`. A turn never follows a newer version.
+- **Opening a call** is the last step, through the turn's fencing token (§7.4), in the
+  transaction that runs those checks and reads the ciphertext: it records the start
+  instant and pins the price. No request byte is sent unless it commits.
+- **Publication recheck.** Each content-bearing event (step, text, card, target) is
+  appended in a transaction holding the epoch row `FOR SHARE` that repeats both
+  checks, failing the turn with `access_changed`. The stream sends only committed
+  events, so a completed revoke stops every later append. Terminal, usage and cost
+  events carry no business data and skip it.
+- **Replay recheck.** Before stored content is sent again (conversation reads, stream
+  replay, re-materialized cards), every catalog's recorded access function is
+  evaluated in the asking user's own request context; any failure hides answer, cards
+  and targets as `access_changed`. Replay needs no grant and ignores agent, model and
+  provider state, so a retired agent's turns still replay.
+
+### 7.2 Pinned context
+
+- The ask names the knowledge mode (current, or the exact retained context id) and the
+  As of frame id when one is selected, as trading reads do: a frame of the session's
+  current market context (`snapshot_missing`), current only while no historical
+  context is selected, a retained context only when it is the selected one. Anything
+  else is `context_required`; the ask never falls back.
+- The turn's immutable **pinned-context record** (knowledge mode, captured or retained
+  context id, resolved cutoff and, with a frame, its pin set: frame id, At,
+  observation ids, curve-contract selections) is its snapshot identity; the worker
+  reads only it.
+- **Working data.** After admission (§7.4) creates the turn queued, the asking request
+  captures once in the user's context and its own short transaction and writes the
+  record with the fencing token, within the request's deadline and cancellation. A
+  failed capture fails the turn with the page read's error, and no other cutoff is
+  tried; an abort or the deadline fails it `request_cancelled`. Terminal writes use an
+  independent cancellation scope. Tool reads never capture.
+- **Reserve.** Each admitted working-data ask permanently uses one of the catalog's
+  4096 retained contexts. The assistant captures through a wrapper that, under lock
+  730849102, refuses with `knowledge_budget_reserved` when fewer than the runtime
+  set's reserve would remain, keeping it for page captures. Reclaiming stays open
+  (O07).
+- Tools take no context, snapshot or workspace inputs. Current-only definitions (TOU
+  products, power hours) run only under a working-data pin (`power_historical`
+  otherwise) and are labeled with their recorded read instant, never the pinned
+  cutoff. Reads that consume a frame (curve prices and history, parties, trades, power
+  hours) fail with `snapshot_missing` when the turn pinned none.
+- **Page report.** Stored at ask and never changed, so navigation during the turn
+  never changes what Read current page reads; its selection is checked when the tool
+  runs (`page_selection_unavailable`).
+- **Session binding.** The turn records its workspace session, profile and session
+  end; a profile switch or session end cancels it, and the worker checks the binding
+  before every read and publication.
+
+### 7.3 Tools and page coverage
+
+The tool set is fixed; each tool is switched on per agent version.
+
+| Tool | Behavior |
+| --- | --- |
+| Read current page | Dispatches the stored page report to that page's read tool |
+| Read trades | Blotter rows, holdings with execution P&L, trade detail |
+| Read trade parties | Legal entities and counterparties |
+| Read market data | Curves, contract definitions, dated contracts, observations |
+| Read schedules | Published date schedules and calendars, TOU products, power hours |
+| Read reference data | The `references` and `unitCatalog` read behind Reference data |
+| Navigate | Requests a move to a server-issued target |
+| Show card | Creates an application-drawn card from this turn's reads (§10.2) |
+
+| Page | Tool | Permissions | Context |
+| --- | --- | --- | --- |
+| Curves & prices, Contract definitions | Read market data | `ReadMarketData` | Pinned |
+| Schedules | Read schedules | `ReadMarketData` | Pinned |
+| Power TOUs | Read schedules | `ReadMarketData` | Current-only; power hours need the frame |
+| Reference data | Read reference data | `ReadMarketData` | Pinned |
+| Entities & counterparties | Read trade parties | `ReadTradeParties`, `ReadMarketData` | Pinned |
+| Blotter rows and holdings | Read trades | `ReadTrades`, `ReadMarketData` | Pinned |
+| Blotter risk results, Delivery prices, Users & access, Settings › AI | none | | Not supported |
+
+- Read current page has no permissions of its own; if the dispatched tool is off it is
+  refused with `tool_not_enabled`. On an unsupported page it returns
+  `page_not_supported`, and the agent never answers from another page's data.
+- Read tools call session-independent operations extracted from the page handlers (§12
+  step 2), so pages and tools share one implementation and authorization path. A
+  tool's contract is the operation's (architecture §10): versioned identifier, input
+  and output schema, permission, and the runtime set's row and byte bounds. A result
+  over a bound fails with `result_too_large`, never truncated. The model may retry
+  with narrower inputs the schema accepts; where it cannot narrow (a long party list)
+  the agent cannot read it and the page still shows everything.
+- A tool step ends with a result; a **refusal** returned to the model as the step
+  result (`page_not_supported`, `snapshot_missing`, `power_historical`,
+  `result_too_large`, `card_too_large`, `card_invalid`, `tool_arguments_invalid`,
+  `tool_not_enabled`, `page_selection_unavailable`), carrying only the code and fixed
+  text, after which the turn continues; or a turn-ending failure (authority, session
+  and fencing codes, otherwise `tool_failed`). Refusals count as steps.
+- A read whose operation ran under its access check is a tool read, and joins the
+  source set, even when it then fails. A refusal before the operation runs adds none.
+- Results carry exact values and server-formatted strings (D114). The preamble
+  requires quoting only returned values and deriving none. Prose is model output;
+  cards are the exact channel.
+- **Navigation targets** are issued by the server; the model never composes one. A
+  page target names a page the user can currently open, checked under the agent
+  context against the delegator's permissions, and keeps the pinned context. Record,
+  filter and context targets come only from this turn's reads. Targets open read views
+  only.
+
+### 7.4 Execution
+
+- Turns run in an in-process worker, an interim path until Milestone 4's durable runs.
+  States follow architecture §11 (queued, running, cancel requested, completed,
+  failed, cancelled) plus interrupted; terminal transitions are atomic and exclusive.
+  A turn completes only when its last call ends normally with no pending tool request
+  and every check and publication succeeded. Cancellation sources end it cancelled,
+  recovery ends it interrupted, and everything else fails, even after published text,
+  which stays marked incomplete.
+- **One worker per database.** A preview process holds a session-level advisory lock
+  (agent-worker class) on a dedicated connection and advances the worker generation.
+  Without the lock, or after losing that connection, assistant and provider-test
+  routes refuse with `agent_runtime_unavailable`. Before serving, it ends every
+  non-terminal turn of an earlier generation as interrupted, marks their open calls
+  `usage_unknown` and closes open test records, each exactly once. Every turn write
+  requires a current generation.
+- **Admission** takes a transaction-scoped advisory lock on the workspace and enforces
+  one active (queued, running or cancel requested) turn per user per workspace
+  (`turn_active`) and the runtime set's workspace limit (`workspace_turn_limit`). It
+  also interrupts, exactly once, any turn still non-terminal past its elapsed limit
+  plus the admission deadline, marking its open calls `usage_unknown`. A queued turn
+  still without a pinned-context record at the admission deadline fails with
+  `ask_incomplete`. Every ending frees both slots.
+- Agent work uses its own runtime and authenticator pools per scope on the existing
+  logins, never the UI pools; workspace concurrency stays below their size, and each
+  tool read fits one 5-second command in one request context. No transaction, request
+  context or epoch lock is held across a model call, backoff or stream write. Text
+  deltas are coalesced, each batch with one publication recheck.
+- **Fencing.** Every worker write is a narrow security-definer operation presenting
+  the turn's fencing token, held only in the admitting process (the database stores
+  its digest). The record write is accepted only from queued without a record, the
+  start only from queued, content writes and call opens only while running. Call
+  close, usage, cost and terminal events are accepted in any non-terminal state
+  without a request context, so accounting finishes after revocation or session end.
+  From cancel requested the only endings are cancelled or interrupted; a record write
+  or start that finds cancel requested ends the turn cancelled instead. A write with a
+  stale token or generation is rejected with `agent_runtime_unavailable`.
+- One narrow operation without the token moves a queued or running turn to cancel
+  requested. Stop (owner's context), Disable, Retire, revocation and the
+  profile-switch handler use it.
+
+### 7.5 Limits and failure
+
+- Each agent version declares, and each turn records: maximum tool steps, total input
+  tokens per turn, output tokens per call (not above the model's:
+  `model_limit_exceeded`), elapsed time, retry count and the caching switch. Exceeding
+  one ends the turn with `limit_tool_steps`, `limit_input_tokens`,
+  `limit_output_tokens` or `limit_elapsed`; a tool request cut off by a limit is not
+  run.
+- The input limit is checked before each attempt against input that earlier attempts
+  reported; nothing is estimated, so the crossing attempt completes and is billed. An
+  earlier unknown or unrecognized input ends the turn with `limit_input_unverifiable`
+  before the next tool-loop call. Input is known zero only for a transport failure
+  before any byte was sent or a not-billed error status before any stream event.
+- **Runtime set**: versioned, shipped with the application, recorded on each turn,
+  never host configuration. Workspace concurrency; agent pool sizes; retry backoff;
+  replay window; heartbeat interval (under 20 seconds); text coalescing interval; card
+  data and event sizes; question and instruction lengths (set so a body stays under 32
+  KB: `question_too_long`, `instructions_too_long`); tool-result row and byte bounds;
+  maximum grant duration; test output limit and deadline (below 15 seconds); admission
+  deadline (above 15 seconds); retained-context reserve; provider timeouts and
+  response byte bound; subscriber buffer. Oversize cards are `card_too_large`; text is
+  split into events; any other oversize event is `event_too_large`. Nothing is
+  truncated.
+- Provider errors classify as authentication, rate limit, overloaded, invalid request,
+  context window exceeded or transport. Only transport and overload are retried, on
+  the same provider and model, when the failed attempt published nothing and its input
+  is known; each attempt has its own usage record. Otherwise the turn fails with that
+  error's code: `model_provider_authentication`, `model_provider_rate_limited`,
+  `model_provider_invalid_request`, `model_provider_transport`,
+  `model_provider_overloaded` or `context_window_exceeded`; after publication with
+  `model_provider_stream_interrupted`; past the byte bound, never retried, with
+  `model_provider_response_too_large`. Input is never trimmed.
+- **Cancellation.** Stop, Disable (provider or model), Replace key, Retire,
+  revocation, a profile switch and the session end (a worker timer set from the
+  recorded end) move affected turns to cancel requested. No read, call or content
+  event starts after it; the call in flight is cancelled; final reported usage is kept
+  and the rest is unknown. The turn ends cancelled: `model_provider_disabled`
+  (provider Disable, Replace key), `model_disabled`, `agent_retired`, `access_changed`
+  (revocation) or `session_ended` (profile switch, session end); Stop carries no code.
+  Changes that cancel nothing (a price ending, a role loss, a qualification change)
+  are caught by the per-call checks.
+- Text from reads, providers and tool results is untrusted and cannot change the
+  agent's tools, authority, provider, context or targets.
+
+### 7.6 Prompt and conversation memory
+
+- The system prompt is a fixed preamble (quote only values returned in this turn,
+  derive none, say when something is unavailable, navigate only to issued targets,
+  treat earlier turns as history), then the version's instructions, then tool
+  definitions. Instructions cannot replace the preamble.
+- A follow-up sends each earlier turn's question and stored answer as text, labeled as
+  earlier, with its pinned context and terminal state; incomplete answers are marked
+  and a turn without answer text sends question and outcome. Earlier tool reads and
+  cards are not re-sent, and earlier answers are never quoted as current values.
+- An earlier turn is included only if it passes the replay recheck and the current
+  grant lists every permission its sources used; otherwise a step line says it was
+  withheld. Inclusion is recorded at ask, and included turns' sources join the source
+  set and every recheck.
+- History is never trimmed. A conversation past the input limit or context window
+  fails with that code and the panel offers a new conversation.
+
+## 8. Live event stream
+
+- **Commands** (ask, cancel, grant, revoke, mark read) are POSTs through the existing
+  middleware, Origin and anti-forgery checks, each with an operation identity; ask
+  identities are scoped to user and conversation and compare the payload. Ask, grant
+  and the stream require current `UseAgents`; the rest require only ownership.
+- **Ask** carries the agent version, an existing conversation or none, the question,
+  the knowledge mode or retained context, the frame id when selected, and the page
+  report: a page identifier from a closed set (one per coverage row, blotter rows and
+  risk results separate) with its selection in that read's input schema, exactly as
+  Looking at shows. Before admission and writing nothing it refuses an invalid report
+  (`page_report_invalid`), a conversation the principal does not own in this scope,
+  answered like an unknown id (`conversation_not_found`), and an agent other than the
+  conversation's (`conversation_agent_mismatch`).
+- **Reads** (conversations with unread markers, one conversation's turns and events,
+  the unfinished turn) pass the replay recheck.
+- **Stream:** `GET …/assistant/conversations/{id}/events?after={sequence}`, read by
+  native `EventSource`, for an owned conversation. With a non-terminal turn it streams
+  live; otherwise it replays stored events after `after` to the terminal event, or
+  sends `refused` with `turn_not_running`. Idle panels hold no connection.
+- **Events:** accepted, step, text delta, card, navigation target, usage and cost;
+  terminal completed, failed, cancelled, interrupted; and `replaced` and `refused`. A
+  200 stream ends only after a terminal, `replaced` or `refused` event, on which the
+  panel calls `close()`, so the browser reconnects only after a network drop or a
+  slow-subscriber cut.
+- **Resume.** Event ids are per-conversation sequences. Reconnects send
+  `Last-Event-ID`, which overrides `after`; a new stream passes `after`. A sequence
+  beyond the latest or older than the replay window gets `refused` with
+  `replay_unavailable`, and the panel re-reads and opens one new stream; the server
+  never silently restarts.
+- **Wire format:** `id:` with the sequence, `event:` with a fixed name, one `data:`
+  line of single-line JSON from the API serializer, a blank line. Model, read and user
+  text appears only inside JSON strings with CR and LF escaped. The panel accepts only
+  the fixed names and validates each payload; a failure closes the stream and re-reads
+  once.
+- **One stream per unfinished turn**, because browsers cap connections per origin: a
+  new one sends the older `replaced`, whose tab offers Resume.
+- The route is matched in the first middleware, exempt from the 15-second deadline and
+  the session semaphore, and sends `refused` with `stream_expired` if the turn's
+  elapsed limit passes without a terminal event.
+- **Admission.** The loopback and GET Origin checks apply. `EventSource` cannot send
+  the anti-forgery header, so the stream relies on the scope's SameSite=Strict,
+  HttpOnly session cookie plus `Sec-Fetch-Site: same-origin` and `Sec-Fetch-Mode:
+  cors`; cookies are not port-scoped, so Sec-Fetch is what refuses a page on another
+  loopback port. No CORS headers; the only side effect is replacing the requester's
+  older stream. Failures are non-2xx, which stops `EventSource`, and the panel
+  re-reads once. A missing or expired session is `session_ended` on assistant routes
+  (pages keep `access_denied`), with a reload offer and no retry loop.
+- The server flushes headers and a comment on open and heartbeats while idle, checking
+  before each write that the session exists with an unchanged profile (else `refused`,
+  `session_ended`). A waiting stream holds no database connection: it subscribes in
+  memory, replays committed events after `after` in one short read with the replay
+  recheck, and drops duplicates by sequence. Live events arrive from the worker after
+  commit, already rechecked. A subscriber overflowing its bounded buffer is cut
+  without a final event, the one deliberate case, and resumes through `Last-Event-ID`.
+- Each scope maps its own stream and commands inside `MapPreview`; no new dependency.
+
+## 9. Settings › AI
+
+Tabs appear by permission (§5.4), use the existing table component and pending-command
+pattern (except Replace key, §5.2), and end with that tab's latest 100 audit entries;
+credential entries read only "key replaced".
+
+- **Usage** (`ReadModelUsage`): a half-open range of local dates (D25) in a reporting
+  zone prefilled from Profile (`report_zone_invalid`), by model, user or agent. Calls
+  fall on days by start instant; the response states the zone and UTC bounds. It shows
+  per-currency cost and tokens; answers and cost per answer, with other turns' cost on
+  its own line; a daily cost chart; turns by terminal state, tokens by dimension, cost
+  and share (a row's cost over its same-currency total); unpriced, unknown,
+  unrecognized and superseded-price amounts apart; and provider tests as their own row
+  so views reconcile. CSV export is audited and listed; it carries exact costs, sums,
+  counts, tokens, the exact currency reference, zone and range, ratios only as
+  `token_cost_report_v1` strings, and uses the formula-guarded writer (today
+  `blotterCsv` in `web/src/blotter-layout.ts`) moved to a shared export module.
+- **Models & prices** (`ManageModelProviders`): models per provider with status,
+  rates, tier and the revision in force or scheduled; Add, Edit, Enable, Disable, Add
+  price. Every field is entered and none inferred; no models or prices ship. Edits
+  other than the display name create a model version. Models start disabled; Enable
+  needs a qualified model on an enabled, qualified provider. Unpriced models show "No
+  price".
+- **Providers** (`ManageModelProviders`): each vendor's protocol, endpoint (an
+  override marked as a check endpoint), qualification, terms, owner visibility,
+  attestation, credential status, last test and state; Replace key, Attest, Test,
+  Enable, Disable. Replace key clears the attestation and disables the provider in one
+  transaction; only Enable with a current attestation resumes calls, never Attest
+  alone. The tab states that enabling sends users' questions and visible data to the
+  vendor account, that its owner may see them, and that its spending limit is the only
+  cumulative cap.
+- **Test** sends one fixed synthetic prompt without workspace data or tools to a
+  priced model the administrator picks, on a qualified provider; either may be
+  disabled. Temperature and reasoning are validated as for a version; output is capped
+  at the test limit; there is one attempt. The record opens in the administrator's
+  context under `ManageModelProviders` and pins its price before any byte is sent; a
+  per-test token held by the handler closes it without a request context, under an
+  independent scope at the test deadline or an abort (`limit_elapsed`,
+  `request_cancelled`). A same-identity retry returns the outcome or
+  `test_in_progress`, never a second request. A test succeeds only for a well-formed
+  response ending normally or at the output limit with recognized usage.
+- **Agents** (`ManageAgents`): name, description, instructions, model, temperature and
+  reasoning where applicable, §7.5 limits, grant duration, tools and allowed roles.
+  Only enabled, qualified, priced models on enabled, qualified providers are offered;
+  a save names the exact model version shown and fails with the §7.1 model and
+  provider codes. Each save is a draft; Publish, with the expected version, publishes
+  the newest. An agent whose model version is no longer current shows "Model changed"
+  until a new version is published. Retire is permanent.
+
+## 10. Assistant panel and cards
+
+### 10.1 Layout and contents
+
+- The panel docks right and the page narrows; its left edge resizes it by pointer or
+  keyboard, the width a browser-local preference (D45). Below 760 px it is a
+  full-width sheet. A header launcher toggles it and is hidden without `UseAgents` or
+  a usable agent.
+- The panel keeps its conversation across pages and has its own busy state. Closing or
+  reloading does not cancel a turn; after a reload the panel reads the unfinished turn
+  and resumes with `after`. A turn finishing while the panel is closed shows a
+  launcher indicator and an unread History marker until opened.
+- **Header:** agent picker with provider, model, version and a Draft label; History;
+  new conversation; close. The picker lists usable agents and preselects the last
+  explicit choice (D45) only while it is listed, otherwise "Choose an agent" with the
+  composer disabled. A conversation is locked to its agent; another choice starts a
+  new conversation.
+- **Looking at:** the page, selection and context the next question will pin, or that
+  the page is not supported. The ask sends exactly this.
+- **Conversation:** questions; collapsible step lines; streamed answers, incomplete
+  ones marked; cards; "Took you to …" notices with Back, which restores page, record,
+  filters and context; and a usage line per answer (tokens by dimension, cost per
+  currency). A target that changes context, or one leaving unsaved editor changes,
+  shows a button instead of moving.
+- **Composer:** Enter sends, Shift+Enter adds a line, Send becomes Stop during a turn,
+  and a failed send keeps the draft with Retry. On `grant_required` the consent of
+  §7.1 appears.
+- **Formatting:** paragraphs, lists, emphasis and code, built from text nodes. No
+  tables, HTML, links or images, and URLs are not linked, because rendered links let
+  injected text carry data out. Tabular and charted values appear only as cards.
+
+### 10.2 Cards
+
+- The agent submits a typed specification: a kind (table, bar chart, line chart, value
+  tiles) and bindings from card fields to fields of this turn's reads. It holds no
+  numbers and no free text; anything else is `card_invalid`.
+- The server composes the title from the bound reads' display names and pinned context
+  (or a current-only read's instant). Labels, values and display strings come only
+  from read schemas and stored reads. The footer names the reads and their context.
+- The browser draws cards with the existing table and chart components (D80), with
+  sort, hover and series toggles. At creation, in the same transaction and recheck,
+  the server issues and stores the navigation target of each bound row or point that
+  has one, within the card data size. A click uses the stored target and sends no
+  command; a re-materialized card shows targets only after the replay recheck. No
+  target is issued after the turn ends.
+
+## 11. Hosted mode and later phases
+
+Under `--hosted-pilot` phase 1 is inert: assistant, stream and Settings › AI routes
+are not mapped; no worker, model-provider client, agent pool or worker connection
+exists; the API reports the assistant unavailable, so the launcher and Settings › AI
+are hidden; `tools/check_hosted_http.py` asserts it. Its migrations still ship, so the
+first hosted release after phase 1 waits for operator baseline qualification (D135).
+The SQL applies in every mode: the new permissions appear in role listings, Users &
+access refuses agent principals and the agent reader role, and
+`tools/provision_hosted.py` grants the owner an explicit list of human role codes
+instead of every role, because the agent reader role cannot be held by a human. No
+`host.json` field or Compose change.
+
+**Phase 2 (agent notes)** adds Search notes and Save note tools, notebooks, note
+permissions, provenance and a Notes view. Notes live in an agent's own notebook or in
+one **common notebook** per workspace that every agent can search and write. Sharing
+must not widen authority, so a note is governed like an earlier turn (§7.6): it keeps
+its turn's source set and pinned-context record; reading it adds its sources to the
+reading turn's source set, so later notes inherit them; it reaches a model only when
+it passes the replay and source-access checks and the turn's grant lists every
+permission those sources used (Search notes otherwise omits it); it reaches a panel or
+the Notes view only for a user who passes the replay recheck on all of them; and it
+always appears labeled with its context, never as current values. Text a user typed is not a
+source, so a note reaches anyone but its author only after the author confirms its
+exact text in the panel. Phase 1 already stores what this needs: source sets as exact
+tool-read ids with access rows, and the pinned-context record.
+
+**Phase 3 (hosted baseline)** adds agent contexts bound to the account session, hosted
+credential key files, API egress, gateway stream settings, multi-process worker leases
+and four gates the owner has not decided: retention (O11), approval to enable a
+provider, per-catalog data scope (O22, and a new open item recorded with phase 3) and
+egress control. Phase 1 keeps these open: the session binding is a typed field, the
+worker generation seeds a lease fence, endpoints are code constants, credentials do
+not depend on data protection, and the heartbeat already fits the gateway's 20-second
+read timeout.
+
+## 12. Delivery order
+
+Each step leaves the application working with no provider configured, keeps the hosted
+inert check green, and updates every document it makes inaccurate (db/README.md,
+security.md, reference-data.md, hosted-pilot.md).
+
+1. Record §14 in decisions.md (first removing the blank lines that split the
+   agreed-decisions table after D77, D96 and D99 and before D132), AGENTS.md and
+   plan.md.
+2. Extract session-independent typed read operations from the page handlers, taking an
+   issued request context and a pinned-context record, never `HttpContext`. Pages
+   switch to them with every existing check green.
+3. Provider, credential, model, price and audit tables; `ManageModelProviders`; key
+   custody in `run_preview.py`; Models & prices and Providers with Replace key. Every
+   provider unqualified.
+4. The fake provider; adapters and mappings; conformance; usage and cost; model-call
+   records for tests; qualification and attestation; Test, Enable, Disable. Meta stays
+   unqualified unless its usage fields are confirmed.
+5. Agents, grants and turns: the remaining tables; `ManageAgents`, `UseAgents`,
+   `ReadModelUsage` and the agent reader role; creation, Publish, Retire; the Users &
+   access and provisioning changes; context pinning and reserve; read tools and
+   Navigate; worker and pools; the stream; Agents and Usage tabs; changed checks.
+6. The panel with consent; grants and Revoke in the profile dialog; grant history in
+   Users & access; navigation history; the background indicator.
+7. Cards and Show card.
+8. Architecture updates and a cross-document consistency pass.
+
+## 13. Verification
+
+Every structured error code in this document has a check that produces it where it is
+specified, and every rule stated as "never" has a check that attempts it. Checks use
+synthetic data and the fake provider. The cases that coverage does not imply:
+
+- **Numbers (C#):** tier thresholds with cache tokens; unknown prompt dimensions with
+  and without a tier; a revision appended during an open call; totals over two
+  revisions of one currency code; input-limit accounting for the crossing attempt,
+  pre-send failures, not-billed overloads and a reset after send; Usage days across a
+  daylight-saving change.
+- **Authority:** revoking or replacing one user's grant cancels only that user's
+  turns; a revoke during a model call returns without waiting and nothing but call
+  close, usage, cost and the terminal event commits after it; losing the last
+  `UseAgents` role fails a running turn while Revoke still works; stored grants match
+  the version, a version with the same provider, model identity and permissions asks
+  nothing, and drafts stay hidden until Publish; each of provider disable, model
+  disable, Retire, Replace key, price ending, model version change and scope removal,
+  between calls and during a backoff, stops further calls with its code; a retired
+  agent's turns still replay; history across a context change and a narrower grant; a
+  grant during a delivery-price attempt fences it; `check_temporal_storage.py` proves
+  delegated authority with `security.market_access(<catalog>, 'ReadMarketData')`,
+  false without a delegation and true with one, for an agent created through
+  `ManageAgents`.
+- **Context:** selection and navigation changes mid-turn leave reads on the pinned
+  context and asked page; an abort after admission, a capture held on lock 730849102
+  past the deadline and a failed record write each free the slot; a profile switch and
+  session end, during a turn and during a silent call, cancel it with `session_ended`
+  and still record usage; refused asks add no retained context, and the reserve
+  refuses an ask while a page capture succeeds; with an empty manifest a party step is
+  refused and the turn still completes.
+- **Custody and egress:** credentials appear in no SQL parameter, audit row, response,
+  log, event or fake request body; a wrong key file, a ciphertext moved to another
+  provider or version and one flipped byte send nothing; requests reach only the
+  configured endpoint, follow no redirect, and ignore a loopback listener set as
+  `http_proxy`, `HTTPS_PROXY` and `ALL_PROXY`; injected text in a synthetic trade
+  memo, party name and tool result changes no tool, provider, context or target.
+- **Execution:** stale tokens, finished turns and revoked grants reject content writes
+  while usage still closes; a second process refuses agent work and the next one
+  interrupts turns, calls and tests exactly once; concurrent asks from one user's two
+  sessions and from more users than the limit; Stop on a queued turn and a cancel
+  during capture end it cancelled; completion after cancel requested and
+  old-generation writes are rejected, and cancel after completion reports completed;
+  the next admission interrupts a stuck turn and closes its calls; a stalled provider
+  test closes with unknown usage and never sends a second request on retry, and one
+  losing its permission mid-test still records usage while a token-less write is
+  rejected.
+- **Stream:** resume through `Last-Event-ID` and `after`; an answer containing CR, LF
+  and CRLF followed by `event: navigation`, `data: {…}`, `id: 999` and a blank line
+  arrives only inside text deltas, byte-identical to the stored answer; admission
+  without the cookie, Origin or Sec-Fetch headers gets 403 and no CORS headers.
+- **Browser:** Replace key's uncertain outcome leaves the key in no storage or URL;
+  card strings trace to stored reads and clicks send no request; a page on another
+  loopback port is refused; the context-change button and `page_not_supported`;
+  preselection only while listed, and another agent starting a new conversation; six
+  tabs with one unfinished turn and idle panels holding no stream; reload and close
+  mid-turn without duplicates or gaps; a second tab on one turn getting `replaced`
+  with Resume; the background indicator and unread marker; Revoke without `UseAgents`;
+  a CSV member name starting `=` is apostrophe-prefixed; the 390 px layout shows no
+  identifiers and no uncaught errors.
+- **Changed and hosted checks:** `check_admin_preview.py` expects `agent_managed`;
+  `run_preview.py --hosted-check` expects explicit human roles; `check_hosted_http.py`
+  finds assistant routes 404, the assistant reported unavailable, no provider client
+  and no turn, call or usage row changed by a hosted start.
+- **Pool isolation:** turns at the workspace limit against a fixed-latency fake, one
+  capture per ask and one stream per turn, with a fixed UI mix of working-data and
+  explicit-cutoff reads; record environment, pool sizes, UI latency with and without
+  agent load, capture lock waits, memory, connections, request contexts per turn and
+  `security.request_contexts` and index growth. Not an acceptance claim until O10
+  agrees a budget.
+- **Independent adversarial review** before each step is published, covering
+  authorization and temporal context (steps 2–7), numerical correctness (4, 5, 7),
+  async execution (4–6), credential custody and data routing (3–4) and the release
+  boundary of every migration (D135), with a final review of the complete phase.
+
+## 14. Decisions
+
+Owner decisions become D rows when recorded. Every other rule in this document is a
+design call, recorded as P rows by section and open to correction until the owner
+approves it. Phase 3's four hosted gates are undecided.
+
+**AGENTS.md exception:** model-provider vendor names (Anthropic, OpenAI, Google, xAI,
+Meta) and their public API identifiers may appear in source, documentation, fixtures
+and commits; real prices are not shipped.
+
+**Owner decisions:** the three phases, phase 1 inert when hosted; a docked panel with
+page questions and navigation, more tools later; Settings › AI's four tabs and the
+Agents form as mocked, with saved drafts and Publish replacing its "Test in pop-up"
+and unsaved definitions refused; four card kinds, no embedded views and no
+agent-written code; server-sent events, not SignalR; P&L comparison next and monthly
+caps later, with per-turn limits and full cost reporting meanwhile (a deviation from
+architecture §9 provider budgets and Milestone 5 resource budgets); conversation
+memory (§7.6); agents created only by `ManageAgents` holders and picked by role, with
+`UseAgents` for trader, risk analyst and market data editor; no delivery-price reads;
+a new grant when provider or model changes, under a maximum duration; `ReadMarketData`
+for model administrators through an operator-assigned role; replay on the user's own
+current access; a browser-local agent choice and one agent per conversation; Meta
+visible but not enableable until confirmed; answers as completed turns, other turns'
+cost on its own line; Usage days in a viewer-picked zone over half-open ranges; the
+background indicator and unread History marker; and a phase 2 common notebook
+alongside agent notebooks.
+
+The agent reader role amends D42 (seven role templates).
+
+**Open items:** O04 partly resolved (agent principals only through `ManageAgents`;
+standing, revocable delegations with explicit duration; redelegation, MFA and
+federation stay open). O09 stays open until real task outcomes are recorded. O07 adds
+reclaiming the retained contexts assistant asks consume. O10 gates phase 1 performance
+acceptance.
+
+**plan.md:** this Milestone 5 slice is brought forward in three phases, with P&L
+comparison next and spending caps later.
+
+**Left to the builder:** table, column and function names; migration split per step;
+the order of handler extraction, provided pages and tools share each operation;
+runtime-set values within the stated constraints; the formatting renderer and the
+navigation history structure.
