@@ -32,6 +32,7 @@ let referencePage:ReferencePage|undefined;
 const canAdvanceReference=()=>!!referencePage&&referencePage.hasMore&&referencePage.offset+referencePage.pageSize<=referencePage.maximumOffset;
 let hostedPilot=false;
 type ProfileChoices={mode:string;profiles:{id:string;name:string}[];customProfiles:{id:string;name:string}[]};
+type StartupAccess={profile:string;permissions:string[]};
 const can=(permission:string)=>permissions.includes(permission);
 const historicalContext=()=>(workspace as (Workspace & {context?:Context})|undefined)?.context;
 const canCorrect=()=>can('ImportObservations')&&!historicalContext();
@@ -341,13 +342,20 @@ function setHostMode(mode:string){
   text('workspace-footer',hostedPilot?'Private workspace. Generated marks and sample trades are labeled.':'Synthetic sample data. Every change stays in this disposable local preview.');
 }
 const bootstrapPath='bootstrap?includeFrames=false';
+const startupBootstrapPath=bootstrapPath+'&includeAccess=true';
 async function profileChoices(initial?:ProfileChoices){const boot=initial??await api<ProfileChoices>(bootstrapPath);setHostMode(boot.mode);$('preview-access').hidden=hostedPilot;$('sign-out').hidden=!hostedPilot;choose('profile',[...boot.profiles,...boot.customProfiles.filter(p=>!boot.profiles.some(base=>base.id===p.id))].map(p=>({value:p.id,name:p.name})),currentProfile);const name=select('profile').selectedOptions[0]?.textContent??'Current user';text('profile-label',name);text('profile-avatar',name.slice(0,1));text('profile-title',name);text('profile-access','Current permissions: '+(permissions.length?permissions.map(p=>friendly(p.replace(/([a-z])([A-Z])/g,'$1 $2'))).join(', '):'No workspace access'));$('profile-open').setAttribute('aria-label','Profile · '+name);}
 $('sign-out').onclick=()=>void act(async()=>{await api('logout',{});location.assign('/auth');});
-async function loadIdentity(){
+async function loadIdentity(initialAccess?:unknown){
   jobs.reset();$('jobs-page').hidden=true;
   deliveryPrices.reset();$('delivery-page').hidden=true;parties.reset();unitConverter.reset();futures.reset();power.reset();touProducts.reset();schedules.reset();dateEditor.reset();administration.reset();contextDirty=false;$('parties-page').hidden=true;$('power-page').hidden=true;$('futures-page').hidden=true;$('no-access-page').hidden=true;
   curve='';clearPrices();clearReference();choose('reference-table',[],'');workspace=undefined;setCurveNames([]);permissions=[];choose('snapshot',[{value:'',name:'Choose a date…'}],'');select('snapshot').closest<HTMLElement>('.date-control')!.hidden=true;$('curves').replaceChildren();$('market-page').hidden=true;$('reference-page').hidden=true;$('schedules-page').hidden=true;$('curve-date-editor').hidden=true;$('admin-page').hidden=true;$('date-context').hidden=true;
-  permissions=(await api<{permissions:string[]}>('access')).permissions;loadProfile();renderTimeZones();
+  if(initialAccess===undefined)permissions=(await api<{permissions:string[]}>('access')).permissions;
+  else{
+    const access=initialAccess as StartupAccess|null;
+    if(!access||access.profile!==currentProfile||!Array.isArray(access.permissions)||!access.permissions.every(p=>typeof p==='string'))throw Error('The workspace access metadata is missing or inconsistent. Refresh and try again.');
+    permissions=[...access.permissions];
+  }
+  loadProfile();renderTimeZones();
   // Navigation follows current permissions; the backend still authorizes every operation.
   const read=can('ReadMarketData'),author=read&&(can('WriteMarketDefinitions')||can('SealMarketDefinitions')),manage=can('ManageAccess')&&can('ManageIdentities');
   for(const id of ['nav-market','nav-delivery','nav-power','nav-reference','nav-schedules'])$(id).hidden=!read;
@@ -404,11 +412,13 @@ $('history-close').onclick=()=>{clearChart($('history-chart'));$('history-card')
 $('correction-form').onsubmit=event=>{event.preventDefault();void act(async()=>{const current=frame(),next=await api<{frame:Frame;observationId:string}>('corrections',{snapshotId:current.id,observationId:input,value:$<HTMLInputElement>('correction-value').value});clearPrices();await reload(next.frame.id);input=next.observationId;await build();notice('Your change was saved. The market date now shows the corrected prices. Earlier versions are still available.');});};
 let initialWorkspaceReady=false;
 void act(async()=>{
-const [examples,boot]=await Promise.all([transport<{id:string;name:string;url:string}[]>('examples',undefined,'/api/'),api<ProfileChoices & {csrfToken:string;profile:string|null;runId:string;tenantId:string;workspaceId:string}>(bootstrapPath)]);
+const [examples,boot]=await Promise.all([transport<{id:string;name:string;url:string}[]>('examples',undefined,'/api/'),api<ProfileChoices & {csrfToken:string;profile:string|null;runId:string;tenantId:string;workspaceId:string;access?:StartupAccess|null}>(startupBootstrapPath)]);
 const chooser=select('example-dataset');chooser.replaceChildren(...examples.map(e=>new Option(e.name,e.id)));chooser.value=exampleId;chooser.onchange=()=>{const selected=examples.find(e=>e.id===chooser.value);if(selected)location.assign(selected.url);};
 csrf=boot.csrfToken;administrationScope=[boot.runId,boot.tenantId,boot.workspaceId].join(':');setHostMode(boot.mode);
   // Synthetic sign-in is an explicit loopback preview facility only.
-  $('example').hidden=hostedPilot;if(hostedPilot&&!boot.profile)throw Error('The signed-in account could not be verified.');currentProfile=boot.profile??'viewer';if(!boot.profile)await api('profile',{profile:currentProfile});await loadIdentity();await profileChoices(boot);initialWorkspaceReady=true;
+  $('example').hidden=hostedPilot;if(hostedPilot&&!boot.profile)throw Error('The signed-in account could not be verified.');
+  if(boot.profile===null?boot.access!==null:typeof boot.profile!=='string'||!boot.profile||boot.access===undefined||boot.access===null)throw Error('The workspace access metadata is missing or inconsistent. Refresh and try again.');
+  currentProfile=boot.profile??'viewer';if(boot.profile===null)await api('profile',{profile:currentProfile});await loadIdentity(boot.profile===null?undefined:boot.access);await profileChoices(boot);initialWorkspaceReady=true;
 }).then(async()=>{
   if(!initialWorkspaceReady)return;
   await new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve())));
