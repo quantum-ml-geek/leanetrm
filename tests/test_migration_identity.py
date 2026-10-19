@@ -18,6 +18,10 @@ class MigrationIdentityChecks(unittest.TestCase):
             '0037_visibility_lookups.sql': 'ceb7bc542cca52356028032d2d4e35e36ff4d7232f1b8c0b3a7920042df310a7',
             '0038_futures_execution_admission.sql': '4aaa2a249a6050d2e068d8ba030b0964927d080a01ae2179bd0d282e63a305e8',
             '0039_futures_admission_clock.sql': '05fa0e0e196d2b9349ef869c586e3fcff9f4a061c34c2d8adb962b44624fb085',
+            '0040_futures_execution_policies.sql': '48a73614a753538b32b0c80c966067f3ec25607973b622a1d540943e648e7d11',
+            '0041_reference_read_authority.sql': 'afda6504ead96f4f9f3504c53c81000b3f2ad33080596b0092fbd4fe7ef8dbb6',
+            '0042_custom_curves.sql': '2f32c1488f422478edcbb0b4f56117375c37a27c8d602461c23c20d0fe2ba11e',
+            '0043_model_providers.sql': 'd39082add6a07e83446fd6adf8bfed87571c9ac20b1125c03cc68e3fd0d81a7f',
         }
         for name, expected in retained.items():
             self.assertEqual(hashlib.sha256((ROOT / 'db/migrations' / name).read_bytes()).hexdigest(), expected, name)

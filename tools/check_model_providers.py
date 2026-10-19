@@ -14,6 +14,62 @@ ISSUER = 'https://preview.invalid'
 REPLACE = 'settings/ai/providers/key'
 
 
+def check_wait_authority(query, psql, environment, administrator, manifest, check):
+    # Exercise the granted SQL entry point directly: the API's final permission
+    # check must not be the only thing preventing an expired database operation.
+    tenant, workspace = (str(UUID(manifest[key])) for key in ('tenantId', 'workspaceId'))
+    provider = query("SELECT id FROM assistant.providers WHERE vendor='anthropic';")
+    version = query(f"SELECT version FROM assistant.providers WHERE id='{provider}';")
+    replay = json.loads(query("SELECT json_build_object('operation',operation_id,'digest',key_digest,'expected',request->>'expectedVersion') "
+                              "FROM assistant.administration_audit WHERE request->>'vendor'='anthropic' ORDER BY recorded_at LIMIT 1;"))
+    grants = json.loads(query(f"SELECT json_agg(json_build_object('id',id,'until',granted_to)) FROM security.role_grants WHERE principal_id='{administrator}';"))
+    state = "SELECT md5(string_agg(value,E'\\n' ORDER BY value)) FROM(" + ' UNION ALL '.join(
+        f"SELECT row_to_json(t)::text value FROM assistant.{table} t" for table in ('providers','credentials','administration_audit')) + ')s;'
+    for lock, expiry, retry in [('principal','grant',False),('provider','context',False),('principal','grant',True),
+                                ('credential','context',False),('audit','context',True)]:
+        holder = pending = None
+        before = query(state)
+        try:
+            if expiry == 'grant':
+                query(f"UPDATE security.role_grants SET granted_to=clock_timestamp()+interval '3 seconds' WHERE principal_id='{administrator}';")
+            token = query("SET SESSION AUTHORIZATION preview_authenticator;SELECT security.issue_context("
+                          f"'{ISSUER}','admin','human_interactive','{tenant}','{workspace}',NULL,'preview_runtime',{2 if expiry=='context' else 60});")
+            holder = subprocess.Popen(psql, env=environment, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            row = f"security.principals WHERE id='{administrator}'" if lock=='principal' else f"assistant.providers WHERE id='{provider}'"
+            locking = f"SELECT id FROM {row} FOR NO KEY UPDATE" if lock in ('principal','provider') else \
+                f"LOCK TABLE assistant.{'credentials' if lock=='credential' else 'administration_audit'} IN ACCESS EXCLUSIVE MODE"
+            holder.stdin.write(f"BEGIN;{locking};\n\\echo LOCKED\n");holder.stdin.flush()
+            while holder.stdout.readline().strip() != 'LOCKED':
+                assert holder.poll() is None, 'The synthetic row-lock holder exited.'
+            operation = str(replay['operation']) if retry else str(uuid4())
+            expected = replay['expected'] if retry else version
+            digest = replay['digest'] if retry else '0'*64
+            app = 'synthetic-provider-expiry-'+uuid4().hex
+            pending = subprocess.Popen([*psql,'--set=VERBOSITY=verbose'], env={**environment,'PGAPPNAME':app}, stdin=subprocess.PIPE,
+                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            pending.stdin.write("SET SESSION AUTHORIZATION preview_runtime;BEGIN;"
+                f"SELECT security.use_context('{token}');SELECT assistant.replace_credential('{operation}','anthropic',{expected},'{provider}',{int(version)+1},"
+                f"decode(repeat('00',12),'hex'),decode(repeat('11',16),'hex'),decode(repeat('22',16),'hex'),'TEST','{digest}');COMMIT;")
+            pending.stdin.close();pending.stdin=None
+            deadline = time.monotonic()+4
+            while query(f"SELECT count(*) FROM pg_stat_activity WHERE application_name='{app}' AND wait_event_type='Lock';") != '1':
+                assert time.monotonic()<deadline and pending.poll() is None, 'The operation never reached its intended row wait.'
+                time.sleep(.02)
+            time.sleep(3.2)
+            expired = query(f"SELECT bool_and(granted_to<clock_timestamp()) FROM security.role_grants WHERE principal_id='{administrator}';") if expiry=='grant' else query(f"SELECT expires_at<clock_timestamp() FROM security.request_contexts WHERE id='{token}';")
+            assert expired=='t', 'The synthetic authority must expire before the row lock is released.'
+            holder.stdin.write('ROLLBACK;\n');holder.stdin.close();holder.stdin=None;holder.communicate(timeout=10)
+            _, stderr = pending.communicate(timeout=10)
+            check(f'{lock} wait rechecks expired {expiry} authority before '+('replaying an earlier result' if retry else 'replacing a credential'),
+                  pending.returncode!=0 and '42501' in stderr)
+            check('an expired provider operation leaves all provider, credential and audit rows unchanged',query(state)==before)
+        finally:
+            for process in (pending,holder):
+                if process is not None and process.poll() is None:process.kill();process.wait(timeout=10)
+            for grant in grants:
+                query(f"UPDATE security.role_grants SET granted_to='{grant['until']}'::timestamptz WHERE id='{grant['id']}';")
+
+
 def run_checks(url, query, psql, manifest, temporary, environment, dotnet):
     tenant, workspace = (str(UUID(manifest[key])) for key in ('tenantId', 'workspaceId'))
     passed = 0
@@ -139,6 +195,7 @@ def run_checks(url, query, psql, manifest, temporary, environment, dotnet):
             runtime('admin', f"DO $$ BEGIN PERFORM assistant.replace_credential({arguments}); RAISE EXCEPTION 'Expected rejection'; "
                              "EXCEPTION WHEN raise_exception THEN IF SQLERRM<>'model_admin_conflict' THEN RAISE; END IF; END $$;")
         check('the database stores a credential only in the slot it hands out: its provider, the next version, and 1 for a new provider')
+        check_wait_authority(query, psql, environment, administrator, manifest, check)
 
         before = counts()
         refusals = [admin.call(REPLACE, {**request(keys[2], 0, vendor='google'), **body}, expected=422)

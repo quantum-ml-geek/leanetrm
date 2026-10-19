@@ -329,3 +329,9 @@ The preview runner creates both 32-byte key files, readable only by their owner,
 once per database. A key file that is unset, missing, a symbolic link, of another
 length or open to anyone else, and a credential that fails authentication, are
 `credential_unavailable`. These routes do not exist under `--hosted-pilot` (P37).
+
+Migration 0045 preserves the granted operation's signature, owner and privileges.
+Credential replacement rechecks current authority after its principal and provider
+row waits, before returning a replay, and after storage writes. Expiry during a
+wait raises an authorization error and rolls back the operation, including its
+audit row; the SQL boundary enforces this independently of the API's final check.
