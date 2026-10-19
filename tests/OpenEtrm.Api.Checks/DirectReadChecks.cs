@@ -50,8 +50,15 @@ internal static class DirectReadChecks
             Same($"{view.Name} reference page matches its page",await Direct(view,"reference page",(c,ct)=>reads.References(c,view.Pin(),"currencies",0,"",ct)),view.Page("references"),
                 "table","rows","references","offset","pageSize","maximumOffset","hasMore","search","referenceRevision","definitionRevisionId");
             foreach(var curve in view.Page("evaluations").AsObject())
+            {
                 Same($"{view.Name} {curve.Key} prices match their page",(await Direct(view,"prices",(c,ct)=>reads.Evaluate(c,view.Pin(view.Selected),curve.Key,ct))).Result,
                     Without(curve.Value!.AsObject(),"context"));
+                var combined=await Direct(view,"prices with workspace",(c,ct)=>reads.Evaluate(c,view.Pin(view.Selected),curve.Key,ct,true));
+                var metadata=combined.Workspace??throw new Exception("An explicitly requested full workspace is missing.");
+                Same($"{view.Name} {curve.Key} combined prices preserve their page",combined.Result,Without(curve.Value!.AsObject(),"context"));
+                Same($"{view.Name} combined workspace retains the same bound catalog",new{definitions=metadata.Data.Definitions,references=metadata.Data.References,unitCatalog=metadata.Units,curveNames=metadata.CurveNames},
+                    view.Page("catalog"),"definitions","references","unitCatalog","curveNames");
+            }
             var history=view.Page("history");
             Same($"{view.Name} history matches its page",await Direct(view,"history",(c,ct)=>reads.History(c,view.Pin(view.Selected),view.Initial,history["curve"]!.GetValue<string>(),history["contractId"]!.GetValue<Guid>(),null,ct)),
                 history["response"]!["points"]);
