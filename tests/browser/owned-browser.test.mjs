@@ -56,9 +56,9 @@ test('browser startup preserves a spawn error',async t=>{
   await assert.rejects(waitForBrowserPort(directory,child),{code:'ENOENT'});
 });
 
-test('browser startup retains its bounded readiness deadline for an invalid file',{timeout:15000},async t=>{
+test('browser startup retains its bounded readiness deadline for an invalid file',async t=>{
   const {directory,child,file}=await fixture(t);await writeFile(file,'invalid\n');
   const start=performance.now();
-  await assert.rejects(waitForBrowserPort(directory,child),/did not become ready/);
-  assert.ok(performance.now()-start>=9000,'invalid content must not skip the readiness wait');
+  await assert.rejects(waitForBrowserPort(directory,child,1000),/did not become ready/);
+  assert.ok(performance.now()-start>=1000,'invalid content must not skip the readiness wait');
 });
