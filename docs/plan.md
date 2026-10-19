@@ -840,6 +840,18 @@ default full bootstrap remains available. An explicit initial access projection
 can supply fresh navigation permissions for the verified account in that same
 response. The browser consumes it once after checking the account identity;
 later access refreshes and all business operations reauthorize independently.
+The initial directory uses a separate typed market-navigation operation rather
+than reading the full pricing workspace. It includes explicit curve
+classifications, frame summaries and exact revision/context identities. Full
+workspace hydration precedes its actual pricing/reference consumers and must
+match the unchanged identity, generation and selected view. Qualify first-use
+pricing and reference inspection separately so deferred work is not hidden by
+the startup measurement. For an explicitly requested Blotter directory, a global
+absence of visible futures and swap revisions can avoid unused valuation reads;
+selected pins, bundle/reference visibility, view/books and current authority
+remain mandatory. Nonempty authorized revision sets use the full existing path.
+These narrow contracts defer unused economic validation without treating absent
+economic inputs as successful calculations.
 Reference reads avoid a duplicate permissive scope check only where the mandatory
 restrictive visibility policy already checks the same current authority per row.
 Exact policy/helper guards and expiry, scope, historical and policy-composition

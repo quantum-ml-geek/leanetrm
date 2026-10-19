@@ -820,3 +820,23 @@ administration-only startup, session isolation, logout and revocation. All
 resources are disposable and synthetic. These checks establish authorization
 contracts; hosted latency and retained-installation migration qualification are
 separate release checks.
+
+## Consumer-scoped navigation and empty directories
+
+Focused checks first reproduced the missing navigation operation and the empty
+directory's unnecessary dependency on economic contract reads. The distinct
+navigation contract now matches authorized full-workspace names,
+classifications, frame summaries and exact working/retained revision/context
+identities. A hidden member rejects partial classification; reference revocation
+and administration-only access cannot produce a successful market directory.
+Owned browser checks cover initial readiness without background full hydration,
+first pricing/reference use, no-date selection, delayed hydration after a changed
+selection, preference refresh and reset before navigation completes.
+
+Empty-directory checks compare complete legacy trades/pivot reports and booking
+metadata under the same retained context. They reject missing selected pins,
+withdrawn reference/trading authority and invalid views/books. Real synthetic
+futures-only and swaps-only holdings retain complete valuation reads; failed
+report joins cannot establish emptiness. These checks use disposable resources
+and synthetic material. They establish scoped read contracts; larger-workload,
+cold-process and hosted latency qualification remain separate measurements.

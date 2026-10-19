@@ -853,6 +853,26 @@ explicitly and reads access afresh. Profile refreshes, identity changes and ever
 business operation independently check current authority. The default bootstrap
 response retains its existing shape.
 
+`GET /api/workspace/navigation` is a separate typed response for the initial
+directory and date picker. Its managed read obtains explicit curve
+classifications and category labels, all authorized curve display names, exact
+bundle/reference/context identities and frame summaries. It does not construct
+the pricing model or load observation values or the unit-conversion catalog.
+The browser retains navigation separately from the full workspace and hydrates
+the latter only for consumers of its definitions, references or source pins.
+Hydration must match the same account, selection, context and revision pins;
+late responses cannot restore an earlier view. Existing full workspace endpoints
+retain their response contracts.
+
+An explicit Blotter directory first checks whether either raw futures or swap
+revision table contains a visible row under its already bound trading context.
+Any such row retains the full valuation path. An empty set uses the same report
+projection after validating the view/books, exact sealed bundle and reference
+visibility, and completeness of selected observation pins. Directory metadata
+and final authority checks remain fresh. Narrow navigation and empty reports
+defer validation of economic material they do not consume; priced catalogs
+and nonempty reports continue to require complete supported financial inputs.
+
 Migration 0041 removes a duplicate permissive access check on 35 reference tables
 whose restrictive visibility policy already checks the same authority on every
 invocation. Catalog-only policies and the separate imported-quantity restriction
