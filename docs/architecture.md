@@ -81,6 +81,13 @@ filters would hide it. These projections defer validation of unused economic
 material; they do not supply missing financial inputs or change pricing rules
 (D160).
 
+Priced trading workspace reads retain the complete catalog and report while
+loading only their consumed first/last-trading milestones and exact primary
+snapshot observation pins. Missing required facts still fail under current
+authorization and the selected historical cutoff. Full metadata reads retain
+all milestone kinds. Generic observation reads retain their same-fact history;
+supplemental swap markets still resolve their visible corrections.
+
 Exchange first-trading facts and application execution eligibility are distinct
 (D158, superseding D157's installation-specific restrictions). A sourced date
 never becomes a fabricated exchange event instant. The actual timestamp may

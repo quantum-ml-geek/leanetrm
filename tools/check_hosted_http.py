@@ -164,6 +164,8 @@ def run_checks(root, manifest, query, dotnet, dll, environment, browser=None, co
         client.call('/api/admin/create', {'operationId': str(uuid4()), 'login': 'forged', 'name': 'Forged', 'kind': 'human', 'roles': ['access_administrator']}, expected=403)
         access, _ = client.call('/api/access'); assert 'BookTrade' in access['permissions']
         workspace, _ = client.call('/api/workspace'); assert workspace['profile'] == first
+        from check_trading_compression import run_hosted_checks as check_hosted_compression
+        check_hosted_compression(client,origin,cert,boot)
         client.call('/api/market/current', {}, headers={'Origin': 'https://attacker.invalid'}, expected=403)
         client.call('/api/bootstrap', headers={'Host': 'attacker.invalid'}, expected=403)
         assert query("SELECT count(*)>0 FROM security.request_contexts WHERE hosted_session_digest IS NOT NULL;") == 't'
