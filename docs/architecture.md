@@ -56,6 +56,13 @@ per-row access checks inside that policy and omit a duplicate permissive check.
 Catalog-only access and separate quantity-catalog restrictions stay in force.
 Migration 0041 rejects unexpected policy shapes or visibility-helper changes;
 its deployment requires a separately qualified schema baseline.
+Migration 0044 applies the same rule to eleven market-definition and observation
+tables. Its guards verify the complete existing policy sets and authority helpers
+before changing any policy. The mandatory volatile visibility helper still checks
+current authority for every candidate row; neither permissions nor historical
+visibility are cached. Write policies, role targets and grants remain unchanged.
+Provider credential replacement also revalidates current authority after row
+waits and before returning an outcome (0045), including an idempotent replay.
 Blotter navigation requests a booking directory without pricing unused entry
 contracts. Choosing a new futures trade explicitly loads the priced catalog and
 replaces both catalog and report under one shared context before opening entry.
@@ -87,6 +94,10 @@ snapshot observation pins. Missing required facts still fail under current
 authorization and the selected historical cutoff. Full metadata reads retain
 all milestone kinds. Generic observation reads retain their same-fact history;
 supplemental swap markets still resolve their visible corrections.
+Built-in calendar availability reads the union of every offered snapshot's exact
+observation pins. Each snapshot still validates all its pins, including those
+outside the selected curve. Custom-curve availability retains its broader
+historical observation and correction policy.
 
 Exchange first-trading facts and application execution eligibility are distinct
 (D158, superseding D157's installation-specific restrictions). A sourced date

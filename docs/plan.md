@@ -17,6 +17,9 @@ managed backend (D162), including all inputs of a custom graph's history window.
 It disables unavailable dates, preserves the user's display zone and requires an
 explicit choice among multiple closes or saved versions. Changing only the
 snapshot preserves the active custom graph and clears its old calculations.
+Built-in availability reads all offered snapshots' exact pins without loading
+unrelated observation history. Custom graphs retain the broader historical
+read needed by their selected history and correction policies.
 
 The [verification workflow](verification.md) now defines a single local/CI command
 covering the existing managed, frontend, database and browser suites. The complete

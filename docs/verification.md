@@ -79,6 +79,36 @@ fresh-navigation regression verifies custom authoring and preview without pricin
 workspace hydration. Exact frame/context selection and stale-response guards
 remain intact. All owned disposable resources completed teardown.
 
+The guarded market-read policy change was also qualified on stock PostgreSQL
+16.14. Actual runtime reads retain one fresh permission check per mandatory
+visibility check, including candidates excluded by their historical cutoff.
+Same-context rows remain identical. Checks cover current scope and role revocation,
+disabled principals, expiry between reads within one statement, additional
+permissive policies, unexpected migration prerequisites and transactional rollback.
+
+A separate Linux x64 comparison isolated these eleven policy expressions on the
+schema-0041 application at `2cc918f67035fd671f3b2340b917704fe35c87c0`.
+Five balanced pairs each used fresh .NET 10.0.13 Release API processes against one
+warm stock PostgreSQL 16.14 database on Linux 6.8.0-88 with four logical CPUs.
+Each API and database was limited to two CPUs and 1 GiB of memory; HTTP used
+loopback without compression. The synthetic workload
+contained 491 contracts, 14,016 source observations and 11,786 reference rows.
+Each request priced 405 distinct futures using 439 exact observation pins, with
+no booked positions or scenarios. Each variant had five cold and 25 warm samples.
+All 60 complete response bodies were identical. Median paired time to response
+headers decreased by 43.8 ms cold and 48.0 ms warm; four of five cold pairs and
+all warm pairs improved. Median API RSS after the cold request was 139,632 KiB
+before and 139,820 KiB after the policy change.
+Median PostgreSQL CPU decreased while API CPU stayed similar, and neither container
+throttled during the measured requests. This isolates the policy cost; it does
+not qualify subsequent migrations, hosted transport or a page-load time budget.
+
+Direct runtime SQL checks also hold principal, provider, credential-storage and
+audit locks until a synthetic role grant or request context has expired. New key
+replacements and accepted-operation retries then fail with SQLSTATE 42501, with
+all provider, credential and audit rows unchanged. Ordinary creation, replacement
+and replay continue through the provider administration integration suite.
+
 ## Hosted job
 
 [The workflow](../.github/workflows/ci.yml) uses `ubuntu-24.04` hosted runners on
