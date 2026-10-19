@@ -38,6 +38,47 @@ runner uses fresh temporary profiles and accepts only the launcher's verified
 owned target. Normal completion removes the owned application, browser and database
 resources. Unconfirmed teardown retains the private directory and fails the check.
 
+Custom-curve qualification on 2026-10-19 passed the complete local command on
+macOS arm64 with .NET 10.0.402, Node 24.22.0, stock PostgreSQL 16.14 and Chrome
+155.0.8059.80. The 132 frontend checks and managed suites include independent
+rolling/locked rational means, inclusive daily-forward BALMO, single/parallel
+factor shocks, frozen history, unit/multiplier preservation, typed formula
+roundtrips, strict gaps and registered SQL output/count validation. The new
+owned HTTP checks cover exact source/schedule references, current scope
+revocation, immutable published relationships, certified knowledge cutoffs,
+historical corrections and explicit frozen final-settlement inputs. The 25
+custom-curve browser checks cover visual edits, raw per-tenor history charts,
+formula/SQL parity, uncertain-save retry, permissions and narrow-screen bounds.
+The standard preview's 268 browser checks and the existing isolated suites also
+passed. Disposable test resources completed teardown. All 31 Python checks and
+the additional history-panel preview startup with eight futures and sixteen swap
+examples also passed. This establishes the bounded local workspace; it does not
+qualify production throughput, bookable custom indices or historical VaR.
+
+The subsequent editor and market-calendar changes passed the complete command
+on the same toolchain, including 136 frontend checks, 33 custom-curve browser
+checks and 22 calendar browser checks. Scoped HTTP checks qualify full curve
+dependencies and recipe history windows, exact snapshot/version choices,
+user-zone dates, certified historical contexts and current reference authority.
+Browser checks cover disabled unavailable days, explicit multiple-close choice,
+graph-preserving snapshot changes, stale-response fencing, permission-denial
+cleanup, keyboard navigation and narrow-screen bounds. Independent review found
+no remaining blocker. All owned disposable resources completed teardown.
+
+The final combined check with migration 0042 also passed after integrating the
+reference-read authorization changes. It includes all 279 standard browser
+checks, current-authority checks for API and raw mutation-response replay,
+independent receipt foreign-key rejection checks and the complete editor/calendar
+suites. Restoring reference access permits the original accepted retry without
+creating a second publication.
+
+Qualification after integrating the market-navigation and trading-read extraction
+also passed the complete command: 138 frontend checks, 298 standard browser
+checks, 34 custom-curve browser checks and 22 calendar browser checks. The
+fresh-navigation regression verifies custom authoring and preview without pricing
+workspace hydration. Exact frame/context selection and stale-response guards
+remain intact. All owned disposable resources completed teardown.
+
 ## Hosted job
 
 [The workflow](../.github/workflows/ci.yml) uses `ubuntu-24.04` hosted runners on
@@ -67,6 +108,15 @@ Browser profiles remain under the preview owner's temporary root until its owned
 process group has stopped. A regression checks that a live descendant can still
 finish writing after the browser parent exits; parent exit alone does not permit
 profile deletion.
+
+Debugger startup now qualifies the port, HTTP endpoint and page target within
+one shared 60-second readiness budget. Read-only probes tolerate transient
+startup unavailability; attachment requires the exact owned loopback port.
+Fifteen harness checks cover delayed readiness, deadline cancellation, process
+exit, rejected foreign targets and confirmed TERM/KILL cleanup. Cleanup failures
+retain the original error. The standard 298 browser checks, descendant-profile
+check and isolated hosted HTTPS/browser suite passed with this owner. Disposable
+resources completed teardown.
 
 Local qualification on 2026-10-17 passed the complete command from a fresh macOS
 arm64 checkout with empty npm/NuGet caches, .NET 10.0.402, Node 24.22.0 and stock

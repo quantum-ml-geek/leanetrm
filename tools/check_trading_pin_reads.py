@@ -105,7 +105,7 @@ def run_supplemental_checks(c, check, query, manifest):
     c.call('profile', {'profile': 'trader'}); c.call('market/current', {})
     data = c.call('workspace')
     frame = next(f for f in data['frames'] if f['at'].startswith('2020-12-18') and not f.get('contextId'))
-    before = _workspace(c, _context(frame)); retained = _context(frame, before['blotter']['context'])
+    before = _workspace(c, _context(frame)); retained = _context(frame, before['catalog']['context'])
     before = _workspace(c, retained)
     held = next(h for h in before['blotter']['holdings'] if h['instrumentType'] == 'financial_swap'
                 and h['definitionRevisionId'] != manifest['revisionId'] and h['curve'] == 'daily_gas')
