@@ -40,6 +40,7 @@ def run_checks(pg_bin, dotnet, browser, *, run=subprocess.run):
     check('independent worker build',[str(dotnet),'build',worker_project,'--no-restore'])
     check('managed automation contracts',[str(dotnet),'run','--no-restore','--project','tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj','--','--automation'])
     check('managed futures admission',[str(dotnet),'run','--no-restore','--project','tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj','--','--futures-admission'])
+    check('managed preview data',[str(dotnet),'run','--no-restore','--project','tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj','--','--preview-data'])
     check('owned automation database',[sys.executable,'tools/check_automation.py','--pg-bin',str(pg_bin),'--dotnet',str(dotnet)])
     check('stock database schema', [sys.executable, 'tools/check_reference_schema.py',
                                    '--pg-bin', str(pg_bin), '--market', '--security'])
