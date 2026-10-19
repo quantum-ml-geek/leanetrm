@@ -1153,3 +1153,34 @@ sensitivities. The UI formats those results through backend amount formatting,
 clears them when terms/context change, and never books a trade as a side effect.
 Swap drafts report PV; futures drafts report execution P&L and open exposure.
 Variation-margin processing and full futures settlement PV remain unimplemented.
+
+## Shared quote-input scenarios and open futures sensitivity
+
+The managed risk path now uses a `ValuationPortfolio` projection of trade-owned
+instrument quantities. Common `Instrument.Value` delegates to instrument PV;
+futures explicitly select execution P&L. The book owns holding arithmetic and
+exact net quantity/cost compilation for book-only reports. Repeated instruments
+share one unit value per affected scenario, including across books. The risk
+engine compares returned values without inspecting pricing methods.
+
+`Instrument.MarketFactors(context)` returns immutable exact quote-factor metadata.
+Books ask each unique instrument once, validate its complete pinned factors and
+union those references. Curve consumers use a common context resolver for explicit
+transitive recipes; no upstream factor is inferred for an independently marked
+all-in curve. API discovery respects selected books/portfolios. Bumps stay explicit;
+manual available-factor scenarios remain possible. Book summaries support up to
+4096 factors; holding-detail requests retain the 16-factor response bound.
+
+Synthetic gas and ERCOT curve checks exercise real unit swap PV through four and
+two basis edges, respectively, across multiple maturities. The independent oracle
+uses explicit signed quote incidence, including a Waha/HSC hedge and an independent
+Waha all-in control. Unit checks cover MWh/kWh price/quantity invariance, derivative
+dimensions and wrong-basis rejection; existing power checks cover 23/24/25-hour
+energy, TOU and exact fractional interval allocation. These checks do not qualify
+exchange data or establish physical-energy equivalence between gas and power.
+
+The [benchmark](risk-benchmark.md) reports 50,000-position calculation work and
+memory. It excludes production reads/transport and does not lift booking database
+bounds or implement generic booked-swap/rate/volatility risk. Full futures PV and
+variation margin remain unsupported. Core policy and futures convention have new
+v2 identifiers; older calculation artifacts retain their original meaning.

@@ -17,6 +17,32 @@ daily/final settlement, variation-margin transitions and generic futures PV rema
 unimplemented. Quantities, quote scales, numerical policy and exact inputs stay in
 the managed backend.
 
+The shared managed valuation path is implemented (D145–148): risk creates
+immutable scenarios and compares returned book/holding values. Instruments own
+unit pricing and report factors through `MarketFactors(context)`. Books apply
+external quantities and execution bases; summary reports compile exact net
+quantities/costs once per book/unit. No optional quantity-scaling flag remains.
+Market factors are exact dated references returned by instruments, checked against
+complete pinned declarations and deduplicated by books. Suggested API factors
+follow selected books/portfolios, including hedged upstream dependencies; unrelated
+curves/maturities and inferred all-in dependencies are excluded.
+
+The 50,000-position Release [benchmark](risk-benchmark.md) covers repeated and
+5,000-distinct unit values, actual futures execution-P&L, and actual swap PV through
+four gas basis edges and two power basis edges with 216 independently shocked
+monthly factors. Independent tests cover exact offsets, nonlinear zero-delta
+values, quantity/price conversion invariance, dependency access fences,
+conflicting bindings and cancellation. Streaming book summaries retain one factor
+pair at a time and expose unit calls, reuse and quantity applications.
+
+This qualifies the managed calculation path, not production throughput. The
+persisted portfolio API remains futures-only; booking database bounds, large
+historical reads, serialization/concurrent service load, generic booked swap risk,
+rate/volatility shocks, durable risk jobs and complete futures settlement PV need
+separate implementation/qualification. Futures execution P&L remains an explicit
+measure. Working-decimal output still rejects unrepresentable results without an
+explicit rounding contract.
+
 
 Temporary futures and swap editors expose Price and Risk before booking. Trade
 parties and book membership are required only for booking. The backend converts
@@ -300,7 +326,7 @@ See [date-field bindings](schedules-and-contract-sequences.md#date-schedules-bef
 Deliver:
 
 - Domain vocabulary, side ownership and definition/version boundaries.
-- Shared factor scenarios, black-box pricers and quantity-scaling contracts.
+- Shared factor scenarios, black-box pricers and mandatory unit-level valuation.
 - Curve dependencies, units, precision and historical input semantics.
 - Administration, delegation, provider boundaries and durable execution rules.
 - Public-content instructions, proposed choices and open decisions.
@@ -338,7 +364,8 @@ Deliver:
   convention, with explicit settled basis, realized/unsettled variation margin,
   remaining risk and supported closeout policy. See
   [reference-data.md](reference-data.md).
-- Quantity-scaling declarations and structured errors for unsupported behavior.
+- Unit instruments, external trade quantities and structured errors for models
+  that cannot satisfy this contract.
 - Versioned inspect/compose/preview/scenario request and response schemas, written
   for both human and agent clients from the beginning.
 - Explicit business/knowledge context contracts for resolved historical inputs;
@@ -418,7 +445,7 @@ Acceptance:
 6. Leave an unrelated factor's dependent computations unchanged and unexecuted
    where independence is proven.
 7. Demonstrate a shared derived node is evaluated once per scenario.
-8. Demonstrate eligible unit calculations are reused across quantities, while
+8. Demonstrate shared unit calculations are reused across external quantities, while
    different shapes/terms have distinct valuation identities.
 9. Compare reuse results with a slow independent full-portfolio repricing path.
 10. Verify quote-input shocks and direct output-curve shocks are distinct requests.
@@ -496,7 +523,7 @@ Acceptance:
     repricing with current market data or reinterpreting events under new rules.
     Verify event/schema upgrades using retained handlers or tested migrations;
     unsupported reconstruction must fail explicitly.
-17. Recompute remaining schedules and quantity-scaling eligibility after partial
+17. Recompute remaining schedules and unit-valuation context after partial
     settlement/exercise/amendment. Preserve provenance while permitting reuse of
     equal normalized remaining economics; ordinary risk freezes actual decisions
     and realized fixings.

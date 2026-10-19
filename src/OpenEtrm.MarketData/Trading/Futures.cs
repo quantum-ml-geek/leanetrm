@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using OpenEtrm.MarketData.Risk;
 
 namespace OpenEtrm.MarketData.Trading;
 
@@ -55,7 +56,7 @@ public sealed record FuturesMarketBinding
         RequirePrices(mark,executionPrice);
         return mark.Subtract(executionPrice);
     }
-    private void RequirePrices(UnitPrice mark,UnitPrice executionPrice)
+    internal void RequirePrices(UnitPrice mark,UnitPrice executionPrice)
     {
         if (mark is null || executionPrice is null)
             throw Error("futures_execution", "Explicit mark and execution price are required.");
@@ -119,6 +120,21 @@ public sealed record FuturesContract : Instrument
                 resolution.Factor!=ExactDecimal.Parse((series.DeliveryTo.DayNumber-series.DeliveryFrom.DayNumber).ToString(System.Globalization.CultureInfo.InvariantCulture))))
             throw FuturesMarketBinding.Error("futures_lot","A variable lot requires an explicit coherent exact-series quantity and selected factor convention.");
         return resolution.Quantity;
+    }
+    public override UnitPricingContract Declare(UnitValuationContext context)
+    {
+        var binding=context.Futures(Id);
+        if(binding.Series!=Series)throw FuturesMarketBinding.Error("futures_identity","The selected binding must retain the exact instrument terms.");
+        return new(Id,Series.LotBasis==LotBasis.FixedTotal&&SettlementMethod=="cash"?"fixed_total_open_mark_v1":"contract_unit_open_mark_v2",
+            binding.Dependencies,UnitQuantity.Specification,Currency);
+    }
+    private string SettlementMethod=>Series.SettlementMethod;
+    public override ExactMoney Value(UnitValuationContext context)
+    {
+        if(context.Measure!=ValuationMeasure.ExecutionPnl)return base.Value(context);
+        var binding=context.Futures(Id);
+        context.Market!.Model.RequireFuturesDefinition(binding.Market,binding.Contract,Series,binding.Quote);
+        return context.Inputs.Price(binding.Market).ExactTimes(UnitQuantity);
     }
     public override InstrumentValuation PV(SideValuationContext context) =>
         throw FuturesMarketBinding.Error("futures_pv_unsupported", "Futures PV requires retained variation-margin and settlement state; execution P&L is a separate operation.");
@@ -197,12 +213,20 @@ public sealed record FuturesHolding(Guid TradeId, Guid BookId, Guid BindingId, G
 public static class FuturesHoldings
 {
     private static bool SameInputs(MarketSnapshot requested, MarketSnapshot retained) => requested.HasSameInputs(retained);
+    internal sealed record ResolvedHolding(Guid TradeId,Guid BookId,FuturesPosition Position,Quantity Quantity,UnitPrice Mark);
     public static ImmutableArray<FuturesHolding> Price(ImmutableArray<FuturesTrade> trades, MarketSnapshot snapshot,
-        CurveBuild market, string implementation)
+        CurveBuild market, string implementation)=>Resolve(trades,snapshot,market,implementation).Select(h=>
+        {
+            var p=h.Position;var side=p.MarketBinding;
+            return new FuturesHolding(h.TradeId,h.BookId,p.Id,p.RetainedInstrumentId,side.Id,side.Contract.Key,h.Quantity,
+                p.ExecutionPrice,h.Mark,side.ExecutionPnl(h.Mark,p.ExecutionPrice,p.Lots),p.Settlement,side.Market.Curve,p.Lots);
+        }).ToImmutableArray();
+    internal static ImmutableArray<ResolvedHolding> Resolve(ImmutableArray<FuturesTrade> trades,MarketSnapshot snapshot,
+        CurveBuild market,string implementation,CancellationToken cancellation=default)
     {
         if (!FuturesMarketBinding.Supported(implementation))
             throw FuturesMarketBinding.Error("futures_convention", "Choose an explicit supported futures pricing convention.");
-        if (trades.IsDefault || trades.Length > 256 || trades.Any(t => t is null) || trades.Select(t => t.Id).Distinct().Count() != trades.Length ||
+        if (trades.IsDefault || trades.Length > 100000 || trades.Any(t => t is null) || trades.Select(t => t.Id).Distinct().Count() != trades.Length ||
             !SameInputs(snapshot,market.Snapshot) || market.Shock is not null || market.NumericalPolicy != CurveModel.NumericalPolicy ||
             !TradingInstant.IsSupported(snapshot.ValuationAt))
             throw FuturesMarketBinding.Error("futures_context", "Use distinct trades and a matching pinned snapshot, definition revision and numerical policy.");
@@ -213,6 +237,7 @@ public static class FuturesHoldings
         var aliases = new Dictionary<Guid,Guid>();
         foreach (var position in trades.SelectMany(t => t.Instruments))
         {
+            cancellation.ThrowIfCancellationRequested();
             var instrument = position.Instrument;
             var side = position.MarketBinding;
             if (sides.TryGetValue(side.Id, out var retained) && retained != side)
@@ -226,10 +251,11 @@ public static class FuturesHoldings
             instruments.TryAdd(instrument.Id, instrument);
         }
         var prices = market.Values.ToDictionary(v => v.Request);
-        var result = ImmutableArray.CreateBuilder<FuturesHolding>();
+        var result = ImmutableArray.CreateBuilder<ResolvedHolding>();
         foreach (var trade in trades)
         foreach (var position in trade.Instruments)
         {
+            cancellation.ThrowIfCancellationRequested();
             var side = position.MarketBinding;
             market.Model.RequireFuturesDefinition(side.Market, side.Contract, side.Series, side.Quote);
             if (position.ExecutedAt > snapshot.ValuationAt)
@@ -241,9 +267,8 @@ public static class FuturesHoldings
             if (value.Quote != side.Quote.Key) throw FuturesMarketBinding.Error("futures_definition", "The exact held quote definition is required.");
             var mark = value.Price;
             var quantity = position.Instrument.LotSize.Scale(position.Lots);
-            var pnl = side.ExecutionPnl(mark, position.ExecutionPrice, position.Lots);
-            result.Add(new(trade.Id, trade.BookId, position.Id, position.RetainedInstrumentId, side.Id, side.Contract.Key,
-                quantity, position.ExecutionPrice, mark, pnl, position.Settlement,side.Market.Curve,position.Lots));
+            side.RequirePrices(mark,position.ExecutionPrice);
+            result.Add(new(trade.Id,trade.BookId,position,quantity,mark));
         }
         return result.ToImmutable();
     }

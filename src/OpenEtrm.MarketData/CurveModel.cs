@@ -316,18 +316,19 @@ public sealed partial class CurveModel
         return spec;
     }
 
-    public CurveBuild Build(MarketSnapshot snapshot, ImmutableArray<CurveRequest> requests)
-        => Build(snapshot,requests,null,[],default);
+    public CurveBuild Build(MarketSnapshot snapshot, ImmutableArray<CurveRequest> requests,CancellationToken cancellation=default)
+        => Build(snapshot,requests,null,[],cancellation);
     private CurveBuild Build(MarketSnapshot snapshot,ImmutableArray<CurveRequest> requests,Risk.QuoteShock? shock,
         ImmutableArray<CurveEvaluation> reusable,CancellationToken cancellation)
     {
+        cancellation.ThrowIfCancellationRequested();
         EnumValue(snapshot.SelectionPolicy);
         if (snapshot.Id == Guid.Empty || snapshot.Definitions != revision)
             Fail("snapshot_pin", "Snapshot must name this exact definition revision.");
         if (snapshot.ValuationAt.Offset != TimeSpan.Zero || snapshot.MarketCutoff.Offset != TimeSpan.Zero ||
             snapshot.MarketCutoff > snapshot.ValuationAt || snapshot.ValuationAt >= End || snapshot.Selections.IsDefault)
             Fail("snapshot_context", "Explicit UTC valuation/cutoff context and selected inputs are required.");
-        if (requests.IsDefaultOrEmpty || requests.Distinct().Count() != requests.Length)
+        if (requests.IsDefault || requests.Distinct().Count() != requests.Length)
             Fail("request", "Supply distinct explicit output requests.");
         var inputs = Unique(snapshot.Selections, s => s.Input);
         foreach (var group in inputs.Values.GroupBy(s => s.Observation.Key))
