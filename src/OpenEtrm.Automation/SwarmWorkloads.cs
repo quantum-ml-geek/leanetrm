@@ -146,7 +146,7 @@ public sealed partial class SwarmGateway
                 },
                 Resources = new { Limits = new { NanoCPUs = p.GetProperty("cpu_nano").GetInt64(), MemoryBytes = p.GetProperty("memory_bytes").GetInt64(), Pids = p.GetProperty("process_limit").GetInt32() } },
                 RestartPolicy = new { Condition = "none" },
-                LogDriver = new { Name = "local", Options = new Dictionary<string, string> { { "max-size", "1m" }, { "max-file", "1" } } },
+                LogDriver = new { Name = "local", Options = new Dictionary<string, string> { { "max-size", "1m" }, { "max-file", "1" }, { "compress", "false" } } },
                 Placement = new { Constraints = new[] { "node.role==worker", "node.platform.os==linux", "node.platform.arch==" + nodeArchitecture, "node.labels.openetrm.workloads==" + pool } },
                 Networks = new[] { new { Target = network } }
             },

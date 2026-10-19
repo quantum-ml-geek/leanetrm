@@ -104,6 +104,8 @@ static class AutomationChecks
         if(container.GetProperty("CapabilityDrop")[0].GetString()!="ALL" ||
             container.GetProperty("Mounts")[0].GetProperty("TmpfsOptions").GetProperty("Mode").GetInt32()!=1023)
             throw new Exception("The Engine task protocol must drop capabilities and permit bounded non-root temporary writes");
+        if (handler.ServiceSpec.RootElement.GetProperty("TaskTemplate").GetProperty("LogDriver").GetProperty("Options").GetProperty("compress").GetString() != "false")
+            throw new Exception("Single-file bounded logging must explicitly disable compression for Engine startup");
         await gateway.RemoveCompletedWorkload(claim with { LaunchPrepared = true, ServiceId = observed.ServiceId }, CancellationToken.None);
         var uncertain = await gateway.ReconcileWorkload(claim with { LaunchPrepared = true }, false, Authorize, CancellationToken.None);
         if (uncertain.State != "unknown" || handler.Creates != 1) throw new Exception("A missing admitted service was launched a second time");
