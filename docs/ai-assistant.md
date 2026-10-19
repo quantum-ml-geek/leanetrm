@@ -4,12 +4,15 @@ Status: design proposal; implementation follows §12. Implemented so far, from s
 the market and reference page reads (`MarketReads`) and the schedule library, TOU
 product and power hour catalog reads (`ScheduleReads`), extracted under a page-view
 `PinnedContext` (a retained context, or working data that binds nothing), and the trade
-party read (`PartyReads`), which binds the dated cutoff of a `TradingView`: for working
-data a context captured from current knowledge at the frame's date, otherwise the
-retained context. Other page operations are still page handlers, among them contract
-shortcuts, date resolution, the date picker catalog, the power hour calculation and
-trades. The turn's working-data pin (§7.2), which binds a captured context, is not
-implemented.
+party read (`PartyReads`) and the trading workspace, Blotter and trade detail reads
+(`TradeReads`), which bind the dated cutoff of a `TradingView`: for working data a
+context captured from current knowledge at the frame's date or, for trades, any context
+captured earlier for that date, otherwise the retained context. Other page operations
+are still page handlers, among them contract shortcuts, date resolution, the date picker
+catalog, the power hour calculation and the other trading reads (catalogs, the
+futures-only Blotter and holdings, deal formats, drafts, previews and risk), which run
+on the trade reads' shared path. The turn's working-data pin (§7.2), which binds a
+captured context, is not implemented.
 
 The page assistant ships in three phases, each with its own design:
 
@@ -98,10 +101,11 @@ Facts the body relies on and does not restate:
   4096 contexts, never reclaimed (`knowledge_limit`), and each current-mode capture
   adds one.
 - **Authorization.** Market and reference page reads, the schedule library, TOU
-  product and power hour catalog reads and the trade party read call `MarketReads` or
-  `ScheduleReads` with a `PinnedContext`, or `PartyReads` with a `TradingView`; other
-  page operations are still `MapPreview` handlers bound to the HTTP request, session
-  and frames. `security.has_permission` for an agent principal requires the agent's
+  product and power hour catalog reads, the trade party read and the trading
+  workspace, Blotter and trade detail reads call `MarketReads` or `ScheduleReads` with a
+  `PinnedContext`, or `PartyReads` or `TradeReads` with a `TradingView`; other page
+  operations are still `MapPreview` handlers bound to the HTTP request, session and
+  frames. `security.has_permission` for an agent principal requires the agent's
   permission, an unexpired, unrevoked delegation listing it, the delegator's current
   permission and `CreateDelegations`, and enabled principals; it does not know who
   asked. `security.trading_access` and `security.use_market_context` also require
@@ -407,10 +411,11 @@ model unpriced. Grants use the existing `security.agent_delegations` and
 ### 7.2 Pinned context
 
 - The ask names the knowledge mode (current, or the exact retained context id) and the
-  As of frame id when one is selected, as trading reads do: a frame of the session's
-  current market context (`snapshot_missing`), current only while no historical
-  context is selected, a retained context only when it is the selected one. Anything
-  else is `context_required`; the ask never falls back.
+  As of frame id when one is selected, as trading reads do, except that it never names
+  an earlier capture over working data: a frame of the session's current market
+  context (`snapshot_missing`), current only while no historical context is selected,
+  a retained context only when it is the selected one. Anything else is
+  `context_required`; the ask never falls back.
 - The turn's immutable **pinned-context record** (knowledge mode, captured or retained
   context id, resolved cutoff and, with a frame, its pin set: frame id, At,
   observation ids, curve-contract selections) is its snapshot identity; the worker
