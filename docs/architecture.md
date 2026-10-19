@@ -43,6 +43,11 @@ Historical visibility uses indexed exact publication lookups without caching
 current authority. Blotter reads its catalog and report in one bound operation
 and returns their shared context (D143). This database function upgrade requires
 the same separately qualified schema baseline as other migrations.
+Reference tables with a verified restrictive visibility policy retain fresh
+per-row access checks inside that policy and omit a duplicate permissive check.
+Catalog-only access and separate quantity-catalog restrictions stay in force.
+Migration 0041 rejects unexpected policy shapes or visibility-helper changes;
+its deployment requires a separately qualified schema baseline.
 Blotter navigation requests a booking directory without pricing unused entry
 contracts. Choosing a new futures trade explicitly loads the priced catalog and
 replaces both catalog and report under one shared context before opening entry.

@@ -14,6 +14,8 @@ def run_checks(url,query,manifest,direct_reads):
         print('PASS '+name,flush=True)
     c=Client();boot=c.bootstrap()
     check('synthetic preview boundary is explicit',boot['mode']=='local-synthetic-preview' and boot['profile'] is None)
+    startup=c.call('bootstrap?includeFrames=false&includeAccess=true')
+    check('anonymous bootstrap explicitly has no selected-profile access projection',startup['access'] is None and startup['profile'] is None)
     compact=c.call('bootstrap?includeFrames=false')
     check('identity bootstrap can omit unused frame payload without changing session metadata',compact['frames']==[] and
           all(compact[key]==boot[key] for key in ['mode','runId','profiles','profile','customProfiles','catalogId','tenantId','workspaceId']) and
@@ -29,6 +31,8 @@ def run_checks(url,query,manifest,direct_reads):
     c.call('health',headers={'Host':'untrusted.invalid'},expected=403);check('host boundary enforced')
     c.call('profile',{'profile':'administrator'},expected=403);check('client cannot invent test identity')
     c.call('profile',{'profile':'viewer'})
+    from check_bootstrap_access import run_checks as check_bootstrap_access
+    check_bootstrap_access(c,check,query)
     workspace=c.call('workspace')
     check('database timestamp transport stays UTC under a non-UTC API environment',all(m.get('event_at') is None or m['event_at'].endswith('+00:00') for m in workspace['references']['futures_milestones']))
     check('viewer reads real catalog and exact input frames',len(workspace['definitions']['curves'])==10 and len(workspace['frames'])==4)

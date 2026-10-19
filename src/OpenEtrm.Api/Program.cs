@@ -158,8 +158,13 @@ void MapPreview(RouteGroupBuilder api,PreviewDatabase database,string cookieName
 {
 var sessions=new ConcurrentDictionary<string,PreviewSession>();
 var marketReads=new MarketReads(database);
+async Task<string[]> CurrentPermissions(NpgsqlConnection connection,CancellationToken ct)
+{
+    await using var command=ScheduleStore.Command(connection,"SELECT security.current_permissions()");
+    return (string[])(await command.ExecuteScalarAsync(ct))!;
+}
 api.MapGet("/health",()=>new {mode=database.Manifest.Mode,runId});
-api.MapGet("/bootstrap",async (HttpContext context,IAntiforgery antiforgery,bool includeFrames=true)=>
+api.MapGet("/bootstrap",async (HttpContext context,IAntiforgery antiforgery,bool includeFrames=true,bool includeAccess=false)=>
 {
     foreach(var item in sessions.Where(x=>DateTimeOffset.UtcNow-x.Value.Created>TimeSpan.FromMinutes(30)).ToArray()) sessions.TryRemove(item.Key,out _);
     PreviewSession session;
@@ -175,9 +180,18 @@ api.MapGet("/bootstrap",async (HttpContext context,IAntiforgery antiforgery,bool
     try {
         var identity=hosted is null?null:HostedAuthentication.Current(context);
         if(identity is not null){if(session.Profile is not null&&session.Profile!=identity.Subject)throw new PreviewDeniedException();session.Profile=identity.Subject;}
-        return new {mode=database.Manifest.Mode,runId,notice=hosted is null?"Disposable synthetic workspace. Test identities are simulations, not production sign-in.":"Private pilot workspace. Financial capability is limited to the supported product conventions.",profiles=identity is null?profiles:profiles.Take(0).Append(new{id=identity.Subject,name=identity.Name,description="Signed-in account"}).ToArray(),
+        object response=new {mode=database.Manifest.Mode,runId,notice=hosted is null?"Disposable synthetic workspace. Test identities are simulations, not production sign-in.":"Private pilot workspace. Financial capability is limited to the supported product conventions.",profiles=identity is null?profiles:profiles.Take(0).Append(new{id=identity.Subject,name=identity.Name,description="Signed-in account"}).ToArray(),
         profile=session.Profile,customProfiles=session.CustomProfiles.Select(p=>new{id=p.Key,name=p.Value}).ToArray(),csrfToken=antiforgery.GetAndStoreTokens(context).RequestToken,frames=includeFrames?session.Frames.Values.Where(f=>f.ContextId==session.MarketContext?.ContextId).OrderBy(f=>f.At).ToArray():[],
-        catalogId=database.Manifest.CatalogId,tenantId=database.Manifest.TenantId,workspaceId=database.Manifest.WorkspaceId}; }
+        catalogId=database.Manifest.CatalogId,tenantId=database.Manifest.TenantId,workspaceId=database.Manifest.WorkspaceId};
+        if(includeAccess)
+        {
+            var options=new JsonSerializerOptions{PropertyNamingPolicy=JsonNamingPolicy.CamelCase};
+            var json=JsonSerializer.SerializeToNode(response,options)!.AsObject();
+            json["access"]=session.Profile is null?null:JsonSerializer.SerializeToNode(new {profile=session.Profile,
+                permissions=await database.WithIdentity(Profile(session),null,CurrentPermissions,context.RequestAborted)},options);
+            response=json;
+        }
+        return Results.Ok(response); }
     finally { session.Gate.Release(); }
 });
 PreviewSession Session(HttpContext context)
@@ -682,10 +696,7 @@ api.MapPost("/jobs/control",(HttpContext c,JobControl body)=>Locked(c,session=>d
     async(connection,ct)=>{c.Items["automation_attempted"]=true;return Results.Ok(await JobOperations.Control(connection,body,ct));},c.RequestAborted)));
 api.MapGet("/access",(Func<HttpContext,Task<IResult>>)(c=>Locked(c,session=>
     database.WithIdentity(Profile(session),null,async(connection,ct)=>
-    {
-        await using var command=ScheduleStore.Command(connection,"SELECT security.current_permissions()");
-        return Results.Ok(new {permissions=(string[])(await command.ExecuteScalarAsync(ct))!});
-    },c.RequestAborted))));
+        Results.Ok(new {permissions=await CurrentPermissions(connection,ct)}),c.RequestAborted))));
 // The principal kinds security.principals accepts; each maps to one login kind.
 (string Code,string Name)[] IdentityKinds=[("human","Human"),("service","Service"),("agent","Agent")];
 api.MapGet("/admin",(Func<HttpContext,Task<IResult>>)(c=>Locked(c,session=>

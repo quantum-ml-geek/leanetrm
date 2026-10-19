@@ -802,3 +802,21 @@ establish full futures lifecycle support. Contract-sequence shortcuts retain
 the current eligibility-based selection semantics under the selected generic
 policy; the date-only fixture reconciles their bound with the trading catalog,
 and missing qualification rejects the sequence.
+
+## Reference-read authority and startup projection
+
+The focused 2026-10-19 checks first reproduced the duplicate-policy shape and
+startup access round trip, then passed with migration 0041 and the optional
+bootstrap access projection. Twenty-nine actual-role database checks cover
+current and historical reference visibility, token expiry under custom and
+generic plans, agent/delegator grant and delegation expiry, scope revocation,
+pooled connections, permissive-policy composition and locking/update reads.
+Catalog-only access and the separate imported-quantity restriction remain.
+
+The startup checks cover legacy response compatibility, fresh projected
+permissions, malformed or mismatched identity metadata, revoked business access
+and later identity refresh. An owned HTTPS preview also verifies signed-in and
+administration-only startup, session isolation, logout and revocation. All
+resources are disposable and synthetic. These checks establish authorization
+contracts; hosted latency and retained-installation migration qualification are
+separate release checks.

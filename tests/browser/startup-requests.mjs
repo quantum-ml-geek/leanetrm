@@ -1,7 +1,7 @@
 export async function run({command,evaluate,wait,click,submit,persona,check,idle,url}){
   await command('Runtime.enable');await command('Page.enable');
   const {identifier}=await command('Page.addScriptToEvaluateOnNewDocument',{source:`
-    window.__startupRequests=[];window.__startupFormats=[];window.__unusedSourceValues=[];window.__bootstrapFrameModes=[];window.__bootstrapFrameCounts=[];
+    window.__startupRequests=[];window.__startupFormats=[];window.__unusedSourceValues=[];window.__bootstrapFrameModes=[];window.__bootstrapFrameCounts=[];window.__bootstrapAccess=[];
     const originalFetch=window.fetch;
     window.fetch=async(input,init)=>{
       const requested=new URL(typeof input==='string'?input:input.url,location.href),path=requested.pathname;
@@ -11,7 +11,7 @@ export async function run({command,evaluate,wait,click,submit,persona,check,idle
       if(path==='/api/bootstrap')window.__bootstrapFrameModes.push(requested.searchParams.get('includeFrames'));
       if(path==='/api/amounts/display')window.__startupFormats.push(...JSON.parse(init.body).map(row=>row.value));
       const response=await originalFetch(input,init);
-      if(path==='/api/bootstrap'&&response.ok)window.__bootstrapFrameCounts.push((await response.clone().json()).frames.length);
+      if(path==='/api/bootstrap'&&response.ok){const boot=await response.clone().json();window.__bootstrapFrameCounts.push(boot.frames.length);window.__bootstrapAccess.push({requested:requested.searchParams.get('includeAccess'),access:boot.access,profile:boot.profile});}
       if(path==='/api/examples')window.__startupExamplesPending=false;
       if(!['/api/workspace','/api/workspace/catalog','/api/evaluate','/api/history'].includes(path)||!response.ok)return response;
       const data=await response.json();
@@ -39,6 +39,7 @@ export async function run({command,evaluate,wait,click,submit,persona,check,idle
   await check('startup explicitly requests the catalog without observation history',"window.__startupRequests.includes('/api/workspace/catalog')&&!window.__startupRequests.includes('/api/workspace')&&window.__startupScope==='on_demand'&&window.__startupObservationCount===0");
   await check('workspace navigation does not format undisplayed observation history',"!window.__startupRequests.includes('/api/amounts/display')");
   await check('initial profile choices reuse the initial bootstrap',"window.__startupRequests.filter(path=>path==='/api/bootstrap').length===1");
+  await check('anonymous local startup requests explicit access metadata then authorizes its chosen identity afresh',"window.__bootstrapAccess[0].requested==='true'&&window.__bootstrapAccess[0].profile===null&&window.__bootstrapAccess[0].access===null&&window.__startupRequests.includes('/api/profile')&&window.__startupRequests.includes('/api/access')");
   await check('browser session bootstrap explicitly omits unused frame pins',"JSON.stringify(window.__bootstrapFrameModes)===JSON.stringify(['false'])&&JSON.stringify(window.__bootstrapFrameCounts)===JSON.stringify([0])");
   await check('startup hydrates stored curve names without a separate directory request',"!window.__startupRequests.includes('/api/curve-names')&&document.querySelectorAll('.curve-button').length>0");
   await check('independent dataset and session bootstrap reads overlap',"window.__bootstrapOverlapsExamples===true");
@@ -46,6 +47,7 @@ export async function run({command,evaluate,wait,click,submit,persona,check,idle
   await click('#profile-open');
   await check('opening Profile still refreshes current profile choices',"window.__startupRequests.filter(path=>path==='/api/bootstrap').length===2&&!document.querySelector('#profile-dialog').hidden&&document.querySelector('#profile-dialog').open");
   await check('profile refresh also omits unused frame pins',"window.__bootstrapFrameModes.length===2&&window.__bootstrapFrameModes.every(value=>value==='false')&&window.__bootstrapFrameCounts.every(value=>value===0)");
+  await check('ordinary Profile metadata never requests or returns the startup authorization projection',"window.__bootstrapAccess[1].requested===null&&window.__bootstrapAccess[1].access===undefined");
   await click('#profile-close');
   await click('#example');
   await check('evaluated contract amounts still use managed formatting',"window.__startupRequests.includes('/api/evaluate')&&window.__startupRequests.includes('/api/amounts/display')&&document.querySelector('#contracts tbody tr')&&document.querySelector('#error').hidden");
