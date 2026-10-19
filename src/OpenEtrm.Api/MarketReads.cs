@@ -31,6 +31,16 @@ public sealed class MarketReads(PreviewDatabase database)
         return new(data,units,catalogOnly?await Names(connection,ct):null);
     }
 
+    public async Task<NavigationRead> Navigation(NpgsqlConnection connection,PinnedContext pin,CancellationToken ct)
+    {
+        await pin.Bind(connection,database.Manifest.CatalogId,ct);
+        var pins=await MarketBundle.Require(connection,database.Manifest,ct);
+        var curves=await MarketNavigation.ReadCurves(connection,database.Manifest,ct);
+        var names=await Names(connection,ct);
+        await MarketBundle.RequireReferenceVisibility(connection,database.Manifest,ct);
+        return new(pins.Definitions,pins.References,curves,names);
+    }
+
     // Stored display names for every curve in this catalog, for screens that show curve codes from any bundle.
     public async Task<ImmutableArray<CurveName>> CurveNames(NpgsqlConnection connection,PinnedContext pin,CancellationToken ct)
     {

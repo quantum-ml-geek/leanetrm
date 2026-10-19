@@ -12,7 +12,7 @@ await withOwnedBrowser(target,process.argv[3],async({command,evaluate,wait,set,c
   await evaluate("document.querySelector('#signin').requestSubmit()");
   await wait("location.pathname==='/' && document.querySelector('#profile-label')?.textContent==='Synthetic hosted human'");
   await wait(idle);
-  await check('signed-in startup uses its fresh bootstrap access projection without an access round trip',"JSON.stringify(window.__hostedStartupAccess)===JSON.stringify(['true'])&&!window.__hostedStartupReads.includes('/api/access')&&window.__hostedStartupReads.includes('/api/workspace/catalog')&&document.querySelector('#error').hidden");
+  await check('signed-in startup uses its fresh bootstrap access projection without an access round trip',"JSON.stringify(window.__hostedStartupAccess)===JSON.stringify(['true'])&&!window.__hostedStartupReads.includes('/api/access')&&window.__hostedStartupReads.includes('/api/workspace/navigation')&&document.querySelector('#error').hidden");
   await check('verified hosted mode identifies the private pilot and qualifies generated marks',"document.querySelector('#workspace-host-mode').textContent==='Private pilot'&&document.querySelector('#workspace-footer').textContent.includes('Generated marks and sample trades')&&!/disposable|local preview/i.test(document.querySelector('.side-note').textContent+document.querySelector('#workspace-footer').textContent)");
   await click('#nav-delivery');
   await check('configured delivery-price sources and paused scheduler are visible',"document.querySelector('#delivery-price-source').options.length===2 && document.querySelector('#delivery-price-jobs').textContent.includes('paused')");
@@ -42,5 +42,5 @@ await withOwnedBrowser(target,process.argv[3],async({command,evaluate,wait,set,c
   await set('#signin [name=login]',credentials.adminLogin);await set('#signin [name=password]',credentials.password);
   await evaluate("document.querySelector('#signin').requestSubmit()");
   await wait("location.pathname==='/'&&!document.querySelector('#admin-page')?.hidden&&"+idle);
-  await check('hosted administration-only startup avoids every market read and access round trip',"JSON.stringify(window.__hostedStartupAccess)===JSON.stringify(['true'])&&!window.__hostedStartupReads.includes('/api/access')&&!window.__hostedStartupReads.includes('/api/workspace/catalog')&&window.__hostedStartupReads.includes('/api/admin')&&document.querySelector('#nav-market').hidden&&document.querySelector('#error').hidden");
+  await check('hosted administration-only startup avoids every market read and access round trip',"JSON.stringify(window.__hostedStartupAccess)===JSON.stringify(['true'])&&!window.__hostedStartupReads.includes('/api/access')&&!window.__hostedStartupReads.includes('/api/workspace/navigation')&&window.__hostedStartupReads.includes('/api/admin')&&document.querySelector('#nav-market').hidden&&document.querySelector('#error').hidden");
 });

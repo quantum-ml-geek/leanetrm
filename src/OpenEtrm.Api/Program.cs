@@ -459,6 +459,15 @@ Task<IResult> Workspace(HttpContext c,bool catalogOnly)=>Locked(c,async session=
 });
 api.MapGet("/workspace",(Func<HttpContext,Task<IResult>>)(c=>Workspace(c,false)));
 api.MapGet("/workspace/catalog",(Func<HttpContext,Task<IResult>>)(c=>Workspace(c,true)));
+api.MapGet("/workspace/navigation",(Func<HttpContext,Task<IResult>>)(c=>Locked(c,async session=>
+{
+    var read=await database.WithIdentity(Profile(session),"ReadMarketData",(connection,ct)=>marketReads.Navigation(connection,Pin(session),ct),c.RequestAborted);
+    var frames=session.Frames.Values.Where(f=>f.ContextId==session.MarketContext?.ContextId).OrderBy(f=>f.At).ToArray();
+    return Results.Ok(new MarketNavigation(Profile(session),session.MarketContext,read.DefinitionRevision,read.ReferenceRevision,
+        database.Manifest.FuturesConvention,database.Manifest.Example,
+        session.MarketContext is null?[..session.InitialFrames]:[..session.Frames.Values.Where(f=>f.ContextId==session.MarketContext.ContextId).Select(f=>f.Id)],
+        [..frames.Select(f=>new NavigationFrame(f.Id,f.Name,f.At))],read.CurveNames,read.Curves));
+})));
 api.MapGet("/reference/catalog",(Func<HttpContext,Task<IResult>>)(c=>Locked(c,session=>database.WithIdentity(Profile(session),"ReadMarketData",async(connection,ct)=>
 {
     var requestedOffset=c.Request.Query["offset"].ToString();

@@ -33,6 +33,8 @@ def run_checks(url,query,manifest,direct_reads):
     c.call('profile',{'profile':'viewer'})
     from check_bootstrap_access import run_checks as check_bootstrap_access
     check_bootstrap_access(c,check,query)
+    from check_market_navigation import run_checks as check_market_navigation
+    check_market_navigation(c,check,query,manifest)
     workspace=c.call('workspace')
     check('database timestamp transport stays UTC under a non-UTC API environment',all(m.get('event_at') is None or m['event_at'].endswith('+00:00') for m in workspace['references']['futures_milestones']))
     check('viewer reads real catalog and exact input frames',len(workspace['definitions']['curves'])==10 and len(workspace['frames'])==4)
