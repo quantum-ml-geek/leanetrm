@@ -4,7 +4,6 @@ using System.Globalization;
 using OpenEtrm.Api;
 using OpenEtrm.MarketData;
 
-if(args is ["--futures-admission"]){FuturesAdmissionChecks.Run();return;}
 if(args is ["--preview-data"]){PreviewDataChecks.Run();return;}
 
 if (args is ["--automation"])
@@ -15,6 +14,8 @@ if(args is ["--automation-controller",var connectionFile,var profileId])
 {
     await AutomationChecks.Controller(connectionFile,profileId);return;
 }
+
+if(args is ["--futures-execution"]){FuturesExecutionChecks.Run();return;}
 
 if (args is ["--hosted-access"])
 {
@@ -30,6 +31,7 @@ if (args is ["--power-imports"])
 
 if (args is ["--schedules"])
 {
+    FuturesExecutionChecks.Run();
     HostedAccessChecks.Run();
     PowerImportChecks.Run();
     SchedulePreviewChecks.Run();

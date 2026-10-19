@@ -5,12 +5,12 @@ export async function run({command,evaluate,wait,click,set,submit,persona,check,
   await command('Page.navigate',{url});await wait(idle);
   await evaluate(`window.__admissionSend=window.fetch;window.__unknownFirstTrading=true;window.fetch=async(...args)=>{
     const path=String(args[0]);
-    if(path==='/api/trading/workspace'&&window.__denyAdmission)return new Response(JSON.stringify({code:'futures_admission'}),{status:422,headers:{'Content-Type':'application/json'}});
-    if(path==='/api/futures/book'&&window.__rejectAdmissionBooking){(window.__admissionBookCommands??=[]).push(JSON.parse(args[1].body));return window.__unknownBookingOutcome?new Response('Synthetic unconfirmed response',{status:502}):new Response(JSON.stringify({code:'futures_admission'}),{status:422,headers:{'Content-Type':'application/json'}});}
+    if(path==='/api/trading/workspace'&&window.__denyAdmission)return new Response(JSON.stringify({code:'futures_execution_policy'}),{status:422,headers:{'Content-Type':'application/json'}});
+    if(path==='/api/futures/book'&&window.__rejectAdmissionBooking){(window.__admissionBookCommands??=[]).push(JSON.parse(args[1].body));return window.__unknownBookingOutcome?new Response('Synthetic unconfirmed response',{status:502}):new Response(JSON.stringify({code:'futures_execution_policy'}),{status:422,headers:{'Content-Type':'application/json'}});}
     const response=await window.__admissionSend(...args);
     if(path!=='/api/trading/workspace'||!response.ok)return response;
     const data=await response.json();window.__sourceFirstTrading=data.catalog.contracts[0].firstTrading;
-    if(window.__unknownFirstTrading)for(const contract of data.catalog.contracts){contract.firstTrading=null;contract.eligibleFrom='2020-12-15T11:00:00Z';contract.eligibilityNote='Sourced contract terms; explicit sample trading eligibility and generated closing marks.';}
+    if(window.__unknownFirstTrading)for(const contract of data.catalog.contracts){contract.firstTrading=null;contract.firstTradingDate=null;contract.eligibleFrom='2020-12-15T11:00:00Z';contract.eligibilityNote='Sourced contract terms; explicit sample trading eligibility and generated closing marks.';}
     return new Response(JSON.stringify(data),{status:200,headers:{'Content-Type':'application/json'}});
   };`);
   await persona('trader');

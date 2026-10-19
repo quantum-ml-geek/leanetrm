@@ -192,7 +192,7 @@ async Task<IResult> Locked(HttpContext context,Func<PreviewSession,Task<IResult>
     try {return await work(session);} finally {session.Gate.Release();}
 }
 string Profile(PreviewSession session)=>session.Profile ?? throw new PreviewDeniedException();
-api.MapPost("/time/inspect",(HttpContext c,LocalTimeRequest body)=>Locked(c,session=>database.WithIdentity(Profile(session),"ReadMarketData",(_,_)=>
+api.MapPost("/time/inspect",(HttpContext c,LocalTimeRequest body)=>Locked(c,session=>database.WithIdentity(Profile(session),null,(_,_)=>
     Task.FromResult<IResult>(Results.Ok(new{candidates=UserTime.Inspect(body.LocalTime,body.TimeZone)})),c.RequestAborted)));
 // Pages pin the session's selected context, or current working data when none is selected.
 PinnedContext Pin(PreviewSession session,Guid? frame=null)

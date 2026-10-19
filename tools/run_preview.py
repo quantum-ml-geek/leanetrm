@@ -33,7 +33,7 @@ def main():
     parser.add_argument('--jobs-check',action='store_true',help='Qualify owned jobs and the shared infrastructure screen')
     parser.add_argument('--booking-check',action='store_true',help='Qualify backend-owned immutable trade booking facts')
     parser.add_argument('--unit-check', action='store_true', help='Run amount/unit integration checks in the owned standard fixture')
-    parser.add_argument('--admission-check',action='store_true',help='Qualify explicit futures execution admission in an owned synthetic fixture')
+    parser.add_argument('--execution-check',action='store_true',help='Qualify standard futures execution policies in an owned synthetic fixture')
     parser.add_argument('--exchange-check',action='store_true',help='Qualify the independent exchange futures dataset')
     parser.add_argument('--with-exchange',action='store_true',help='Publish the independent exchange futures dataset in this newly owned database')
     parser.add_argument('--party-check', action='store_true', help='Run party-editor integration checks in an owned fixture')
@@ -42,7 +42,7 @@ def main():
     parser.add_argument('--browser',type=Path,help='Installed Chromium-compatible executable; used only with --browser-check')
     parser.add_argument('--example', choices=['standard','mixed-gas'], default='standard', help='Explicit synthetic dataset')
     args = parser.parse_args()
-    if args.identity_check or args.unit_check or args.party_check or args.exchange_check or args.booking_check or args.draft_check or args.hosted_check or args.jobs_check or args.admission_check:
+    if args.identity_check or args.unit_check or args.party_check or args.exchange_check or args.booking_check or args.draft_check or args.hosted_check or args.jobs_check or args.execution_check:
         args.check = True
         if args.example != 'standard' or args.identity_check and args.browser_check:
             parser.error('--identity-check requires the standard fixture without --browser-check')
@@ -110,10 +110,14 @@ def main():
         else:
             reference,market,security,manifest=fixture(ROOT)
         for migration in sorted((ROOT/'db/migrations').glob('[0-9][0-9][0-9][0-9]_*.sql')):
+            if args.execution_check and migration.name=='0040_futures_execution_policies.sql':
+                from check_futures_policy_upgrade import run_checks as check_policy_upgrade
+                legacy_reference,legacy_market,_,legacy_manifest=fixture(ROOT)
+                check_policy_upgrade(query,legacy_reference,legacy_market,legacy_manifest,migration.read_text())
             query(migration.read_text())
-        if args.admission_check:
-            from check_futures_admission import prepare as prepare_admission
-            reference,market,manifest=prepare_admission(reference,market,manifest)
+        if args.execution_check:
+            from check_futures_execution import prepare as prepare_execution
+            reference,market,manifest=prepare_execution(reference,market,manifest)
         if args.hosted_check:
             from provision_hosted import prepare as prepare_hosted
             prepared=temporary/'fresh-pilot-check'
@@ -209,16 +213,16 @@ def main():
         if args.with_exchange and not args.check:
             from seed_exchange_positions import seed_positions as seed_exchange
             seed_exchange(url,run_id,temporary)
-            print('Loaded nineteen exchange-aligned futures examples with original synthetic execution prices.',flush=True)
+            print('Loaded twelve source-listed monthly futures examples with original synthetic execution prices.',flush=True)
         print(f'PREVIEW_URL={url}',flush=True)
         print('Private synthetic database. Ctrl+C stops the app and removes its owned database.',flush=True)
         if args.check:
-            if args.admission_check:
-                from check_futures_admission import run_checks as check_admission
-                check_admission(url,query,manifest)
+            if args.execution_check:
+                from check_futures_execution import run_checks as check_execution
+                check_execution(url,query,manifest)
             elif args.jobs_check:
                 from check_jobs_http import run_checks as check_jobs
-                check_jobs(url)
+                check_jobs(url,query)
                 if args.browser_check:
                     target=temporary/'browser-target.json'
                     target.write_text(json.dumps({'suite':'business_browser_v1','url':url,'runId':run_id}))
@@ -241,8 +245,8 @@ def main():
                 check_exchange(url,query,exchange_manifest)
                 from seed_exchange_positions import seed_positions as seed_exchange
                 seeded=seed_exchange(url,run_id,temporary)
-                assert len(seeded)==19 and seeded==seed_exchange(url,run_id,temporary)
-                print('PASS exchange examples populate nineteen real product families through idempotent authorized bookings.',flush=True)
+                assert len(seeded)==12 and seeded==seed_exchange(url,run_id,temporary)
+                print('PASS exchange examples populate twelve source-listed monthly product families through idempotent authorized bookings.',flush=True)
                 if args.browser_check:
                     target=temporary/'browser-target.json'
                     target.write_text(json.dumps({'suite':'business_browser_v1','url':url,'runId':run_id}))

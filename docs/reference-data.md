@@ -256,8 +256,9 @@ economic accuracy or permission to use/distribute that data.
 ## Public placeholders and installation data
 
 Ship generic schemas, empty placeholders and clearly synthetic fixtures in the
-public project. Do not ship real venue catalogs, copied rulebook prose, source
-documents, settlement histories or privately licensed reference datasets.
+public project. The bounded exchange example may contain verified public
+specification facts and source links. Do not ship copied rulebook prose, source documents, settlement
+histories or privately licensed reference datasets.
 Real definitions belong in installation-specific data loaded under appropriate
 permissions. The project's code license does not license third-party data.
 
@@ -285,9 +286,9 @@ facts and shocks only still-variable inputs. Initial model policy must define
 which amounts PV includes, cash timing, discounting and any price-alignment or
 collateral assumptions. Initial margin is distinct from variation margin.
 
-First enable a documented synthetic fixed-lot convention. Before a real product
-is supported, qualify its daily/final settlement, closeout and any delivery/notice
-rules. Physically deliverable products require an explicit supported path or an
+Execution P&L/open-risk use may consume source-qualified real terms under the
+selected execution policy. Full futures valuation and lifecycle support still
+require qualified daily/final settlement, closeout and delivery/notice rules. Physically deliverable products require an explicit supported path or an
 enforced pre-delivery closeout policy; cash-settled tests do not prove physical
 delivery support.
 
@@ -302,3 +303,30 @@ These storage checks do not qualify the economic model or the temporal resolver.
 Further acceptance covers holiday exceptions, date-only versus instant deadlines,
 unit/tick economics, pending verification, conflicting sources, expired permissions,
 history replay and futures P&L/settlement reconciliation.
+
+## Execution qualification and price provenance
+
+Product/series `definition_state` records provenance/completeness, not permission
+to execute. A real exchange contract does not become synthetic because its price
+is generated. The exchange example uses candidate definitions with sourced terms
+and a separate synthetic price source selected as `trader_mark`. Unknown listing
+facts remain NULL; no application eligibility bound is presented as an exchange
+first-trading event.
+
+Migration 0040 adds exact-series/implementation execution policies with explicit
+bounds/rules, price-role/source FKs and qualification-evidence FKs. SQL booking
+and managed loading enforce the selected policy under current reference authority
+and historical visibility. Instrument identity remains the series primary key.
+This extends execution P&L/open-risk use, not variation-margin, final-settlement
+or physical-delivery processing. Installation data and seeding scripts do not
+require a private application admission mode.
+
+For a known first-trading date without a time, qualification retains the next-local-
+date UTC boundary's offset and declared tzdb version. Managed qualification checks
+that proof against the pinned clock; SQL enforces the retained bound independently
+of database-host timezone rules. The bound may be later, never earlier. Exact-
+instant and wholly unknown-source policies carry no date proof. SQL also rejects
+missing or repeated local midnight; minute-aligned offsets within fourteen hours
+of UTC define the supported proof range. Contract-sequence shortcuts use the
+selected execution policy to identify eligible contracts, while milestone receipts
+retain their actual known/unknown source facts.
