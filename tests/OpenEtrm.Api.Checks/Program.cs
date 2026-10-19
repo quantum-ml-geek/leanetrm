@@ -5,6 +5,7 @@ using OpenEtrm.Api;
 using OpenEtrm.MarketData;
 
 if(args is ["--futures-admission"]){FuturesAdmissionChecks.Run();return;}
+if(args is ["--preview-data"]){PreviewDataChecks.Run();return;}
 
 if (args is ["--automation"])
 {

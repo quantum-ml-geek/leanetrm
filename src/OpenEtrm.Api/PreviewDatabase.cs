@@ -393,6 +393,12 @@ SELECT NOT(rolsuper OR rolbypassrls OR rolcreatedb OR rolcreaterole) AND pg_has_
 public sealed class PreviewData
 {
     private readonly PreviewManifest manifest;
+    private readonly Dictionary<(string Table,string Field),ILookup<string,JsonElement>> referenceRows,definitionRows;
+    private readonly ILookup<Guid,JsonElement> observationRows,contractDefinitions;
+    private readonly ILookup<Guid?,JsonElement> correctionRows;
+    private readonly ILookup<Guid,MarketContract> contractRows;
+    private readonly ILookup<string,QuoteSpecification> quoteRows;
+    private readonly HashSet<(string Curve,Guid Contract)> curveMembers;
     public ImmutableDictionary<string, ImmutableArray<JsonElement>> Definitions { get; }
     public ImmutableDictionary<string, ImmutableArray<JsonElement>> References { get; }
     public FuturesAdmission Admission { get; }
@@ -413,15 +419,32 @@ public sealed class PreviewData
     {
         RequireBundlePin(manifest,Single(definitions["revisions"]));
         this.manifest=manifest; Definitions=definitions.ToImmutableDictionary(); References=references.ToImmutableDictionary(); Admission=new(References); Observations=observations;
+        // Index only the rows captured by this authorized read. Grouping retains
+        // duplicate keys so each consumer still applies its exact cardinality rule.
+        referenceRows=IndexRows(References,[("quantity_specifications","code"),("quote_specifications","code"),
+            ("settlement_targets","code"),("futures_series","code"),("futures_products","code"),
+            ("futures_milestones","series_code"),("futures_product_terms","product_code"),
+            ("futures_lot_resolutions","series_code"),("futures_basis_settlements","series_code"),
+            ("units","code"),("currencies","code"),("sources","code"),("interest_rate_definitions","code")]);
+        definitionRows=IndexRows(Definitions,[("curves","code"),("curve_members","curve_code"),
+            ("curve_inputs","curve_code"),("rate_curves","code"),("rate_curve_points","curve_code")]);
+        contractDefinitions=Definitions["contracts"].ToLookup(row=>row.Id("id"));
+        curveMembers=Definitions["curve_members"].Select(row=>(row.Text("curve_code"),row.Id("contract_id"))).ToHashSet();
+        observationRows=observations.ToLookup(row=>row.Id("id"));
+        correctionRows=observations.ToLookup(row=>row.OptionalId("corrects_id"));
         revision=new(manifest.CatalogId,manifest.RevisionId); reference=new(manifest.ReferenceCatalogId,manifest.ReferenceRevisionId);
         var quantities=references["quantity_specifications"].Select(q => new QuantitySpecification(R(q.Text("code")),R(q.Text("commodity_code")),R(q.Text("basis_code")),R(q.Text("unit_code")),R(q.Text("dimension_code")))).ToImmutableArray();
+        var quantitiesByUnit=quantities.ToLookup(q=>(q.Commodity.Code,q.Unit.Code));
         var quotes=Quotes=references["quote_specifications"].Select(q => new QuoteSpecification(R(q.Text("code")),q.Text("kind") switch {"outright"=>QuoteKind.Outright,"basis"=>QuoteKind.Basis,_=>throw Unsupported()},R(q.Text("currency_code")),R(q.Text("quantity_code")),q.Number("multiplier"),q.Number("trading_tick"),q.Number("clearing_increment"),q.Number("minimum"),q.Number("maximum"))).ToImmutableArray();
+        quoteRows=quotes.ToLookup(q=>q.Key.Code,StringComparer.Ordinal);
         var contracts=Contracts=definitions["contracts"].Select(c => new MarketContract(K(c.Id("id")),c.Text("kind") switch {"future"=>ContractKind.Future,"forward"=>ContractKind.Forward,_=>throw Unsupported()},DateOnly.ParseExact(c.Text("delivery_from"),"yyyy-MM-dd",System.Globalization.CultureInfo.InvariantCulture),DateOnly.ParseExact(c.Text("delivery_to"),"yyyy-MM-dd",System.Globalization.CultureInfo.InvariantCulture),c.Instant("expiry_at"),c.OptionalText("futures_series_code") is {} series ? R(series):null)).ToImmutableArray();
+        contractRows=contracts.ToLookup(c=>c.Key.Id);
+        var mappings=definitions["constituent_mappings"].ToLookup(row=>(row.Text("curve_code"),row.Text("slot")));
         var curves=definitions["curves"].Select(c =>
         {
-            var code=c.Text("code"); var members=definitions["curve_members"].Where(m=>m.Text("curve_code")==code).OrderBy(m=>m.GetProperty("ordinal").GetInt32()).Select(m=>K(m.Id("contract_id"))).ToImmutableArray();
-            var target=Single(references["settlement_targets"].Where(t=>t.Text("code")==c.Text("settlement_target_code")));
-            var inputs=definitions["curve_inputs"].Where(i=>i.Text("curve_code")==code).ToImmutableArray();
+            var code=c.Text("code"); var members=DefinitionRows("curve_members","curve_code",code).OrderBy(m=>m.GetProperty("ordinal").GetInt32()).Select(m=>K(m.Id("contract_id"))).ToImmutableArray();
+            var target=Single(ReferenceRows("settlement_targets","code",c.Text("settlement_target_code")));
+            var inputs=DefinitionRows("curve_inputs","curve_code",code).ToImmutableArray();
             var numeric=inputs.Where(i=>i.Text("slot")=="multiplier").ToImmutableArray();
             NumericInput? multiplier=null;
             if (numeric.Length!=0)
@@ -437,22 +460,23 @@ public sealed class PreviewData
                 new(target.Text("kind") switch {"future_series"=>SettlementKind.FutureSeries,"index"=>SettlementKind.Index,"index_difference"=>SettlementKind.IndexDifference,_=>throw Unsupported()},target.OptionalText("index_a_code") is {} a?R(a):null,target.OptionalText("index_b_code") is {} b?R(b):null),
                 c.Text("rule") switch {"direct"=>CurveRule.Direct,"add"=>CurveRule.Add,"scale_add"=>CurveRule.ScaleAdd,_=>throw Unsupported()},members,
                 inputs.Where(i=>i.Text("slot")!="multiplier").Select(i=>new CurveInput(i.Text("slot") switch {"base"=>InputSlot.Base,"spread"=>InputSlot.Spread,_=>throw Unsupported()},new(revision,i.Text("source_curve_code")),i.Text("expiry_rule") switch {"require_live"=>SourceExpiryRule.RequireLive,"freeze_final_future"=>SourceExpiryRule.FreezeFinalFuture,_=>throw Unsupported()},
-                    definitions["constituent_mappings"].Where(m=>m.Text("curve_code")==code&&m.Text("slot")==i.Text("slot")).Select(m=>new ConstituentMapping(K(m.Id("target_contract_id")),K(m.Id("source_contract_id")))).ToImmutableArray())).ToImmutableArray(),
+                    mappings[(code,i.Text("slot"))].Select(m=>new ConstituentMapping(K(m.Id("target_contract_id")),K(m.Id("source_contract_id")))).ToImmutableArray())).ToImmutableArray(),
                 c.OptionalText("direct_role") is {} directRole?ParseRole(directRole):null,c.OptionalText("direct_source_code") is {} directSource?R(directSource):null,multiplier);
         }).ToImmutableArray();
         var futures=FuturesSeries=contracts.Where(c=>c.Kind==ContractKind.Future).Select(c=>
         {
-            var series=Single(references["futures_series"].Where(s=>s.Text("code")==c.FuturesSeries!.Value.Code));
-            var product=Single(references["futures_products"].Where(p=>p.Text("code")==series.Text("product_code")));
-            var expiry=Single(references["futures_milestones"].Where(m=>m.Text("series_code")==series.Text("code")&&m.Text("milestone")=="last_trading"));
-            var first=Single(references["futures_milestones"].Where(m=>m.Text("series_code")==series.Text("code")&&m.Text("milestone")=="first_trading"));
-            var terms=Single(references["futures_product_terms"].Where(t=>t.Text("product_code")==series.Text("product_code")));
-            ReferenceKey Quantity(string unit)=>Single(quantities.Where(q=>q.Commodity.Code==product.Text("commodity_code")&&q.Unit.Code==unit)).Key;
-            var resolution=references.GetValueOrDefault("futures_lot_resolutions",[]).Where(r=>r.Text("series_code")==series.Text("code")).ToArray();
+            var series=Single(ReferenceRows("futures_series","code",c.FuturesSeries!.Value.Code));
+            var product=Single(ReferenceRows("futures_products","code",series.Text("product_code")));
+            var milestones=ReferenceRows("futures_milestones","series_code",series.Text("code"));
+            var expiry=Single(milestones.Where(m=>m.Text("milestone")=="last_trading"));
+            var first=Single(milestones.Where(m=>m.Text("milestone")=="first_trading"));
+            var terms=Single(ReferenceRows("futures_product_terms","product_code",series.Text("product_code")));
+            ReferenceKey Quantity(string unit)=>Single(quantitiesByUnit[(product.Text("commodity_code"),unit)]).Key;
+            var resolution=references.ContainsKey("futures_lot_resolutions")?ReferenceRows("futures_lot_resolutions","series_code",series.Text("code")).ToArray():[];
             if(resolution.Length>1)throw Unsupported();
             var lot=resolution.SingleOrDefault();
             FuturesLotResolution? resolved=lot.ValueKind==JsonValueKind.Undefined?null:new(new(lot.Number("amount"),R(lot.Text("quantity_code"))),lot.Number("factor"),lot.Text("implementation"));
-            var basis=references["futures_basis_settlements"].SingleOrDefault(b=>b.Text("series_code")==series.Text("code"));
+            var basis=ReferenceRows("futures_basis_settlements","series_code",series.Text("code")).SingleOrDefault();
             if(basis.ValueKind!=JsonValueKind.Undefined&&terms.OptionalText("index_code") is not null)throw new MarketDataException("futures_definition","A basis settlement index is retained once on the exact dated series.");
             FuturesBasisSettlement? basisSettlement=basis.ValueKind==JsonValueKind.Undefined?null:new(R(basis.Text("index_code")),R(basis.Text("benchmark_series_code")),basis.Text("implementation"));
             return new FuturesSeriesSpecification(c.FuturesSeries!.Value,Quantity(product.Text("quote_unit_code")),R(product.Text("quote_currency_code")),product.Number("quote_multiplier"),product.Number("outright_tick_size"),R(product.Text("location_code")),R(terms.Text("profile_code")),
@@ -463,6 +487,15 @@ public sealed class PreviewData
         var seriesDefinitions=definitions["series"].Select(s=>new MarketSeries(S(s.Id("id")),s.OptionalId("contract_id") is {} id?K(id):null,s.OptionalText("quote_code") is {} q?R(q):null,s.OptionalText("value_specification_code") is {} v?R(v):null)).ToImmutableArray();
         Model=new(revision,reference,quantities,quotes,contracts,curves,futures,valueSpecs,seriesDefinitions);
     }
+    private static Dictionary<(string Table,string Field),ILookup<string,JsonElement>> IndexRows(
+        ImmutableDictionary<string,ImmutableArray<JsonElement>> tables,(string Table,string Field)[] keys)
+        =>keys.Where(key=>tables.ContainsKey(key.Table)).ToDictionary(key=>key,
+            key=>tables[key.Table].ToLookup(row=>row.Text(key.Field),StringComparer.Ordinal));
+    public IEnumerable<JsonElement> ReferenceRows(string table,string field,string key)=>referenceRows[(table,field)][key];
+    public IEnumerable<JsonElement> DefinitionRows(string table,string field,string key)=>definitionRows[(table,field)][key];
+    public IEnumerable<MarketContract> ContractRows(Guid id)=>contractRows[id];
+    public IEnumerable<QuoteSpecification> QuoteRows(string code)=>quoteRows[code];
+    public bool HasCurveMember(string curve,Guid contract)=>curveMembers.Contains((curve,contract));
     public static void RequireBundlePin(PreviewManifest manifest, JsonElement row)
     {
         if (row.Id("catalog_id") != manifest.CatalogId || row.Id("id") != manifest.RevisionId ||
@@ -474,13 +507,13 @@ public sealed class PreviewData
     private static MarketDataException Unsupported()=>new("unsupported_definition","The selected definition uses an unsupported kind.");
     private static T Single<T>(IEnumerable<T> source)
     { var values=source.Take(2).ToArray(); return values.Length==1?values[0]:throw new MarketDataException("ambiguous_reference","A required exact reference is missing or ambiguous."); }
-    public JsonElement Observation(Guid id)=>Single(Observations.Where(o=>o.Id("id")==id));
+    public JsonElement Observation(Guid id)=>Single(observationRows[id]);
     public InputFrame SelectPinned(InputFrame frame)
     {
         var pins=frame.ObservationIds.Select(id=>
         {
             var current=Observation(id);
-            while(true){var successors=Observations.Where(o=>o.OptionalId("corrects_id")==current.Id("id")).ToArray();
+            while(true){var successors=correctionRows[current.Id("id")].ToArray();
                 if(successors.Length==0)return current.Id("id");
                 if(successors.Length!=1)throw new MarketDataException("revision_conflict","An observation has conflicting successors.");
                 current=successors[0];}
@@ -499,7 +532,7 @@ public sealed class PreviewData
     }
     public CurveBuild Build(InputFrame frame,string code)
     {
-        if (string.IsNullOrEmpty(code) || !Definitions["curves"].Any(c=>c.Text("code")==code)) throw new MarketDataException("missing_curve","Select an exact curve definition.");
+        if (string.IsNullOrEmpty(code) || !DefinitionRows("curves","code",code).Any()) throw new MarketDataException("missing_curve","Select an exact curve definition.");
         if(!frame.CurveContracts.TryGetValue(code,out var members) || members.IsDefault)
             throw new MarketDataException("missing_curve_view","An explicit contract selection is required for this market date.");
         if(members.IsEmpty)throw new MarketDataException("empty_curve_view","This market date has no remaining contracts in the selected view.");
@@ -508,13 +541,13 @@ public sealed class PreviewData
     }
     public ZeroRateDefinition RateDefinition(string code)
     {
-        var curve=Single(Definitions["rate_curves"].Where(c=>c.Text("code")==code));
-        var specification=Single(References["interest_rate_definitions"].Where(r=>r.Text("code")==curve.Text("interest_rate_code")));
-        var pillars=Definitions["rate_curve_points"].Where(p=>p.Text("curve_code")==code).OrderBy(p=>p.GetProperty("ordinal").GetInt32()).Select(p=>new RatePillar(S(p.Id("series_id")),DateOnly.ParseExact(p.Text("maturity"),"yyyy-MM-dd",System.Globalization.CultureInfo.InvariantCulture))).ToImmutableArray();
+        var curve=Single(DefinitionRows("rate_curves","code",code));
+        var specification=Single(ReferenceRows("interest_rate_definitions","code",curve.Text("interest_rate_code")));
+        var pillars=DefinitionRows("rate_curve_points","curve_code",code).OrderBy(p=>p.GetProperty("ordinal").GetInt32()).Select(p=>new RatePillar(S(p.Id("series_id")),DateOnly.ParseExact(p.Text("maturity"),"yyyy-MM-dd",System.Globalization.CultureInfo.InvariantCulture))).ToImmutableArray();
         return new(new(revision,code),R(specification.Text("code")),R(specification.Text("currency_code")),specification.Text("day_count"),specification.Text("compounding"),specification.Text("implementation"),curve.Text("date_basis"),R(curve.Text("source_code")),pillars);
     }
     public ZeroRateBuild BuildRates(InputFrame frame,string code) => new ZeroRateCurve(RateDefinition(code)).Build(Snapshot(frame));
-    public bool IsRateCurve(string code)=>Definitions["rate_curves"].Any(c=>c.Text("code")==code);
+    public bool IsRateCurve(string code)=>DefinitionRows("rate_curves","code",code).Any();
     public (string Value,Guid[] Inputs) HistoryValue(InputFrame frame,string code,Guid? contract,Guid? series)
     {
         if(IsRateCurve(code))
@@ -539,7 +572,7 @@ public sealed class PreviewData
         }
         if(frame.CurveContracts.TryGetValue(code,out var selected) && selected.IsEmpty)
         {
-            if(!Definitions["curves"].Any(c=>c.Text("code")==code))throw new MarketDataException("missing_curve","Select an exact curve definition.");
+            if(!DefinitionRows("curves","code",code).Any())throw new MarketDataException("missing_curve","Select an exact curve definition.");
             return new {snapshotId=frame.Id,frame.Name,at=frame.At,curve=code,availability="no_remaining_contracts",
                 evaluated=0,numericalPolicy=CurveModel.NumericalPolicy,trace=Array.Empty<object>(),points=Array.Empty<object>(),observationIds=frame.ObservationIds};
         }
@@ -548,11 +581,11 @@ public sealed class PreviewData
         var trace=build.Evaluations.Select(e=>
         {
             var v=e.Result;
-            var c=Single(Definitions["contracts"].Where(c=>c.Id("id")==v.Request.Contract.Id));
-            var definition=Single(Definitions["curves"].Where(c=>c.Text("code")==v.Request.Curve.Code));
-            var multiplier=Definitions["curve_inputs"].SingleOrDefault(i=>i.Text("curve_code")==v.Request.Curve.Code&&i.Text("slot")=="multiplier");
+            var c=Single(contractDefinitions[v.Request.Contract.Id]);
+            var definition=Single(DefinitionRows("curves","code",v.Request.Curve.Code));
+            var multiplier=DefinitionRows("curve_inputs","curve_code",v.Request.Curve.Code).SingleOrDefault(i=>i.Text("slot")=="multiplier");
             return new {id=nodeIds[(v.Request,e.Use)],curve=v.Request.Curve.Code,contractId=v.Request.Contract.Id,
-                deliveryFrom=c.Text("delivery_from"),deliveryTo=c.Text("delivery_to"),priceTick=c.Text("kind")=="future"?Quotes.Single(q=>q.Key==v.Quote).ClearingIncrement.ToString():null,value=v.Price.Value.ToString(),quote=v.Quote.Code,
+                deliveryFrom=c.Text("delivery_from"),deliveryTo=c.Text("delivery_to"),priceTick=c.Text("kind")=="future"?QuoteRows(v.Quote.Code).Single(q=>q.Key==v.Quote).ClearingIncrement.ToString():null,value=v.Price.Value.ToString(),quote=v.Quote.Code,
                 rule=definition.Text("rule"),use=e.Use==InputUse.FrozenFact?"frozen":"variable",
                 source=definition.OptionalText("direct_source_code"),role=e.Use==InputUse.FrozenFact?"final_contract_settlement":definition.OptionalText("direct_role"),
                 inputs=e.Inputs.Select(i=>new {slot=i.Slot==InputSlot.Base?"base":"spread",id=nodeIds[(i.Source,i.Use)]}).ToArray(),
@@ -562,8 +595,8 @@ public sealed class PreviewData
         return new { snapshotId=frame.Id, frame.Name, at=frame.At, curve=code, evaluated=build.EvaluatedConstituents, numericalPolicy=build.NumericalPolicy,
             trace, points=build.Values.Select(v=>
             {
-                var c=Single(Definitions["contracts"].Where(c=>c.Id("id")==v.Request.Contract.Id));
-                return new { contractId=v.Request.Contract.Id,instrumentId=c.OptionalText("futures_series_code") is {} future?(Guid?)ContractIdentity.Futures(R(future)):null, deliveryFrom=c.Text("delivery_from"),deliveryTo=c.Text("delivery_to"),expiry=c.Text("expiry_at"),priceTick=c.Text("kind")=="future"?Quotes.Single(q=>q.Key==v.Quote).ClearingIncrement.ToString():null,value=v.Price.Value.ToString(),quote=v.Quote.Code,lineage=v.Lineage.Select(k=>k.Id).Order().ToArray() };
+                var c=Single(contractDefinitions[v.Request.Contract.Id]);
+                return new { contractId=v.Request.Contract.Id,instrumentId=c.OptionalText("futures_series_code") is {} future?(Guid?)ContractIdentity.Futures(R(future)):null, deliveryFrom=c.Text("delivery_from"),deliveryTo=c.Text("delivery_to"),expiry=c.Text("expiry_at"),priceTick=c.Text("kind")=="future"?QuoteRows(v.Quote.Code).Single(q=>q.Key==v.Quote).ClearingIncrement.ToString():null,value=v.Price.Value.ToString(),quote=v.Quote.Code,lineage=v.Lineage.Select(k=>k.Id).Order().ToArray() };
             }).ToArray(), observationIds=frame.ObservationIds };
     }
 }

@@ -33,18 +33,18 @@ public sealed partial class FuturesStore(PreviewManifest manifest)
         row:throw Error("futures_definition","The exact futures reference is unavailable.");
     public static FuturesMarketBinding Binding(PreviewData data,string curve,Guid contractId,Guid id,string implementation)
     {
-        var c=One(data.Definitions["curves"].Where(c=>c.Text("code")==curve));
+        var c=One(data.DefinitionRows("curves","code",curve));
         if(c.Text("rule")!="direct" ||
-            !data.Definitions["curve_members"].Any(m=>m.Text("curve_code")==curve&&m.Id("contract_id")==contractId))
+            !data.HasCurveMember(curve,contractId))
             throw Error("futures_definition","Select an exact dated member of a directly observed futures curve.");
-        var contract=data.Contracts.SingleOrDefault(c=>c.Key.Id==contractId)??throw Error("futures_definition","Select a retained futures contract.");
+        var contract=data.ContractRows(contractId).SingleOrDefault()??throw Error("futures_definition","Select a retained futures contract.");
         if(contract.FuturesSeries is not {} key)throw Error("futures_definition","The selected member is not a future.");
-        var series=One(data.References["futures_series"].Where(s=>s.Text("code")==key.Code));
-        var product=One(data.References["futures_products"].Where(p=>p.Text("code")==series.Text("product_code")));
+        var series=One(data.ReferenceRows("futures_series","code",key.Code));
+        var product=One(data.ReferenceRows("futures_products","code",series.Text("product_code")));
         var eligibleFrom=data.Admission.Require(product,series,c,implementation);
         if(product.Text("location_code")!=c.Text("location_code") || product.Text("commodity_code")!=c.Text("commodity_code"))
             throw Error("futures_definition","The selected futures curve must preserve the exact product commodity and location.");
-        var quote=data.Quotes.Single(q=>q.Key.Code==c.Text("quote_code"));
+        var quote=data.QuoteRows(c.Text("quote_code")).Single();
         return data.Model.BindFutures(id,new(new(contract.Key.Revision,curve),contract.Key),product.Text("settlement_method"),implementation,eligibleFrom);
     }
     public async Task<ImmutableArray<JsonElement>> Books(NpgsqlConnection connection,CancellationToken ct)=>
@@ -56,28 +56,28 @@ public sealed partial class FuturesStore(PreviewManifest manifest)
 
     public async Task<object> Catalog(NpgsqlConnection connection,PreviewData data,InputFrame frame,CancellationToken ct)
     {
-        var contracts=data.Definitions["curve_members"].Where(m=>data.Contracts.Any(c=>c.Key.Id==m.Id("contract_id")&&c.Kind==ContractKind.Future))
+        var contracts=data.Definitions["curve_members"].Where(m=>data.ContractRows(m.Id("contract_id")).Any(c=>c.Kind==ContractKind.Future))
             .Select(m=>Binding(data,m.Text("curve_code"),m.Id("contract_id"),m.Id("contract_id"),manifest.FuturesConvention))
             .Where(s=>s.EligibleFrom<=frame.At&&frame.At<s.Contract.Expiry).OrderBy(s=>s.Contract.DeliveryFrom).ToArray();
-        var market=contracts.Length==0?null:data.Model.Build(data.Snapshot(frame),contracts.Select(s=>s.Market).ToImmutableArray());
+        var prices=contracts.Length==0?null:data.Model.Build(data.Snapshot(frame),contracts.Select(s=>s.Market).ToImmutableArray()).Values.ToLookup(v=>v.Request);
         return new {books=await Books(connection,ct),bookingActor=await TradeAnnotations.Actor(connection,manifest.CatalogId,ct),legalEntities=await TradeParties.Catalog(connection,manifest.CatalogId,true,ct),counterparties=await TradeParties.Catalog(connection,manifest.CatalogId,false,ct),contracts=contracts.Select(s=>
         {
-            var series=One(data.References["futures_series"].Where(v=>v.Text("code")==s.Series.Key.Code));
-            var product=One(data.References["futures_products"].Where(v=>v.Text("code")==series.Text("product_code")));
-            var quantity=One(data.References["quantity_specifications"].Where(v=>v.Text("code")==s.Quote.Quantity.Code));
-            var unit=One(data.References["units"].Where(v=>v.Text("code")==quantity.Text("unit_code")));
-            var currency=One(data.References["currencies"].Where(v=>v.Text("code")==s.Quote.Currency.Code));
-            var source=data.References["sources"].SingleOrDefault(v=>v.Text("code")==product.Text("code"));
-            var index=data.References["futures_product_terms"].SingleOrDefault(v=>v.Text("product_code")==product.Text("code"));
+            var series=One(data.ReferenceRows("futures_series","code",s.Series.Key.Code));
+            var product=One(data.ReferenceRows("futures_products","code",series.Text("product_code")));
+            var quantity=One(data.ReferenceRows("quantity_specifications","code",s.Quote.Quantity.Code));
+            var unit=One(data.ReferenceRows("units","code",quantity.Text("unit_code")));
+            var currency=One(data.ReferenceRows("currencies","code",s.Quote.Currency.Code));
+            var source=data.ReferenceRows("sources","code",product.Text("code")).SingleOrDefault();
+            var index=data.ReferenceRows("futures_product_terms","product_code",product.Text("code")).SingleOrDefault();
             return new {quoteKind=s.Quote.Kind==QuoteKind.Basis?"basis":"outright",basisSettlement=s.Series.BasisSettlement,sourceUrl=source.ValueKind==JsonValueKind.Undefined?null:source.Text("locator"),index=s.Series.BasisSettlement?.Index.Code??(index.ValueKind==JsonValueKind.Undefined?null:index.OptionalText("index_code")),
                 eligibilityNote=product.Text("definition_state")=="candidate"?"Sourced contract terms admitted for sample trading with generated closing marks. Eligibility is separate from the exchange first-trade timestamp. Official settlements, variation margin and delivery are not processed.":manifest.FuturesConvention==FuturesMarketBinding.GeneralImplementation?"Synthetic admission starts on 1 October 2026; this is not the exchange first-listing date. Prices and available date range are illustrative. Exchange product facts and published lot totals are retained separately.":null,
                 id=s.Contract.Key.Id,instrumentId=s.Instrument.Id,curve=s.Market.Curve.Code,name=product.Text("name"),deliveryFrom=Date(s.Contract.DeliveryFrom),deliveryTo=Date(s.Contract.DeliveryTo),
-                firstTrading=s.Series.FirstTradingAt is {} first?Instant(first):null,eligibleFrom=Instant(s.EligibleFrom),lastTrading=Instant(s.Contract.Expiry),contractSize=s.LotSize.Amount.ToString(),nominalSize=s.Series.ContractSize.ToString(),nominalUnit=One(data.References["units"].Where(u=>u.Text("code")==product.Text("lot_unit_code"))).Text("symbol"),lotFactor=s.Series.LotResolution?.Factor.ToString(),lotResolution=s.Series.LotResolution?.Implementation,
+                firstTrading=s.Series.FirstTradingAt is {} first?Instant(first):null,eligibleFrom=Instant(s.EligibleFrom),lastTrading=Instant(s.Contract.Expiry),contractSize=s.LotSize.Amount.ToString(),nominalSize=s.Series.ContractSize.ToString(),nominalUnit=One(data.ReferenceRows("units","code",product.Text("lot_unit_code"))).Text("symbol"),lotFactor=s.Series.LotResolution?.Factor.ToString(),lotResolution=s.Series.LotResolution?.Implementation,
                 unit=unit.Text("symbol"),currency=currency.Text("display_code"),quoteMultiplier=s.Quote.Multiplier.ToString(),tick=s.Quote.TradingTick.ToString(),
                 clearingIncrement=s.Quote.ClearingIncrement.ToString(),minimumPrice=s.Quote.Minimum.ToString(),maximumPrice=s.Quote.Maximum.ToString(),
                 contract=s.Contract.Key,series=s.Series.Key,quote=s.Quote.Key,lotQuantity=s.Series.LotQuantity,
                 priceUnit=new {s.Quote.Currency,s.Quote.Quantity,multiplier=s.Quote.Multiplier.ToString()},
-                lotBasis=product.Text("lot_basis"),settlementMethod=s.SettlementMethod,mark=market!.Values.Single(v=>v.Request==s.Market).Price.Value.ToString()};
+                lotBasis=product.Text("lot_basis"),settlementMethod=s.SettlementMethod,mark=prices![s.Market].Single().Price.Value.ToString()};
         }).ToArray(),convention=manifest.FuturesConvention};
     }
     public async Task<object> Holdings(NpgsqlConnection connection,PreviewData data,InputFrame frame,CancellationToken ct)
