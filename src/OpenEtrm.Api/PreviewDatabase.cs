@@ -14,7 +14,8 @@ public sealed record PreviewManifest(string Mode, Guid CatalogId, Guid RevisionI
     PreviewSequenceCoverage[]? Schedules = null,PreviewSwapMarket[]? SwapMarkets=null, PreviewUnitCatalog? UnitCatalog=null,string IdentityIssuer="https://preview.invalid",string FuturesConvention="fixed_total_cash_execution_pnl_v1");
 public sealed record PreviewUnitCatalog(Guid ReferenceRevisionId,Guid DefinitionRevisionId);
 public sealed record UnitCatalogData(ReferenceRevision Revision,ImmutableDictionary<string,ImmutableArray<JsonElement>> References);
-public enum ReferenceReadScope { DefinitionClosure, AllVisible }
+public enum ReferenceReadScope { DefinitionClosure, AllVisible, TradeValuation }
+public enum ObservationReadScope { FactHistory, ExactPins }
 public sealed record ReferencePage(string Table,ImmutableArray<JsonElement> Rows,
     ImmutableDictionary<string,ImmutableArray<JsonElement>> References,int Offset,int PageSize,int MaximumOffset,bool HasMore,string Search,
     ReferenceRevision ReferenceRevision,Guid DefinitionRevisionId);
@@ -125,7 +126,8 @@ SELECT NOT(rolsuper OR rolbypassrls OR rolcreatedb OR rolcreaterole) AND pg_has_
     }
 
     public async Task<PreviewData> Read(NpgsqlConnection connection, CancellationToken ct,Guid? selectedRevision=null,PreviewData? sharedReferences=null,ImmutableArray<Guid>? observationIds=null,
-        ReferenceReadScope referenceScope=ReferenceReadScope.DefinitionClosure,bool includeCalendarDays=true)
+        ReferenceReadScope referenceScope=ReferenceReadScope.DefinitionClosure,bool includeCalendarDays=true,
+        ObservationReadScope observationScope=ObservationReadScope.FactHistory)
     {
         if(selectedRevision is {} requested&&requested!=Manifest.RevisionId&&!(Manifest.SwapMarkets??[]).Any(m=>m.RevisionId==requested))throw new PreviewDeniedException();
         var selectedManifest=selectedRevision is {} id?Manifest with {RevisionId=id}:Manifest;
@@ -148,9 +150,14 @@ SELECT NOT(rolsuper OR rolbypassrls OR rolcreatedb OR rolcreaterole) AND pg_has_
         }
         await RequireSharedReferenceAccess();
         references=await ReadReferences(connection,selectedManifest,definitions,referenceScope,includeCalendarDays,sharedReferences,ct);
-        var observations = observationIds is {} pins
-            ? await ReadObservationFacts(connection, selectedManifest, pins, ct)
-            : await Rows(connection, "SELECT row_to_json(t)::text FROM (SELECT * FROM market_data.observations WHERE catalog_id=$1 AND definition_revision_id=$2 ORDER BY observed_at,received_at,id) t", [selectedManifest.CatalogId, selectedManifest.RevisionId], ct);
+        var observations = await (observationScope switch
+        {
+            ObservationReadScope.ExactPins => ReadObservationPins(connection,selectedManifest,
+                observationIds??throw new ArgumentException("Exact observation reads require explicit pins.",nameof(observationIds)),ct),
+            ObservationReadScope.FactHistory when observationIds is {} pins => ReadObservationFacts(connection,selectedManifest,pins,ct),
+            ObservationReadScope.FactHistory => Rows(connection, "SELECT row_to_json(t)::text FROM (SELECT * FROM market_data.observations WHERE catalog_id=$1 AND definition_revision_id=$2 ORDER BY observed_at,received_at,id) t", [selectedManifest.CatalogId, selectedManifest.RevisionId], ct),
+            _ => throw new ArgumentOutOfRangeException(nameof(observationScope))
+        });
         await RequireSharedReferenceAccess();
         return new PreviewData(selectedManifest, definitions, references, observations);
     }
@@ -178,6 +185,8 @@ SELECT NOT(rolsuper OR rolbypassrls OR rolcreatedb OR rolcreaterole) AND pg_has_
                 predicate=$" AND {column}=ANY($3::text[])";
                 parameters=[..parameters,selected];
             }
+            if(scope==ReferenceReadScope.TradeValuation&&table=="futures_milestones")
+                predicate+=" AND milestone IN ('first_trading','last_trading')";
             return await Rows(connection,$"SELECT row_to_json(t)::text FROM(SELECT * FROM ref_data.{table} WHERE catalog_id=$1 AND revision_id=$2{predicate})t",parameters,ct);
         }
         if(scope==ReferenceReadScope.AllVisible)
@@ -296,6 +305,18 @@ SELECT NOT(rolsuper OR rolbypassrls OR rolcreatedb OR rolcreaterole) AND pg_has_
         ("quantity_specifications",["quantity_code","numerator_quantity_code","denominator_quantity_code"]),
         ("measurement_bases",["basis_code"]),("price_index_definitions",["index_a_code","index_b_code"])
     ];
+
+    private static Task<ImmutableArray<JsonElement>> ReadObservationPins(NpgsqlConnection connection,PreviewManifest manifest,ImmutableArray<Guid> pins,CancellationToken ct)
+    {
+        if(pins.IsEmpty)return Task.FromResult(ImmutableArray<JsonElement>.Empty);
+        return Rows(connection,"""
+            SELECT row_to_json(t)::text FROM (
+                SELECT * FROM market_data.observations
+                WHERE catalog_id=$1 AND definition_revision_id=$2 AND id=ANY($3::uuid[])
+                ORDER BY observed_at,received_at,id
+            ) t
+            """,[manifest.CatalogId,manifest.RevisionId,pins.ToArray()],ct);
+    }
 
     private static Task<ImmutableArray<JsonElement>> ReadObservationFacts(NpgsqlConnection connection,PreviewManifest manifest,ImmutableArray<Guid> pins,CancellationToken ct)
     {

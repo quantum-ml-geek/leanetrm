@@ -856,6 +856,12 @@ First pricing may explicitly request complete catalog metadata from the same
 authorized evaluation read, with unchanged default evaluation behavior and
 separate selected-source versus catalog-observation projections. Verify one
 context bind, exact metadata/source validation and first-use chart readiness.
+Priced trading workspace reads explicitly limit milestone metadata to the required
+first/last-trading facts and primary observations to the selected snapshot pins.
+Checks compare complete retained catalog/report responses, reject missing required
+facts and prove unused metadata/corrections are not read. Generic/full metadata
+reads and supplemental swap correction resolution retain their existing scope;
+end-to-end cold-entry performance requires separate qualification.
 Reference reads avoid a duplicate permissive scope check only where the mandatory
 restrictive visibility policy already checks the same current authority per row.
 Exact policy/helper guards and expiry, scope, historical and policy-composition
