@@ -1,12 +1,14 @@
 import {renderRegularTable} from './regular-table.js';
+import {zonedInput} from './user-time.js';
 import {JobRequest} from './job-requests.js';
 
 type Job={id:string;name:string;operation:string;state:string;version:number;dueAt:string;expiresAt:string;owner:string;mine:boolean;actions:string[];runs:{state:string;startedAt:string;attempt:number;observation:string|null;errorCode:string|null}[]};
 type Node={clusterId:string;id:string;version:number;name:string;role:string;state:string;availability:string;cpuNano:number;memoryBytes:number;observedAt:string;stale:boolean;actions:string[]};
 type Directory={page:number;total:number;jobs:Job[];profiles:{id:string;version:number;name:string}[];canCreate:boolean;manageAll:boolean;observedAt:string;infrastructure:{state:string;observedAt:string|null;nodes:Node[];commands:{id:string;nodeId:string;availability:string;state:string;errorCode:string|null;createdAt:string;canResolve:boolean}[]}};
-export function setupJobs(options:{api:<T>(path:string,body?:unknown)=>Promise<T>;act:(work:()=>Promise<void>)=>Promise<void>;busy:()=>boolean;identity:()=>string;instant:(at:string)=>string}){
+export function setupJobs(options:{api:<T>(path:string,body?:unknown)=>Promise<T>;act:(work:()=>Promise<void>)=>Promise<void>;busy:()=>boolean;identity:()=>string;instant:(at:string)=>string;zone:()=>string}){
   const get=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id) as T;
   const field=(id:string)=>get<HTMLInputElement|HTMLSelectElement>(id);
+  const dueInput=zonedInput(get<HTMLInputElement>('job-due'),options.zone,options.api),expiryInput=zonedInput(get<HTMLInputElement>('job-expires'),options.zone,options.api);
   const pending=new JobRequest();
   let directory:Directory|undefined;
   const key=()=>`openetrm.jobs.request.${options.identity()}`;
@@ -54,12 +56,12 @@ export function setupJobs(options:{api:<T>(path:string,body?:unknown)=>Promise<T
     if(pending.command)throw Error('Reconcile the outstanding job request first.');
     const frequency=field('job-frequency').value;if(!['once','interval'].includes(frequency))throw Error('Choose a frequency.');
     const due=field('job-due').value,expires=field('job-expires').value;
-    if(!due||!expires)throw Error('Supply explicit UTC due and expiry times.');
+    if(!due||!expires)throw Error('Supply due and expiry times in your display time zone.');
     const profile=directory?.profiles.find(p=>`${p.id}:${p.version}`===field('job-profile').value);
-    await mutate('jobs/create',{name:field('job-name').value,operation:field('job-operation').value,dueAt:due+'Z',expiresAt:expires+'Z',
+    await mutate('jobs/create',{name:field('job-name').value,operation:field('job-operation').value,dueAt:await dueInput.instant(),expiresAt:await expiryInput.instant(),
       intervalSeconds:frequency==='once'?null:Number(field('job-interval').value),timeZone:'UTC',misfire:'run_once',overlap:'forbid',
       timeoutSeconds:Number(field('job-timeout').value),maximumAttempts:Number(field('job-attempts').value),profileId:profile?.id??null,profileVersion:profile?.version??null});
   });};
   function sync(){get<HTMLButtonElement>('jobs-previous').disabled=options.busy()||!directory||directory.page===0;get<HTMLButtonElement>('jobs-next').disabled=options.busy()||!directory||(directory.page+1)*100>=directory.total;}
-  return{load,sync,refresh:render,reset(){clear();pending.clear();try{const stored=sessionStorage.getItem(key());if(stored){const value=JSON.parse(stored);if(['jobs/create','jobs/control','infrastructure/availability','infrastructure/resolve'].includes(value.path)&&typeof value.operationId==='string'&&value.body&&typeof value.body==='object')pending.command={...value,uncertain:true};}}catch{/* Invalid browser state cannot grant authority. */}get<HTMLFormElement>('job-create').reset();fields();get('job-pending').hidden=!pending.command;}};
+  return{load,sync,refresh(){dueInput.refresh();expiryInput.refresh();render();},reset(){dueInput.clear();expiryInput.clear();clear();pending.clear();try{const stored=sessionStorage.getItem(key());if(stored){const value=JSON.parse(stored);if(['jobs/create','jobs/control','infrastructure/availability','infrastructure/resolve'].includes(value.path)&&typeof value.operationId==='string'&&value.body&&typeof value.body==='object')pending.command={...value,uncertain:true};}}catch{/* Invalid browser state cannot grant authority. */}get<HTMLFormElement>('job-create').reset();fields();get('job-pending').hidden=!pending.command;}};
 }

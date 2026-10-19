@@ -10,10 +10,9 @@ export async function run({command,evaluate,wait,click,set,persona,check,shot,id
  await select('nymex_ng','Nov');
  await check('physical Henry Hub futures show typed lot, execution tick and lifecycle scope',"(()=>{const t=document.querySelector('#futures-terms').textContent;return t.includes('10000 MMBtu')&&t.includes('physical delivery')&&t.includes('Execution tick 0.001')&&t.includes('daily/final settlement is not processed');})()");
  await select('ice_spm','Nov');await check('monthly power distinguishes nominal MW from dated MWh per lot',"(()=>{const t=document.querySelector('#futures-terms').textContent;return t.includes('384 MWh per lot')&&t.includes('nominal 1 MW');})()");
- await select('ice_spm','Dec');await check('different delivery periods retain their own published power lot',"document.querySelector('#futures-terms').textContent.includes('416 MWh per lot')");
+ await select('ice_spm','Jan');await check('different delivery periods retain their own published power lot',"document.querySelector('#futures-terms').textContent.includes('400 MWh per lot')");
  await select('ice_wah','Nov');await check('basis future shows its exact benchmark and independent quote meaning',"(()=>{const t=document.querySelector('#futures-terms').textContent;return t.includes('waha_bidweek minus nymex_ng_20261101')&&t.includes('own market factor');})()");
- await select('ice_css','Oct');await check('daily swing has a fixed gas lot',"(()=>{const t=document.querySelector('#futures-terms').textContent;return t.includes('2500 MMBtu')&&t.includes('fixed total');})()");
- await select('test_calendar_day_gas','Nov');await check('daily-rate control is explicitly synthetic and retains its total period lot',"(()=>{const t=document.querySelector('#futures-terms').textContent;return t.includes('75000 MMBtu')&&t.includes('not exchange-listed')&&t.includes('per delivery day');})()");
+ await check('unconfirmed daily maturities are excluded from trading',"![...document.querySelector('#futures-contract').options].some(o=>o.value.includes('ice_css')||o.value.includes('ice_pda'))");
  await shot('exchange-contract-entry');
  await command('Page.navigate',{url:url+'/'});await wait("document.querySelectorAll('.curve-button').length>0&&"+idle);await persona('trader');await click('#example');await click('#nav-futures');
  await check('returning to the original example restores its independent dated catalog',"document.querySelector('#example-dataset').value==='baseline'&&document.querySelector('#futures-contract').options.length===7");

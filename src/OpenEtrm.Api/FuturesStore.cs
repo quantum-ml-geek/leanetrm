@@ -41,7 +41,7 @@ public sealed partial class FuturesStore(PreviewManifest manifest)
         if(contract.FuturesSeries is not {} key)throw Error("futures_definition","The selected member is not a future.");
         var series=One(data.ReferenceRows("futures_series","code",key.Code));
         var product=One(data.ReferenceRows("futures_products","code",series.Text("product_code")));
-        var eligibleFrom=data.Admission.Require(product,series,c,implementation);
+        var eligibleFrom=data.ExecutionPolicies.Resolve(product,series,c,implementation);
         if(product.Text("location_code")!=c.Text("location_code") || product.Text("commodity_code")!=c.Text("commodity_code"))
             throw Error("futures_definition","The selected futures curve must preserve the exact product commodity and location.");
         var quote=data.QuoteRows(c.Text("quote_code")).Single();
@@ -68,9 +68,14 @@ public sealed partial class FuturesStore(PreviewManifest manifest)
             var unit=One(data.ReferenceRows("units","code",quantity.Text("unit_code")));
             var currency=One(data.ReferenceRows("currencies","code",s.Quote.Currency.Code));
             var source=data.ReferenceRows("sources","code",product.Text("code")).SingleOrDefault();
+            var selectedCurve=One(data.DefinitionRows("curves","code",s.Market.Curve.Code));
+            var priceSource=One(data.ReferenceRows("sources","code",selectedCurve.Text("direct_source_code")));
+            var firstMilestone=One(data.ReferenceRows("futures_milestones","series_code",series.Text("code")).Where(v=>v.Text("milestone")=="first_trading"));
             var index=data.ReferenceRows("futures_product_terms","product_code",product.Text("code")).SingleOrDefault();
             return new {quoteKind=s.Quote.Kind==QuoteKind.Basis?"basis":"outright",basisSettlement=s.Series.BasisSettlement,sourceUrl=source.ValueKind==JsonValueKind.Undefined?null:source.Text("locator"),index=s.Series.BasisSettlement?.Index.Code??(index.ValueKind==JsonValueKind.Undefined?null:index.OptionalText("index_code")),
-                eligibilityNote=product.Text("definition_state")=="candidate"?"Sourced contract terms admitted for sample trading with generated closing marks. Eligibility is separate from the exchange first-trade timestamp. Official settlements, variation margin and delivery are not processed.":manifest.FuturesConvention==FuturesMarketBinding.GeneralImplementation?"Synthetic admission starts on 1 October 2026; this is not the exchange first-listing date. Prices and available date range are illustrative. Exchange product facts and published lot totals are retained separately.":null,
+                eligibilityNote="Execution eligibility is a selected application policy, separate from the exchange first-trading fact.",
+                firstTradingDate=firstMilestone.OptionalText("business_date"),priceRole=selectedCurve.Text("direct_role"),
+                priceSource=new{code=priceSource.Text("code"),kind=priceSource.Text("kind"),locator=priceSource.Text("locator")},
                 id=s.Contract.Key.Id,instrumentId=s.Instrument.Id,curve=s.Market.Curve.Code,name=product.Text("name"),deliveryFrom=Date(s.Contract.DeliveryFrom),deliveryTo=Date(s.Contract.DeliveryTo),
                 firstTrading=s.Series.FirstTradingAt is {} first?Instant(first):null,eligibleFrom=Instant(s.EligibleFrom),lastTrading=Instant(s.Contract.Expiry),contractSize=s.LotSize.Amount.ToString(),nominalSize=s.Series.ContractSize.ToString(),nominalUnit=One(data.ReferenceRows("units","code",product.Text("lot_unit_code"))).Text("symbol"),lotFactor=s.Series.LotResolution?.Factor.ToString(),lotResolution=s.Series.LotResolution?.Implementation,
                 unit=unit.Text("symbol"),currency=currency.Text("display_code"),quoteMultiplier=s.Quote.Multiplier.ToString(),tick=s.Quote.TradingTick.ToString(),

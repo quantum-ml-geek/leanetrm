@@ -191,7 +191,7 @@ async Task<IResult> Locked(HttpContext context,Func<PreviewSession,Task<IResult>
     try {return await work(session);} finally {session.Gate.Release();}
 }
 string Profile(PreviewSession session)=>session.Profile ?? throw new PreviewDeniedException();
-api.MapPost("/time/inspect",(HttpContext c,LocalTimeRequest body)=>Locked(c,session=>database.WithIdentity(Profile(session),"ReadMarketData",(_,_)=>
+api.MapPost("/time/inspect",(HttpContext c,LocalTimeRequest body)=>Locked(c,session=>database.WithIdentity(Profile(session),null,(_,_)=>
     Task.FromResult<IResult>(Results.Ok(new{candidates=UserTime.Inspect(body.LocalTime,body.TimeZone)})),c.RequestAborted)));
 InputFrame Frame(PreviewSession session,Guid id)=>session.Frames.TryGetValue(id,out var frame) && frame.ContextId==session.MarketContext?.ContextId?frame:throw new MarketDataException("snapshot_missing","Select a saved input snapshot from this preview session.");
 api.MapPost("/profile",(HttpContext c,ProfileRequest body)=>Locked(c,session=>

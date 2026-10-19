@@ -609,7 +609,7 @@ local release boundary; identified findings were resolved. Futures scope remains
 execution P&L and deterministic open shocks. Final settlement, variation-margin
 transitions and physical delivery processing remain unimplemented.
 
-The retained local preview was updated on its owned stock PostgreSQL16.14 database.
+The retained local preview was updated on its owned stock PostgreSQL 16.14 database.
 Migrations0022–0024 and the isolated exchange namespace committed atomically after
 asserting every pre-existing baseline trading row unchanged. Main manifest bytes
 and reference pins remained unchanged. Private-port and final-URL acceptance
@@ -629,7 +629,7 @@ historical view. Rejected writes retain no trading publication.
 Risk unit cash and execution bases now remain ExactMoney until final position
 scaling/conversion. Independent oracles cover opposite-sign near-limit prices,
 quote multipliers and sub-decimal unit cash with a representable final result.
-The focused stock PostgreSQL16.14 authority/identity checks and252 managed core
+The focused stock PostgreSQL 16.14 authority/identity checks and252 managed core
 checks passed. The Release benchmark rechecked every position/book against its
 independent reference; current work, allocations and timing are recorded in
 [risk-benchmark.md](risk-benchmark.md). Its mixed performance is not a service
@@ -754,3 +754,51 @@ records 50,000-position workload, unit/scenario counts, memory and measured phas
 costs. Service capacity, durable runs and complete futures settlement PV remain
 unqualified. The isolated PR candidate preserves the current public reference-data and
 scheduler contracts.
+
+## Standard execution policies and source facts
+
+On 2026-10-19, `tools/check_all.py` passed on stock PostgreSQL 16.14, the pinned
+.NET/Node toolchains and Chrome. It ran 277 managed core checks, 116 frontend checks,
+255 standard browser checks, 25 focused party/power checks, 14 unit/precision
+checks, eight exchange checks, eleven job checks and 24 mixed-period HTTP checks,
+plus schema, authorization, temporal, automation and hosted-authentication suites.
+All database/browser resources were owned and disposable.
+
+The standard futures execution-policy fixture preserves a date-only source fact,
+requires its qualified next-local-date offset/tzdb proof and books at the explicit
+bound using the declared price source/role. Raw authorized operations reject
+missing policies, conflicting sources/roles, early bounds, date-proof bypass,
+wrong fixed offsets, stale declared tzdb, repeated/skipped Havana midnights,
+conflicting policies under another pricing convention, revoked scopes and
+invisible history.
+The public booking regression proves authorization precedes reading conflicting
+reference economics. Independent Chicago spring/fall oracles retain 05:00/06:00 UTC
+boundaries, with no fabricated source event. Eligibility remains outside contract
+identity and external lot scaling remains unchanged. An owned 0039-to-0040
+upgrade preserves original admissions and native milestone facts, converts the
+exact retained source/role/bound, and rejects ambiguous price-source mappings.
+
+The revised exchange example has 19 real product definitions and 72 source-confirmed
+monthly maturities. Only 61 have qualified cutoff instants and executable market
+rows; eleven year-end cutoffs stay unknown. Daily product terms are retained but
+no daily maturities are inferred from listing cycles. Generated prices use the
+separate synthetic source and `trader_mark` role. Invented product/venue controls
+remain outside the exchange catalog. Ordinary-session time qualification and
+bounded calendar coverage are described in [the example](exchange-futures.md).
+This supersedes the earlier 113-contract example, which included an invented unit
+control and inferred daily rows.
+
+Job entry resolves the selected user clock through the managed resolver; a Tokyo
+entry yields the correct UTC request, and switching accounts refreshes its zone
+label. Stored instants and elapsed-interval recurrence remain UTC. Literal
+first-trading/booking/delivery dates are not shifted or labeled as user-zone
+instants. Explicit contractual clock inputs retain their authored convention.
+
+Independent adversarial code review found no remaining concrete blocker after
+these regressions were resolved. It did not independently re-fetch exchange
+source records. Migration 0040 and existing-installation reconciliation still need
+a qualified release; these local checks did not update a hosted database or
+establish full futures lifecycle support. Contract-sequence shortcuts retain
+the current eligibility-based selection semantics under the selected generic
+policy; the date-only fixture reconciles their bound with the trading catalog,
+and missing qualification rejects the sequence.
