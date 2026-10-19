@@ -22,6 +22,7 @@ if (args is ["--hosted-access"])
     return;
 }
 if(args is ["--power-collection"]){Environment.ExitCode=await PowerImportChecks.MalformedCollection();return;}
+if(args is ["--market-reads",var marketFixture]){await MarketReadChecks.Run(marketFixture);return;}
 if (args is ["--power-imports"])
 {
     PowerImportChecks.Run();return;
