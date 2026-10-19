@@ -1176,9 +1176,11 @@ sample dataset links quotes, rates and trades to `usd` / `USD` / `US Dollar` in
 
 Shared grids suppress row activation after pointer dragging, text selection or
 scrolling. Deliberate pointer and keyboard activation preserve source-row identity
-through virtual scrolling. Schedule tables have a single bounded scrolling area;
-shared table text uses consistent spacing and tabular numeric alignment without
-changing exact values or exports.
+through virtual scrolling. A column width a person sets survives later redraws at
+another grid width, such as when an opened menu adds a page scrollbar, and a saved
+view stores it. Schedule tables have a single bounded scrolling area; shared table
+text uses consistent spacing and tabular numeric alignment without changing exact
+values or exports.
 
 The separately selectable [exchange futures example](exchange-futures.md) uses
 public product facts and synthetic observations. V2 lot normalization supports
