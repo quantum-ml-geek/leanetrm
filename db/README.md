@@ -400,3 +400,18 @@ reference-calendar schedule publication. Accepted retries retain their original
 control ordinal and create no new publication. Drain runtime writes for upgrades.
 The display-name migration still rejects populated unnamed catalogs; this
 sequence does not claim an automatic upgrade of those retained installations.
+
+## Page-assistant model providers
+
+[0043_model_providers.sql](migrations/0043_model_providers.sql) grants
+`ManageModelProviders` to access administrators and adds the `assistant` schema
+for the page assistant's providers ([ai-assistant.md](../docs/ai-assistant.md)
+§5): one provider per workspace and vendor, insert-only credentials and an
+append-only administration audit. No provider, credential or key material is
+installed. The API seals each key itself, so the key never reaches a statement,
+parameter or log: the database holds only nonce, ciphertext, tag and last four
+characters, and the audit a redaction marker with a keyed retry digest. The runtime
+has no table access; three definer operations recheck `ManageModelProviders` and
+refuse delegated agent contexts. Providers stay unqualified until their adapters
+ship. As a new migration it stops automatic hosted updates until the
+operator qualifies a new baseline (D135).

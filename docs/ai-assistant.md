@@ -1,18 +1,22 @@
 # Page assistant, phase 1: local-preview core
 
-Status: design proposal; implementation follows §12. Implemented so far, from step 2:
-the market and reference page reads (`MarketReads`) and the schedule library, TOU
-product and power hour catalog reads (`ScheduleReads`), extracted under a page-view
-`PinnedContext` (a retained context, or working data that binds nothing), and the trade
-party read (`PartyReads`) and the trading workspace, Blotter and trade detail reads
-(`TradeReads`), which bind the dated cutoff of a `TradingView`: for working data a
+Status: design proposal; implementation follows §12. Step 2 is complete for the §7.3
+read tools: the market and reference page reads (`MarketReads`) and the schedule
+library, TOU product and power hour catalog reads (`ScheduleReads`), extracted under a
+page-view `PinnedContext` (a retained context, or working data that binds nothing), and
+the trade party read (`PartyReads`) and the trading workspace, Blotter and trade detail
+reads (`TradeReads`), which bind the dated cutoff of a `TradingView`: for working data a
 context captured from current knowledge at the frame's date or, for trades, any context
-captured earlier for that date, otherwise the retained context. Other page operations
-are still page handlers, among them contract shortcuts, date resolution, the date picker
-catalog, the power hour calculation and the other trading reads (catalogs, the
-futures-only Blotter and holdings, deal formats, drafts, previews and risk), which run
-on the trade reads' shared path. The turn's working-data pin (§7.2), which binds a
-captured context, is not implemented.
+captured earlier for that date, otherwise the retained context. The other page
+operations stay page handlers because no tool reads them: session drafts (contract
+shortcuts and draft date schedules), calculations (the power hour calculation and date
+resolution), the date picker's projection of the library and the other trading reads
+(catalogs, the futures-only Blotter and holdings, deal formats, drafts, previews and
+risk), which run on the trade reads' shared path. From step 3, `ManageModelProviders`,
+provider and write-only credential storage with key custody, and the Providers read and
+Replace key operations are implemented; models, prices and the Settings › AI tabs are
+not. The turn's working-data pin (§7.2), which binds a captured context, is not
+implemented.
 
 The page assistant ships in three phases, each with its own design:
 
@@ -175,7 +179,12 @@ model unpriced. Grants use the existing `security.agent_delegations` and
 
 - A key is entered through a dedicated operation. The C# boundary removes it before
   any SQL parameter, log or audit write; the audit keeps a redaction marker and a
-  keyed hash so an identical retry is recognized and a different one is a conflict.
+  keyed hash of the workspace, request identity, vendor and key, so an identical retry
+  is recognized and a different one is a conflict. Malformed input is
+  `model_admin_input`, and a body that does not bind, such as one with an unknown
+  field, is a bad request; reusing a request identity for another request or acting on
+  a stale provider version is `model_admin_conflict`; an outcome the API cannot confirm
+  is `model_admin_outcome_unknown`.
 - The browser holds the key only in the form field and the in-flight request, never in
   storage, a URL or the pending-command record, and clears the field when the request
   settles. After an uncertain outcome the tab shows current credential status; Retry
@@ -184,7 +193,8 @@ model unpriced. Grants use the existing `security.agent_delegations` and
   each in its own private file: an AES-GCM key-encryption key and an HMAC-SHA-256
   retry-hash key, passed to every API start. Each seal uses a fresh 96-bit nonce from
   `RandomNumberGenerator` and a 128-bit tag; associated data is provider identity,
-  vendor and credential version. A missing or wrong key file or a failed tag is
+  vendor and credential version. A key file that is unset, missing, a symbolic link,
+  not exactly 32 bytes or open to anyone but its owner, and a failed tag, are
   `credential_unavailable`. Nothing is generated at API start, and nothing depends on
   ASP.NET data protection. Rotation is out of scope; losing a file means re-entering
   every key.
@@ -875,8 +885,9 @@ synthetic data and the fake provider. The cases that coverage does not imply:
   identifiers and no uncaught errors.
 - **Changed and hosted checks:** `check_admin_preview.py` expects `agent_managed`;
   `run_preview.py --hosted-check` expects explicit human roles; `check_hosted_http.py`
-  finds assistant routes 404, the assistant reported unavailable, no provider client
-  and no turn, call or usage row changed by a hosted start.
+  finds assistant routes unmapped (404, and `request_token` for a POST), the assistant
+  reported unavailable, no provider client and no turn, call or usage row changed by a
+  hosted start.
 - **Pool isolation:** turns at the workspace limit against a fixed-latency fake, one
   capture per ask and one stream per turn, with a fixed UI mix of working-data and
   explicit-cutoff reads; record environment, pool sizes, UI latency with and without

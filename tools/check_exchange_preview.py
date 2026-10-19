@@ -135,6 +135,12 @@ def run_checks(url,query=None,manifest=None):
     c.call('profile',{'profile':'admin'})
     c.call('admin/update',{'operationId':str(uuid4()),'id':first['id'],'expectedVersion':first['version'],'name':first['name'],'enabled':False,'roles':['viewer']},expected=409)
     print('PASS namespace administration: same-login accounts are independent, newly created users sign in, revocation is scoped and cross-workspace updates reject.',flush=True)
+    # Each example workspace keeps its own page-assistant providers and audit.
+    base.call('profile',{'profile':'admin'})
+    stored=base.call('settings/ai/providers/key',{'operationId':str(uuid4()),'vendor':'anthropic','expectedVersion':0,'key':'sk-synthetic-example-'+uuid4().hex})
+    exchange=c.call('settings/ai/providers')
+    assert stored['credential']['version']==1 and exchange['audit']==[] and all(p['credential'] is None and p['version']==0 for p in exchange['providers'])
+    print('PASS each example workspace administers its own model providers.',flush=True)
     if query is not None:
         import json
         assert query(f"SELECT count(*) FROM ref_data.futures_products WHERE catalog_id='{manifest['referenceCatalogId']}' AND definition_state='synthetic';")=='0'
