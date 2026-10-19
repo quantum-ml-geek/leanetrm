@@ -92,9 +92,9 @@ public static class PowerPreview
                         he=$"HE{i*minutes/60+1:D2}"+(minutes==60?"":$" +{i*minutes%60:D2}m"),
                         hb=$"HB{i*minutes/60:D2}"+(minutes==60?"":$" +{i*minutes%60:D2}m")}).ToArray()};
             }))),
-            // Only contracts with one explicit settlement index are offered; each carries its holiday calendar.
+            // Only contracts with one explicit settlement index are offered, by delivery date; each carries its holiday calendar.
             curves=data.Definitions["curves"].Where(c=>PerMwhOutright(data,c)).Select(c=>new {code=c.Text("code"),
-                contracts=data.Contracts.Where(k=>frame.CurveContracts.TryGetValue(c.Text("code"),out var members)&&members.Contains(k.Key.Id))
+                contracts=data.Contracts.Where(k=>frame.CurveContracts.TryGetValue(c.Text("code"),out var members)&&members.Contains(k.Key.Id)).OrderBy(k=>k.DeliveryFrom)
                     .Select(k=>(Contract:k,Index:IndexCode(data,c,k))).Where(k=>k.Index is not null).Select(k=>new {
                         id=k.Contract.Key.Id,from=k.Contract.DeliveryFrom.ToString("yyyy-MM-dd",CultureInfo.InvariantCulture),to=k.Contract.DeliveryTo.ToString("yyyy-MM-dd",CultureInfo.InvariantCulture),
                         holidayCalendar=Calendar(data,Index(data,k.Index!)).Text("code")}).ToArray()}).Where(c=>c.contracts.Length>0),
