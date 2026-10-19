@@ -11,10 +11,7 @@ public sealed record PinnedContext
 {
     private PinnedContext(ScheduleContext? context,InputFrame? frame)
     {
-        // A retained context names its id and every coordinate; none is ever filled in later.
-        if(context is {ContextId:null} or {EffectiveOn:null} or {KnownAt:null} or {KnownThrough:null})
-            throw new TemporalException("temporal_context","Pin an exact retained context.");
-        Context=context;
+        Context=context is null?null:Exact(context);
         Frame=frame is null?null:Require(frame);
     }
     // The selected retained context, or null for current working data.
@@ -25,12 +22,16 @@ public sealed record PinnedContext
     public InputFrame RequireFrame()=>Frame??throw Missing();
     // A frame belongs to exactly one knowledge view; working frames carry no context.
     public InputFrame Require(InputFrame? frame)=>frame is not null && frame.ContextId==Context?.ContextId?frame:throw Missing();
-    // Binds the stored context only when its coordinates are exactly the pin's, so a read never mixes two views.
-    public async Task Bind(NpgsqlConnection connection,Guid catalog,CancellationToken ct)
+    public Task Bind(NpgsqlConnection connection,Guid catalog,CancellationToken ct)=>
+        Context is null?Task.CompletedTask:BindExact(connection,catalog,Context,ct);
+    // A stored context names its id and every coordinate; none is ever filled in later.
+    internal static ScheduleContext Exact(ScheduleContext context)=>context is {ContextId:null} or {EffectiveOn:null} or {KnownAt:null} or {KnownThrough:null}
+        ?throw new TemporalException("temporal_context","Pin an exact retained context."):context;
+    // Binds a stored context only when its coordinates are exactly those named, so a read never mixes two views.
+    internal static async Task BindExact(NpgsqlConnection connection,Guid catalog,ScheduleContext context,CancellationToken ct)
     {
-        if(Context is null)return;
-        await new KnowledgeStore(catalog).Retained(connection,Context,ct);
-        await MarketContextStore.Bind(connection,catalog,Context,ct);
+        await new KnowledgeStore(catalog).Retained(connection,context,ct);
+        await MarketContextStore.Bind(connection,catalog,context,ct);
     }
-    static MarketDataException Missing()=>new("snapshot_missing","Select a saved input snapshot from this preview session.");
+    internal static MarketDataException Missing()=>new("snapshot_missing","Select a saved input snapshot from this preview session.");
 }

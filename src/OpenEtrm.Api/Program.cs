@@ -159,6 +159,7 @@ void MapPreview(RouteGroupBuilder api,PreviewDatabase database,string cookieName
 var sessions=new ConcurrentDictionary<string,PreviewSession>();
 var marketReads=new MarketReads(database);
 var scheduleReads=new ScheduleReads(database);
+var partyReads=new PartyReads(database);
 async Task<string[]> CurrentPermissions(NpgsqlConnection connection,CancellationToken ct)
 {
     await using var command=ScheduleStore.Command(connection,"SELECT security.current_permissions()");
@@ -508,15 +509,16 @@ api.MapPost("/select-observation",(HttpContext c,SelectionRequest body)=>Locked(
     if (session.Frames.Count>=128) throw new MarketDataException("preview_limit","Restart the disposable preview to create more saved selections.");
     session.Frames.Add(updated.Id,updated); return Results.Ok(new {frame=updated});
 }));
+// The party page reads a historical view's own context, or working data as of current knowledge
+// it captures at the selected frame's date.
+async Task<TradingView> PartyView(NpgsqlConnection connection,PreviewSession session,Guid frame,CancellationToken ct)
+{
+    var pin=Pin(session,frame);
+    return pin.Context is {} retained?TradingView.Retained(pin.Frame,retained):await TradingView.Capture(connection,knowledgeStore,pin.Frame,ct);
+}
 api.MapPost("/parties/catalog",(HttpContext c,PartyReadRequest body)=>Locked(c,session=>
     database.WithIdentity(Profile(session),"ReadTradeParties",async(connection,ct)=>
-    {
-        var frame=Frame(session,body.SnapshotId);
-        var selected=session.MarketContext ?? (await knowledgeStore.Capture(connection,new(frame.At.UtcDateTime.ToString("yyyy-MM-dd",System.Globalization.CultureInfo.InvariantCulture),null,"current"),ct)).Context;
-        await MarketContextStore.Bind(connection,database.Manifest.CatalogId,selected,ct);
-        return Results.Ok(new{versions=await PartyEditors.Read(connection,database.Manifest.CatalogId,body.Kind,frame.At,ct),context=selected,
-            canEdit=session.MarketContext is null && await PreviewDatabase.HasPermission(connection,"WriteTradeParties",ct)});
-    },c.RequestAborted)));
+        Results.Ok(await partyReads.Catalog(connection,await PartyView(connection,session,body.SnapshotId,ct),body.Kind,ct)),c.RequestAborted)));
 api.MapPost("/parties/save",(HttpContext c,PartySaveRequest body)=>Locked(c,session=>
 {
     if(session.MarketContext is not null)throw new MarketDataException("historical_read_only","Return to working data before editing party records.");
