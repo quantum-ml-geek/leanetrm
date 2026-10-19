@@ -290,6 +290,8 @@ def main():
                 check_schedule_storage(query,psql,env,manifest)
                 from check_temporal_storage import run_checks as check_temporal_storage
                 check_temporal_storage(query,psql,env,manifest,url)
+                from check_reference_policy_storage import run_checks as check_reference_policy_storage
+                check_reference_policy_storage(query,manifest)
                 from check_futures_storage import run_checks as check_futures_storage
                 check_futures_storage(query,manifest,psql,env)
                 from check_futures_amendments import run_checks as check_amendments

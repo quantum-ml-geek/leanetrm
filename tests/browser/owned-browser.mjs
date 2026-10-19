@@ -7,6 +7,22 @@ import {setTimeout as delay} from 'node:timers/promises';
 
 export const idle="document.body?.getAttribute('aria-busy')==='false'";
 
+export async function waitForBrowserPort(directory,chrome){
+  let spawnError;
+  const failed=error=>{spawnError=error;};chrome.on('error',failed);
+  try{
+    for(let i=0;i<100;i++){
+      if(spawnError)throw spawnError;
+      if(chrome.exitCode!==null||chrome.signalCode!==null)throw Error('Owned browser exited before readiness.');
+      let content='';try{content=await readFile(join(directory,'DevToolsActivePort'),'utf8');}catch{}
+      const end=content.indexOf('\n'),line=content.slice(0,end),port=Number(line);
+      if(end>0&&/^\d+$/.test(line)&&Number.isInteger(port)&&port>=1&&port<=65535)return port;
+      await delay(100);
+    }
+    throw Error('Owned browser did not become ready.');
+  }finally{chrome.off('error',failed);}
+}
+
 export async function withOwnedBrowser(targetFile,browserPath,run){
   const root=dirname(resolve(targetFile)),target=JSON.parse(await readFile(targetFile,'utf8'));
   const url=new URL(target.url);
@@ -27,17 +43,10 @@ export async function withOwnedBrowser(targetFile,browserPath,run){
   if(!(await stat(browserPath)).isFile())throw Error('Configure an installed Chromium-compatible browser executable.');
   const directory=await mkdtemp(join(root,'browser-'));
   const chrome=spawn(browserPath,[...certificateFlags,'--headless=new','--no-first-run','--disable-background-networking','--disable-component-update','--disable-sync','--disable-extensions','--disable-default-apps','--metrics-recording-only',`--user-data-dir=${directory}`,'--remote-debugging-port=0','about:blank'],{stdio:'ignore'});
-  let socket,sequence=0,passed=0,spawnError;
+  let socket,sequence=0,passed=0;
   const pending=new Map(),errors=[];
-  chrome.on('error',error=>{spawnError=error;});
   try{
-    let port;
-    for(let i=0;i<100;i++){
-      if(spawnError)throw spawnError;
-      if(chrome.exitCode!==null)throw Error('Owned browser exited before readiness.');
-      try{port=Number((await readFile(join(directory,'DevToolsActivePort'),'utf8')).split('\n')[0]);break;}catch{await delay(100);}
-    }
-    if(!port)throw Error('Owned browser did not become ready.');
+    const port=await waitForBrowserPort(directory,chrome);
     const targets=await(await fetch(`http://127.0.0.1:${port}/json/list`,{signal:AbortSignal.timeout(5000)})).json();
     socket=new WebSocket(targets.find(t=>t.type==='page').webSocketDebuggerUrl);
     await new Promise((accept,reject)=>{const timeout=setTimeout(()=>reject(Error('Browser connection timed out')),5000);socket.onopen=()=>{clearTimeout(timeout);accept();};socket.onerror=error=>{clearTimeout(timeout);reject(error);};});
@@ -63,7 +72,7 @@ export async function withOwnedBrowser(targetFile,browserPath,run){
   }finally{
     socket?.close();
     for(const p of pending.values()){clearTimeout(p.timeout);p.reject(Error('Browser check finished'));}pending.clear();
-    if(chrome.exitCode===null&&chrome.pid){chrome.kill('SIGTERM');await new Promise((accept,reject)=>{const timeout=setTimeout(()=>{chrome.kill('SIGKILL');reject(Error('Browser shutdown timed out'));},5000);chrome.once('exit',()=>{clearTimeout(timeout);accept();});});}
+    if(chrome.exitCode===null&&chrome.signalCode===null&&chrome.pid){chrome.kill('SIGTERM');await new Promise((accept,reject)=>{const timeout=setTimeout(()=>{chrome.kill('SIGKILL');reject(Error('Browser shutdown timed out'));},5000);chrome.once('exit',()=>{clearTimeout(timeout);accept();});});}
     // run_preview.py removes profiles after stopping the entire owned process group.
   }
 }

@@ -15,8 +15,9 @@ import {run as exchange} from './exchange.mjs';
 import {run as risk} from './risk.mjs';
 import {run as jobs} from './jobs.mjs';
 import {run as startupRequests} from './startup-requests.mjs';
+import {run as startupAccess} from './startup-access.mjs';
 import {run as reference} from './reference.mjs';
-async function marketNavigation(browser){await startupRequests(browser);await reference(browser);await marketContext(browser);}
+async function marketNavigation(browser){await startupRequests(browser);await startupAccess(browser);await reference(browser);await marketContext(browser);}
 async function tradingNavigation(browser){await futuresLoading(browser);await futuresAdmission(browser);await futures(browser);}
 if(process.argv.length!==4&&!(process.argv.length===5&&['--units','--parties-power','--exchange','--jobs'].includes(process.argv[4])))throw Error('Invoke through tools/run_preview.py --browser-check --browser /path/to/browser');
 let total=0;

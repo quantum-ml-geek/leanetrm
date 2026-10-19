@@ -3,6 +3,8 @@ import {readFile} from 'node:fs/promises';
 import {dirname,join} from 'node:path';
 const target=process.argv[2], credentials=JSON.parse(await readFile(join(dirname(target),'hosted-check/browser-account.json'),'utf8'));
 await withOwnedBrowser(target,process.argv[3],async({command,evaluate,wait,set,check,shot,idle,url,click,submit})=>{
+  await command('Runtime.enable');await command('Page.enable');
+  await command('Page.addScriptToEvaluateOnNewDocument',{source:`window.__hostedStartupReads=[];window.__hostedStartupAccess=[];const send=window.fetch;window.fetch=(input,...args)=>{const u=new URL(typeof input==='string'?input:input.url,location.href);window.__hostedStartupReads.push(u.pathname);if(u.pathname==='/api/bootstrap')window.__hostedStartupAccess.push(u.searchParams.get('includeAccess'));return send(input,...args);};`});
   await command('Page.navigate',{url:url+'/auth'});
   await wait("!!document.querySelector('#signin')");
   await set('#signin [name=login]',credentials.login);
@@ -10,6 +12,7 @@ await withOwnedBrowser(target,process.argv[3],async({command,evaluate,wait,set,c
   await evaluate("document.querySelector('#signin').requestSubmit()");
   await wait("location.pathname==='/' && document.querySelector('#profile-label')?.textContent==='Synthetic hosted human'");
   await wait(idle);
+  await check('signed-in startup uses its fresh bootstrap access projection without an access round trip',"JSON.stringify(window.__hostedStartupAccess)===JSON.stringify(['true'])&&!window.__hostedStartupReads.includes('/api/access')&&window.__hostedStartupReads.includes('/api/workspace/catalog')&&document.querySelector('#error').hidden");
   await check('verified hosted mode identifies the private pilot and qualifies generated marks',"document.querySelector('#workspace-host-mode').textContent==='Private pilot'&&document.querySelector('#workspace-footer').textContent.includes('Generated marks and sample trades')&&!/disposable|local preview/i.test(document.querySelector('.side-note').textContent+document.querySelector('#workspace-footer').textContent)");
   await click('#nav-delivery');
   await check('configured delivery-price sources and paused scheduler are visible',"document.querySelector('#delivery-price-source').options.length===2 && document.querySelector('#delivery-price-jobs').textContent.includes('paused')");
@@ -36,4 +39,8 @@ await withOwnedBrowser(target,process.argv[3],async({command,evaluate,wait,set,c
   await evaluate("document.querySelector('#sign-out').click()");
   await wait("location.pathname==='/auth' && !!document.querySelector('#signin')");
   await check('another human can sign in and sign out',"!!document.querySelector('#signin')");
+  await set('#signin [name=login]',credentials.adminLogin);await set('#signin [name=password]',credentials.password);
+  await evaluate("document.querySelector('#signin').requestSubmit()");
+  await wait("location.pathname==='/'&&!document.querySelector('#admin-page')?.hidden&&"+idle);
+  await check('hosted administration-only startup avoids every market read and access round trip',"JSON.stringify(window.__hostedStartupAccess)===JSON.stringify(['true'])&&!window.__hostedStartupReads.includes('/api/access')&&!window.__hostedStartupReads.includes('/api/workspace/catalog')&&window.__hostedStartupReads.includes('/api/admin')&&document.querySelector('#nav-market').hidden&&document.querySelector('#error').hidden");
 });

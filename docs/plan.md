@@ -836,7 +836,15 @@ latency, retained observation counts, contracts and booked positions. It can
 enforce that budget separately from ordinary correctness checks. Broader
 concurrency and larger reference/contract workloads still require qualification.
 Startup requests identity metadata without the unused frame projection; the
-default full bootstrap remains available. After TypeScript checks, the pinned
+default full bootstrap remains available. An explicit initial access projection
+can supply fresh navigation permissions for the verified account in that same
+response. The browser consumes it once after checking the account identity;
+later access refreshes and all business operations reauthorize independently.
+Reference reads avoid a duplicate permissive scope check only where the mandatory
+restrictive visibility policy already checks the same current authority per row.
+Exact policy/helper guards and expiry, scope, historical and policy-composition
+checks qualify migration 0041 separately from an application-image update.
+After TypeScript checks, the pinned
 build-only esbuild dependency bundles the presentation entry to avoid repeated
 module discovery requests. Chart and table vendors retain their separate modules
 and license notices. Blotter navigation

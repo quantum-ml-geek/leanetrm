@@ -132,18 +132,31 @@ def run_checks(root, manifest, query, dotnet, dll, environment, browser=None, co
         api = start()
         anonymous = Client(); anonymous.call('/', expected=302); anonymous.call('/api/bootstrap', expected=401)
         anonymous.call('/api/bootstrap?includeFrames=false', expected=401)
+        anonymous.call('/api/bootstrap?includeFrames=false&includeAccess=true', expected=401)
         anonymous.call('/api/profile', {'profile':'admin'}, expected=401)
         anonymous.call('/api/bootstrap', headers={'X-User': 'admin', 'X-Forwarded-User': 'admin'}, expected=401)
         for _ in range(15):
             anonymous.call('/auth');anonymous.call('/auth/script.js');anonymous.call('/auth/style.css')
         first = provision('invalid', ['trader', 'market_data_editor', 'access_administrator'])
         second = provision('second_human', ['trader'])
+        administrator = provision('admin_human', ['access_administrator'])
         client = Client()
         client.login('', password, '/auth?failed=1')
         client.login('invalid', password)
         boot = client.bootstrap(); assert boot['profile'] == first and boot['mode'] == 'hosted-pilot' and len(boot['profiles']) == 1
         compact, _ = client.call('/api/bootstrap?includeFrames=false')
-        assert compact['frames'] == [] and compact['profile'] == first and compact['profiles'] == boot['profiles']
+        assert compact['frames'] == [] and compact['profile'] == first and compact['profiles'] == boot['profiles'] and 'access' not in compact
+        startup, _ = client.call('/api/bootstrap?includeFrames=false&includeAccess=true')
+        current, _ = client.call('/api/access')
+        assert startup['access'] == {'profile':first,'permissions':current['permissions']} and startup['frames']==[]
+        client.call('/api/bootstrap?includeAccess=unknown',expected=400)
+        admin=Client();admin.login('admin_human',password);admin_boot=admin.bootstrap()
+        admin_startup,_=admin.call('/api/bootstrap?includeFrames=false&includeAccess=true')
+        admin_access,_=admin.call('/api/access')
+        assert admin_startup['access']=={'profile':administrator,'permissions':admin_access['permissions']}
+        assert admin_boot['profile']==administrator and 'ManageAccess' in admin_access['permissions'] and 'ReadMarketData' not in admin_access['permissions']
+        admin.call('/api/workspace/catalog',expected=403)
+        print('PASS hosted startup projects current identity permissions without granting market-data authority',flush=True)
         retained, _ = client.call('/api/bootstrap')
         assert retained['frames'] == boot['frames']
         assert all(cookie.secure for cookie in client.cookies)
@@ -170,7 +183,7 @@ def run_checks(root, manifest, query, dotnet, dll, environment, browser=None, co
             target=root/'hosted-browser-target.json'
             target.write_text(json.dumps({'suite':'hosted_browser_v1','url':origin+'/','controlUrl':control_url,'runId':run_id}))
             account=directory/'browser-account.json'
-            account.write_text(json.dumps({'login':'invalid','secondLogin':'second_human','password':password}));account.chmod(0o600)
+            account.write_text(json.dumps({'login':'invalid','secondLogin':'second_human','adminLogin':'admin_human','password':password}));account.chmod(0o600)
             from owned_process import stop_owned_group
             process=subprocess.Popen(['node',str(Path(__file__).resolve().parents[1]/'tests/browser/hosted.mjs'),str(target),str(browser)],start_new_session=True)
             try:
@@ -181,11 +194,13 @@ def run_checks(root, manifest, query, dotnet, dll, environment, browser=None, co
         for cookie in client.cookies: copied.cookies.set_cookie(cookie)
         client.call('/api/logout', {})
         copied.call('/api/bootstrap', expected=401)
+        copied.call('/api/bootstrap?includeFrames=false&includeAccess=true', expected=401)
         copied.call('/api/logout', {}, expected=401)
         client.login('second_human', password)
         assert client.bootstrap()['profile'] == second
         query(f"UPDATE security.workspace_memberships SET enabled=false WHERE principal_id='{second}';UPDATE security.workspace_memberships SET enabled=true WHERE principal_id='{second}';")
         client.call('/api/bootstrap', expected=401)
+        client.call('/api/bootstrap?includeFrames=false&includeAccess=true', expected=401)
         print('PASS hosted HTTPS: private invitation/password login, malformed-login rejection, secure cookies, immutable actor, persona/admin-create denial, scoped business read, CSRF logout, origin/host checks, restart persistence, cross-human session reset and revocation', flush=True)
     finally:
         if api and api.poll() is None: api.terminate(); api.wait(timeout=10)

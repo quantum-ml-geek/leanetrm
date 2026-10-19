@@ -845,6 +845,20 @@ requests during startup. The existing chart and table vendor modules retain
 their separate files and license notices; the deployed application needs no
 Node runtime or bundler.
 
+Startup explicitly requests compact bootstrap metadata and an access projection.
+For a selected, verified identity, the server reads its current permissions in
+the same response; the browser validates the identity and consumes that projection
+once for navigation. Anonymous local preview still selects its synthetic identity
+explicitly and reads access afresh. Profile refreshes, identity changes and every
+business operation independently check current authority. The default bootstrap
+response retains its existing shape.
+
+Migration 0041 removes a duplicate permissive access check on 35 reference tables
+whose restrictive visibility policy already checks the same authority on every
+invocation. Catalog-only policies and the separate imported-quantity restriction
+remain. Exact helper and policy guards reject schema drift before changing these
+policies; retained deployments require a separately qualified schema baseline.
+
 Run:
 
 ```sh
