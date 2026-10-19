@@ -19,6 +19,10 @@ def run_checks(Client, check):
     c.call('market/context', {**request, 'mode': 'at', 'knownAt': context['knownAt']})
     historical = c.call('workspace')
     check('historical workspace omits later corrections and later observation dates', changed['observationId'] not in [o['id'] for o in historical['observations']] and all(o['observed_at'][:10] <= '2020-12-17' for o in historical['observations']))
+    sources = c.call('evaluate', {'snapshotId': frame['id'], 'curve': 'local_power', 'includeSources': True})
+    check('on-demand sources retain the certified cutoff without leaking later corrections',
+          sources['context'] == context and changed['observationId'] not in {o['id'] for o in sources['observations']}
+          and {o['id'] for o in sources['observations']} <= {o['id'] for o in historical['observations']})
     check('commodity replay retains exact result after a later correction', c.call('evaluate', {'snapshotId': frame['id'], 'curve': 'local_power'}) == before)
     rates = c.call('evaluate', {'snapshotId': frame['id'], 'curve': 'interest_rates'})
     check('interest rates use the identical certified market context', rates['context'] == context)

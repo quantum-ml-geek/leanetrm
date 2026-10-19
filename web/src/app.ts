@@ -28,6 +28,7 @@ function choose(id:string,options:{value:string;name:string}[],value:string){con
 let csrf='',workspace:Workspace|undefined,curve='',result:CurveResult|undefined,contract='',historyData:PriceHistory|undefined,pricingContract='',showAllContracts=false,input='',draftFor='',busy=false,page='market';
 let contextDirty=false,currentProfile='',administrationScope='',permissions:string[]=[];
 let hostedPilot=false;
+type ProfileChoices={mode:string;profiles:{id:string;name:string}[];customProfiles:{id:string;name:string}[]};
 const can=(permission:string)=>permissions.includes(permission);
 const historicalContext=()=>(workspace as (Workspace & {context?:Context})|undefined)?.context;
 const canCorrect=()=>can('ImportObservations')&&!historicalContext();
@@ -68,8 +69,10 @@ async function transport<T>(path:string,body?:unknown,root=apiRoot):Promise<T>{
 }
 async function api<T>(path:string,body?:unknown):Promise<T>{
  const payload=await transport<T>(path,body);
- if(/^(workspace|trading\/blotter|swaps\/(preview|editor)|futures\/(holdings|editor|amend-preview)|evaluate|history|power\/preview)$/.test(path))
-  await prepareAmountDisplay(payload,request=>transport<string[]>('amounts/display',request),path==='history'?decimalTick():undefined);
+ if(/^(trading\/blotter|swaps\/(preview|editor)|futures\/(holdings|editor|amend-preview)|evaluate|history|power\/preview)$/.test(path)){
+  const displayed=path==='evaluate'||path==='history'?{points:(payload as CurveResult|PriceHistory).points}:payload;
+  await prepareAmountDisplay(displayed,request=>transport<string[]>('amounts/display',request),path==='history'?decimalTick():undefined);
+ }
  return payload;
 }
 async function act(work:()=>Promise<void>){
@@ -172,7 +175,9 @@ function renderPrices(){
 }
 async function build(){
   if(contextDirty)throw Error('Apply the changed context before viewing prices.');
-  const f=frame();if(!curve)throw Error('Choose a curve first.');const next=await api<CurveResult>('evaluate',{snapshotId:f.id,curve});result=next;renderPrices();
+  const f=frame();if(!curve)throw Error('Choose a curve first.');const next=await api<CurveResult>('evaluate',{snapshotId:f.id,curve,includeSources:true});
+  if(next.snapshotId!==f.id||next.curve!==curve||next.observationScope!=='selected_frame'||!Array.isArray(next.observations))throw Error('The selected price sources are missing or inconsistent. Refresh and try again.');
+  data().observations=next.observations;result=next;renderPrices();
 }
 function renderHistory(){
   if(!result||!historyData)return;const p=result.points.find(p=>pointIdentity(p)===contract);if(!p)throw Error('Please select this sample again.');const rates=result.kind==='rates';$('history-card').hidden=false;text('history-title',`${rates?displayDate(pointDate(p)):deliveryLabel(p.deliveryFrom!,p.deliveryTo!)} · ${rates?'rate':'price'} history`);
@@ -283,7 +288,11 @@ function renderReference(){
   unitConverter.populate(data().unitCatalog?{...data(),references:data().unitCatalog!.references}:data(),selected==='units'||selected==='unit_conversions');
   const rows=data().unitCatalog?.references[selected]??data().references[selected],columns=publicColumns(rows);table('reference',columns.map(c=>c.name),rows.map(r=>columns.map(c=>referenceValue(r,c.key))));
 }
-async function loadWorkspace(){workspace=await api<Workspace>('workspace');setCurveNames(await api<{code:string;name:string}[]>('curve-names'));}
+async function loadWorkspace(){
+  const next=await api<Workspace>('workspace/catalog');
+  if(next.observationScope!=='on_demand'||!Array.isArray(next.observations)||next.observations.length)throw Error('The market catalog is missing or inconsistent. Refresh and try again.');
+  const names=await api<{code:string;name:string}[]>('curve-names');workspace=next;setCurveNames(names);
+}
 async function reload(selected:string){await loadWorkspace();renderFrames(selected);renderContext();renderReference();}
 function updateFilters(){
   prefs.browseBy=select('browse-by').value as Preferences['browseBy'];prefs.commodity=select('commodity').value;persist();
@@ -302,8 +311,8 @@ $('sidebar-toggle').onclick=()=>{if(busy)return;prefs.sidebarCollapsed=!prefs.si
 $('library-toggle').onclick=()=>{if(busy)return;prefs.libraryCollapsed=!prefs.libraryCollapsed;renderLayout();persist();};
 for(const id of ['market-menu','settings-menu','trading-menu'])$<HTMLDetailsElement>(id).ontoggle=()=>{if(!currentProfile||prefs.sidebarCollapsed)return;const closed=prefs.collapsedMenus.includes(id),open=$<HTMLDetailsElement>(id).open;if(closed===!open)return;prefs.collapsedMenus=open?prefs.collapsedMenus.filter(k=>k!==id):[...prefs.collapsedMenus,id];persist();};
 $('profile-open').onclick=()=>void act(openProfile);for(const id of ['profile-close','profile-cancel'])$(id).onclick=()=>$<HTMLDialogElement>('profile-dialog').close();
-$('preferences-form').onsubmit=event=>{event.preventDefault();void act(async()=>{const zone=select('zone').value;if(!validTimeZone(zone))throw Error('Choose a valid time zone.');const selected=select('snapshot').value;prefs.timeZone=zone;await prepareAmountDisplay({result,historyData},request=>transport<string[]>('amounts/display',request),decimalTick());prefs.browseBy=select('preferred-browse').value as Preferences['browseBy'];persist();if(workspace){renderFrames(selected);renderContext();renderPrices();renderReference();schedules.refresh();dateEditor.refresh();power.refresh();}renderTimeZones();administration.refresh();parties.refresh();futures.refresh();if(page==='futures'&&select('snapshot').value)await futures.load();$<HTMLDialogElement>('profile-dialog').close();});};
-async function profileChoices(){const boot=await api<{mode:string;profiles:{id:string;name:string}[];customProfiles:{id:string;name:string}[]}>('bootstrap');hostedPilot=boot.mode==='hosted-pilot';$('preview-access').hidden=hostedPilot;$('sign-out').hidden=!hostedPilot;choose('profile',[...boot.profiles,...boot.customProfiles.filter(p=>!boot.profiles.some(base=>base.id===p.id))].map(p=>({value:p.id,name:p.name})),currentProfile);const name=select('profile').selectedOptions[0]?.textContent??'Current user';text('profile-label',name);text('profile-avatar',name.slice(0,1));text('profile-title',name);text('profile-access','Current permissions: '+(permissions.length?permissions.map(p=>friendly(p.replace(/([a-z])([A-Z])/g,'$1 $2'))).join(', '):'No workspace access'));$('profile-open').setAttribute('aria-label','Profile · '+name);}
+$('preferences-form').onsubmit=event=>{event.preventDefault();void act(async()=>{const zone=select('zone').value;if(!validTimeZone(zone))throw Error('Choose a valid time zone.');const selected=select('snapshot').value;prefs.timeZone=zone;await prepareAmountDisplay({points:result?.points,historyData},request=>transport<string[]>('amounts/display',request),decimalTick());prefs.browseBy=select('preferred-browse').value as Preferences['browseBy'];persist();if(workspace){renderFrames(selected);renderContext();renderPrices();renderReference();schedules.refresh();dateEditor.refresh();power.refresh();}renderTimeZones();administration.refresh();parties.refresh();futures.refresh();if(page==='futures'&&select('snapshot').value)await futures.load();$<HTMLDialogElement>('profile-dialog').close();});};
+async function profileChoices(initial?:ProfileChoices){const boot=initial??await api<ProfileChoices>('bootstrap');hostedPilot=boot.mode==='hosted-pilot';$('preview-access').hidden=hostedPilot;$('sign-out').hidden=!hostedPilot;choose('profile',[...boot.profiles,...boot.customProfiles.filter(p=>!boot.profiles.some(base=>base.id===p.id))].map(p=>({value:p.id,name:p.name})),currentProfile);const name=select('profile').selectedOptions[0]?.textContent??'Current user';text('profile-label',name);text('profile-avatar',name.slice(0,1));text('profile-title',name);text('profile-access','Current permissions: '+(permissions.length?permissions.map(p=>friendly(p.replace(/([a-z])([A-Z])/g,'$1 $2'))).join(', '):'No workspace access'));$('profile-open').setAttribute('aria-label','Profile · '+name);}
 $('sign-out').onclick=()=>void act(async()=>{await api('logout',{});location.assign('/auth');});
 async function loadIdentity(){
   jobs.reset();$('jobs-page').hidden=true;
@@ -361,6 +370,6 @@ for(const id of ['source-all','pricing-all'])$(id).onclick=()=>void act(async()=
 $('history-close').onclick=()=>{clearChart($('history-chart'));$('history-card').hidden=true;historyData=undefined;contract='';};
 $('correction-form').onsubmit=event=>{event.preventDefault();void act(async()=>{const current=frame(),next=await api<{frame:Frame;observationId:string}>('corrections',{snapshotId:current.id,observationId:input,value:$<HTMLInputElement>('correction-value').value});clearPrices();await reload(next.frame.id);input=next.observationId;await build();notice('Your change was saved. The market date now shows the corrected prices. Earlier versions are still available.');});};
 void act(async()=>{const examples=await transport<{id:string;name:string;url:string}[]>('examples',undefined,'/api/');const chooser=select('example-dataset');chooser.replaceChildren(...examples.map(e=>new Option(e.name,e.id)));chooser.value=exampleId;chooser.onchange=()=>{const selected=examples.find(e=>e.id===chooser.value);if(selected)location.assign(selected.url);};
-const boot=await api<{mode:string;csrfToken:string;profiles:{id:string;name:string}[];profile:string|null;runId:string;tenantId:string;workspaceId:string}>('bootstrap');csrf=boot.csrfToken;administrationScope=[boot.runId,boot.tenantId,boot.workspaceId].join(':');hostedPilot=boot.mode==='hosted-pilot';
+const boot=await api<ProfileChoices & {csrfToken:string;profile:string|null;runId:string;tenantId:string;workspaceId:string}>('bootstrap');csrf=boot.csrfToken;administrationScope=[boot.runId,boot.tenantId,boot.workspaceId].join(':');hostedPilot=boot.mode==='hosted-pilot';
   // Synthetic sign-in is an explicit loopback preview facility only.
-  $('example').hidden=hostedPilot;if(hostedPilot&&!boot.profile)throw Error('The signed-in account could not be verified.');currentProfile=boot.profile??'viewer';if(!boot.profile)await api('profile',{profile:currentProfile});await loadIdentity();await profileChoices();});
+  $('example').hidden=hostedPilot;if(hostedPilot&&!boot.profile)throw Error('The signed-in account could not be verified.');currentProfile=boot.profile??'viewer';if(!boot.profile)await api('profile',{profile:currentProfile});await loadIdentity();await profileChoices(boot);});

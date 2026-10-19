@@ -18,7 +18,7 @@ export async function run({command,evaluate,wait,click,set,submit,persona,check,
   await set('#date-context-on','2020-12-17');await click('#date-context-latest');await click('#apply-view-context');
   await check('explicit context apply displays historical read-only mode',"document.querySelector('#environment-context-note').textContent.includes('Historical view')&&document.querySelector('#error').hidden");
   const first=await evaluate("window.__responses.filter(r=>r.path==='/api/market/context').at(-1).data");
-  await check('workspace receives exactly the applied temporal context',`JSON.stringify(window.__responses.filter(r=>r.path==='/api/workspace').at(-1).data.context)===${JSON.stringify(JSON.stringify(first.context))}`);
+  await check('workspace receives exactly the applied temporal context',`JSON.stringify(window.__responses.filter(r=>r.path==='/api/workspace/catalog').at(-1).data.context)===${JSON.stringify(JSON.stringify(first.context))}`);
 
   await evaluate(`(()=>{const s=document.querySelector('#snapshot');s.value=[...s.options].find(o=>o.textContent.includes('Dec 17')).value;s.dispatchEvent(new Event('change',{bubbles:true}));})()`);await wait(idle);
   const before=await evaluate("window.__responses.filter(r=>r.path==='/api/evaluate').at(-1).data");
@@ -27,7 +27,7 @@ export async function run({command,evaluate,wait,click,set,submit,persona,check,
   await check('rate curve uses same context and renders discount factors',`JSON.stringify(window.__responses.filter(r=>r.path==='/api/evaluate').at(-1).data.context)===${JSON.stringify(JSON.stringify(first.context))}&&document.querySelector('#contracts').textContent.includes('Discount factor')&&document.querySelector('#error').hidden`);
   await click('#nav-reference');await check('reference view survives historical context with rows',"document.querySelector('#reference').textContent.length>0&&document.querySelector('#error').hidden");
   await click('#nav-schedules');await click('#nav-market');
-  await check('navigation retains exact context, no implicit current reload',`JSON.stringify(window.__responses.filter(r=>r.path==='/api/workspace').at(-1).data.context)===${JSON.stringify(JSON.stringify(first.context))}`);
+  await check('navigation retains exact context, no implicit current reload',`JSON.stringify(window.__responses.filter(r=>r.path==='/api/workspace/catalog').at(-1).data.context)===${JSON.stringify(JSON.stringify(first.context))}`);
   const future=await evaluate(`(async()=>{await __api('market/current',{});const w=(await __api('workspace')).data;let f=w.frames.filter(f=>f.at.startsWith('2020-12-17')&&!f.contextId).at(-1);let o=w.observations.find(o=>f.observationIds.includes(o.id)&&o.series_id.endsWith('000000000001'));while(w.observations.some(n=>n.corrects_id===o.id))o=w.observations.find(n=>n.corrects_id===o.id);if(!f.observationIds.includes(o.id))f=(await __api('select-observation',{snapshotId:f.id,observationId:o.id})).data.frame;return await __api('corrections',{snapshotId:f.id,observationId:o.id,value:(Number(o.value)+0.137).toFixed(3)});})()`);
   await check('editor can create a synthetic current-input correction',JSON.stringify(future.status===200));
   await evaluate(`__api('market/context',{effectiveOn:'2020-12-17',knownAt:${JSON.stringify(first.context.knownAt)},mode:'at',selection:'latest_correction'})`);
@@ -40,10 +40,10 @@ export async function run({command,evaluate,wait,click,set,submit,persona,check,
   await check('explicit current knowledge advances dependent curve price',`window.__responses.filter(r=>r.path==='/api/evaluate').at(-1).data.points[0].value!==${JSON.stringify(before.points[0].value)}&&document.querySelector('#error').hidden`);
   await set('#date-context-on','2020-12-16');
   await check('unapplied date edit immediately hides old prices and reference rows',"document.querySelector('#contracts').children.length===0&&document.querySelector('#reference').children.length===0");
-  await click('#nav-reference');await check('navigation applies changed context instead of stale reference rows',"window.__responses.filter(r=>r.path==='/api/workspace').at(-1).data.context.effectiveOn==='2020-12-16'&&document.querySelector('#reference').textContent.length>0");
+  await click('#nav-reference');await check('navigation applies changed context instead of stale reference rows',"window.__responses.filter(r=>r.path==='/api/workspace/catalog').at(-1).data.context.effectiveOn==='2020-12-16'&&document.querySelector('#reference').textContent.length>0");
   await set('#date-context-view','2099-01-01T00:00');await click('#apply-view-context');
   await check('future knowledge cutoff errors visibly with no stale row fallback',"!document.querySelector('#error').hidden&&document.querySelector('#contracts').children.length===0&&document.querySelector('#reference').children.length===0");
-  await click('#current-view-context');await check('explicit return restores current pins and clears context',"document.querySelector('#date-context-on').value===''&&document.querySelector('#date-context-view').value===''&&document.querySelector('#environment-context-note').textContent.includes('Current workspace')&&window.__responses.filter(r=>r.path==='/api/workspace').at(-1).data.context===null");
+  await click('#current-view-context');await check('explicit return restores current pins and clears context',"document.querySelector('#date-context-on').value===''&&document.querySelector('#date-context-view').value===''&&document.querySelector('#environment-context-note').textContent.includes('Current workspace')&&window.__responses.filter(r=>r.path==='/api/workspace/catalog').at(-1).data.context===null");
   await click('#date-context>summary');await click('#nav-market');await click('#example');await evaluate('window.scrollTo(0,0)');await shot('market-desktop');
   await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await evaluate('window.scrollTo(0,0)');
   await check('mobile 390px view has no page-wide horizontal overflow',"document.documentElement.scrollWidth<=window.innerWidth+1");await shot('market-mobile');

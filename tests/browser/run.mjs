@@ -12,9 +12,11 @@ import {run as parties} from './parties.mjs';
 import {run as exchange} from './exchange.mjs';
 import {run as risk} from './risk.mjs';
 import {run as jobs} from './jobs.mjs';
+import {run as startupRequests} from './startup-requests.mjs';
+async function marketNavigation(browser){await startupRequests(browser);await marketContext(browser);}
 if(process.argv.length!==4&&!(process.argv.length===5&&['--units','--parties-power','--exchange','--jobs'].includes(process.argv[4])))throw Error('Invoke through tools/run_preview.py --browser-check --browser /path/to/browser');
 let total=0;
-for(const [name,run] of (process.argv[4]==='--jobs'?[['jobs',jobs]]:process.argv[4]==='--exchange'?[['exchange futures',exchange]]:process.argv[4]==='--units'?[['units and precision',units]]:process.argv[4]==='--parties-power'?[['power TOUs',power],['party editors',parties]]:[['market context',marketContext],['administration',administration],['power TOUs',power],['party editors',parties],['futures',futures],['risk',risk],['trade editor',tradeEditor],['financial swaps',swaps],['table interactions',tableInteractions],['units and precision',units]])){
+for(const [name,run] of (process.argv[4]==='--jobs'?[['jobs',jobs]]:process.argv[4]==='--exchange'?[['exchange futures',exchange]]:process.argv[4]==='--units'?[['units and precision',units]]:process.argv[4]==='--parties-power'?[['power TOUs',power],['party editors',parties]]:[['market navigation',marketNavigation],['administration',administration],['power TOUs',power],['party editors',parties],['futures',futures],['risk',risk],['trade editor',tradeEditor],['financial swaps',swaps],['table interactions',tableInteractions],['units and precision',units]])){
   const passed=await withOwnedBrowser(process.argv[2],process.argv[3],run);total+=passed;console.log(`${passed} ${name} browser checks passed.`);
 }
 if(process.argv.length===4)total+=await checkProfileLifetime(process.argv[2],process.argv[3]);
