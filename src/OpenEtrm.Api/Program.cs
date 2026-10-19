@@ -160,6 +160,7 @@ var sessions=new ConcurrentDictionary<string,PreviewSession>();
 var marketReads=new MarketReads(database);
 var scheduleReads=new ScheduleReads(database);
 var partyReads=new PartyReads(database);
+var tradeReads=new TradeReads(database);
 async Task<string[]> CurrentPermissions(NpgsqlConnection connection,CancellationToken ct)
 {
     await using var command=ScheduleStore.Command(connection,"SELECT security.current_permissions()");
@@ -546,15 +547,31 @@ api.MapPost("/table-views/blotter",(HttpContext c,SaveTableView body)=>Locked(c,
 api.MapPost("/table-views/blotter/delete",(HttpContext c,DeleteTableView body)=>Locked(c,session=>
     database.WithIdentity(Profile(session),"ReadTrades",async(connection,ct)=>{await TableViews.Delete(connection,body,ct);return Results.Ok(new {deleted=true});},c.RequestAborted)));
 var futuresStore=new FuturesStore(database.Manifest);
-Task<IResult> FuturesRead(HttpContext c,FuturesReadRequest body,Func<NpgsqlConnection,PreviewData,InputFrame,CancellationToken,Task<object>> read,bool scenario=false,Guid? headTrade=null,bool amendmentPreview=false,string? expectedConvention=null,bool dealRisk=false,bool combinedWorkspace=false,
-    Func<NpgsqlConnection,InputFrame,CancellationToken,Task<object?>>? readWithoutMarket=null)=>
+// Working data, the only editable view: current knowledge captured for this read over a working frame.
+bool Working(PreviewSession session,FuturesReadRequest body)=>session.MarketContext is null&&body is {KnowledgeMode:"current",ContextId:null};
+// Trading pages name their knowledge: current knowledge, captured now at the working frame's date;
+// a context captured earlier, re-read over a working frame; or the selected historical view's own.
+async Task<TradingView> TradeView(NpgsqlConnection connection,PreviewSession session,FuturesReadRequest body,InputFrame frame,CancellationToken ct)
+{
+    if(Working(session,body))return await TradingView.Capture(connection,knowledgeStore,frame,ct);
+    if(body is not {KnowledgeMode:"retained",ContextId:{} id})throw new MarketDataException("futures_context","Choose current knowledge explicitly or supply the exact retained context.");
+    var context=(await knowledgeStore.Read(connection,id,ct)).Context;
+    if(session.MarketContext is null)return TradingView.Reread(frame,context);
+    return session.MarketContext.ContextId==context.ContextId?TradingView.Retained(frame,context)
+        :throw new MarketDataException("futures_context","Trading must use the shared selected historical context.");
+}
+// Trading pages without a read operation of their own run their store's read on the shared trading read path.
+Task<IResult> FuturesRead(HttpContext c,FuturesReadRequest body,Func<NpgsqlConnection,PreviewData,InputFrame,CancellationToken,Task<object>> read,bool scenario=false,Guid? headTrade=null,bool amendmentPreview=false,string? expectedConvention=null,bool dealRisk=false)=>
+    TradingRead(c,body,(connection,view,ct)=>tradeReads.Read(connection,view,data=>read(connection,data,view.Frame,ct),ct),scenario,headTrade,amendmentPreview,expectedConvention,dealRisk);
+// The page keeps request policy: conventions, risk and amendment permissions, and the booking and amendment flags.
+Task<IResult> TradingRead(HttpContext c,FuturesReadRequest body,Func<NpgsqlConnection,TradingView,CancellationToken,Task<object>> read,bool scenario=false,Guid? headTrade=null,bool amendmentPreview=false,string? expectedConvention=null,bool dealRisk=false,bool combinedWorkspace=false)=>
     Locked(c,session=>database.WithIdentity(Profile(session),"ReadTrades",async(connection,ct)=>
     {
         if(expectedConvention is SwapStore.Convention or TradingBlotter.Convention){if(body.Convention!=expectedConvention)throw new MarketDataException("swap_context","Select the explicit supported swap valuation convention.");}
         else FuturesStore.Convention(body.Convention);
         if(scenario && !await PreviewDatabase.HasPermission(connection,"RunScenario",ct)||dealRisk && !await PreviewDatabase.HasPermission(connection,"RunDealRisk",ct))throw new PreviewDeniedException();
         var frame=Frame(session,body.SnapshotId);
-        var working=session.MarketContext is null&&body.KnowledgeMode=="current"&&body.ContextId is null;
+        var working=Working(session,body);
         if(amendmentPreview&&!working)
             throw new MarketDataException("historical_read_only","Amendments require working data.");
         if(amendmentPreview&&!await PreviewDatabase.HasPermission(connection,"AmendTrade",ct))throw new PreviewDeniedException();
@@ -564,33 +581,15 @@ Task<IResult> FuturesRead(HttpContext c,FuturesReadRequest body,Func<NpgsqlConne
             await using var head=ScheduleStore.Command(connection,expectedConvention==SwapStore.Convention?"SELECT security.swap_current_head($1,$2)":"SELECT security.futures_current_head($1,$2)",database.Manifest.CatalogId,trade);
             currentHead=await head.ExecuteScalarAsync(ct) is int revision?revision:null;
         }
-        ScheduleContext selected;
-        if(body.KnowledgeMode=="current" && body.ContextId is null && session.MarketContext is null)
-            selected=(await knowledgeStore.Capture(connection,new(frame.At.UtcDateTime.ToString("yyyy-MM-dd",System.Globalization.CultureInfo.InvariantCulture),null,"current"),ct)).Context;
-        else if(body.KnowledgeMode=="retained" && body.ContextId is {} id)
-        {
-            selected=(await knowledgeStore.Read(connection,id,ct)).Context;
-            if(session.MarketContext is {} view && view.ContextId!=selected.ContextId)
-                throw new MarketDataException("futures_context","Trading must use the shared selected historical context.");
-        }
-        else throw new MarketDataException("futures_context","Choose current knowledge explicitly or supply the exact retained context.");
-        await MarketContextStore.Bind(connection,database.Manifest.CatalogId,selected,ct);
-        await using(var bind=ScheduleStore.Command(connection,"SELECT security.use_trading_context($1,$2)",database.Manifest.CatalogId,frame.At))await bind.ExecuteNonQueryAsync(ct);
-        var value=readWithoutMarket is null?null:await readWithoutMarket(connection,frame,ct);
-        if(value is null)
-        {
-            var data=await database.Read(connection,ct,observationIds:frame.ObservationIds);
-            value=await read(connection,data,frame,ct);
-        }
+        var view=await TradeView(connection,session,body,frame,ct);
+        var value=await read(connection,view,ct);
         if(scenario && !await PreviewDatabase.HasPermission(connection,"RunScenario",ct)||dealRisk && !await PreviewDatabase.HasPermission(connection,"RunDealRisk",ct))throw new PreviewDeniedException();
-        await using(var check=ScheduleStore.Command(connection,"SELECT security.trading_access($1,'ReadTrades')",database.Manifest.CatalogId))
-            if(!Equals(await check.ExecuteScalarAsync(ct),true))throw new PreviewDeniedException();
         var response=System.Text.Json.Nodes.JsonNode.Parse(JsonSerializer.Serialize(value,new JsonSerializerOptions{PropertyNamingPolicy=JsonNamingPolicy.CamelCase,Converters={new ExactDecimalJsonConverter()}}))!.AsObject();
         foreach(var json in combinedWorkspace?new[]{response["catalog"]!.AsObject(),response["blotter"]!.AsObject()}:new[]{response})
         {
-        json["context"]=JsonSerializer.SerializeToNode(selected,new JsonSerializerOptions{PropertyNamingPolicy=JsonNamingPolicy.CamelCase});json["asOf"]=JsonSerializer.SerializeToNode(frame.At);
+        json["context"]=JsonSerializer.SerializeToNode(view.Context,new JsonSerializerOptions{PropertyNamingPolicy=JsonNamingPolicy.CamelCase});json["asOf"]=JsonSerializer.SerializeToNode(frame.At);
         json["canRunDealRisk"]=JsonSerializer.SerializeToNode(await PreviewDatabase.HasPermission(connection,"RunDealRisk",ct));
-        json["canBook"]=JsonSerializer.SerializeToNode(session.MarketContext is null&&body.KnowledgeMode=="current"&&await PreviewDatabase.HasPermission(connection,"BookTrade",ct));
+        json["canBook"]=JsonSerializer.SerializeToNode(working&&await PreviewDatabase.HasPermission(connection,"BookTrade",ct));
         if(json["books"] is not null)
         {
             json["canAmendTrades"]=JsonSerializer.SerializeToNode(working&&await PreviewDatabase.HasPermission(connection,"AmendTrade",ct));
@@ -624,8 +623,8 @@ api.MapPost("/trade-formats/save",(HttpContext c,DealFormatSave body)=>Locked(c,
  return Results.Ok(await DealAmountFormats.Save(connection,database.Manifest.CatalogId,body,ct));
 },c.RequestAborted)));
 api.MapPost("/futures/catalog",(HttpContext c,FuturesReadRequest body)=>FuturesRead(c,body,futuresStore.Catalog));
-api.MapPost("/futures/editor",(HttpContext c,FuturesEditorRequest body)=>FuturesRead(c,body.Context??throw new MarketDataException("futures_trade","Supply the selected context."),
-    (connection,data,frame,ct)=>futuresStore.Editor(connection,data,frame,body,ct),headTrade:body.TradeId));
+api.MapPost("/futures/editor",(HttpContext c,FuturesEditorRequest body)=>TradingRead(c,body.Context??throw new MarketDataException("futures_trade","Supply the selected context."),
+    (connection,view,ct)=>tradeReads.FuturesTrade(connection,view,body.TradeId,body.Revision,ct),headTrade:body.TradeId));
 api.MapPost("/futures/amend-preview",(HttpContext c,FuturesAmendRequest body)=>FuturesRead(c,new(body.SnapshotId,body.Convention,body.KnowledgeMode),
     (connection,data,frame,ct)=>futuresStore.PreviewAmendment(connection,data,frame,body,ct),headTrade:body.TradeId,amendmentPreview:true));
 api.MapPost("/futures/amend",(HttpContext c,FuturesAmendRequest body)=>Locked(c,async session=>
@@ -641,27 +640,17 @@ api.MapPost("/futures/amend",(HttpContext c,FuturesAmendRequest body)=>Locked(c,
 api.MapPost("/futures/blotter",(HttpContext c,FuturesBlotterRequest body)=>FuturesRead(c,body.Context??throw new MarketDataException("blotter_view","Supply the selected context."),(connection,data,frame,ct)=>futuresStore.Blotter(connection,data,frame,body.View,ct)));
 api.MapPost("/futures/holdings",(HttpContext c,FuturesReadRequest body)=>FuturesRead(c,body,futuresStore.Holdings));
 var swapStore=new SwapStore(database);
-var tradingBlotter=new TradingBlotter(database.Manifest,futuresStore,swapStore);
 api.MapPost("/trading/workspace",(HttpContext c,TradingWorkspaceRequest body)=>
 {
  if(body.BookingCatalog is not(null or "directory" or "priced_contracts"))throw new MarketDataException("blotter_view","Choose an available booking catalog projection.");
- return FuturesRead(c,body.Context??throw new MarketDataException("blotter_view","Supply the selected context."),
-  async(connection,data,frame,ct)=>new{catalog=body.BookingCatalog=="directory"?await futuresStore.Directory(connection,ct):await futuresStore.Catalog(connection,data,frame,ct),
-   blotter=await tradingBlotter.Read(connection,data,frame,body.View,ct)},expectedConvention:TradingBlotter.Convention,combinedWorkspace:true,
-   readWithoutMarket:body.BookingCatalog!="directory"?null:async(connection,frame,ct)=>
-   {
-    var report=await tradingBlotter.ReadEmptyDirectory(connection,frame,body.View,ct);
-    if(report is null)return null;
-    var catalog=await futuresStore.Directory(connection,ct);
-    await MarketBundle.RequireReferenceVisibility(connection,database.Manifest,ct);
-    return new{catalog,blotter=report};
-   });
+ return TradingRead(c,body.Context??throw new MarketDataException("blotter_view","Supply the selected context."),
+  (connection,view,ct)=>tradeReads.Workspace(connection,view,body.View,body.BookingCatalog=="directory",ct),expectedConvention:TradingBlotter.Convention,combinedWorkspace:true);
 });
-api.MapPost("/trading/blotter",(HttpContext c,FuturesBlotterRequest body)=>FuturesRead(c,body.Context??throw new MarketDataException("blotter_view","Supply the selected context."),
- (connection,data,frame,ct)=>tradingBlotter.Read(connection,data,frame,body.View,ct),expectedConvention:TradingBlotter.Convention));
+api.MapPost("/trading/blotter",(HttpContext c,FuturesBlotterRequest body)=>TradingRead(c,body.Context??throw new MarketDataException("blotter_view","Supply the selected context."),
+ (connection,view,ct)=>tradeReads.Blotter(connection,view,body.View,ct),expectedConvention:TradingBlotter.Convention));
 api.MapPost("/swaps/catalog",(HttpContext c,FuturesReadRequest body)=>FuturesRead(c,body,swapStore.Catalog,expectedConvention:SwapStore.Convention));
-api.MapPost("/swaps/editor",(HttpContext c,SwapEditorRequest body)=>FuturesRead(c,body.Context??throw new MarketDataException("swap_context","Supply the selected context."),
- (connection,data,frame,ct)=>swapStore.Editor(connection,data,frame,body,ct),headTrade:body.TradeId,expectedConvention:SwapStore.Convention));
+api.MapPost("/swaps/editor",(HttpContext c,SwapEditorRequest body)=>TradingRead(c,body.Context??throw new MarketDataException("swap_context","Supply the selected context."),
+ (connection,view,ct)=>tradeReads.SwapTrade(connection,view,body.TradeId,body.Revision,ct),headTrade:body.TradeId,expectedConvention:SwapStore.Convention));
 api.MapPost("/swaps/preview",(HttpContext c,SwapWriteRequest body)=>FuturesRead(c,new(body.SnapshotId,body.Convention,body.KnowledgeMode),
  (connection,data,frame,ct)=>swapStore.Preview(connection,data,frame,body,ct),headTrade:body.TradeId,amendmentPreview:body.TradeId is not null,expectedConvention:SwapStore.Convention));
 Task<IResult> SaveSwap(HttpContext c,SwapWriteRequest body,bool amend)=>Locked(c,session=>database.WithIdentity(Profile(session),amend?"AmendTrade":"BookTrade",async(connection,ct)=>

@@ -4,11 +4,12 @@ using Npgsql;
 namespace OpenEtrm.Api;
 
 // The dated cutoff a trading read binds and the frame it reads at. Trading facts are always read
-// as of a context: current knowledge captured for this read over a working frame, which may be
-// edited, or a historical view's retained context, which may not. Page views use PinnedContext.
+// as of a context: current knowledge captured for this read over a working frame, the only view
+// that may be edited; a context captured earlier, re-read over a working frame; or a historical
+// view's retained context. Page views use PinnedContext.
 public sealed record TradingView
 {
-    // Views are made by Capture or Retained; the checks alone rebuild a page's own view directly.
+    // Views are made by Capture, Reread or Retained; the checks alone rebuild a page's own view directly.
     internal TradingView(InputFrame? frame,ScheduleContext context,bool working)
     {
         Frame=frame??throw PinnedContext.Missing();Context=PinnedContext.Exact(context);Working=working;
@@ -24,6 +25,9 @@ public sealed record TradingView
         var on=frame.At.UtcDateTime.ToString("yyyy-MM-dd",CultureInfo.InvariantCulture);
         return new(frame,(await store.Capture(connection,new(on,null,"current"),ct)).Context,true);
     }
+    // Working data as of a context captured earlier. The read refuses a context effective on another date.
+    public static TradingView Reread(InputFrame? frame,ScheduleContext context)=>
+        frame is {ContextId:null}?new(frame,context,false):throw PinnedContext.Missing();
     // A historical view: its retained context, read at one of its own frames.
     public static TradingView Retained(InputFrame? frame,ScheduleContext context)=>
         frame is not null && frame.ContextId==context.ContextId?new(frame,context,false):throw PinnedContext.Missing();
