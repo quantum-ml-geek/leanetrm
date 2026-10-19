@@ -57,6 +57,9 @@ export function renderDataGrid(host:HTMLElement,key:string,scope:string,headers:
   function update(){const shown=values.filter(row=>matchesTableRow(row,state.query,state.columns,options.visible)).length;count.textContent=`${shown} of ${values.length} rows`;clear.hidden=!state.query&&!state.columns.some(v=>v!==null);}
   function apply(){update();if(ready&&alive)table.setFilter(matches);}
   function layout():GridLayout{return {order:table.getColumns().map(c=>options.keys[Number(c.getField().slice(1))]),widths:Object.fromEntries(table.getColumns().map(c=>[options.keys[Number(c.getField().slice(1))],Math.max(40,Math.min(3000,Math.round(c.getWidth()||120)))])),sort:table.getSorters().map(s=>({key:options.keys[Number(s.field.slice(1))],direction:s.dir}))};}
+  // fitDataFill refits every column without a definition width whenever the
+  // grid is redrawn for a new size, so a user's resize becomes that width.
+  table.on('columnResized',(column:any)=>{column.getDefinition().width=column.getWidth();});
   table.on('tableBuilt',()=>{if(!alive){table.destroy();return;}ready=true;apply();options.onReady?.();});
   for(const event of ['columnMoved','columnResized','dataSorted'])table.on(event,()=>{if(ready&&current())options.onLayout(layout());});
   search.oninput=()=>{if(!current())return;state.query=search.value;apply();};

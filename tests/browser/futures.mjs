@@ -93,6 +93,11 @@ export async function run({command,evaluate,wait,click,set,submit,persona,check,
   await command('Input.dispatchMouseEvent',{type:'mouseReleased',x:target.x,y:target.y,button:'left',clickCount:1});
   const resize=await evaluate("(()=>{const n=document.querySelector('#futures-holdings [role=columnheader][tabulator-field=c1] + .tabulator-col-resize-handle'),r=n.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+12};})()");
   await command('Input.dispatchMouseEvent',{type:'mousePressed',x:resize.x,y:resize.y,button:'left',clickCount:1});await command('Input.dispatchMouseEvent',{type:'mouseMoved',x:resize.x+50,y:resize.y,button:'left',buttons:1});await command('Input.dispatchMouseEvent',{type:'mouseReleased',x:resize.x+50,y:resize.y,button:'left',clickCount:1});
+  const frames="new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))",bookWidth="Math.round(document.querySelector('#futures-holdings [role=columnheader][tabulator-field=c1]').getBoundingClientRect().width)";
+  const resizedWidth=await evaluate(bookWidth);
+  await command('Emulation.setDeviceMetricsOverride',{width:1400,height:1050,deviceScaleFactor:1,mobile:false});await evaluate(frames);
+  await command('Emulation.setDeviceMetricsOverride',{width:1440,height:1050,deviceScaleFactor:1,mobile:false});await evaluate(frames);
+  await check('a resized column keeps its width when the grid is redrawn for a new size',`${resizedWidth}>=140&&${bookWidth}===${resizedWidth}`);
   await set('#futures-holdings .table-search','Jan');await menu('blotter-settings');await set('#blotter-name','Book A review');await click('#blotter-save');
   await check('named view saves selected books columns and row filters',"document.querySelector('#blotter-saved').value==='Book A review'&&document.querySelector('#error').hidden");
   await check('account save captures resized columns and a non-default visual order',"(()=>{const v=window.__futuresResponses.filter(r=>r.path==='/api/table-views/blotter'&&r.data.layout).at(-1).data.layout;return v.grid.widths.book>=140&&v.grid.order.indexOf('book')>v.grid.order.indexOf('market');})()");
