@@ -33,6 +33,7 @@ import {run as swapObservations} from './swap-observations.mjs';
 import {run as tableInteractions} from './table-interactions.mjs';
 import {run as blotterPlace} from './blotter-place.mjs';
 import {run as blotterShell} from './blotter-shell.mjs';
+import {run as blotterScope} from './blotter-scope.mjs';
 import {run as blotterDetails} from './blotter-details.mjs';
 import {run as blotterCloseOut,refusals as blotterCloseOutRefusals} from './blotter-close-out.mjs';
 import {run as units} from './units.mjs';
@@ -70,7 +71,7 @@ async function tradingNavigation(browser){await blotterStreaming(browser);await 
 async function ppaEntry(browser){await ppa(browser);await ppaComposed(browser);}
 async function riskAndDashboard(browser){await risk(browser);await riskWorkspace(browser);await dashboard(browser);}
 // The table interactions and the Blotter workbench's scenarios share one browser, and so one preview session, for the same reason.
-async function tablesAndBlotter(browser){await tableInteractions(browser);await blotterPlace(browser);await blotterDetails(browser);await blotterShell(browser);}
+async function tablesAndBlotter(browser){await tableInteractions(browser);await blotterPlace(browser);await blotterDetails(browser);await blotterScope(browser);await blotterShell(browser);}
 // The standard fixture initially has futures only. Book both product families
 // through their editor checks before exercising mixed-portfolio risk and the Dashboard's Positions.
 const standardSuites=[['market navigation',marketNavigation],['profile dialog',profileDialog],['administration',administration],['power TOUs',power],['party editors',parties],['futures',tradingNavigation],['trade editor',tradeEditor],['financial swaps',swaps],['risk and dashboard',riskAndDashboard],['table interactions and the Blotter workbench',tablesAndBlotter],['units and precision',units],['saved-change notices',notices]];

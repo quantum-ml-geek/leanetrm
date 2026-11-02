@@ -337,8 +337,13 @@ Trading opens a **Blotter** of individual trade bindings. Named views select
 columns, portfolio/book filters, row filters and an explicit pivot layout. Pivots
 use the managed backend, preserving exact quantity and currency partitions; they
 do not merge obligations. Saving a view does not save or choose market inputs,
-knowledge coordinates or authority. Shared financial date controls stay in the
-page header (D217). As of, with the Blotter's close badge (D219), remains visible;
+knowledge coordinates or authority. The Blotter and Risk share searchable
+portfolio/book selectors; portfolio membership narrows displayed book choices
+without silently removing explicit selections or changing the managed intersection. Named Blotter views
+can be pinned to the sidebar instead of fixed physical-product shortcuts.
+All four Blotter panes support temporary maximize/restore (D294).
+Shared financial date controls stay in the page header (D217).
+As of, with the Blotter's close badge (D219), remains visible;
 As known on and its explanation open in document flow under a summary naming the
 knowledge in use. Jobs exposes the same controls for saved valuation reports;
 unapplied edits block report reads, while job and node operations stay current.
