@@ -288,7 +288,7 @@ remaining bounds are recorded with the executable consumers in the linked contra
 | D290 | An option premium outside the rate curve is left out on its own, and option events cannot be dated after they are recorded | Decided by the owner (2026-11-02, [futures-options.md](futures-options.md)). A pending premium cash payment, or an option's expiry, whose date lies outside the selected currency curve's pillars is listed with `discount_coverage` and no value; the curve is still never extrapolated, and every other position of the read or risk run is valued. A missing discount default still fails the read. An exercise, assignment or instruction whose business time is after its recording time is refused with `option_event_future` (migration 0168); expiry already requires its instant to have passed. |
 | D291 | Reprice bounded independent joint scenarios and selected mixed sensitivities through common PV | Implementation increment, 2026-11-02. Every named sample is a temporary child of the same selected market scenario; exact loss is base value minus shocked value. Unit reuse and external quantity application stay in the shared valuation path. Selected mixed pairs use four corners at half, nominal and double bumps, with explicit absolute/relative agreement tolerances and native units. Completed managed results retain values, full scenario ancestry and work receipts, without executable child graphs. Agreement does not establish differentiability or global linearity. Joint-run HTTP/worker retention and graphical report integration remain work. See [joint scenario risk](joint-scenario-risk.md). |
 | D292 | Risk selects portfolios, books and individual trades before pricing | Decided by the owner, 2026-11-02. Portfolio groups books; book holds trades. Optional nonempty trade IDs narrow the authorized retained parent scope and include every held binding of each selected trade. Empty explicit selection refuses rather than widening. Discovery reads booking identity without pricing. Catalogs, immediate reports, retained worker runs, multipart display and exports preserve the exact subset; absent/null IDs preserve legacy whole-book JSON. Migration 0169 provides selected source reads and minimal lease-fenced PPA identity discovery without direct worker ledger access. See [Risk workspace](risk-workspace.md) and [scope contract](risk-engine.md#individual-trade-scope-d292). |
-| D293 | Blotter panes maximize temporarily; shared portfolio/book picks and personal sidebar pins replace product shortcuts | Decided by the owner, 2026-11-02. Summary, Positions, Details and Charts each maximize and restore without changing the saved arrangement or replacing their controls. Blotter and Risk share searchable multiple-selection controls. Portfolio choices narrow the displayed books using the authorized directory's exact memberships; an incompatible selected book stays explicit and removable, never silently dropped. Empty selections and combined filters retain the existing managed intersection semantics. Fixed Physical gas and Physical crude sidebar shortcuts are removed; named filtered Blotter views use the existing account-owned sidebar pin. Native product operations remain available from the common Blotter. No new persistence contract or financial rule is introduced. |
+| D294 | Blotter panes maximize temporarily; shared portfolio/book picks and personal sidebar pins replace product shortcuts | Decided by the owner, 2026-11-02. Summary, Positions, Details and Charts each maximize and restore without changing the saved arrangement or replacing their controls. Blotter and Risk share searchable multiple-selection controls. Portfolio choices narrow the displayed books using the authorized directory's exact memberships; an incompatible selected book stays explicit and removable, never silently dropped. Empty selections and combined filters retain the existing managed intersection semantics. Fixed Physical gas and Physical crude sidebar shortcuts are removed; named filtered Blotter views use the existing account-owned sidebar pin. Native product operations remain available from the common Blotter. No new persistence contract or financial rule is introduced. |
 
 ## Proposed implementation choices
 
@@ -2053,3 +2053,29 @@ D286 naming clarification: side names describe their terms (Power, REC, Capacity
 Fixed price, Index price, Fee, and attribute price sides). Direction is selected
 independently on each side. Delivery/payment role identifiers remain exact
 internal contract identifiers, rather than user-facing side names.
+
+
+## D293 — Maintained crude delivery masters use original pricing identities
+
+Local implementation contract, not publication or production activation approval.
+
+Maintain immutable crude setup versions over exact grade/facility/custody masters
+and an explicitly admitted original monthly index curve. Require an explicit
+one-to-one 60-Fahrenheit standard-volume policy, coherent unit graphs, unchanged
+pricing quantity semantics, typed foreign keys, effective delivery coverage and
+certified publication knowledge. Do not copy curves or observations to make new
+masters fit an older pricing namespace.
+
+Native v2 assignment/physical identities retain the separate delivery references;
+pricing quantities, currency, multiplier, contracts, series and factors remain
+original. V1 identities and retained programs remain unchanged. New bookings pin
+the exact setup and require its current head; retained trades and command retries
+keep their admitted version. Common interactive/queued scenarios evaluate shared
+original factors under current dual-reference authority and worker lease fencing.
+
+The executable baseline has one current original pricing revision with multiple
+grades/curves. A second simultaneous context refuses rather than choosing one.
+Separate-master delivery-to-cash remains unsupported and refuses before writes;
+legacy operations retain their existing contract. Broader source selection,
+physical LNG/cargo and saved Incoterms terms remain planned. Fee catalogs remain
+deferred. See [the implemented contract and qualification](crude-delivery-setups.md).

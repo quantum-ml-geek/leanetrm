@@ -156,7 +156,7 @@ The default arrangement, top to bottom:
 - Each pane can temporarily maximize to fill the dock and restore its previous
   arrangement. The saved split ratios, grid and editor state stay in place.
   Moving and resizing wait until the panes are restored. Maximization is not
-  saved in the named view (D293).
+  saved in the named view (D294).
 - The arrangement (dock layout, split ratios, collapsed panes, active tabs)
   is saved in the named Blotter view. This bumps `BlotterView` to version 6;
   version 5 views follow the existing earlier-version rule. An unsaved
