@@ -1360,7 +1360,7 @@ populated additive-upgrade check preserves prior operational and cash history.
 Automated crude closes, amendments and cancellation remain further work.
 Production activation remains a separate release gate.
 
-D292 local implementation adds the [crude delivery setup workflow](crude-delivery-setups.md):
+D293 local implementation adds the [crude delivery setup workflow](crude-delivery-setups.md):
 versioned Save/Validate/Publish, separate exact delivery and pricing namespaces,
 explicit 60-Fahrenheit volume equivalence, native booking/reopen and common
 interactive/queued risk. Qualification uses independent numerical oracles,

@@ -12,7 +12,7 @@ page guidance. Operational questions need no financial access or invented market
 snapshot. See [workspace assistance](assistant-workspace.md) for the operation
 boundary, replay contract and implemented limits.
 
-D292 implements [maintained crude delivery setups](crude-delivery-setups.md):
+D293 implements [maintained crude delivery setups](crude-delivery-setups.md):
 exact delivery masters bind to an original admitted monthly index source,
 with explicit standard-volume equivalence and immutable booking pins. Native
 pre-delivery valuation and shared portfolio risk consume the original market

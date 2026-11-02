@@ -2054,7 +2054,7 @@ independently on each side. Delivery/payment role identifiers remain exact
 internal contract identifiers, rather than user-facing side names.
 
 
-## D292 — Maintained crude delivery masters use original pricing identities
+## D293 — Maintained crude delivery masters use original pricing identities
 
 Local implementation contract, not publication or production activation approval.
 

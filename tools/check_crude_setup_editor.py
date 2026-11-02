@@ -146,10 +146,13 @@ def run_booking_checks(url, query, manifest, *, run_worker):
     report = c.call('portfolio/risk', request)
     held = next(p for p in report['factors'][0]['positions'] if p['tradeId'] == booked['tradeId'])
     assert {k: Fraction(held['values'][k]) for k in ('base','up','down','delta','gamma')} == {'base':2000,'up':3000,'down':1000,'delta':1000,'gamma':0}
-    job = c.call('portfolio/risk/jobs', {'requestId': str(uuid4()), 'request': request})
+    selected_request = {**request, 'tradeIds': [booked['tradeId']]}
+    selected_report = c.call('portfolio/risk', selected_request)
+    assert {p['tradeId'] for factor in selected_report['factors'] for p in factor['positions']} == {booked['tradeId']}
+    job = c.call('portfolio/risk/jobs', {'requestId': str(uuid4()), 'request': selected_request})
     run_worker(); completed = c.call('portfolio/risk/jobs/' + job['id'])
     assert completed['state'] == 'completed', completed
-    assert completed['result']['factors'] == report['factors']
+    assert completed['result']['factors'] == selected_report['factors']
     # A later setup publication cannot change retained economics or program identity.
     c.call('profile', {'profile': 'editor'})
     saved = next(v for v in c.call('crude-setup/catalog')['versions'] if v['id'] == assignment['crudeSetupId'])

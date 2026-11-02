@@ -1,6 +1,6 @@
 # Crude delivery setups
 
-D292 adds an executable mapping from exact delivery masters to an existing
+D293 adds an executable mapping from exact delivery masters to an existing
 monthly index source. Its consumers are the delivery setup editor, native crude
 trade preview/booking, retained trading views, and interactive/queued contractual
 portfolio risk. This is a local implementation; production activation is separate.
@@ -43,9 +43,13 @@ Authoring requires `WriteMarketDefinitions`; publication requires
 and both reference catalogs. Drafts are immutable. Equal normalized terms under
 the same base reuse the draft; an already published identical fact is reused.
 A draft can be resaved under a newer explicit base after a competing publication.
+Returning to earlier terms from a later base creates a new revision; retrying the
+original command continues to return its original outcome.
 A stale base cannot publish. Publication availability is certified from the
 transaction's checked commit time, never its creation timestamp or insertion
-order. A retained context cannot see a later setup publication.
+order. A retained context cannot see a later setup publication. Current-head resolution
+chooses the latest known publication before checking authority; a hidden head
+raises an error instead of making an older publication current.
 
 Commands retain actor, request identity, canonical payload and first outcome.
 Reusing a request with different terms refuses. Unknown save/publish outcomes
@@ -112,7 +116,8 @@ implemented.
 
 The managed `--physical-crude-side` checks cover separate reference namespaces,
 retained v2 execution, unchanged v1 admission, incompatible quantities and indirect
-unit-scale changes, and shared physical/financial scenario oracles.
+unit-scale changes, shared physical/financial scenario oracles, and a quote with multiplier 0.001
+where 1,000 volume units at a raw price of 2 give exactly 2 currency units.
 
 `tools/run_preview.py --crude-setup-check` creates a stock disposable PostgreSQL
 installation. It uses a separate delivery catalog/revision and an original source
@@ -120,7 +125,8 @@ declared only as a swap bundle. Checks cover semantic replay, normalized dates,
 publication role separation, stale-base/rebase behavior, monthly coverage,
 historical visibility, current authority for both references, unchanged original
 observations, native booking/reopen, stale-head refusal, corrected-source parity,
-and real queued-worker risk parity. Existing native crude and mixed-portfolio
+selected-trade and whole-book queued-worker risk parity, and permission
+revocation/recovery without following a hidden current head. Existing native crude and mixed-portfolio
 checks also run. Add `--browser-check --browser /path/to/browser` for authoring,
 post-commit coded-failure recovery across reloads, explicit ambiguous-binding
 selection, ticket booking and read-only-role checks.
