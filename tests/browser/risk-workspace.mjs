@@ -133,7 +133,7 @@ async function tradeSelection({command,evaluate,wait,click,set,check,shot,idle,u
  await set('#risk-workspace-portfolios',portfolio);await wait(idle);
  await set('#risk-workspace-books',book);await wait(idle);
  await check('selecting a portfolio and book lists that book’s trades',
-  `(()=>{const page=${scopePage};return page.trades.length>0&&page.trades.every(t=>t.bookId===${JSON.stringify(book)})&&document.querySelector('#risk-workspace-trades').options.length>0&&[...document.querySelector('#risk-workspace-books').options].every(o=>page.books.find(b=>b.id===o.value)?.portfolio_id===${JSON.stringify(portfolio)});})()`);
+  `(()=>{const page=${scopePage};return page.trades.length>0&&page.trades.every(t=>t.bookId===${JSON.stringify(book)})&&document.querySelector('#risk-workspace-trades').options.length>0&&[...document.querySelectorAll('#risk-workspace-books-picker .scope-option input')].every(o=>page.books.find(b=>b.id===o.value)?.portfolio_id===${JSON.stringify(portfolio)});})()`);
  await set('#risk-workspace-trade-mode','selected');await wait(idle);
  await check('an empty individual selection cannot run whole-book risk',"document.querySelector('#risk-jobs-new').disabled&&document.querySelector('#risk-workspace-trade-help').textContent.includes('Select at least one trade')");
  const trade=await evaluate("[...document.querySelector('#risk-workspace-trades').options].find(o=>!o.disabled).value");

@@ -5,6 +5,7 @@ import {recentCompletedRuns,riskAddress} from './risk-results.js';
 import {askInPanel} from './side-panel.js';
 import {publicText} from './market-view.js';
 import {sameRiskScope} from './risk-scope.js';
+import {setupBookScopePicker} from './scope-picker.js';
 
 type Source={snapshotId:string;context?:{contextId?:string}};
 type Scope={bookIds:string[];portfolioIds:string[];tradeIds:string[]|null};
@@ -19,6 +20,7 @@ export function setupRiskWorkspace(o:Options){
  const prefix='workspace-',host=get('risk-page'),editor=get<HTMLDetailsElement>('risk-workspace-editor');
  copyRiskEditor(get('risk-workspace-editor-body'),prefix);
  const results=setupRiskResults(get('risk-workspace-results'),o.zone);
+ const scopePicker=setupBookScopePicker({books:get('risk-workspace-books'),portfolios:get('risk-workspace-portfolios'),busy:o.busy});
  let epoch=0,directory:Directory|undefined,selection:Source|undefined,selectedJob:string|undefined,owner='',engine:ReturnType<typeof setupRisk>|undefined;
  let shown:RunView|undefined,question:AbortController|undefined,scope:Scope={bookIds:[],portfolioIds:[],tradeIds:null},unreadRecovery=false;
  let tradeChoices=new Map<string,Trade>(),tradesReady=false,allTradesAvailable=false,totalTrades=0,nextTradeOffset:number|null=null,maxTrades=256;
@@ -79,12 +81,7 @@ export function setupRiskWorkspace(o:Options){
   }catch(error){if(version===epoch){results.reset();get('risk-workspace-note').textContent='The retained report could not be read under current authority. Refresh to try again.';}throw error;}
  }
  function drawScope(){
-  if(!directory)return;
-  const books=directory.books.filter(b=>!scope.portfolioIds.length||scope.portfolioIds.includes(b.portfolio_id)).map(b=>({id:b.id,name:`${b.portfolio} · ${b.name}`})),portfolios=[...new Map(directory.books.map(b=>[b.portfolio_id,b.portfolio]))].map(([id,name])=>({id,name}));
-  for(const [id,rows,selected] of [['risk-workspace-books',books,scope.bookIds],['risk-workspace-portfolios',portfolios,scope.portfolioIds]] as const){
-   const control=get<HTMLSelectElement>(id);control.replaceChildren(...rows.map(row=>new Option(row.name,row.id)),...selected.filter(value=>!rows.some(row=>row.id===value)).map(value=>new Option('Selected scope no longer readable',value)));
-   control.selectedIndex=-1;for(const option of control.options)option.selected=selected.includes(option.value);
-  }
+  scopePicker.set(directory?.books??[],scope);
  }
  function drawTrades(){
   get<HTMLSelectElement>('risk-workspace-trade-mode').value=scope.tradeIds===null?'all':'selected';
@@ -159,8 +156,8 @@ export function setupRiskWorkspace(o:Options){
  return {load,reset,leave,openJob,refresh:()=>{if(!host.hidden)results.refresh();engine!.refresh();},
   sync(){engine!.sync();get<HTMLButtonElement>('risk-jobs-new').disabled=o.busy()||!o.canRun()||!scopeValid()||unreadRecovery;
    for(const id of ['risk-workspace-portfolios','risk-workspace-books','risk-workspace-trade-mode','risk-workspace-trades'])get<HTMLSelectElement>(id).disabled=o.busy()||!directory;
-   get<HTMLButtonElement>('risk-workspace-trades-more').disabled=o.busy()||!tradesReady;},
-  contextChanged(){epoch++;engine!.inputsChanged(engine!.edited());results.reset();shown=undefined;directory=undefined;selection=undefined;tradesReady=false;tradeChoices.clear();drawTrades();get('risk-workspace-note').textContent='The selected market context changed. Refresh Risk to read the new scope.';},
+   get<HTMLButtonElement>('risk-workspace-trades-more').disabled=o.busy()||!tradesReady;scopePicker.sync();},
+  contextChanged(){epoch++;engine!.inputsChanged(engine!.edited());results.reset();shown=undefined;directory=undefined;selection=undefined;scopePicker.set([],{bookIds:[],portfolioIds:[]});tradesReady=false;tradeChoices.clear();drawTrades();get('risk-workspace-note').textContent='The selected market context changed. Refresh Risk to read the new scope.';},
   edited:()=>engine!.edited(),unconfirmed:()=>engine!.unconfirmed(),
   address:()=>selectedJob?'#risk/job/'+encodeURIComponent(selectedJob):'',
   assistant:()=>selectedJob&&engine!.current()?.retained&&engine!.current()?.parts.some(p=>p.job?.id===selectedJob)?{operation:'portfolio.risk.jobs.id_v1',inputJson:JSON.stringify({body:null,parameters:{id:selectedJob}})}:undefined};

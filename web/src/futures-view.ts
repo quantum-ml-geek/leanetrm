@@ -25,6 +25,7 @@ import {setupFuturesBooking} from './futures-booking.js';
 import {draftShapes,otherRevision,readCurveShapes} from './curve-shapes.js';
 import {newTradeControl,newTradeProducts,setupNewTrade,type NewProduct} from './new-trade.js';
 import {createTableWorkspace} from './table-workspace.js';
+import {setupBookScopePicker} from './scope-picker.js';
 import {renderDataGrid} from './data-grid.js';
 import {contractPositions,deltaLadder,ladderExport,type LadderCell,type LadderValue} from './delta-ladder.js';
 import {pivotMatrix,pivotChartPanels,groupLabel,type PivotGroup} from './analytics-model.js';
@@ -127,6 +128,7 @@ export function setupFutures(options:{tickets:ProductTickets;api:Api;stream:(bod
     note:get('new-trade-availability'),body:get('blotter-dock'),rows:get('blotter-pane-grid'),rowGroups:rowGroups.map(group=>[group,rowGroupLabels[group]] as const),lens:get('desk-lens'),
   });
   // Existing booking controls share the table toolbar.
+  const scopePicker=setupBookScopePicker({books:get('blotter-books'),portfolios:get('blotter-portfolios'),busy});
   get('blotter-refresh').id='futures-refresh';get('blotter-new').id='futures-new';get('blotter-rows').id='desk-positions';
   let catalog:Catalog|undefined,holdings:Holdings|undefined,summaries:Summary[]|undefined,owner='',snapshot='',uncertain=false,generation=0;
   // The first page of the booked positions a read values: its total is the count the status line gives, and the priced read must hold its
@@ -190,7 +192,7 @@ export function setupFutures(options:{tickets:ProductTickets;api:Api;stream:(bod
   // the view. Moving or collapsing a pane draws the grid again where it now stands, never builds it again. The details collapse by their own
   // control, which asks first about edits they hold.
   let setUp=false,retainedOnly=false;
-  const dock=setupDock(get('blotter-dock'),{label:'Blotter panes',rules:blotterDockRules,narrow:options.narrow,initial:view.panes,ownCollapse:['details'],
+  const dock=setupDock(get('blotter-dock'),{label:'Blotter panes',rules:blotterDockRules,narrow:options.narrow,initial:view.panes,ownCollapse:['details'],maximizable:true,
     tabs:[{id:'summary',label:'Summary',body:get('blotter-pane-summary')},{id:'grid',label:'Positions',body:get('blotter-pane-grid')},{id:'details',label:'Details',body:get('blotter-pane-details')},{id:'charts',label:'Charts',body:get('blotter-pane-charts')}],
     changed:arrangement=>{
       // Charts put away to make room for the details are this visit's, never the view's; once brought back by the person they are theirs again.
@@ -628,9 +630,6 @@ export function setupFutures(options:{tickets:ProductTickets;api:Api;stream:(bod
     if(opened&&sameMode(panel.current(),next))panel.focusForm();
   }
   const selected=(id:string)=>Array.from(get<HTMLSelectElement>(id).selectedOptions,o=>o.value);
-  function choices(id:string,rows:{id:string;name:string}[],ids:string[]){
-    const select=get<HTMLSelectElement>(id);select.replaceChildren(...rows.map(r=>new Option(publicText(r.name),r.id,false,ids.includes(r.id))),...ids.filter(id=>!rows.some(r=>r.id===id)).map(id=>new Option('Unavailable saved selection',id,false,true)));
-  }
   function captureFilters(){if(!table)return;const state=table.state();view.query=state.query;view.columnFilters=Object.fromEntries(state.columns.flatMap((value,i)=>value===null||transientKeys.has(tableColumns[i])?[]:[[tableColumns[i],value]]));}
   // A view keeps the layout of its own columns: the Risk lens draws others, whose layout it never keeps.
   function captureLayout(){captureFilters();if(table?.ready())view.grid=withoutColumns(table.layout(),transientKeys);}
@@ -654,8 +653,7 @@ export function setupFutures(options:{tickets:ProductTickets;api:Api;stream:(bod
     field('blotter-mode').value=view.mode;get('blotter-pivot-fields').hidden=view.mode!=='pivot';
     // Trade rows group by the desk's choice; a pivot groups by its own dimensions and has the configurable chart.
     field('blotter-row-group').value=view.rowGroup??'';get('blotter-row-group-control').hidden=view.mode==='pivot';get('blotter-chart-settings').hidden=view.mode!=='pivot';
-    choices('blotter-books',catalog?.books.map(b=>({id:b.id,name:b.name}))??[],view.bookIds);
-    choices('blotter-portfolios',Array.from(new Map(catalog?.books.map(b=>[b.portfolio_id,{id:b.portfolio_id,name:b.portfolio}])??[]).values()),view.portfolioIds);
+    scopePicker.set(catalog?.books??[],view);
     workspace.pivot(view.groupBy,view.measures,view.splitBy);get<HTMLInputElement>('blotter-show-chart').checked=view.chart.visible;field('blotter-chart-measure').value=view.chart.measure;field('blotter-chart-kind').value=view.chart.kind;
     get('blotter-chart-card').querySelectorAll<HTMLButtonElement>('[data-plot-kind]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.plotKind===view.chart.kind)));
     choose('blotter-saved',[...savedViews.map(v=>({id:v.name,name:v.name})),...earlierViews.map(name=>({id:name,name:`${name} · ${earlierFormatLabel}`}))],field('blotter-saved').value||draftBase?.name||'','Current view · not saved');
@@ -737,6 +735,7 @@ export function setupFutures(options:{tickets:ProductTickets;api:Api;stream:(bod
   function store(){try{if(pending.command)sessionStorage.setItem(storageKey(),JSON.stringify(pending.command));else sessionStorage.removeItem(storageKey());}catch{/* The current visit still retains the exact in-memory request. */}}
   function restore(){
     if(owner===options.profile()){takeStoredRequest();return;}
+    dock.restore();
     owner=options.profile();pending.clear();uncertain=false;view=newBlotterView();showPanes();forgetViews();draftBase=undefined;field('blotter-name').value='';text('blotter-view-note','Named views are saved to your account. Dates and market inputs are selected separately.');get('blotter-column-choices').replaceChildren();text('blotter-table-title','Positions');workspace.closeMenus();viewControls();
     takeStoredRequest();
   }
@@ -890,6 +889,7 @@ export function setupFutures(options:{tickets:ProductTickets;api:Api;stream:(bod
     if(control.reason===null)button.removeAttribute('aria-describedby');else button.setAttribute('aria-describedby','new-trade-availability');
   }
   function sync(){
+    scopePicker.sync();
     markKeptSubmission();
     // Release the rows before restoring their control's focus. On entry to
     // busy, position.sync captures that focus before the rows become inert.

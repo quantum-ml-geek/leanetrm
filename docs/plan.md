@@ -11,6 +11,12 @@ directory remains separate from a complete archive. Joint statistical scenarios,
 aligned history, VaR/expected shortfall, Monte Carlo/PCA/hybrid, EVT and backtesting
 remain subsequent increments; deterministic graphics do not establish them.
 
+D293 adds temporary maximize/restore to every Blotter pane, a shared searchable
+portfolio/book picker in Blotter and Risk, and personal saved-view sidebar pins
+in place of fixed physical-product shortcuts. Membership comes from the bound
+directory; managed scope resolution and existing saved-view persistence remain
+unchanged. See [the workbench](blotter-workbench.md#panes-arrange-resize-collapse).
+
 D291 adds the [managed joint-scenario and mixed-derivative boundary](joint-scenario-risk.md):
 bounded named sibling shocks, exact full-PV loss, selected cross-gammas and explicit
 half/nominal/double step diagnostics. Joint-run HTTP admission, durable retention
