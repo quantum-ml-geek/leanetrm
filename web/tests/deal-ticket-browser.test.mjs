@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {browserAvailable,withBrowserPage} from './browser-page.mjs';
+import {browserAvailable,withBrowserPage,browserTestTimeout} from './browser-page.mjs';
 
 // The ticket draws a synthetic in-delivery schedule view in the real grid dependency: the backend's delivered, remaining and total rows,
 // pinned in that order, and the strip's delivered count.
-test('a ticket in delivery shows the delivered count and the delivered, remaining and total rows above the pinned total',{skip:!browserAvailable,timeout:30000},async()=>{
+test('a ticket in delivery shows the delivered count and the delivered, remaining and total rows above the pinned total',{skip:!browserAvailable,timeout:browserTestTimeout},async()=>{
  await withBrowserPage('<link rel="stylesheet" href="/vendor/tabulator.css"><link rel="stylesheet" href="/app.css"><div id="host" style="width:1200px"></div>',async evaluate=>{
   await evaluate(`(async()=>{
    const {renderTicket}=await import('/deal-ticket.js'),{newTicket}=await import('/ticket-model.js');
@@ -35,7 +35,7 @@ test('a ticket in delivery shows the delivered count and the delivered, remainin
 
 // The ticket keeps the rows the person opened or closed across a redraw, and draws a side added since the last preview only once a
 // preview holds it: until then the instrument grid shows the sides the schedule has and the new side's tab says it is not previewed.
-test('a redraw keeps the person\'s open and closed rows and leaves out a side the schedule does not hold yet',{skip:!browserAvailable,timeout:30000},async()=>{
+test('a redraw keeps the person\'s open and closed rows and leaves out a side the schedule does not hold yet',{skip:!browserAvailable,timeout:browserTestTimeout},async()=>{
  await withBrowserPage('<link rel="stylesheet" href="/vendor/tabulator.css"><link rel="stylesheet" href="/app.css"><div id="host" style="width:1200px"></div>',async evaluate=>{
   await evaluate(`(async()=>{
    const {renderTicket}=await import('/deal-ticket.js'),{newTicket,addSide}=await import('/ticket-model.js');
@@ -66,7 +66,7 @@ test('a redraw keeps the person\'s open and closed rows and leaves out a side th
 
 // In booked mode a side's tab makes the day cells of a column the description enters in that mode inputs; a change opens that day's
 // record. The Quantity links tab draws each link's receipt, delivery and fuel from the backend's exact text.
-test('a booked side tab enters day quantities and the links tab draws the backend links',{skip:!browserAvailable,timeout:30000},async()=>{
+test('a booked side tab enters day quantities and the links tab draws the backend links',{skip:!browserAvailable,timeout:browserTestTimeout},async()=>{
  await withBrowserPage('<link rel="stylesheet" href="/vendor/tabulator.css"><link rel="stylesheet" href="/app.css"><div id="host" style="width:1200px"></div>',async evaluate=>{
   await evaluate(`(async()=>{
    const {renderTicket}=await import('/deal-ticket.js'),{newTicket}=await import('/ticket-model.js');
@@ -110,7 +110,7 @@ test('a booked side tab enters day quantities and the links tab draws the backen
 });
 
 // A late answer that changes nothing on screen leaves the drawn ticket standing, so the person keeps their place in its schedule.
-test('a lookup answer that changes nothing leaves the drawn schedule standing',{skip:!browserAvailable,timeout:30000},async()=>{
+test('a lookup answer that changes nothing leaves the drawn schedule standing',{skip:!browserAvailable,timeout:browserTestTimeout},async()=>{
  await withBrowserPage('<link rel="stylesheet" href="/vendor/tabulator.css"><link rel="stylesheet" href="/app.css"><div id="host" style="width:1200px"></div>',async evaluate=>{
   await evaluate(`(async()=>{
    const {setupTicket}=await import('/ticket-controller.js');
@@ -128,7 +128,7 @@ test('a lookup answer that changes nothing leaves the drawn schedule standing',{
      rows:[{key:'2041-02',parent:null,level:'month',start:'',end:'',operatingDate:null,cells:cells(q),delivered:false}]},summaries:[],scheduleRefusal:null,quantityUnit:'MMBtu',links:[]};}
     throw Error('unexpected '+path);
    };
-   setupTicket(document.querySelector('#host'),{api,context:()=>({}),product:'synthetic_flow',instant:at=>at,actor:()=>'synthetic',booked:()=>{}});
+   setupTicket(document.querySelector('#host'),{api,context:()=>({}),product:'synthetic_flow',instant:at=>at,zone:()=>'UTC',actor:()=>'synthetic',booked:()=>{}});
    const until=async test=>{for(let i=0;i<250&&!test();i++)await new Promise(r=>setTimeout(r,20));if(!test())throw Error('timed out');};
    const edit=async value=>{await until(()=>!!document.querySelector('[data-field=q] input'));const input=document.querySelector('[data-field=q] input');input.value=value;input.onchange();};
    const drawn=q=>document.querySelector('.ticket-status')?.dataset.kind==='current'&&document.querySelector('.tabulator-row[data-row-key="2041-02"]')?.textContent.includes(q);
@@ -143,7 +143,7 @@ test('a lookup answer that changes nothing leaves the drawn schedule standing',{
 });
 
 // Lookup answers dropped because the draft changed leave that draft unread, so returning to it reads its lookups again.
-test('a draft whose lookup answers were dropped reads them again when the person returns to it',{skip:!browserAvailable,timeout:30000},async()=>{
+test('a draft whose lookup answers were dropped reads them again when the person returns to it',{skip:!browserAvailable,timeout:browserTestTimeout},async()=>{
  await withBrowserPage('<link rel="stylesheet" href="/vendor/tabulator.css"><link rel="stylesheet" href="/app.css"><div id="host" style="width:1200px"></div>',async evaluate=>{
   await evaluate(`(async()=>{
    const {setupTicket}=await import('/ticket-controller.js');
@@ -159,7 +159,7 @@ test('a draft whose lookup answers were dropped reads them again when the person
     if(path==='tickets/preview')return {schedule:null,summaries:null,scheduleRefusal:{code:'schedule_view',message:'Not drawn here.'},quantityUnit:'MMBtu',links:[]};
     throw Error('unexpected '+path);
    };
-   setupTicket(document.querySelector('#host'),{api,context:()=>({}),product:'synthetic_flow',instant:at=>at,actor:()=>'synthetic',booked:()=>{}});
+   setupTicket(document.querySelector('#host'),{api,context:()=>({}),product:'synthetic_flow',instant:at=>at,zone:()=>'UTC',actor:()=>'synthetic',booked:()=>{}});
    window.until=async test=>{for(let i=0;i<250&&!test();i++)await new Promise(r=>setTimeout(r,20));if(!test())throw Error('timed out');};
    const edit=async value=>{await until(()=>!!document.querySelector('[data-field=q] input'));const input=document.querySelector('[data-field=q] input');input.value=value;input.onchange();};
    await edit('5');await until(()=>held.length===1);
@@ -174,7 +174,7 @@ test('a draft whose lookup answers were dropped reads them again when the person
 
 // A slow field read must not send every other field into the server's session
 // lock, and edits/closing must release obsolete reads.
-test('ticket field reads are bounded and superseded or closed reads are cancelled',{skip:!browserAvailable,timeout:30000},async()=>{
+test('ticket field reads are bounded and superseded or closed reads are cancelled',{skip:!browserAvailable,timeout:browserTestTimeout},async()=>{
  await withBrowserPage('<div id="host"></div>',async evaluate=>{
   await evaluate(`(async()=>{
    const {setupTicket}=await import('/ticket-controller.js');
@@ -191,7 +191,7 @@ test('ticket field reads are bounded and superseded or closed reads are cancelle
     });
     throw Error('Unexpected request '+path);
    };
-   window.ticket=setupTicket(document.querySelector('#host'),{api,context:()=>({snapshotId:'synthetic'}),product:'synthetic_flow',instant:at=>at,actor:()=>'bounded-reader',booked:()=>{}});
+   window.ticket=setupTicket(document.querySelector('#host'),{api,context:()=>({snapshotId:'synthetic'}),product:'synthetic_flow',instant:at=>at,zone:()=>'UTC',actor:()=>'bounded-reader',booked:()=>{}});
    window.until=async test=>{for(let i=0;i<250&&!test();i++)await new Promise(r=>setTimeout(r,10));if(!test())throw Error('timed out');};
    await until(()=>calls.length>0);
   })()`);
@@ -213,7 +213,7 @@ test('ticket field reads are bounded and superseded or closed reads are cancelle
 
 // Cancellation is an optimization as well as a lifetime boundary: a transport
 // that still delivers an old answer must not win after A -> B -> A edits.
-test('cancelled lookup and preview answers cannot return through the same draft',{skip:!browserAvailable,timeout:30000},async()=>{
+test('cancelled lookup and preview answers cannot return through the same draft',{skip:!browserAvailable,timeout:browserTestTimeout},async()=>{
  await withBrowserPage('<div id="host"></div>',async evaluate=>{
   await evaluate(`(async()=>{
    const {setupTicket}=await import('/ticket-controller.js');
@@ -227,7 +227,7 @@ test('cancelled lookup and preview answers cannot return through the same draft'
     if(path==='tickets/preview')return new Promise(resolve=>previews.push({resolve,signal}));
     throw Error('Unexpected '+path);
    };
-   window.ticket=setupTicket(document.querySelector('#host'),{api,context:()=>({}),product:'synthetic_flow',instant:at=>at,actor:()=>'late-reader',booked:()=>{}});
+   window.ticket=setupTicket(document.querySelector('#host'),{api,context:()=>({}),product:'synthetic_flow',instant:at=>at,zone:()=>'UTC',actor:()=>'late-reader',booked:()=>{}});
    window.until=async test=>{for(let i=0;i<250&&!test();i++)await new Promise(r=>setTimeout(r,10));if(!test())throw Error('timed out');};
    window.edit=value=>{const input=document.querySelector('[data-field=reference] input');input.value=value;input.onchange();};
    await until(()=>!!document.querySelector('[data-field=reference] input'));
@@ -253,7 +253,7 @@ test('cancelled lookup and preview answers cannot return through the same draft'
 });
 
 // Slow reference reads must not accumulate a request for every intermediate ticket shape.
-test('ticket reference reads are bounded and queued choices follow only the latest sides',{skip:!browserAvailable,timeout:30000},async()=>{
+test('ticket reference reads are bounded and queued choices follow only the latest sides',{skip:!browserAvailable,timeout:browserTestTimeout},async()=>{
  await withBrowserPage('<div id="host"></div>',async evaluate=>{
   await evaluate(`(async()=>{
    const {setupTicket}=await import('/ticket-controller.js');
@@ -271,7 +271,7 @@ test('ticket reference reads are bounded and queued choices follow only the late
     }
     throw Error(path);
    };
-   window.ticket=setupTicket(document.querySelector('#host'),{api,context:()=>({}),product:d.product,instant:at=>at,actor:()=>'synthetic',booked:()=>{}});
+   window.ticket=setupTicket(document.querySelector('#host'),{api,context:()=>({}),product:d.product,instant:at=>at,zone:()=>'UTC',actor:()=>'synthetic',booked:()=>{}});
    await tick();
    document.querySelector('[data-side="cash-1"] .ticket-remove').click();
    for(const kind of ['physical','fee'])[...document.querySelectorAll('.ticket-add-kind')].find(b=>b.textContent===kind).click();
@@ -291,7 +291,7 @@ test('ticket reference reads are bounded and queued choices follow only the late
  });
 });
 
-test('returning to an earlier draft cannot apply a partially superseded lookup batch',{skip:!browserAvailable,timeout:30000},async()=>{
+test('returning to an earlier draft cannot apply a partially superseded lookup batch',{skip:!browserAvailable,timeout:browserTestTimeout},async()=>{
  await withBrowserPage('<div id="host"></div>',async evaluate=>{
   await evaluate(`(async()=>{
    const {setupTicket}=await import('/ticket-controller.js');
@@ -308,7 +308,7 @@ test('returning to an earlier draft cannot apply a partially superseded lookup b
     }
     throw Error(path);
    };
-   window.ticket=setupTicket(document.querySelector('#host'),{api,context:()=>({}),product:d.product,instant:at=>at,actor:()=>'synthetic',booked:()=>{}});
+   window.ticket=setupTicket(document.querySelector('#host'),{api,context:()=>({}),product:d.product,instant:at=>at,zone:()=>'UTC',actor:()=>'synthetic',booked:()=>{}});
    await delay(30);
    window.edit=value=>{const input=document.querySelector('[data-field=input] input');input.value=value;input.onchange();};
    edit('base');await delay(700);
@@ -322,7 +322,7 @@ test('returning to an earlier draft cannot apply a partially superseded lookup b
  });
 });
 
-test('late booked choice labels preserve an editable day cell and its unsent quantity',{skip:!browserAvailable,timeout:30000},async()=>{
+test('late booked choice labels preserve an editable day cell and its unsent quantity',{skip:!browserAvailable,timeout:browserTestTimeout},async()=>{
  await withBrowserPage('<div id="host"></div>',async evaluate=>{
   await evaluate(`(async()=>{
    const {setupTicket}=await import('/ticket-controller.js');
@@ -342,7 +342,7 @@ test('late booked choice labels preserve an editable day cell and its unsent qua
     throw Error(path);
    };
    window.until=async test=>{for(let i=0;i<250&&!test();i++)await new Promise(r=>setTimeout(r,20));if(!test())throw Error('Condition not ready');};
-   window.ticket=setupTicket(document.querySelector('#host'),{api,context:()=>({}),product:d.product,instant:at=>at,actor:()=>'synthetic-reader',opened:{tradeId:'synthetic',bindingId:'synthetic',revision:1}});
+   window.ticket=setupTicket(document.querySelector('#host'),{api,context:()=>({}),product:d.product,instant:at=>at,zone:()=>'UTC',actor:()=>'synthetic-reader',opened:{tradeId:'synthetic',bindingId:'synthetic',revision:1}});
    await until(()=>held.length===1);
    const level=document.querySelector('.ticket-level');level.value='day';level.onchange();
    document.querySelector('.ticket-tab[data-tab="physical-1"]').click();
@@ -355,6 +355,47 @@ test('late booked choice labels preserve an editable day cell and its unsent qua
   assert.deepEqual(await evaluate("({same:cell.isConnected&&cell===document.querySelector('.ticket-cell-input'),value:cell.value,focused:document.activeElement===cell,party:document.querySelector('[data-field=party] .ticket-value').textContent})"),{same:true,value:'990',focused:true,party:'party-1'});
   await evaluate("cell.dispatchEvent(new Event('change'))");
   assert.equal(await evaluate("document.querySelector('.ticket-record [data-field=quantity] .ticket-control').value"),'990');
+  await evaluate('ticket.destroy()');
+ });
+});
+
+// A local date-time is booked only as the instant it resolved to: while its resolution is out, or after the clock refused it, the earlier
+// instant is not booked in its place; and an earlier entry's late answer never replaces a later one's.
+test('a local time still resolving or refused blocks booking, and a late answer for an earlier entry is ignored',{skip:!browserAvailable,timeout:browserTestTimeout},async()=>{
+ await withBrowserPage('<div id="host"></div>',async evaluate=>{
+  await evaluate(`(async()=>{
+   const {setupTicket}=await import('/ticket-controller.js');
+   const f=(id,over={})=>({id,label:id,meaning:'',type:'text',unit:null,state:'editable',required:false,band:null,choices:null,dependsOn:[],lookup:null,soon:null,rule:null,...over});
+   const d={product:'synthetic_flow',version:1,rowShape:'flow',tradeFields:[f('pay',{type:'datetime'})],sideLimits:[],levels:['month'],modes:['new'],tabs:[],tradeColumns:[],sides:[]};
+   window.inspections=[];window.bookings=[];window.previewed=[];
+   const api=async(path,body)=>{
+    if(path==='tickets/description')return d;
+    if(path==='time/inspect')return new Promise(resolve=>inspections.push({resolve,body}));
+    if(path==='tickets/preview'){previewed.push(body.draft);return {schedule:null,summaries:[],scheduleRefusal:{code:'schedule_view',message:'Not drawn here.'},quantityUnit:'MMBtu',links:[]};}
+    if(path==='tickets/book'){bookings.push(body);return new Promise(()=>{});}
+    throw Error('Unexpected '+path);
+   };
+   window.ticket=setupTicket(document.querySelector('#host'),{api,context:()=>({}),product:'synthetic_flow',instant:at=>at,zone:()=>'America/Chicago',actor:()=>'local-time',booked:()=>{}});
+   window.until=async test=>{for(let i=0;i<300&&!test();i++)await new Promise(r=>setTimeout(r,10));if(!test())throw Error('timed out');};
+   window.enter=value=>{const input=document.querySelector('[data-field=pay] input');input.value=value;input.onchange();};
+   window.pay=()=>JSON.stringify(previewed.at(-1)??null);
+   await until(()=>!!document.querySelector('[data-field=pay] input'));
+   enter('2026-03-07T04:00');await until(()=>inspections.length===1);
+   inspections[0].resolve({candidates:[{instant:'2026-03-07T10:00:00Z'}]});await until(()=>pay().includes('2026-03-07T10:00:00Z'));
+   await new Promise(r=>setTimeout(r,400));
+   enter('2026-03-08T02:30');await until(()=>inspections.length===2);
+   document.querySelector('.ticket-book').click();await new Promise(r=>setTimeout(r,50));
+   window.whilePending=bookings.length;
+   inspections[1].resolve({candidates:[]});await new Promise(r=>setTimeout(r,400));
+   document.querySelector('.ticket-book').click();await new Promise(r=>setTimeout(r,50));
+   window.afterRefusal=bookings.length;
+   enter('2026-03-09T04:00');enter('2026-03-10T04:00');await until(()=>inspections.length===4);
+   inspections[3].resolve({candidates:[{instant:'2026-03-10T09:00:00Z'}]});await until(()=>pay().includes('2026-03-10T09:00:00Z'));
+   inspections[2].resolve({candidates:[{instant:'2026-03-09T09:00:00Z'}]});await new Promise(r=>setTimeout(r,400));
+  })()`);
+  assert.equal(await evaluate('whilePending'),0);
+  assert.equal(await evaluate('afterRefusal'),0);
+  assert.equal(await evaluate("pay().includes('2026-03-10T09:00:00Z')&&!pay().includes('2026-03-09T09:00:00Z')"),true);
   await evaluate('ticket.destroy()');
  });
 });

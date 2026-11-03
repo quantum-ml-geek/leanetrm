@@ -137,6 +137,8 @@ export function setupFutures(options:{tickets:ProductTickets;api:Api;stream:(bod
   // Existing booking controls share the table toolbar.
   const scopePicker=setupBookScopePicker({books:get('blotter-books'),portfolios:get('blotter-portfolios'),busy});
   get('blotter-refresh').id='futures-refresh';get('blotter-new').id='futures-new';get('blotter-rows').id='desk-positions';
+  // Group headers wrap at the grid's visible width, which the stylesheet reads from here.
+  {const positions=get('desk-positions');new ResizeObserver(()=>positions.style.setProperty('--desk-visible-width',`${positions.querySelector('.tabulator-tableholder')?.clientWidth??positions.clientWidth}px`)).observe(positions);}
   let catalog:Catalog|undefined,holdings:Holdings|undefined,summaries:Summary[]|undefined,owner='',snapshot='',uncertain=false,generation=0;
   // The first page of the booked positions a read values: its total is the count the status line gives, and the priced read must hold its
   // bindings. Failed valuation can expose these independently read operational facts.
@@ -955,8 +957,8 @@ export function setupFutures(options:{tickets:ProductTickets;api:Api;stream:(bod
   function choose(id:string,rows:{id:string;name:string}[],selected:string,placeholder='Choose…'){const select=get<HTMLSelectElement>(id);select.replaceChildren(new Option(placeholder,''),...rows.map(r=>new Option(publicText(r.name),r.id)));select.value=rows.some(r=>r.id===selected)?selected:'';}
   // A trade row's fields as the trade columns and exports state them: exact amounts, readable names.
   function tradeFields(h:Holding):Record<string,string|null>{
-    const {booking,amountFormat,fixedAmountFormat,commodity,quantitySpecification,currencyReference,projectionCurves,coverage,exchange,linkedFuturesTradeIds,actions,...fields}=h;
-    return {...fields,exchange:exchange?.name??null,linkedFuturesTradeIds:linkedFuturesTradeIds?.join(', ')??null,priceUnit:h.instrumentType==='ppa'?null:priceUnit(h),tradeDate:booking.tradeDate,legalEntity:booking.legalEntity??null,counterparty:booking.counterparty??null,instrumentType:friendly(h.instrumentType),commodity:commodity.name,market:h.marketLabel??curveName(h.curve),contract:deliveryLabel(h.deliveryFrom,h.deliveryTo,options.zone()),executed:displayInstant(h.executedAt,options.zone()),settlement:publicText(h.settlement==='unprocessed'?'Unprocessed':h.settlement)};
+    const {booking,amountFormat,fixedAmountFormat,commodity,quantitySpecification,currencyReference,projectionCurves,coverage,exchange,linkedFuturesTradeIds,linkedFuturesTrades,actions,...fields}=h;
+    return {...fields,exchange:exchange?.name??null,linkedFuturesTradeIds:linkedFuturesTradeIds?.join(', ')??null,linkedFuturesTrades:linkedFuturesTrades?.join(', ')??null,priceUnit:h.instrumentType==='ppa'?null:priceUnit(h),tradeDate:booking.tradeDate,legalEntity:booking.legalEntity??null,counterparty:booking.counterparty??null,instrumentType:friendly(h.instrumentType),commodity:commodity.name,market:h.marketLabel??curveName(h.curve),contract:deliveryLabel(h.deliveryFrom,h.deliveryTo,options.zone()),executed:displayInstant(h.executedAt,options.zone()),settlement:publicText(h.settlement==='unprocessed'?'Unprocessed':h.settlement)};
   }
   // What a trade row's value cell says when the close cannot value it, on screen and in exports (D220).
   function notValued(h:Holding,key:string){return h.unavailableReason&&valueFields(h.instrumentType).includes(key)?`Not valued · ${valuationReason(h.unavailableReason,h.instrumentType)}`:undefined;}

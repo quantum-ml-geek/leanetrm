@@ -1,16 +1,17 @@
-import {crudeChoices,crudeSelection,crudeReferenceFields,type CrudeReferenceData} from './crude-selection.js';
+import {crudeChoices,crudeSelection,crudeReferenceFields,standardTemperature,type CrudeReferenceData} from './crude-selection.js';
+import type {ClockRow} from './market-view.js';
 import {zonedInput} from './user-time.js';
 import {displayExactInstant} from './market-view.js';
 import {decorateSideCard,sideAddButton} from './side-card.js';
 import {PendingCommand,actorTransport,type RequestCommand} from './pending-command.js';
-import {crudeConvention,crudeRequest,restoreCrudeCommand,type CrudeProfile,type CrudeFields} from './physical-crude-model.js';
+import {crudeClockHint,crudeConvention,crudePreview,crudeRequest,restoreCrudeCommand,type CrudeProfile,type CrudeFields,type CrudeValue} from './physical-crude-model.js';
 type Api=<T>(path:string,body?:unknown)=>Promise<T>;
 type Party={id:string;revision:number;name:string};
-type Assignment={crudeSetupId?:string|null;bindingName:string;code:string;definitionRevisionId:string;physical:Record<string,unknown>;quantityUnit:string;priceUnit:string;curve:string;curveName:string};
-type Catalog={deliveryReferences:CrudeReferenceData;profiles:CrudeProfile[];books:{id:string;name:string}[];legalEntities:Party[];counterparties:Party[];canBook:boolean;scope:string};
-type Value={presentValue:string;currency:string;sides:{role:string;direction:string;presentValue:string;quantity:unknown}[];deliveryFrom:string;deliveryTo:string;quantity:string;quantityUnit:string};
+type Assignment={crudeSetupId?:string|null;code:string;definitionRevisionId:string;physical:Record<string,unknown>;quantityUnit:string;priceUnit:string;curve:string;curveName:string};
+type Catalog={deliveryReferences:CrudeReferenceData;clocks:ClockRow[];profiles:CrudeProfile[];books:{id:string;name:string}[];legalEntities:Party[];counterparties:Party[];canBook:boolean;scope:string};
+type Value=CrudeValue;
 type Receipt={tradeId:string;instrumentId:string;operationId:string;revision:number};
-type DirectoryRow={tradeId:string;revision:number;instrumentId:string;bookId:string;bookName:string;direction:string;quantity:string;quantityUnit:string;deliveryFrom:string;deliveryTo:string;gradeName:string;facilityName:string;custodyPointName:string};
+type DirectoryRow={tradeId:string;tradeReference:string;revision:number;instrumentId:string;bookId:string;bookName:string;direction:string;quantity:string;quantityUnit:string;deliveryFrom:string;deliveryTo:string;gradeName:string;facilityName:string;custodyPointName:string};
 // An accepted receipt survives context changes, but its follow-up views belong only
 // to the identity and generation that accepted it.
 export async function showAcceptedCrudeTrade(o:{current:()=>boolean;open:()=>Promise<void>;directory:()=>Promise<void>;booked:()=>Promise<void>}){
@@ -26,10 +27,10 @@ export function setupPhysicalCrude(o:{api:Api;act:(work:()=>Promise<void>)=>Prom
  <fieldset><legend>Crude</legend><div class="schedule-fields">
  <label>Commodity<select id="crude-commodity" required></select></label><label>Grade<select id="crude-grade" required></select></label><label>Facility<select id="crude-facility" required></select></label><label>Custody point<select id="crude-custodyPoint" required></select></label><label>Volume specification<select id="crude-quantityCode" required></select></label><label>Delivery clock<select id="crude-clock" required></select></label><input id="crude-assignment" type="hidden"><button id="crude-clear-references" type="button" class="text-button">Clear reference selections</button><p id="crude-selection-note" class="field-help" role="status"></p><label>Contract profile<select id="crude-profile" required></select></label>
  <label>Physical direction<select id="crude-direction" required><option value="">Choose direction</option><option value="receive">Receive crude</option><option value="deliver">Deliver crude</option></select></label>
- <label>Delivery from · <span class="crude-zone"></span><input id="crude-from" type="datetime-local" step="1" required></label><label>Delivery to · <span class="crude-zone"></span>, exclusive<input id="crude-to" type="datetime-local" step="1" required></label>
- <label>Contract volume · <span id="crude-quantity-unit"></span><input id="crude-quantity" inputmode="decimal" required></label></div><dl id="crude-reference"></dl></fieldset>
- <fieldset><legend>Fixed price</legend><div class="schedule-fields"><label>Cash direction<select id="crude-cash-direction" required><option value="">Choose direction</option><option value="pay">Pay consideration</option><option value="receive">Receive consideration</option></select></label><label>Fixed price · <span id="crude-price-unit"></span><input id="crude-price" inputmode="decimal" required></label><label>Payment instant · <span class="crude-zone"></span><input id="crude-payment" type="datetime-local" step="1" required></label></div></fieldset>
- <fieldset><legend>Handling fee</legend><div class="schedule-fields"><label>Fee terms<select id="crude-fee-mode" required><option value="">Choose fee terms</option><option value="none">No handling fee</option><option value="per_unit">Per-unit handling fee</option></select></label><label>Fee · <span id="crude-fee-unit"></span><input id="crude-fee" inputmode="decimal"></label><label>Fee direction<select id="crude-fee-direction"><option value="">Choose direction</option><option value="pay">Pay fee</option><option value="receive">Receive fee</option></select></label></div></fieldset>
+ <label>Delivery from · <span class="crude-zone"></span><input id="crude-from" type="datetime-local" step="1" required></label><label>Delivery to · <span class="crude-zone"></span>, exclusive<input id="crude-to" type="datetime-local" step="1" required></label><p id="crude-clock-hint" class="field-help"></p>
+ <label>Contract volume<span id="crude-quantity-unit" class="label-unit"></span><input id="crude-quantity" inputmode="decimal" required></label></div><dl id="crude-reference"></dl></fieldset>
+ <fieldset><legend>Fixed price</legend><div class="schedule-fields"><label>Cash direction<select id="crude-cash-direction" required><option value="">Choose direction</option><option value="pay">Pay consideration</option><option value="receive">Receive consideration</option></select></label><label>Fixed price<span id="crude-price-unit" class="label-unit"></span><input id="crude-price" inputmode="decimal" required></label><label>Payment instant · <span class="crude-zone"></span><input id="crude-payment" type="datetime-local" step="1" required></label></div></fieldset>
+ <fieldset><legend>Handling fee</legend><div class="schedule-fields"><label>Fee terms<select id="crude-fee-mode" required><option value="">Choose fee terms</option><option value="none">No handling fee</option><option value="per_unit">Per-unit handling fee</option></select></label><label>Fee<span id="crude-fee-unit" class="label-unit"></span><input id="crude-fee" inputmode="decimal"></label><label>Fee direction<select id="crude-fee-direction"><option value="">Choose direction</option><option value="pay">Pay fee</option><option value="receive">Receive fee</option></select></label></div></fieldset>
  <div class="schedule-actions"><button id="crude-preview" type="submit">Preview trade</button><button id="crude-book-submit" type="button" disabled>Book reviewed trade</button></div></form>
  <section id="crude-pending" hidden><h3>Submission awaiting confirmation</h3><p>The original request is retained. Check its status or retry the same request.</p><button id="crude-check" type="button">Check original status</button><button id="crude-retry" type="button">Retry original request</button></section><p id="crude-receipt" role="status"></p></section>
  <section id="crude-result" class="card" hidden><h3 id="crude-result-title"></h3><dl id="crude-terms"></dl><p id="crude-total"></p><div id="crude-sides" class="table-wrap"></div></section>
@@ -60,7 +61,7 @@ export function setupPhysicalCrude(o:{api:Api;act:(work:()=>Promise<void>)=>Prom
  function selection(){return crudeSelection(selectedReferences());}
  function referenceChoices(){
   if(!catalog)return;
-  const choices=crudeChoices(catalog.deliveryReferences);
+  const choices=crudeChoices(catalog.deliveryReferences,catalog.clocks);
   for(const key of crudeReferenceFields)options('crude-'+key,choices[key],val('crude-'+key));
   reference(resolved);
  }
@@ -72,8 +73,8 @@ export function setupPhysicalCrude(o:{api:Api;act:(work:()=>Promise<void>)=>Prom
   details('crude-reference',refs?[
    ['Commodity',refs.commodities.find(r=>r.code===selected.commodity)?.name??''],['Grade',grade?.name??''],
    ['Facility',refs.locations.find(r=>r.code===selected.facility)?.name??''],['Custody point',refs.locations.find(r=>r.code===selected.custodyPoint)?.name??''],
-   ['Volume specification',quantity?.code??''],['Standard temperature',grade?`${grade.standard_temperature} ${grade.temperature_scale}`:'']] : []);
-  if(a){const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent='Pricing source · derived';dd.textContent=`${a.curveName} · ${a.curve}`;get('crude-reference').append(dt,dd);}
+   ['Volume specification',refs.units.find(r=>r.code===quantity?.unit_code)?.symbol??''],['Standard temperature',grade?standardTemperature(grade.standard_temperature!,grade.temperature_scale!):'']] : []);
+  if(a){const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent='Pricing source · derived';dd.textContent=a.curveName;get('crude-reference').append(dt,dd);}
  }
  function clearResolution(){referenceEpoch++;resolved=undefined;input('crude-assignment').value='';reference(undefined);}
  async function resolveReferences(){
@@ -93,6 +94,7 @@ export function setupPhysicalCrude(o:{api:Api;act:(work:()=>Promise<void>)=>Prom
  function sync(){
   if(displayZone!==o.zone()){displayZone=o.zone();clearResolution();Object.values(times).forEach(t=>t.refresh());epoch++;reviewed=undefined;if(shownValue?.title.startsWith('Booked trade'))render(shownValue.value,shownValue.title,shownValue.terms);else get('crude-result').hidden=true;if(directoryRows)renderDirectory(directoryRows);}
   root.querySelectorAll('.crude-zone').forEach(n=>n.textContent=o.zone());
+  const clock=get<HTMLSelectElement>('crude-clock');get('crude-clock-hint').textContent=crudeClockHint(clock.value?clock.selectedOptions[0].text:undefined,o.zone());
   const locked=o.busy()||!!pending.command||o.historical()||!catalog;
   for(const node of get<HTMLFormElement>('crude-form').querySelectorAll<HTMLInputElement|HTMLSelectElement>('input,select'))node.disabled=locked;
   for(const id of ['crude-fee','crude-fee-direction']){input(id).disabled=locked||val('crude-fee-mode')!=='per_unit';input(id).required=val('crude-fee-mode')==='per_unit';}
@@ -118,20 +120,21 @@ export function setupPhysicalCrude(o:{api:Api;act:(work:()=>Promise<void>)=>Prom
   return crudeRequest(selectedContext,header,assignment,profile,{...fields,deliveryFrom,deliveryTo,paymentAt});
  }
  function render(value:Value,title:string,terms?:Record<string,unknown>){
-  shownValue={value,title,terms};get('crude-result-title').textContent=title;get('crude-total').textContent=`Contractual present value: ${value.presentValue} ${value.currency}`;
-  details('crude-terms',[['Delivery window',`${displayExactInstant(value.deliveryFrom,o.zone())} to ${displayExactInstant(value.deliveryTo,o.zone())} · exclusive`],['Contract volume',`${value.quantity} ${value.quantityUnit}`],...(terms?[['Assignment',String(terms.assignmentCode)],['Physical direction',String(terms.direction)],['Consideration direction',String(terms.considerationDirection)],['Fixed price',String(terms.fixedPrice)],['Payment · '+o.zone(),displayExactInstant(String(terms.paymentAt),o.zone())],['Handling fee',terms.handlingFee===null?'None':`${terms.handlingFee} · ${terms.handlingFeeDirection}`],['Profile',String(terms.profile)],['Tolerance',String(terms.tolerance)]] as [string,string][]:[])]);
-  const table=document.createElement('table'),head=table.createTHead().insertRow();for(const name of ['Side','Direction','Signed PV']){const th=document.createElement('th');th.textContent=name;head.append(th);}const body=table.createTBody();for(const side of value.sides){const row=body.insertRow();for(const text of [side.role,String(side.direction),side.presentValue])row.insertCell().textContent=text;}get('crude-sides').replaceChildren(table);get('crude-result').hidden=false;
+  shownValue={value,title,terms};get('crude-result-title').textContent=title;
+  const shown=crudePreview(value,terms,o.zone());
+  get('crude-total').textContent=shown.total;details('crude-terms',shown.terms);
+  const table=document.createElement('table'),head=table.createTHead().insertRow();for(const name of shown.columns){const th=document.createElement('th');th.textContent=name;head.append(th);}const body=table.createTBody();for(const side of shown.sides){const row=body.insertRow();for(const text of side)row.insertCell().textContent=text;}get('crude-sides').replaceChildren(table);get('crude-result').hidden=false;
  }
  async function open(tradeId:string){const g=epoch,a=owner;const r=await o.api<{terms:Record<string,unknown>;valuation:Value;tradeId:string;revision:number}>('crude/editor',{context:context(),tradeId});if(g!==epoch||a!==o.actor())return;reviewed=undefined;render(r.valuation,`Booked trade · revision ${r.revision} · read only`,r.terms);sync();}
  async function directory(){const g=epoch,a=owner;const result=await o.api<{trades:DirectoryRow[]}>('crude/directory',context());if(g!==epoch||a!==o.actor())return;
   directoryRows=result.trades;renderDirectory(result.trades);
  }
  function renderDirectory(trades:DirectoryRow[]){
-  const table=document.createElement('table'),head=table.createTHead().insertRow();for(const label of ['Trade','Book','Grade','Facility / custody point','Direction','Contract volume','Delivery · '+o.zone()]){const th=document.createElement('th');th.textContent=label;head.append(th);}const body=table.createTBody();for(const trade of trades){const row=body.insertRow(),button=document.createElement('button');button.type='button';button.className='text-button';button.textContent=trade.tradeId;button.onclick=()=>void o.act(()=>open(trade.tradeId));row.insertCell().append(button);for(const text of [trade.bookName,trade.gradeName,`${trade.facilityName} / ${trade.custodyPointName}`,trade.direction,`${trade.quantity} ${trade.quantityUnit}`,`${displayExactInstant(trade.deliveryFrom,o.zone())} to ${displayExactInstant(trade.deliveryTo,o.zone())}`])row.insertCell().textContent=text;}get('crude-directory').replaceChildren(table);
+  const table=document.createElement('table'),head=table.createTHead().insertRow();for(const label of ['Trade','Book','Grade','Facility / custody point','Direction','Contract volume','Delivery · '+o.zone()]){const th=document.createElement('th');th.textContent=label;head.append(th);}const body=table.createTBody();for(const trade of trades){const row=body.insertRow(),button=document.createElement('button');button.type='button';button.className='text-button';button.textContent=trade.tradeReference;button.onclick=()=>void o.act(()=>open(trade.tradeId));row.insertCell().append(button);for(const text of [trade.bookName,trade.gradeName,`${trade.facilityName} / ${trade.custodyPointName}`,trade.direction,`${trade.quantity} ${trade.quantityUnit}`,`${displayExactInstant(trade.deliveryFrom,o.zone())} to ${displayExactInstant(trade.deliveryTo,o.zone())}`])row.insertCell().textContent=text;}get('crude-directory').replaceChildren(table);
  }
  async function accept(receipt:Receipt,command:RequestCommand,actor:string){if(actor!==o.actor()||pending.command?.operationId!==command.operationId)return;
   if(receipt.operationId!==command.operationId||typeof receipt.tradeId!=='string'||typeof receipt.instrumentId!=='string'||receipt.revision!==1)throw Error('The booking response could not be reconciled. Check the original status.');
-  pending.clear();persist();reviewed=undefined;dirty=false;get('crude-receipt').textContent=`Booked trade ${receipt.tradeId} · revision ${receipt.revision}`;sync();const acceptedEpoch=epoch;await showAcceptedCrudeTrade({current:()=>actor===o.actor()&&acceptedEpoch===epoch,open:()=>open(receipt.tradeId),directory,booked:async()=>{await o.onBooked?.(receipt.tradeId);}});
+  pending.clear();persist();reviewed=undefined;dirty=false;get('crude-receipt').textContent=`Trade booked · revision ${receipt.revision}`;sync();const acceptedEpoch=epoch;await showAcceptedCrudeTrade({current:()=>actor===o.actor()&&acceptedEpoch===epoch,open:()=>open(receipt.tradeId),directory,booked:async()=>{await o.onBooked?.(receipt.tradeId);}});
  }
  async function submit(){const command=pending.command,a=owner;if(!command||a!==o.actor())throw Error('The original request belongs to a different workspace identity.');const previouslyUncertain=pending.sending();persist();sync();try{const receipt=await o.api<Receipt>('crude/book',{...command.body,operationId:command.operationId});await accept(receipt,command,a);}catch(error){if(a===o.actor()&&pending.command?.operationId===command.operationId){pending.failed((error as {code?:string}).code,previouslyUncertain);persist();}throw error;}finally{sync();}}
  async function load(){reset();if(o.historical())throw Error('Return to working data to open physical crude bookings.');const g=epoch,a=owner,c=await o.api<Catalog>('crude/references',context());if(g!==epoch||a!==o.actor())return;catalog=c;get('crude-scope').textContent=c.scope;

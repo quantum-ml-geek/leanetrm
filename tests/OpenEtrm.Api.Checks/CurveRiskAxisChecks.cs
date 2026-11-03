@@ -13,6 +13,11 @@ internal static class CurveRiskAxisChecks
     public static void Run(PreviewData data,InputFrame frame)
     {
         var snapshot=data.Snapshot(frame);var factor=data.Model.QuoteFactors(snapshot).First();
+        foreach(var (from,to,expected) in new[]{((2026,11,1),(2026,12,1),"Nov 2026"),((2026,11,1),(2027,2,1),"Nov 2026 – Jan 2027"),((2021,1,1),(2021,1,2),"Jan 1, 2021"),((2021,1,1),(2021,1,15),"Jan 1, 2021 to Jan 15, 2021, exclusive")})
+        {
+            var label=CurveRiskAxes.PeriodLabel(new(from.Item1,from.Item2,from.Item3),new(to.Item1,to.Item2,to.Item3));
+            if(label!=expected)throw new Exception($"A factor's delivery period reads as calendar dates: expected {expected}, got {label}.");
+        }
         var request=new CurveRequest(factor.Curves[0],factor.Contract);
         var previousCulture=CultureInfo.CurrentCulture;
         try
@@ -74,7 +79,7 @@ internal static class CurveRiskAxisChecks
         // target is shocked in its place.
         var unpublished=CurveRiskAxes.Held(operation,catalog,default);
         if(!unpublished.Contracts.IsEmpty||!unpublished.Curves.IsEmpty||
-            !unpublished.ContractsWithoutTarget.SequenceEqual([FormattableString.Invariant($"{output.Curve.Code} · {contract.DeliveryFrom:yyyy-MM-dd} to {contract.DeliveryTo:yyyy-MM-dd}")])||
+            !unpublished.ContractsWithoutTarget.SequenceEqual([$"{output.Curve.Code} · {CurveRiskAxes.PeriodLabel(contract.DeliveryFrom,contract.DeliveryTo)}"])||
             !unpublished.CurvesWithoutTarget.SequenceEqual([output.Curve.Code]))
             throw new Exception("A held price that no scenario coordinate publishes must be named, and no other target shocked in its place.");
         // A held price that is a whole live contract is shocked by its contract target, and its curve by its whole-curve target.

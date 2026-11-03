@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Npgsql;
 using OpenEtrm.MarketData;
 using OpenEtrm.MarketData.Crude;
@@ -30,6 +31,8 @@ public sealed class PhysicalCrudeStore(PreviewDatabase database)
 {
  public const string Convention="physical_crude_fixed_volume_v1";
  public const string Profile="physical_crude_standard_volume_v1";
+ // The one admitted profile's name; any other retained code is refused rather than shown as a code.
+ public static string ProfileName(string? code)=>code==Profile?"Fixed standard volume at 60°F · zero tolerance · undiscounted":throw Invalid("The crude trade names an unsupported contract profile.");
  private Guid Catalog=>database.Manifest.CatalogId;
  private static readonly JsonSerializerOptions Json=new(JsonSerializerDefaults.Web);
  private static MarketDataException Invalid(string message)=>new("crude_input",message);
@@ -41,11 +44,11 @@ public sealed class PhysicalCrudeStore(PreviewDatabase database)
  public async Task<object> References(NpgsqlConnection c,CancellationToken ct)
  {
   var revision=await new CrudeSetupEditor(database).DeliveryRevision(c,ct);
-  return new{deliveryReferences=await CrudeDeliveryReferences.Read(c,revision,ct),
+  return new{deliveryReferences=await CrudeDeliveryReferences.Read(c,revision,ct),clocks=await CrudeSetupEditor.ProfileClocks(c,revision,ct),
    books=await PreviewDatabase.Rows(c,"SELECT row_to_json(b)::text FROM trading.books b WHERE catalog_id=$1 ORDER BY name",[Catalog],ct),
    legalEntities=await TradeParties.Catalog(c,Catalog,true,ct),counterparties=await TradeParties.Catalog(c,Catalog,false,ct),
    canBook=await PreviewDatabase.HasPermission(c,"BookTrade",ct),
-   profiles=new[]{new{code=Profile,quantityBasis="standard_volume_total",tolerance="0",discounting=false,label="Fixed standard volume at 60°F · zero tolerance · undiscounted"}},
+   profiles=new[]{new{code=Profile,quantityBasis="standard_volume_total",tolerance="0",discounting=false,label=ProfileName(Profile)}},
    scope="Select the physical commodity, grade, facility, custody point, volume specification and clock separately. Pricing is resolved from their maintained mapping and complete delivery interval. Separate-master delivery-to-cash remains unsupported."};
  }
  internal async Task RecheckReferences(NpgsqlConnection c,CancellationToken ct)
@@ -89,8 +92,8 @@ public sealed class PhysicalCrudeStore(PreviewDatabase database)
   var unit=Unit(data,quote.Quantity);
   var currency=One(data.References["currencies"].Where(r=>r.Text("code")==quote.Currency.Code)).Text("display_code");
   return new{code=row.Text("code"),definitionRevisionId=sourceRevision,crudeSetupId=row.OptionalId("setup_id"),
-   bindingName=row.OptionalText("setup_code")??row.Text("code"),physical=body.Physical,curve=curve.Text("code"),curveName=curve.Text("name"),
-   quantityUnit=unit,priceUnit=quote.Multiplier==ExactDecimal.Parse("1")?currency+" / 1 "+unit:currency+" × "+quote.Multiplier+" / "+unit};
+   physical=body.Physical,curve=curve.Text("code"),curveName=curve.Text("name"),
+   quantityUnit=unit,priceUnit=Presentation.PriceUnitLabel.Format(PriceUnit.FromQuote(quote),currency,unit)};
  }
  private async Task<ImmutableArray<JsonElement>> Assignments(NpgsqlConnection c,PreviewData data,CancellationToken ct,bool currentOnly=false)
  {
@@ -120,11 +123,11 @@ public sealed class PhysicalCrudeStore(PreviewDatabase database)
    var quote=One(data.Quotes.Where(x=>x.Key.Code==curve.Text("quote_code")));
    var unit=Unit(data,quote.Quantity);
    var currency=One(data.References["currencies"].Where(x=>x.Text("code")==quote.Currency.Code)).Text("display_code");
-   return new{code=row.Text("code"),crudeSetupId=row.OptionalText("setup_id"),bindingName=row.OptionalText("setup_code")??row.Text("code"),definitionRevisionId=data.DefinitionRevision.RevisionId,commodity=row.Text("commodity_code"),commodityName=row.Text("commodity_name"),grade=row.Text("grade_code"),gradeName=row.Text("grade_name"),facility=row.Text("facility_code"),facilityName=row.Text("facility_name"),custodyPoint=row.Text("custody_point_code"),custodyPointName=row.Text("custody_point_name"),quantityCode=quote.Quantity.Code,quantityName=One(data.References["quantity_specifications"].Where(q=>q.Text("code")==quote.Quantity.Code)).Text("code")+" · "+unit,quantityUnit=unit,priceUnit=quote.Multiplier==ExactDecimal.Parse("1")?currency+" / 1 "+unit:currency+" × "+quote.Multiplier+" / "+unit,curve=row.Text("curve_code"),curveName=curve.Text("name"),clock=row.Text("clock_code"),clockName=row.Text("clock_code"),standardTemperature=row.Text("standard_temperature"),temperatureScale=row.Text("temperature_scale")};
+   return new{code=row.Text("code"),crudeSetupId=row.OptionalText("setup_id"),bindingName=row.OptionalText("setup_code")??row.Text("code"),definitionRevisionId=data.DefinitionRevision.RevisionId,commodity=row.Text("commodity_code"),commodityName=row.Text("commodity_name"),grade=row.Text("grade_code"),gradeName=row.Text("grade_name"),facility=row.Text("facility_code"),facilityName=row.Text("facility_name"),custodyPoint=row.Text("custody_point_code"),custodyPointName=row.Text("custody_point_name"),quantityCode=quote.Quantity.Code,quantityName=One(data.References["quantity_specifications"].Where(q=>q.Text("code")==quote.Quantity.Code)).Text("code")+" · "+unit,quantityUnit=unit,priceUnit=Presentation.PriceUnitLabel.Format(PriceUnit.FromQuote(quote),currency,unit),curve=row.Text("curve_code"),curveName=curve.Text("name"),clock=row.Text("clock_code"),clockName=row.Text("clock_code"),standardTemperature=row.Text("standard_temperature"),temperatureScale=row.Text("temperature_scale")};
   }).ToArray();
   return new{assignments,books=await PreviewDatabase.Rows(c,"SELECT row_to_json(b)::text FROM trading.books b WHERE catalog_id=$1 ORDER BY name",[Catalog],ct),
    legalEntities=await TradeParties.Catalog(c,Catalog,true,ct),counterparties=await TradeParties.Catalog(c,Catalog,false,ct),canBook=await PreviewDatabase.HasPermission(c,"BookTrade",ct),
-   profiles=new[]{new{code=Profile,quantityBasis="standard_volume_total",tolerance="0",discounting=false,label="Fixed standard volume at 60°F · zero tolerance · undiscounted"}},
+   profiles=new[]{new{code=Profile,quantityBasis="standard_volume_total",tolerance="0",discounting=false,label=ProfileName(Profile)}},
    scope="Future fixed total standard volume at 60°F, one exact grade and custody point within one forward month. Independently directed physical delivery, fixed consideration and optional handling fee. Imported assignments retain their supported Delivery and cash workflow. Separately maintained delivery setups currently support contractual booking and pre-delivery valuation; their receipt/inventory/cash workflow is not yet qualified."};
  }
  internal async Task<CrudeValuationAssignment> Metadata(NpgsqlConnection c,PreviewData data,PhysicalCrudeWriteRequest body,CancellationToken ct,DateTimeOffset? resolveAt=null)
@@ -203,7 +206,11 @@ public sealed class PhysicalCrudeStore(PreviewDatabase database)
    await using var authority=ScheduleStore.Command(c,"SELECT security.crude_setup_visible($1,$2)",Catalog,setup);
    if(!Equals(await authority.ExecuteScalarAsync(ct),true))throw new PreviewDeniedException();
   }
-  return new{presentValue=total!.ToExactString(),currency=One(data.References["currencies"].Where(x=>x.Text("code")==assignment.Quote.Currency.Code)).Text("display_code"),sides,body.DeliveryFrom,body.DeliveryTo,quantity=quantity.ToString(),quantityUnit=Unit(data,assignment.Quantity.Key)};
+  var currency=One(data.References["currencies"].Where(x=>x.Text("code")==assignment.Quote.Currency.Code)).Text("display_code");
+  var unit=Unit(data,assignment.Quantity.Key);
+  var source=One(data.Definitions["curves"].Where(x=>x.Text("code")==assignment.Projection.Market.Curve.Code)).Text("name");
+  return new{presentValue=total!.ToExactString(),currency,sides,body.DeliveryFrom,body.DeliveryTo,quantity=quantity.ToString(),quantityUnit=unit,
+   pricingSource=source,priceUnit=Presentation.PriceUnitLabel.Format(PriceUnit.FromQuote(assignment.Quote),currency,unit),profileName=ProfileName(body.Profile)};
  }
  public async Task<object> Preview(NpgsqlConnection c,PreviewData data,InputFrame frame,PhysicalCrudeWriteRequest body,CancellationToken ct)
  {var r=await Resolve(c,data,body,frame.At,ct);return await Value(c,data,frame,body,r.Instrument,r.Assignment,r.Quantity,null,ct);}
@@ -228,11 +235,13 @@ public sealed class PhysicalCrudeStore(PreviewDatabase database)
   try{await command.ExecuteNonQueryAsync(ct);}catch(PostgresException e)when(e.MessageText=="crude_portfolio_scope")
   {throw new MarketDataException("crude_close_scope","Automated closes do not yet support physical crude obligations. Use the common blotter and portfolio risk for contractual valuation.");}
  }
- public async Task<object> Directory(NpgsqlConnection c,CancellationToken ct)=>new{trades=await PreviewDatabase.Rows(c,"""
-  SELECT json_build_object('tradeId',r.trade_id,'revision',r.revision,'instrumentId',r.instrument_id,'bookId',r.book_id,'bookName',b.name,
+ // Each booking by its trade reference beside its key, which stays the identity that opens it.
+ public async Task<object> Directory(NpgsqlConnection c,CancellationToken ct)=>new{trades=(await PreviewDatabase.Rows(c,"""
+  SELECT json_build_object('tradeId',r.trade_id,'trade_reference',tr.reference_number,'revision',r.revision,'instrumentId',r.instrument_id,'bookId',r.book_id,'bookName',b.name,
   'direction',CASE WHEN r.direction=1 THEN 'receive' ELSE 'deliver' END,'quantity',r.quantity::text,'quantityUnit',u.symbol,
   'deliveryFrom',i.delivery_from,'deliveryTo',i.delivery_to,'gradeName',g.name,'facilityName',f.name,'custodyPointName',p.name)::text
   FROM trading.crude_trade_revisions r JOIN trading.crude_instruments i USING(catalog_id,instrument_id)
+  JOIN trading.trade_references tr ON(tr.catalog_id,tr.trade_id)=(r.catalog_id,r.trade_id)
   JOIN trading.books b ON(b.catalog_id,b.id)=(r.catalog_id,r.book_id)
   JOIN market_data.crude_valuation_assignments a ON(a.catalog_id,a.revision_id,a.code)=(i.catalog_id,i.definition_revision_id,i.assignment_code)
   JOIN ref_data.crude_grades g ON(g.catalog_id,g.revision_id,g.code)=(a.delivery_catalog_id,a.delivery_revision_id,a.grade_code)
@@ -243,5 +252,5 @@ public sealed class PhysicalCrudeStore(PreviewDatabase database)
   JOIN ref_data.quantity_specifications q ON(q.catalog_id,q.revision_id,q.code)=(quote.catalog_id,quote.revision_id,quote.quantity_code)
   JOIN ref_data.units u ON(u.catalog_id,u.revision_id,u.code)=(q.catalog_id,q.revision_id,q.unit_code)
   WHERE r.catalog_id=$1 ORDER BY r.publication_order DESC LIMIT 256
-  """,[Catalog],ct)};
+  """,[Catalog],ct)).Select(row=>{var named=JsonNode.Parse(row.GetRawText())!.AsObject();named.Remove("trade_reference");named["tradeReference"]=TradingReference.Trade(row);return named;}).ToArray()};
 }

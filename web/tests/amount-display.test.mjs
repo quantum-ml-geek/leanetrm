@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {prepareAmountDisplay,amountText,selectDisplayPrecision,initialDisplayPrecision} from '../dist/amount-display.js';
+import {prepareAmountDisplay,amountText,selectDisplayPrecision,initialDisplayPrecision,shownAmounts,riskReportRead} from '../dist/amount-display.js';
 import {newPreferences,parsePreferences} from '../dist/preferences.js';
 test('display adapter sends exact text and tick choice, keeping raw financial values untouched',async()=>{
  selectDisplayPrecision(initialDisplayPrecision());
@@ -79,4 +79,27 @@ test('price pivot measures use backend price formatting while keeping their exac
  assert.equal(requests.length,3);assert.ok(requests.every(r=>r.decimalPlaces===4&&r.tick===null));
  assert.equal(amountText(source.groups[0].executionPriceMean,'price'),'0.1235');
  assert.equal(source.groups[0].executionPriceMean,'0.123456789012345678');
+});
+
+test('a risk report and a retained risk job are formatted by the page that shows them, not by every read; the job directory has none',()=>{
+ const report={factors:[{totals:[{values:{display:{delta:'31753799.370855039072'}}}]}]};
+ assert.equal(shownAmounts('portfolio/risk',report),undefined);
+ assert.equal(riskReportRead('portfolio/risk'),true);
+ assert.equal(riskReportRead('portfolio/risk/jobs/job-1'),true);
+ assert.equal(riskReportRead('portfolio/risk/jobs'),false);
+});
+test('a crude preview and a reopened crude trade show their amounts',()=>{
+ const preview={presentValue:'292500',quantity:'50000',sides:[{presentValue:'3505000'}]};
+ assert.equal(shownAmounts('crude/preview',preview),preview);assert.equal(shownAmounts('crude/editor',preview),preview);
+});
+test('a PPA read shows its exact fractions: each is sent as a rational by its field\'s kind, and the read itself is untouched',async()=>{
+ selectDisplayPrecision(initialDisplayPrecision());const requests=[];
+ const preview={bindings:[{measures:{valueExcludingOverdue:{numerator:'28407490050852804298252338129',denominator:'200000000000000000000000'},completePv:null},
+  sides:[{measures:{periods:[{quantity:{numerator:'1895',denominator:'2'},amount:{numerator:'85275',denominator:'2'},presentValue:{numerator:'-7',denominator:'1'}}]}}]}]};
+ for(const path of ['ppa/preview','ppa/inspect','ppa/break-even'])assert.equal(shownAmounts(path,preview),preview);
+ const before=JSON.stringify(preview);
+ await prepareAmountDisplay(preview,async body=>{requests.push(...body);return body.map(r=>r.value==='1895/2'?'947.5':'shown');});
+ assert.equal(JSON.stringify(preview),before);
+ assert.deepEqual(requests.map(r=>[r.value,r.trimTrailingZeros]),[['28407490050852804298252338129/200000000000000000000000',false],['1895/2',true],['85275/2',false],['-7',false]]);
+ assert.equal(amountText('1895/2','quantity'),'947.5');
 });

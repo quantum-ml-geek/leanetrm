@@ -1,6 +1,6 @@
 import {compareDecimalStrings} from './analytics-model.js';
 import {deliveryLabel} from './market-view.js';
-import {unappliedContext} from './new-trade.js';
+import {bookingAllowed,unappliedContext} from './new-trade.js';
 
 // The option ticket's selection of a listed series (D288): exchange and commodity, then the underlying future, then call or put, then
 // strike. Each list offers only what the catalog lists under the selections above it, in the catalog's order; nothing is chosen for the
@@ -10,8 +10,8 @@ type Named={code:string;name:string};
 export type OptionSeries={series:string;instrumentId:string;contractId:string;product:string;name:string;exchange:Named;commodity:Named;underlyingSeries:string;
  right:string;strike:string;expiryAt:string;exerciseStyle:string;premiumStyle:string;contraryInstructionsAllowed:boolean;multiplier:string;currency:string;
  premiumTick:string;minimumPremium:string;maximumPremium:string;curve:string;settlementPrice:string};
-/** An underlying future the catalog's series exercise into, with its delivery period. */
-export type OptionUnderlying={series:string;deliveryFrom:string;deliveryTo:string};
+/** An underlying future the catalog's series exercise into, with its product's name and delivery period. */
+export type OptionUnderlying={series:string;name:string;deliveryFrom:string;deliveryTo:string};
 export type OptionCatalog={options:readonly OptionSeries[];underlyings:readonly OptionUnderlying[]};
 export const optionLevels=['exchange','commodity','underlying','right','strike'] as const;
 export type OptionLevel=typeof optionLevels[number];
@@ -23,6 +23,8 @@ export const noOptionPick:OptionPick=Object.freeze({exchange:'',commodity:'',und
 const valueOf:Record<OptionLevel,(s:OptionSeries)=>string>={exchange:s=>s.exchange.code,commodity:s=>s.commodity.code,underlying:s=>s.underlyingSeries,right:s=>s.right,strike:s=>s.strike};
 const rightLabel=(right:string)=>right.charAt(0).toUpperCase()+right.slice(1);
 
+/** An underlying future as a person names it: its delivery period and its product's name. */
+export const underlyingLabel=(deliveryFrom:string,deliveryTo:string,name:string)=>`${deliveryLabel(deliveryFrom,deliveryTo)} · ${name}`;
 function labelOf(catalog:OptionCatalog,level:OptionLevel,s:OptionSeries):string{
  switch(level){
   case 'exchange':return s.exchange.name;
@@ -32,7 +34,7 @@ function labelOf(catalog:OptionCatalog,level:OptionLevel,s:OptionSeries):string{
   case 'underlying':{
    const found=catalog.underlyings.filter(u=>u.series===s.underlyingSeries);
    if(found.length!==1)throw Error(`The option catalog does not describe the underlying future ${s.underlyingSeries} exactly once.`);
-   return `${deliveryLabel(found[0].deliveryFrom,found[0].deliveryTo)} · ${s.underlyingSeries}`;
+   return underlyingLabel(found[0].deliveryFrom,found[0].deliveryTo,found[0].name);
   }
  }
 }
@@ -94,4 +96,10 @@ export function lifecycleWrites(state:{view:'working'|'historical'|'live'|'read_
  if(state.view!=='working')return {enabled:false,reason:'Lifecycle events are recorded from working data at current knowledge. Return to working data to record one.'};
  if(!state.canBook)return {enabled:false,reason:state.reason??'Booking is not available in this view, and the backend did not say why.'};
  return {enabled:true,reason:null};
+}
+// What the option ticket says before a series is picked: why it cannot book, including when the close lists no series at all.
+export function optionTicketStatus(catalog:OptionCatalog&{canBook:boolean;bookingUnavailableReason?:string|null}):string{
+ const allowed=bookingAllowed(catalog);
+ if(!allowed.enabled)return allowed.reason;
+ return catalog.options.length?'Pick the listed series, then enter the execution.':'No options are listed at this close, so none can be booked. Choose another close or publish listed series.';
 }

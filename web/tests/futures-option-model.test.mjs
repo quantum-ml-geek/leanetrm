@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {noOptionPick,optionChoices,pickOption,keepOffered,lifecycleWrites} from '../dist/futures-option-model.js';
+import {noOptionPick,optionChoices,pickOption,keepOffered,lifecycleWrites,optionTicketStatus} from '../dist/futures-option-model.js';
 
 // A synthetic catalog: two exchanges, two commodities on the first, the series in the backend's order.
 const named=(code,name)=>({code,name});
@@ -17,8 +17,8 @@ const catalog={
   series('a_oil_feb_c50','',oil,'oil_feb','call','50'),
   series('b_gas_feb_c10','',gas,'b_gas_feb','call','10'),
  ].map((s,i)=>({...s,exchange:i===5?beta:alpha})),
- underlyings:[{series:'gas_feb',deliveryFrom:'2041-02-01',deliveryTo:'2041-03-01'},{series:'gas_mar',deliveryFrom:'2041-03-01',deliveryTo:'2041-04-01'},
-  {series:'oil_feb',deliveryFrom:'2041-02-01',deliveryTo:'2041-03-01'},{series:'b_gas_feb',deliveryFrom:'2041-02-01',deliveryTo:'2041-03-01'}],
+ underlyings:[{series:'gas_feb',name:'Synthetic gas future',deliveryFrom:'2041-02-01',deliveryTo:'2041-03-01'},{series:'gas_mar',name:'Synthetic gas future',deliveryFrom:'2041-03-01',deliveryTo:'2041-04-01'},
+  {series:'oil_feb',name:'Synthetic oil future',deliveryFrom:'2041-02-01',deliveryTo:'2041-03-01'},{series:'b_gas_feb',name:'Synthetic gas future',deliveryFrom:'2041-02-01',deliveryTo:'2041-03-01'}],
 };
 const values=list=>list.map(c=>c.value);
 const pick=(...steps)=>steps.reduce((p,[level,value])=>pickOption(catalog,p,level,value),noOptionPick);
@@ -39,7 +39,7 @@ test('an exchange with one commodity still waits for the person to pick it',()=>
 test('each list offers only what the selections above it list in the catalog: in the catalog\'s order, strikes ascending',()=>{
  const shown=optionChoices(catalog,pick(['exchange','exchange_a'],['commodity','gas'],['underlying','gas_feb'],['right','call']));
  assert.deepEqual(values(shown.commodity),['gas','oil']);
- assert.deepEqual(shown.underlying,[{value:'gas_feb',label:'Feb 2041 · gas_feb'},{value:'gas_mar',label:'Mar 2041 · gas_mar'}]);
+ assert.deepEqual(shown.underlying,[{value:'gas_feb',label:'Feb 2041 · Synthetic gas future'},{value:'gas_mar',label:'Mar 2041 · Synthetic gas future'}]);
  assert.deepEqual(shown.right,[{value:'call',label:'Call'},{value:'put',label:'Put'}]);
  assert.deepEqual(values(shown.strike),['9.5','10']);
  assert.equal(shown.series,null);
@@ -91,4 +91,9 @@ test('lifecycle events are offered only from working data at current knowledge, 
 
 test('lifecycle events are not offered while a changed historical context is unapplied, as booking is not',()=>{
  assert.deepEqual(lifecycleWrites({view:'working',canBook:true,reason:null,contextDirty:true,recorded:false}),{enabled:false,reason:'Apply the changed historical context first.'});
+});
+test('a catalog with no listed series says nothing can be booked at this close, rather than leaving every field disabled unexplained',()=>{
+ assert.equal(optionTicketStatus({...catalog,options:[],underlyings:[],canBook:true}),'No options are listed at this close, so none can be booked. Choose another close or publish listed series.');
+ assert.equal(optionTicketStatus({...catalog,canBook:true}),'Pick the listed series, then enter the execution.');
+ assert.equal(optionTicketStatus({...catalog,canBook:false,bookingUnavailableReason:'This account cannot book trades.'}),'This account cannot book trades.');
 });

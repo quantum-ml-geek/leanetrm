@@ -24,13 +24,13 @@ export async function run(actions){
  await command('Page.reload');await wait("document.querySelector('#nav-crude-setup')&&"+idle);await click('#nav-crude-setup');await wait("!document.querySelector('#cs-retry').hidden&&"+idle);
  await click('#cs-retry');await wait("document.querySelector('#cs-retry').hidden&&document.querySelector('#cs-version').value&&"+idle);
  const id=await evaluate("document.querySelector('#cs-version').value");
- await check('saved retry accepts a stable server version distinct from the request ID',"document.querySelector('#cs-status').textContent.startsWith('Draft saved')&&document.querySelector('#cs-version-state').textContent.startsWith('draft')");
+ await check('saved retry accepts a stable server version distinct from the request ID',"document.querySelector('#cs-status').textContent.startsWith('Draft saved')&&/draft/i.test(document.querySelector('#cs-version-state').textContent)");
  await persona('approver');await click('#nav-crude-setup');await wait("document.querySelector('#cs-version').options.length>1&&"+idle);await set('#cs-version',id);await click('#cs-open');await click('#cs-validate');await wait("!document.querySelector('#cs-publish').disabled&&"+idle);
  await evaluate(`(()=>{const original=window.fetch;window.fetch=async function(input,init){if(String(input).endsWith('/api/crude-setup/publish')){window.fetch=original;return new Response(JSON.stringify({code:'crude_setup_market_scope',message:'Synthetic definite publication rollback'}),{status:422,headers:{'Content-Type':'application/json'}});}return original.call(this,input,init);};})()`);
  await click('#cs-publish');await wait(idle);
  await check('a definite publication scope refusal releases its request and retains the draft',`document.querySelector('#cs-retry').hidden&&document.querySelector('#cs-version').value===${JSON.stringify(id)}&&!document.querySelector('#cs-validate').disabled&&!document.querySelector('#cs-publish').disabled`);
  await failAfterCommit('crude-setup/publish');await click('#cs-publish');await wait("!document.querySelector('#cs-retry').hidden&&"+idle);
- await command('Page.reload');await wait("document.querySelector('#nav-crude-setup')&&"+idle);await click('#nav-crude-setup');await wait("!document.querySelector('#cs-retry').hidden&&"+idle);await click('#cs-retry');await wait("document.querySelector('#cs-version-state').textContent.startsWith('published')&&"+idle);
+ await command('Page.reload');await wait("document.querySelector('#nav-crude-setup')&&"+idle);await click('#nav-crude-setup');await wait("!document.querySelector('#cs-retry').hidden&&"+idle);await click('#cs-retry');await wait("document.querySelector('#cs-version-state').textContent.startsWith('Published setup')&&"+idle);
  await check('publication retry recovers its first outcome without replacing its request',"document.querySelector('#cs-retry').hidden&&!document.querySelector('#cs-preview').disabled&&document.querySelector('#cs-publish').disabled");
  const frame=await evaluate("(async()=>{const w=await(await fetch('/api/workspace')).json();return w.frames.find(f=>w.initialFrameIds.includes(f.id)&&f.at.startsWith('2020-12-18')).id;})()");
  await set('#snapshot',frame);await wait(idle);
@@ -51,7 +51,7 @@ export async function run(actions){
  await evaluate('window.releaseCrudeResolution()');
  await check('a late mapping response cannot restore pricing after a physical selection changes',"document.querySelector('#crude-assignment').value===''&&!document.querySelector('#crude-reference').textContent.includes('synthetic_crude_forward')&&document.querySelector('#crude-book-submit').disabled");
  await set('#crude-grade','synthetic_unmapped_grade');await set('#crude-quantity','1000');await set('#crude-price','78');
- await submit('#crude-form');await wait("document.querySelector('#crude-total').textContent==='Contractual present value: 2000 USD'&&"+idle);
+ await submit('#crude-form');await wait("document.querySelector('#crude-total').textContent==='Contractual present value: 2,000.000 USD'&&"+idle);
  await evaluate(`(()=>{const original=window.fetch;window.fetch=async function(input,init){if(String(input).endsWith('/api/crude/book')){window.fetch=original;window.syntheticRejectedCrudeCommand=JSON.parse(init.body);return new Response(JSON.stringify({code:'crude_setup_conflict',message:'Synthetic definite stale publication rollback'}),{status:409,headers:{'Content-Type':'application/json'}});}return original.call(this,input,init);};})()`);
  await click('#crude-book-submit');await wait(idle);
  await check('a definite stale-setup booking refusal unlocks the ticket for review',"document.querySelector('#crude-pending').hidden&&!document.querySelector('#crude-price').disabled");

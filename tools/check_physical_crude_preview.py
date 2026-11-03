@@ -40,7 +40,8 @@ def run_checks(url, query, manifest):
     loaded=c.call('crude/editor',{'context':context,'tradeId':booked['tradeId']})
     assert loaded['valuation']=={key:value[key] for key in loaded['valuation']}
     assert loaded['terms']['considerationDirection']=='pay' and loaded['terms']['handlingFeeDirection']=='receive'
-    assert any(row['tradeId']==booked['tradeId'] for row in c.call('crude/directory',context)['trades'])
+    listed=next(row for row in c.call('crude/directory',context)['trades'] if row['tradeId']==booked['tradeId'])
+    assert listed['tradeReference'].startswith('TR-'), listed
     prior={**context,'knowledgeMode':'retained','contextId':value['context']['contextId']}
     assert not any(row['tradeId']==booked['tradeId'] for row in c.call('crude/directory',prior)['trades']), 'A context captured before booking cannot see a later publication'
     c.call('crude/editor',{'context':prior,'tradeId':booked['tradeId']},expected=422)
@@ -64,6 +65,7 @@ def run_checks(url, query, manifest):
     terms=c.call('trading/crude',exact)
     assert terms['head']['request']['assignmentCode']==body['assignmentCode']
     assert terms['physical']['grade_code']==assignment['grade']
+    assert terms['profileName']=='Fixed standard volume at 60°F · zero tolerance · undiscounted', terms.get('profileName')
     c.call('trading/position',{**exact,'revision':2},expected=422)
     other=next(book['id'] for book in catalog['books'] if book['id']!=body['bookId'])
     assert c.call('trading/positions',{**positions,'bookIds':[other]})['positions']==[]

@@ -29,7 +29,7 @@ export type Holding={booking:Booking;commodity:{code:string;name:string};priceTi
  * with the backend's reason when it is not; `closableLots` the unsigned open lots an exercise or assignment may close.
  */
 export type OptionFacts={component:'option'|'premium';series:string;product:string;exchange:{code:string;name:string};right:string;strike:string;expiryAt:string;
-  underlyingSeries:string;openLots:string;lifecycleState:string;linkedFuturesTradeIds:string[];premium:string;premiumAmount:string;premiumPaymentDate:string;
+  underlyingSeries:string;underlyingName:string;productName:string;openLots:string;lifecycleState:string;linkedFuturesTradeIds:string[];linkedFuturesTrades:string[];premium:string;premiumAmount:string;premiumPaymentDate:string;
   cashState:'pending'|'settled'|null;impliedVolatility:string|null;calibrationMode:string|null;numericalPolicy:string|null;
   actions:Record<'exercise'|'assignment'|'instruction',{allowed:boolean;reason:string|null}>|null;closableLots:string|null;unitPresentValue:string|null};
 export type Summary={view:{groupBy:string[];measures:string[];pivotConvention:string|null};groups:PivotGroup[]};
@@ -105,20 +105,21 @@ type Identity={label:string;code:string;revision:string;catalog?:string};
  * among them: their codes where these differ, and for one code in several revisions the start of each revision's id. A revision
  * id is its own: two references that share one are in different catalogs, and are named by the catalog's id and the revision's.
  */
-function distinct(entries:ReadonlyMap<string,Identity>,word:string):Map<string,string>{
+function distinct(entries:ReadonlyMap<string,Identity>,word:string|null):Map<string,string>{
   const sharing=new Map<string,string[]>();
   for(const [key,{label}] of entries)sharing.set(label,[...(sharing.get(label)??[]),key]);
   return new Map([...entries].map(([key,{label,code,revision}])=>{
     const colliding=sharing.get(label)!.map(k=>entries.get(k)!);if(colliding.length===1)return [key,label];
     const own=new Set(colliding.map(e=>e.revision)).size===colliding.length,identity=(e:Identity)=>own?e.revision:`${e.catalog}:${e.revision}`;
     const short=shortIds(colliding.map(identity));
-    return [key,[label,...(new Set(colliding.map(e=>e.code)).size>1?[code]:[]),...(colliding.filter(e=>e.code===code).length>1?[`${word} ${short.get(identity(entries.get(key)!))}`]:[])].join(' · ')];
+    return [key,[label,...(new Set(colliding.map(e=>e.code)).size>1?[code]:[]),...(word!==null&&colliding.filter(e=>e.code===code).length>1?[`${word} ${short.get(identity(entries.get(key)!))}`]:[])].join(' · ')];
   }));
 }
 // A reference is identified by its code in its catalog's revision; a key built from it has been validated by referenceKey.
 const referenceIdentity=(label:string,reference:unknown):Identity=>{const {code,revision}=reference as Reference;return {label,code,revision:revision.revisionId,catalog:revision.catalogId};};
-const currencyLabels=(groups:readonly PivotGroup[])=>distinct(new Map(groups.map(g=>[referenceKey(g.currencyReference),referenceIdentity(text(g,'currency'),g.currencyReference)])),'revision');
-const unitLabels=(groups:readonly PivotGroup[])=>distinct(new Map(groups.map(g=>[referenceKey(g.quantitySpecification),referenceIdentity(text(g,'unit'),g.quantitySpecification)])),'revision');
+// A currency or unit reads by its code in whichever reference revision it was booked under; amounts in each stay apart all the same (D98).
+const currencyLabels=(groups:readonly PivotGroup[])=>distinct(new Map(groups.map(g=>[referenceKey(g.currencyReference),referenceIdentity(text(g,'currency'),g.currencyReference)])),null);
+const unitLabels=(groups:readonly PivotGroup[])=>distinct(new Map(groups.map(g=>[referenceKey(g.quantitySpecification),referenceIdentity(text(g,'unit'),g.quantitySpecification)])),null);
 const marketKey=(market:string,revision:string)=>`${market}|${revision}`;
 // The market a position is grouped under: its curve, or the several curves of a scheduled swap together as the backend keys them.
 const marketOf=(h:Pick<Holding,'curve'|'marketKey'|'definitionRevisionId'>)=>marketKey(h.marketKey??h.curve,h.definitionRevisionId);
@@ -215,7 +216,8 @@ export type MixSegment={key:string;commodity:string;commodityName:string;instrum
 export type PositionsTile={count:number;segments:MixSegment[];note:string|null};
 /**
  * The positions the read returned (the number of its rows), mixed by the backend's commodity and instrument type groups,
- * one segment per group, never summed per commodity. `unvalued` is the read's own count of positions it cannot value.
+ * one segment per group, never summed per commodity: only groups that read alike in every term share a segment. `unvalued` is the
+ * read's own count of positions it cannot value.
  */
 export function positionsTile(summaries:readonly Summary[],rows:number,unvalued:number):PositionsTile{
   const groups=groupsOf(summaries,mix),units=unitLabels(groups),currencies=currencyLabels(groups);
@@ -225,9 +227,14 @@ export function positionsTile(summaries:readonly Summary[],rows:number,unvalued:
   // Segments of one commodity and instrument type say what keeps them apart: their unit, their currency, or both.
   const label=(e:typeof entries[number])=>{const same=entries.filter(o=>o.base===e.base);if(same.length===1)return e.base;
     return [e.base,...(new Set(same.map(o=>o.unit)).size>1?[e.unit]:[]),...(new Set(same.map(o=>o.currency)).size>1?[e.currency]:[])].join(' · ');};
+  // Groups that read alike in every term (one commodity and type, a unit and a currency of one code under several reference revisions)
+  // are one segment of their trades: a count of trades has no unit to keep apart.
+  const merged=new Map<string,{key:string;commodity:string;commodityName:string;instrumentType:string;label:string;trades:number}>();
+  for(const e of entries){const at=JSON.stringify([e.commodity,e.instrumentType,label(e)]),seen=merged.get(at);
+    if(seen)seen.trades+=e.trades;else merged.set(at,{key:at,commodity:e.commodity,commodityName:e.commodityName,instrumentType:e.instrumentType,label:label(e),trades:e.trades});}
   // Two commodities that share a name are told apart by their codes.
-  const labels=distinct(new Map(entries.map(e=>[e.key,{label:label(e),code:e.commodity,revision:e.key}])),'group');
-  const segments=entries.map(({key,commodity,commodityName,instrumentType,trades})=>({key,commodity,commodityName,instrumentType,label:labels.get(key)!,trades}))
+  const labels=distinct(new Map([...merged.values()].map(e=>[e.key,{label:e.label,code:e.commodity,revision:e.key}])),'group');
+  const segments=[...merged.values()].map(({key,commodity,commodityName,instrumentType,trades})=>({key,commodity,commodityName,instrumentType,label:labels.get(key)!,trades}))
     .sort((a,b)=>a.label.localeCompare(b.label)||byText(a.key,b.key));
   if(!Number.isInteger(rows)||rows<0)throw Error(inconsistent);
   const excluded=excludedPositions(unvalued);
@@ -391,6 +398,8 @@ export type DeskRow={tradeId:string;revision:string;instrumentType:string;pill:'
   /** The words its cells draw beside their exact amounts, which the grid's row search reads. */
   words:string}&Valuation;
 /** The unit of a position's price and mark: its currency per quantity unit, with the quote multiplier when it is not one. */
+// The line under a mark: an option's is its settlement price, whose unit its row does not state.
+export const markCaption=(row:{pill:string;priceUnit:string|null})=>[row.pill==='OPT'?'Settlement':'Mark',row.priceUnit].filter(Boolean).join(' · ');
 export const priceUnit=(h:{currency:string;unit:string;quoteMultiplier?:string})=>`${h.currency}/${h.unit}${h.quoteMultiplier&&h.quoteMultiplier!=='1'?' × '+h.quoteMultiplier:''}`;
 const sides:Readonly<Record<string,string>>={pay_fixed:'Pay fixed',receive_fixed:'Receive fixed',multi_side:'Multi-side'};
 // The kinds of swap instrument and the valuation states of a swap the Blotter states; any other is refused, never shown as one of them.
