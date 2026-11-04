@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using Npgsql;
 using OpenEtrm.MarketData;
@@ -49,6 +50,10 @@ public sealed partial class PortfolioRiskPreview
             maxObservations=FactorHistory.MaximumObservations,maxCalendarDays=FactorHistory.MaximumCalendarDays,maxResponseBytes=MaximumHistoryBytes}};
 
     public async Task<object> History(NpgsqlConnection connection,PreviewData data,InputFrame frame,PortfolioHistoryRequest body,CancellationToken ct)
+        =>(await CaptureHistory(connection,data,frame,body,ct)).Result;
+    // The history read, and the captured request that names its manifest for a statistical calculation.
+    private async Task<(object Result,PortfolioHistoryRequest Captured)> CaptureHistory(NpgsqlConnection connection,PreviewData data,InputFrame frame,
+        PortfolioHistoryRequest body,CancellationToken ct)
     {
         if(body.Scope is null||body.Policy is null)throw new MarketDataException("risk_history_policy","Choose the retained scope and explicit dated-factor history policies.");
         FactorHistory.ValidatePolicy(body.Policy);
@@ -73,7 +78,7 @@ public sealed partial class PortfolioRiskPreview
         if(JsonSerializer.SerializeToUtf8Bytes(result,RiskJobs.Json).Length>MaximumHistoryBytes)
             throw new MarketDataException("risk_history_capacity","The history manifest exceeds 32 MiB. Reduce the window or select a smaller explicit scope.");
         await RequireHistoryAccess(connection,portfolio,ct);
-        return result;
+        return (result,captured);
     }
 
     private async Task<AlignedFactorHistory> BuildHistory(NpgsqlConnection connection,PortfolioValuation.Prepared portfolio,InputFrame frame,
@@ -180,4 +185,42 @@ public sealed partial class PortfolioRiskPreview
             if(!Equals(await reference.ExecuteScalarAsync(ct),true))throw new PreviewDeniedException();
         }
     }
+
+    // The assistant's statistical setup: the catalog's history, parametric and historical capabilities for a scope.
+    public async Task<object> StatisticalSetup(NpgsqlConnection connection,PreviewData data,InputFrame frame,PortfolioRiskCatalogRequest body,CancellationToken ct)
+    {
+        var (portfolio,bookIds,books)=await PreparePortfolio(connection,data,frame,body.BookIds,body.PortfolioIds,PricingPolicy,ct,tradeIds:body.TradeIds);
+        return new{pricingPolicy=PricingPolicy,history=HistoryCapabilities(portfolio),parametric=ParametricCapabilities(),historical=HistoricalCapabilities(),
+            books=books.Where(b=>bookIds.Contains(b.Id("id"))).Select(b=>new{id=b.Id("id"),name=b.Text("name"),
+                valuedTrades=portfolio.Positions.Where(p=>p.BookId==b.Id("id")).Select(p=>p.TradeId).Distinct().Count(),
+                excludedTrades=portfolio.Excluded.Where(p=>p.BookId==b.Id("id")).Select(p=>p.TradeId).Distinct().Count()}),
+            measures=portfolio.Positions.Select(p=>p.Measure).Distinct().Order().Select(m=>new{measure=m,measureLabel=MeasureLabel(m)}),
+            factors=portfolio.Factors.Length,excludedPositions=portfolio.Excluded};
+    }
+    // The assistant's statistical reads (assistant-workspace.md). A history without its captured manifest is captured first, under
+    // the same retained pins, exactly as the page's history read does; capturing under current knowledge refuses.
+    private async Task<PortfolioHistoryRequest> CapturedHistory(NpgsqlConnection connection,PreviewData data,InputFrame frame,PortfolioHistoryRequest? history,
+        string code,CancellationToken ct)
+    {
+        if(history is null)throw new MarketDataException(code,"Choose the exact captured history and retained trade scope.");
+        if(history.ExpectedManifestId is not null)return history;
+        if(history.Scope?.Context?.KnowledgeMode!="retained")
+            throw new MarketDataException(code,"Capture statistical history under the retained context it will be calculated in.");
+        return (await CaptureHistory(connection,data,frame,history,ct)).Captured;
+    }
+    // Factors in history-column order; each session's selected price type by code, a session with no permitted price as "none".
+    private static IEnumerable<object> SummaryFactors(AlignedFactorHistory manifest,IReadOnlyList<PortfolioRiskAxis> axes,ImmutableArray<PreviewData> markets)=>
+        manifest.Columns.Select((c,i)=>new{c.Id,axes[i].Label,unit=Unit(markets,axes[i].Unit),
+            sessionPriceTypes=manifest.DayPrices.IsDefault?null:manifest.DayPrices.GroupBy(d=>d.Choices[i].SelectedType??"none")
+                .ToDictionary(g=>g.Key,g=>g.Count(),StringComparer.Ordinal)});
+    // A summary's amounts as the Risk page shows them: each becomes {value, display} at the default money precision (D114), exact values kept.
+    private static JsonObject Shown(object summary)
+    {
+        var node=JsonSerializer.SerializeToNode(summary,RiskJobs.Json)!.AsObject();
+        ToolAmountDisplay.Annotate(DisplayWalk.Viewer(node));
+        return node;
+    }
+    private static object SummaryCoverage(AlignedFactorHistory manifest,PortfolioValuation.Prepared portfolio)=>new{
+        available=manifest.Available&&portfolio.Excluded.IsEmpty,factors=manifest.Columns.Length,sessions=manifest.Sessions.Length,
+        samples=manifest.Samples.Length,rejected=manifest.Rejected.Length,minimumSamples=manifest.Policy.MinimumSamples};
 }

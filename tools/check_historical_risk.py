@@ -28,9 +28,9 @@ def run_checks(url,manifest,query,run_worker):
     assert {r['id'] for r in rows}=={r['id'] for r in history['manifest']['samples']} and len(rows)==249
     losses={}
     for row in rows:
-        assert len(row['values'])==len(row['losses'])==len(columns)
+        assert len(row['scenarioValues'])==len(row['losses'])==len(columns)
         for i,key in enumerate(columns):
-            assert Fraction(row['losses'][i])==Fraction(exposures[key]['baseValue'])-Fraction(row['values'][i])
+            assert Fraction(row['losses'][i])==Fraction(exposures[key]['baseValue'])-Fraction(row['scenarioValues'][i])
         losses[row['id']]=sum(Fraction(v) for v in row['losses'])
     assert len(result['partitions'])==1
     partition=result['partitions'][0];alpha=Fraction(request['policy']['confidence']);n=len(losses)
@@ -71,6 +71,7 @@ def run_checks(url,manifest,query,run_worker):
     unavailable=c.call('portfolio/risk/historical',insufficient)['historical']
     assert not unavailable['result']['available'] and unavailable['result']['partitions']==[] and unavailable['matrix']['rows']==[]
     print('PASS historical coverage: insufficient common history cannot publish a fabricated distribution',flush=True)
+    check_assistant_reads(c,scope,request,direct,compared,paired,history,insufficient)
     for field,value in [('horizon','ten_days'),('tailPolicy','normal_tail'),('valuationPolicy','recalibrate_volatility')]:
         bad=deepcopy(request);bad['policy'][field]=value;c.call('portfolio/risk/historical',bad,expected=422)
 
@@ -143,3 +144,80 @@ def run_checks(url,manifest,query,run_worker):
     assert c.call('portfolio/risk/jobs/'+job['jobId'])['result']['historical']['result']==result
     print('PASS zero historical column: complete native factor declaration survives SQL retention and actual worker replay; all sample probability mass remains and prior report is unchanged',flush=True)
     return dict(client=c,scope=scope,request=request,direct=direct,job=stored,catalog=catalog)
+
+
+ASSISTANT_RESULT_BYTES=65536
+
+
+def check_assistant_reads(c,scope,request,direct,compared,paired,history,insufficient):
+    """The assistant's historical summary and one-scenario drill-down are bounded projections of the Risk page's own report."""
+    import json
+    from check_parametric_risk import exact_amounts
+    def size(value):return len(json.dumps(value,separators=(',',':')).encode())
+    study=direct['historical'];result=study['result'];manifest=history['manifest']
+    session={s['close']:s['date'] for s in manifest['sessions']}
+    changes={r['id']:r for r in manifest['samples']}
+    setup=c.call('portfolio/risk/statistical/setup',scope)
+    assert size(setup)<=ASSISTANT_RESULT_BYTES and setup['historical']==c.call('portfolio/risk/catalog',scope)['historical']
+    uncaptured=deepcopy(request);uncaptured['history'].pop('expectedManifestId')
+    for body in (request,uncaptured):
+        summary=c.call('portfolio/risk/historical/summary',body)
+        assert size(summary)<=ASSISTANT_RESULT_BYTES,size(summary)
+        summary=exact_amounts(summary)
+        assert summary['available'] and summary['studyId']==study['studyId'] and summary['historyId']==manifest['id']
+        assert summary['policy']==request['policy'] and summary['samples']==result['samples']
+        assert summary['history']=={k:request['history'][k] for k in ('calendar','from','to','policy')}
+        assert [(f['id'],f['label'],f['unit']) for f in summary['factors']]==[(f['id'],f['factor']['label'],f['factor']['unit']) for f in study['factors']]
+        assert summary['books']==study['books']
+        trades={e['tradeId']:{'id':e['tradeId'],'reference':e['tradeReference'],'instrumentType':e['instrumentType'],'bookId':e['bookId']} for e in study['exposures']}
+        assert summary['trades']==sorted(trades.values(),key=lambda t:t['reference'])
+        assert len(summary['partitions'])==len(result['partitions'])
+        for compact,exact,shown in zip(summary['partitions'],result['partitions'],study['partitions']):
+            assert (compact['measure'],compact['currency'])==(exact['measure'],shown['currency'])
+            for key in ('baseValue','mean','valueAtRisk','expectedShortfall','tailSampleMass','quantileTies'):assert compact[key]==exact[key],key
+            assert compact['books']==[{'bookId':b['id'],'valueAtRisk':b['valueAtRisk'],'expectedShortfall':b['expectedShortfall']} for b in exact['books']]
+            assert compact['trades']==[{'tradeId':t['id'],'valueAtRisk':t['valueAtRisk'],'expectedShortfall':t['expectedShortfall']} for t in exact['trades']]
+            tail=sorted((x for x in exact['samples'] if Fraction(x['varWeight'])!=0 or Fraction(x['esWeight'])!=0),key=lambda x:(-Fraction(x['loss']),x['id']))
+            assert compact['tail']==[{'sample':x['id'],'from':session[changes[x['id']]['from']['at']],'to':session[changes[x['id']]['to']['at']],
+                'loss':x['loss'],'varWeight':x['varWeight'],'esWeight':x['esWeight']} for x in tail]
+            assert tail and Fraction(compact['expectedShortfall'])==sum(Fraction(x['loss'])*Fraction(x['esWeight']) for x in tail)
+        assert summary['comparison'] is None
+    paired_summary=exact_amounts(c.call('portfolio/risk/historical/summary',compared))
+    normal=paired['comparison']['report']['result']
+    assert paired_summary['comparison']['studyId']==study['studyId'] and paired_summary['comparison']['available']==normal['available']
+    labels={(p['measure'],json.dumps(p['currencyReference'],sort_keys=True)):p['currency'] for p in study['partitions']}
+    assert paired_summary['comparison']['partitions']==[{'measure':p['measure'],'currency':labels[(p['measure'],json.dumps(p['currency'],sort_keys=True))],
+        **{k:p[k] for k in ('mean','standardDeviation','valueAtRisk','expectedShortfall')}} for p in normal['partitions']]
+
+    worst=paired_summary['partitions'][0]['tail'][0]['sample']
+    row=next(r for r in study['matrix']['rows'] if r['id']==worst)
+    drill=c.call('portfolio/risk/historical/sample',{'request':request,'sample':worst})
+    assert size(drill)<=ASSISTANT_RESULT_BYTES
+    drill=exact_amounts(drill)
+    assert drill['studyId']==study['studyId'] and drill['sample']==worst
+    assert (drill['from'],drill['to'])==(session[changes[worst]['from']['at']],session[changes[worst]['to']['at']])
+    assert [(m['factor'],m['from'],m['to'],m['move']) for m in drill['moves']]==[(i,
+        changes[worst]['from']['marks'][i]['value'],changes[worst]['to']['marks'][i]['value'],v) for i,v in enumerate(changes[worst]['changes'])]
+    day={d['at']:d['choices'] for d in manifest.get('dayPrices') or []}
+    assert [(m['fromPriceType'],m['toPriceType']) for m in drill['moves']]==[(day[changes[worst]['from']['at']][i]['selectedType'],day[changes[worst]['to']['at']][i]['selectedType'])
+        if day else (None,None) for i in range(len(drill['moves']))]
+    assert drill['partitions']==[{'measure':p['measure'],'currency':p['currency'],'loss':next(x['loss'] for x in e['samples'] if x['id']==worst)}
+        for p,e in zip(study['partitions'],result['partitions'])]
+    exposures={e['id']:e for e in study['exposures']}
+    assert [(h['tradeReference'],h['bindingId'],h['measure'],h['baseValue'],h['scenarioValue'],h['loss']) for h in drill['holdings']]==[
+        (exposures[k]['tradeReference'],exposures[k]['bindingId'],exposures[k]['measure'],exposures[k]['baseValue'],row['scenarioValues'][i],row['losses'][i])
+        for i,k in enumerate(study['matrix']['columns'])]
+    assert c.call('portfolio/risk/historical/sample',{'request':request,'sample':'0'*64},expected=422)['code']=='risk_historical_sample'
+    assert exact_amounts(c.call('portfolio/risk/historical/sample',{'request':compared,'sample':worst}))==drill
+    current=deepcopy(uncaptured);current['history']['scope']['context']['knowledgeMode']='current';current['history']['scope']['context'].pop('contextId')
+    assert c.call('portfolio/risk/historical/summary',current,expected=422)['code']=='risk_historical_scope'
+    assert c.call('portfolio/risk/historical/sample',{'request':current,'sample':worst},expected=422)['code']=='risk_historical_scope'
+    unavailable=exact_amounts(c.call('portfolio/risk/historical/summary',insufficient))
+    assert not unavailable['available'] and unavailable['unavailableReasons']==['insufficient_common_history'] and unavailable['partitions']==[]
+    sample=c.call('portfolio/risk/historical/sample',{'request':insufficient,'sample':history['manifest']['samples'][0]['id']},expected=422)
+    assert sample['code']=='risk_historical_unavailable' and 'insufficient common history' in sample['message']
+    c.call('profile',{'profile':'viewer'})
+    for path,body in (('portfolio/risk/statistical/setup',scope),('portfolio/risk/historical/summary',request),('portfolio/risk/historical/sample',{'request':request,'sample':worst})):
+        c.call(path,body,expected=403)
+    c.call('profile',{'profile':'risk'})
+    print('PASS historical assistant reads: bounded summary, tail scenarios and one-scenario drill-down repeat the exact full-PV report',flush=True)

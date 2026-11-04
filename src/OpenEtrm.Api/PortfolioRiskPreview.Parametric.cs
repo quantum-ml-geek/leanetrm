@@ -6,6 +6,7 @@ using System.Text.Json.Serialization;
 using Npgsql;
 using OpenEtrm.MarketData;
 using OpenEtrm.MarketData.Risk;
+using OpenEtrm.Shared.Numerics;
 
 namespace OpenEtrm.Api;
 
@@ -104,7 +105,10 @@ public sealed partial class PortfolioRiskPreview
         if(result.Id!=plan.ExpectedManifestId)throw new MarketDataException("risk_history_manifest","The pinned historical observations no longer reproduce their retained manifest.");
         return result;
     }
-    private static object CalculateParametric(Prepared prepared,CancellationToken ct)
+    // One statistical evaluation: its history, the half/nominal/double valuation passes, their delta estimates and the Gaussian report.
+    private sealed record ParametricRun(PortfolioParametricRequest Spec,AlignedFactorHistory History,ParametricRiskReport Result,bool Evaluated,int TreesBefore,
+        PortfolioValuationResult Nominal,PortfolioValuationResult? Half,PortfolioValuationResult? Twice,List<object> Estimates);
+    private static ParametricRun EvaluateParametric(Prepared prepared,CancellationToken ct)
     {
         var spec=prepared.Request.Parametric!;var history=prepared.History??throw new MarketDataException("risk_parametric_history","Missing prepared calibration history.");
         var before=prepared.Portfolio.Options?.TreePrices??0;
@@ -133,6 +137,11 @@ public sealed partial class PortfolioRiskPreview
             deltas.Add(new(id,total.BookId,total.Measure,total.Value.Currency,values.ToImmutable()));
         }
         var result=ParametricRisk.Calculate(history,spec.Policy,deltas.ToImmutable(),prepared.Portfolio.Excluded.IsEmpty,ct);
+        return new(spec,history,result,evaluate,before,nominal,half,twice,estimates);
+    }
+    private static object CalculateParametric(Prepared prepared,CancellationToken ct)
+    {
+        var (spec,history,result,evaluate,before,nominal,half,twice,estimates)=EvaluateParametric(prepared,ct);
         var presentation=prepared with{Bumps=evaluate?prepared.Bumps:[]};
         var report=JsonSerializer.SerializeToNode(PresentSensitivity(presentation,nominal,before),RiskJobs.Json)!.AsObject();report.Remove("factors");
         if(evaluate)
@@ -165,4 +174,28 @@ public sealed partial class PortfolioRiskPreview
                 ScheduleGraphEvaluatedNodes=passes.Sum(w=>w.ScheduleGraphEvaluatedNodes),ScheduleGraphReusedReads=passes.Sum(w=>w.ScheduleGraphReusedReads),
                 ResolvedCurveMonths=passes.Sum(w=>w.ResolvedCurveMonths),ReusedCurveMonths=passes.Sum(w=>w.ReusedCurveMonths),
                 CalibratedBlocks=passes.Sum(w=>w.CalibratedBlocks),ReusedBlocks=passes.Sum(w=>w.ReusedBlocks)};
+    // The parametric summary is the Risk page's calculation, projected to its exact estimates, coverage and contributions.
+    // Partitions name books by id and factors by their position in `factors`, so each label appears once.
+    public async Task<object> ParametricSummary(NpgsqlConnection connection,PreviewData data,InputFrame frame,PortfolioParametricRequest body,CancellationToken ct)
+    {
+        var history=await CapturedHistory(connection,data,frame,body?.History,"risk_parametric_scope",ct);
+        var prepared=await Prepare(connection,data,frame,StatisticalRequest(body! with{History=history}),ct);
+        var run=EvaluateParametric(prepared,ct);var manifest=run.History;var portfolio=prepared.Portfolio;
+        var markets=portfolio.Markets.Select(m=>m.Data).ToImmutableArray();
+        var axes=manifest.Columns.Select(c=>CurveRiskAxes.Quote(portfolio,c.Mapping.Factor,ct)).ToImmutableArray();
+        var column=manifest.Columns.Select((c,i)=>(c.Id,i)).ToDictionary(c=>c.Id,c=>c.i,StringComparer.Ordinal);
+        SignedRatio Size(string value)=>SignedRatio.TryParse(value,out var r)?r.CompareTo(SignedRatio.Zero)<0?SignedRatio.Zero-r:r:
+            throw new MarketDataException("risk_parametric_numeric","Expected plain backend Gaussian output.");
+        return Shown(new{asOf=frame.At,contextId=portfolio.Context.ContextId,historyId=manifest.Id,run.Result.Available,run.Result.UnavailableReasons,
+            policy=run.Spec.Policy,history=new{run.Spec.History.Calendar,run.Spec.History.From,run.Spec.History.To,run.Spec.History.Policy},
+            coverage=SummaryCoverage(manifest,portfolio),
+            excludedPositions=portfolio.Excluded,
+            books=prepared.Books.Where(b=>prepared.BookIds.Contains(b.Id("id"))).Select(b=>new{id=b.Id("id"),name=b.Text("name")}),
+            factors=SummaryFactors(manifest,axes,markets),
+            calibration=new{run.Result.Calibration.Samples,run.Result.Calibration.Rank,run.Result.Calibration.Conditioning,run.Result.Calibration.CorrelationCondition},
+            partitions=run.Result.Partitions.Select(p=>new{p.Measure,measureLabel=MeasureLabel(p.Measure),currency=Currency(markets,p.Currency),
+                p.Mean,p.StandardDeviation,p.ValueAtRisk,p.ExpectedShortfall,
+                books=p.Books.Select(b=>new{bookId=Guid.Parse(b.Id),b.ValueAtRisk,b.ExpectedShortfall}),
+                factors=p.Factors.OrderByDescending(f=>Size(f.ValueAtRisk)).Select(f=>new{factor=column[f.Id],f.ValueAtRisk,f.ExpectedShortfall})})});
+    }
 }

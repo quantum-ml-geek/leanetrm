@@ -47,7 +47,7 @@ There is no arbitrary URL, HTTP client, SQL or execution tool.
 | Markets/curves | Navigation, evaluation, history, overlays, corrections, composition, save, publication and activation |
 | Reference/parties/schedules | Authorized catalogs, editors, conversion, date resolution, preview, save and publication |
 | Trading | Catalogs, positions, draft pricing/risk, booking, amendments and supported swap settlement |
-| Risk | Interactive calculations, retained job directory/reports, submission and cancellation |
+| Risk | Interactive calculations, bounded statistical VaR setup, parametric and historical summaries and historical scenario drill-down, retained job directory/reports, submission and cancellation |
 | Interval/delivery data | Source/series catalogs, selected windows, corrections and supported curve/quantity previews |
 | Jobs/infrastructure | Existing directory, job creation/update/control and typed node operations |
 | Administration/AI | Account, provider/model/agent configuration, usage and page guidance |
@@ -111,6 +111,15 @@ those product-specific command families are not added by this catalog.
 
 Existing turn/token/read limits and complete-result bounds of 500 records/64 KiB
 apply. Oversized results refuse instead of becoming partial successful reports.
+The Risk page's full VaR catalog, history and reports exceed that bound, so the
+assistant uses `portfolio/risk/statistical/setup`, `portfolio/risk/parametric/summary`,
+`portfolio/risk/historical/summary` and `portfolio/risk/historical/sample` (D306):
+the same capabilities and calculations, projected to exact estimates shown as
+`{value, display}` at money display precision, coverage, per-session price types, allocations, the
+tail scenarios and one scenario's factor moves and holding losses. They grow
+with the scope: roughly 150 trades in a measure, a 95% tail of 2,048 samples
+over three measures, or about 150 holdings in one scenario exceed the bound and
+refuse as usual after the calculation.
 Large retained reports, missing frames/sources and unsupported financial contracts
 remain explicit refusals. Credential replacement stays in the human-only form;
 keys never enter the assistant catalog. Technical audit/context/usage records
