@@ -35,6 +35,8 @@ refresh cannot silently restore it. Context changes do not rebind contracts.
 
 Optional `snapshotId` catalog projections supplement the original raw APIs.
 Malformed explicit snapshot identities refuse instead of selecting current data.
+Curve definition metadata remains readable while an ambiguous close choice is
+unresolved; pricing and save operations still require an exact selected frame.
 Gas/crude contextual setup inspection is read-only under historical knowledge.
 Their published heads are read separately from bounded raw history, so a long
 history of one binding cannot hide another current code. Current reference and

@@ -259,7 +259,7 @@ export async function run({command,evaluate,wait,click,set,submit,persona,check,
   await check('Back opens the trade again in the panel, on its Terms and without the edits that were given up',
     `${q('#position-details-head .side-panel-reference')}.textContent===${JSON.stringify(trade)}&&${q('#position-details-tabs-terms')}.getAttribute('aria-selected')==='true'&&${q('#trade-editing')}.hidden&&JSON.stringify(${looking}.slice(0,2))===${JSON.stringify(JSON.stringify(['Blotter',`Trade ${trade}, revision ${revision}`]))}`,looking);
   await click('#details-collapse');
-  // The report names the revision the form displays: the position's own, or an earlier one that the form's selector shows.
+  // The report names the context-resolved revision shown by the read-only version evidence.
   await wait("!!document.querySelector('#desk-positions .tabulator-row:not(.tabulator-group)')");
   await click('#desk-positions .tabulator-row:not(.tabulator-group)');await wait("document.querySelector('#position-details')?.hidden===false");
   await click('#side-panel-amend');await wait("!document.querySelector('#trade-editing').hidden&&"+idle);
@@ -267,12 +267,12 @@ export async function run({command,evaluate,wait,click,set,submit,persona,check,
   await click('#trade-confirm');await click('#trade-submit');
   await wait(`${q('#position-details-head .side-panel-meta')}?.textContent.startsWith('Revision 2')&&${idle}`);
   await click('#side-panel-amend');await wait("!document.querySelector('#trade-editing').hidden&&"+idle);
-  await set('#trade-revision','1');await wait(idle);
-  await check('Looking at names the revision the form displays, though the Blotter holds a later one',
-    `JSON.stringify(${looking}.slice(0,2))===${JSON.stringify(JSON.stringify(['Blotter',`Trade ${trade}, revision 1`]))}&&${q('#position-details-head .side-panel-meta')}.textContent.startsWith('Revision 2')`,looking);
-  await script({text:'It shows revision 1. '});
+  await click('#trade-reload');await wait(idle);
+  await check('Looking at names the context-resolved revision without a version picker',
+    `JSON.stringify(${looking}.slice(0,2))===${JSON.stringify(JSON.stringify(['Blotter',`Trade ${trade}, revision 2`]))}&&${q('#position-details-head .side-panel-meta')}.textContent.startsWith('Revision 2')`,looking);
+  await script({text:'It shows revision 2. '});
   await ask('Which revision is this?');await wait(finished);
-  await check('and so does the page report an ask sends',`${asks}.at(-1).body.pageReport.selection.revision===1&&${asks}.at(-1).body.pageReport.selection.view==='trade'`,`JSON.stringify(${asks}.at(-1).body.pageReport)`);
+  await check('and so does the page report an ask sends',`${asks}.at(-1).body.pageReport.selection.revision===2&&${asks}.at(-1).body.pageReport.selection.view==='trade'`,`JSON.stringify(${asks}.at(-1).body.pageReport)`);
   await click('#trade-reload');
   await check('which is the Blotter\'s again once the form reloads the latest',`JSON.stringify(${looking}.slice(0,2))===${JSON.stringify(JSON.stringify(['Blotter',`Trade ${trade}, revision 2`]))}`,looking);
   await click('#details-collapse');
