@@ -54,9 +54,9 @@ browser cache or unsent form contains. No draft store is added.
 ## Selection asks
 
 Blotter reports carry a separate focus: at most 64 distinct trade ids or one
-pivot cell's native group identities and measure. The shared backend grouping
+pivot cell's native group identities and measure. The shared backend grouping for selectable, quantity-partitioned pivots
 issues an opaque group id including its native price partition; no cell amounts
-or labels enter the ask. Selected positions and pivot totals are resolved again
+or labels enter the ask. Existing money-summary shapes remain unchanged. Selected positions and pivot totals are resolved again
 at the exact turn pin. Unavailable or ambiguous selections refuse whole.
 
 Ctrl/Command-click, Shift-click and keyboard selection identify trade rows.

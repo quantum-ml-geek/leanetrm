@@ -129,7 +129,9 @@ public sealed partial class TradingBlotter(PreviewDatabase database,FuturesStore
    priceMultiplier=hasPrices?Text(r,"quoteMultiplier"):null,definition=byDefinition?Text(r,"definitionRevisionId"):null}));
   foreach(var partition in partitions)
   {
-   var first=partition.First();var group=new JsonObject{["groupId"]=Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes("blotter-group-v1:"+partition.Key)))};
+   var first=partition.First();var group=new JsonObject();
+   // Selectable native pivots need exact identities; D223 money summaries retain their established shape.
+   if(byQuantity)group["groupId"]=Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes("blotter-group-v1:"+partition.Key)));
    // A healthy subtotal cannot be the complete value of a group whose retained
    // schedules need rebooking. Its individual healthy positions remain valued.
    var needsRebooking=partition.Any(row=>Text(row,"unavailableReason")==PpaBlotter.NeedsRebooking);

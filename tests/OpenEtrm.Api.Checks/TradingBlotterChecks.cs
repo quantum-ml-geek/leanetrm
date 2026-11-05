@@ -95,15 +95,9 @@ static class TradingBlotterChecks
     {
         var groups=TradingBlotter.Groups(Pivot(MoneyConvention,["instrumentType"],MoneyMeasures),Positions());
         Require(groups.Count==4,"Money groups were not one per instrument type and exact currency: "+groups.Count);
-        string[] stated=["currency","currencyReference","executionPnl","groupId","instrumentType","presentValue","tradeCount","unvaluedPositions"];
+        string[] stated=["currency","currencyReference","executionPnl","instrumentType","presentValue","tradeCount","unvaluedPositions"];
         Require(groups.All(group=>group.Select(member=>member.Key).Order(StringComparer.Ordinal).SequenceEqual(stated)),
             "A money group stated a unit or quantity specification, or lacked its type, currency, measures or unvalued count");
-        var identities=groups.Select(g=>Text(g,"groupId")).ToArray();
-        Require(identities.Distinct().Count()==groups.Count&&identities.All(id=>id is {Length:64}&&id.All(c=>char.IsAsciiHexDigit(c)&&!char.IsUpper(c))),
-            "Native money partitions must each issue a distinct opaque group identity.");
-        var reordered=TradingBlotter.Groups(Pivot(MoneyConvention,["instrumentType"],MoneyMeasures),Positions().AsEnumerable().Reverse().ToList());
-        Require(identities.Order(StringComparer.Ordinal).SequenceEqual(reordered.Select(g=>Text(g,"groupId")).Order(StringComparer.Ordinal)),
-            "A native group identity changed when the same source rows arrived in another order.");
         Require(Text(Group(groups,"financial_swap","usd"),"presentValue")=="11.6",
             "Swap present value was not added across quantity units and definition revisions of one currency");
         Require(Text(Group(groups,"financial_swap","eur"),"presentValue")=="7","A second currency was added to the first, or lost");
@@ -134,6 +128,12 @@ static class TradingBlotterChecks
         var perUnit=TradingBlotter.Groups(Pivot(TotalsConvention,["instrumentType"],["presentValue","tradeCount"]),Positions());
         Require(perUnit.Count==6&&perUnit.All(group=>group["unit"] is not null&&group["quantitySpecification"] is not null),
             "The totals convention stopped partitioning by quantity specification");
+        var identities=perUnit.Select(g=>Text(g,"groupId")).ToArray();
+        Require(identities.Distinct().Count()==perUnit.Count&&identities.All(id=>id is {Length:64}&&id.All(c=>char.IsAsciiHexDigit(c)&&!char.IsUpper(c))),
+            "Selectable native partitions must each issue a distinct opaque group identity.");
+        var reordered=TradingBlotter.Groups(Pivot(TotalsConvention,["instrumentType"],["presentValue","tradeCount"]),Positions().AsEnumerable().Reverse().ToList());
+        Require(identities.Order(StringComparer.Ordinal).SequenceEqual(reordered.Select(g=>Text(g,"groupId")).Order(StringComparer.Ordinal)),
+            "A native group identity changed when the same source rows arrived in another order.");
         Console.WriteLine("PASS the totals convention still partitions by quantity specification");
     }
 
