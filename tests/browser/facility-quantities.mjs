@@ -1,3 +1,4 @@
+import {openBookedSchedules} from './gas-ticket.mjs';
 const q=JSON.stringify;
 
 export async function run({command,evaluate,wait,set,click,submit,persona,check,shot,idle,url,fixture,fitsWidth}){
@@ -77,6 +78,7 @@ export async function run({command,evaluate,wait,set,click,submit,persona,check,
  await set('#snapshot',inspectionFrame);await wait(idle);await click('#nav-facilities');
  await evaluate(`window.facilityTicketPayload=null;window.facilityTradeFetch=window.fetch;window.fetch=async(...args)=>{const response=await facilityTradeFetch(...args);if(String(args[0]).endsWith('/trading/gas')&&response.ok)window.facilityTicketPayload=await response.clone().json();return response;};
   const row=[...document.querySelectorAll('#facility-allocation-table tbody tr')].find(r=>r.querySelector('input')?.value==='60');row.querySelector('[data-facility-trade]').click();`);
+ await openBookedSchedules({wait,click});
  await wait("!!document.querySelector('#position-details .ticket-facility-track')&&"+idle,30000).catch(async error=>{throw Error(error.message+' · '+JSON.stringify(await evaluate("({page:document.querySelector('#page-title').textContent,error:document.querySelector('#error').textContent,detail:document.querySelector('#position-details')?.textContent,ticket:window.facilityTicketPayload})")));});
  await check('a historical allocation opens the trade and only its own Side delivery track',
   "facilityTicketPayload.facilityAllocations.length===1&&facilityTicketPayload.facilityAllocations[0].quantity==='60'&&Object.keys(facilityTicketPayload.facilityAllocations[0]).sort().join()==='day,obligationId,quantity,sideCode,state,unit'");

@@ -4,7 +4,7 @@
 // tab, whose lost response is checked once, the coming-soon items drawn and never sent, and the quantity links of a linked side.
 import {newTrade} from './new-trade.mjs';
 import {sideSession,correctSyntheticBase} from './side-session.mjs';
-import {blotterAt,bookedTicket as booked,decemberClose,gasTicket,q} from './gas-ticket.mjs';
+import {blotterAt,bookedTicket as booked,decemberClose,gasTicket,openBookedSchedules,q} from './gas-ticket.mjs';
 
 export async function run(actions){
  const {command,evaluate,wait,set,click,check,persona,shot,idle,url,tab}=actions;
@@ -102,7 +102,7 @@ export async function run(actions){
  await wait(`!!${reconcile}&&document.querySelectorAll(${q(ticket+' .ticket-card')}).length===3`);
  await check('the reconciled ticket shows the request\'s exact terms, locked',`document.querySelector(${q(control('physical-1','quantity'))}).value==='10000'&&document.querySelector('#gas-ticket > div').inert`);
  await evaluate(`${reconcile}.click()`);
- await wait("document.querySelector('#position-details-tabs-schedules')&&!document.querySelector('#position-details').hidden&&"+idle);await click('#position-details-tabs-schedules');
+ await openBookedSchedules(actions);
  await until(`!!document.querySelector(${q(booked)})&&`+current(booked),`({error:document.querySelector('#error').textContent,booking:document.querySelector('#gas-ticket .ticket-booking')?.textContent,details:document.querySelector('#position-details').textContent.slice(0,300)})`);
  await check('the booked trade opens read-only in the Details pane with the schedule it was previewed with',
   `${month(booked)}===${q(previewed)}&&document.querySelectorAll(${q(booked+' .ticket-card')}).length===3&&!document.querySelector(${q(booked+' .ticket-control:not([disabled])')})&&!document.querySelector(${q(booked+' .ticket-book')})`,

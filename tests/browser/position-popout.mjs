@@ -45,6 +45,7 @@ export async function run({command,evaluate,wait,click,set,persona,check,idle,ur
   const read=await popup.evaluate("window.popupReads.find(r=>r.path.endsWith('/trading/position')).body");
   if(read.context.snapshotId!==snapshot||read.context.knowledgeMode!=='retained'||read.context.contextId!==report.context.contextId||read.tradeId!==selected.tradeId||read.bindingId!==selected.bindingId||read.revision!==Number(selected.revision))throw Error('The popup replaced its retained selection.');
   if(type==='ppa'){
+   await popup.click('#position-window-tabs-schedules');
    await popup.wait("document.querySelector('.position-schedules')?.textContent.includes('under this Blotter')",30000);
    await popup.evaluate("(()=>{const root=document.querySelector('.position-schedules');for(const select of root.querySelectorAll('.schedule-fields select')){select.value=select.options[1].value;select.dispatchEvent(new Event('change',{bubbles:true}));}root.querySelector('.schedule-fields button').click();})()");
    await popup.wait("window.popupReads.some(r=>r.path.endsWith('/ppa/inspect')&&r.status===200)&&!document.querySelector('.position-schedules').textContent.includes('Loading selected month…')",30000);

@@ -1,6 +1,6 @@
 import {workspaceProbeScript} from './workspace-probe.mjs';
 import {newTrade,closeNewTrade} from './new-trade.mjs';
-import {bookedTicket,gasTicket,q} from './gas-ticket.mjs';
+import {bookedTicket,gasTicket,openBookedSchedules,q} from './gas-ticket.mjs';
 import {copyFile,mkdtemp} from 'node:fs/promises';
 import {dirname,join} from 'node:path';
 import {tmpdir} from 'node:os';
@@ -47,8 +47,9 @@ export async function run(a){
  await check('reopening restores the same pending request with storage unavailable',`document.querySelector('#position-details-form').contains(document.querySelector('#gas-page'))&&document.querySelector('#gas-ticket > div').inert`);
  await evaluate(`${reconcile}.click()`);
  const booked=bookedTicket,opened=gasTicket(a,booked);
+ await openBookedSchedules(a);
  await opened.until(`!!document.querySelector(${q(booked)})&&`+opened.current(booked));
- await check('confirmed booking opens common retained trade terms exactly once',`window.bookRequests.length===1&&window.tradeReads.at(-1).blotter.holdings.filter(h=>h.tradeId===window.bookReceipt.tradeId).length===1&&document.querySelector('#position-details').textContent.includes('Physical gas trade')`, `({error:document.querySelector('#error').textContent,details:document.querySelector('#position-details').textContent.slice(0,300)})`);
+ await check('confirmed booking opens common retained side schedules exactly once',`window.bookRequests.length===1&&window.tradeReads.at(-1).blotter.holdings.filter(h=>h.tradeId===window.bookReceipt.tradeId).length===1&&document.querySelector('#position-details-tabs-schedules').getAttribute('aria-selected')==='true'`, `({error:document.querySelector('#error').textContent,details:document.querySelector('#position-details').textContent.slice(0,300)})`);
  // A day's quantity is recorded from the booked physical side's tab, without changing its contract.
  await set(`${booked} .ticket-level`,'day');await click(`${booked} .ticket-tab[data-tab="physical-1"]`);
  const cell=`${booked} .tabulator-row[data-row-key="2021-01-05"] .ticket-cell-input`,record=`${booked} .ticket-record`;
