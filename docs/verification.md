@@ -1,15 +1,34 @@
 # Local verification and continuous integration
 
+D325–D326 add actual frontend-report / prompt-API / SQL catalog parity, empty
+identity-only asks and immutable prompt pins for Dashboard, crude setup and Vol
+surfaces. Managed checks reject browser values and Blotter-only fields on these
+pages. Web browser checks cover cursor tracking, reduced motion, minimize/close,
+late controls, replaced highlights and native modal Review controls without
+consent or authorization. The workspace browser also checks the native swap field
+anchor. These are synthetic owned checks, not production business tests.
+
 D319 regression qualification uses the owned `--assistant-workspace-check --browser-check`
 suite. It covers New swap operation discovery, page handles and shared numbering,
 empty/bounded reads, native navigation, walkthrough go/pause, booking refusal and
 Stop during an outstanding catalog read. `--assistant-runtime-check` separately
-checks v14 admission and v13 refusal; run it separately from the workspace flag.
+checks v15 admission and v14 refusal; run it separately from the workspace flag.
 
 D320 adds injected initial-control-refresh failures to the owned assistant and
 `--live-calculation-check --browser-check` suites. They check main-window recovery,
 live Retry and pop-out recovery, plus native pointer Stop during a held catalog
 read. No production reproduction is implied by these synthetic regressions.
+
+The owned futures/swap browser fixtures normalize the virtual positions viewport
+through `positions-scroll.mjs` before checking its first rows or group headers.
+They allow 500 ms for pending retained-row placement, then make at most five
+native scroll attempts before requiring the viewport at the top. The exact quantity/display and two-subtotal
+assertions remain unchanged; this is fixture positioning, not a financial rule.
+The pop-out Keep/Discard check captures its displayed context after the native
+ticket-opening read and immediately before the proposed date change.
+PPA and Dashboard reloads require a new document before checking controls or
+request counters. The Dashboard read-count case leaves a restored Dashboard
+before measuring its next explicit opening.
 
 D312–D315 page-digest, selection and walkthrough checks run with
 `python3 tools/run_preview.py --pg-bin /path/to/postgres/bin --dotnet /path/to/dotnet --assistant-workspace-check --browser-check --browser /path/to/chrome`.
