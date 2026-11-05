@@ -1,10 +1,12 @@
+import {whenVisible} from './visible-read.js';
+import {batchReads} from './batch-reads.js';
+import type {CurveShape} from './desk-model.js';
 import {PendingCommand} from './pending-command.js';
-import {readCurveShapes} from './curve-shapes.js';
+import {readCurveShapes,curvesPerRead} from './curve-shapes.js';
 import {setupAddWidget} from './dashboard-add.js';
 import {setupPositions} from './dashboard-positions.js';
 import {chartBody} from './dashboard-chart.js';
 import {levelsBody,refusalNote,type DashboardMarket,type SharedShapes} from './dashboard-levels.js';
-import {curvesPerRead} from './market-board.js';
 import {addWidget,newWidget,arrange,removeWidget,moveToSection,moveOnBoard,nudged,configuredCurves,morningSections,endOfSection,
   type Arrangement,type DashboardLayout,type DashboardWidget,type Nudge,type Section,type WidgetKind} from './dashboard-layout.js';
 
@@ -32,21 +34,23 @@ export function setupDashboard(options:{api:<T>(path:string,body?:unknown)=>Prom
   const get=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id) as T;
   const pending=new PendingCommand(code=>!!code&&knownRejections.has(code));
   const positions=setupPositions(options.api);
-  let version:string|null=null,layout:DashboardLayout|undefined,conflict=false;
+  let version:string|null=null,layout:DashboardLayout|undefined,conflict=false,generation=0;
   // Bodies are drawn once for a market and kept across layout edits; a new close, context or reload draws them again.
   let drawn=new Map<string,Drawn>();
   // The Board controls open for arranging, and the one to focus again once the saved layout is drawn.
   const arranging=new Set<string>();
   let refocus:{id:string;nudge:Nudge}|undefined;
 
-  function forget(){for(const {dispose} of drawn.values())dispose?.();drawn=new Map();}
+  const shapeReaders=new Set<()=>void>();
+  function forget(){generation++;for(const cancel of shapeReaders)cancel();shapeReaders.clear();for(const {dispose} of drawn.values())dispose?.();drawn=new Map();}
 
-  // One curve-shapes read, in reads of at most the read's limit, for every Latest levels and Price chart curve not yet drawn.
-  function sharedShapes(widgets:readonly DashboardWidget[],market:DashboardMarket):SharedShapes{
-    const curves=configuredCurves(widgets),reads=[];
-    for(let i=0;i<curves.length;i+=curvesPerRead)
-      reads.push(readCurveShapes(options.api,{snapshotId:market.snapshotId,context:market.navigation.context??undefined},curves.slice(i,i+curvesPerRead)));
-    return Promise.all(reads).then(maps=>new Map(maps.flatMap(map=>[...map])));
+  function sharedShapes(market:DashboardMarket){
+    const started=generation;
+    const cancel=()=>reader.cancel();
+    const reader=batchReads<string,CurveShape|string>({maximum:curvesPerRead,current:()=>started===generation,
+      read:curves=>readCurveShapes(options.api,{snapshotId:market.snapshotId,context:market.navigation.context??undefined},curves),
+      active:reading=>{if(reading)shapeReaders.add(cancel);else shapeReaders.delete(cancel);}});
+    return (widget:DashboardWidget):SharedShapes=>reader.get(configuredCurves([widget]));
   }
 
   // The body of one widget, reading the market now on screen; shapes come from the render's shared read.
@@ -97,17 +101,22 @@ export function setupDashboard(options:{api:<T>(path:string,body?:unknown)=>Prom
     // A widget no longer on the layout, or whose content changed, is released; one unchanged keeps its drawn body.
     const contents=new Map(layout.widgets.map(w=>[w.id,JSON.stringify([w.kind,w.config])]));
     for(const [id,{content,dispose}] of drawn)if(contents.get(id)!==content){dispose?.();drawn.delete(id);}
-    // The market is read only when a widget is drawn; one that cannot be read refuses each widget drawn.
-    const fresh=layout.widgets.filter(w=>!drawn.has(w.id));
-    let market:DashboardMarket|undefined,shapes:SharedShapes|undefined;
+    let market:DashboardMarket|undefined,shapes:ReturnType<typeof sharedShapes>|undefined;
     const bodies=new Map(layout.widgets.map(widget=>{
       const kept=drawn.get(widget.id);
       if(kept)return [widget.id,kept.body];
+      const body=element('div','dashboard-deferred');body.append(element('p','muted','Scroll to load this widget.'));
       try{
-        const now=market??=options.market(),made=draw(widget,now,()=>shapes??=sharedShapes(fresh,now));
-        drawn.set(widget.id,{content:contents.get(widget.id)!,readAt:readAt(now),...made});
-        return [widget.id,made.body];
-      }catch(error){return [widget.id,refusalNote(error)];}
+        const now=market??=options.market();
+        let made:ReturnType<typeof draw>|undefined;
+        const cancel=whenVisible(body,()=>{
+          try{made=draw(widget,now,()=>(shapes??=sharedShapes(now))(widget));body.replaceChildren(made.body);sync();}
+          catch(error){body.replaceChildren(refusalNote(error));}
+        });
+        drawn.set(widget.id,{content:contents.get(widget.id)!,readAt:readAt(now),body,
+          freshen:current=>made?.freshen?.(current),dispose:()=>{cancel();made?.dispose?.();}});
+      }catch(error){body.replaceChildren(refusalNote(error));}
+      return [widget.id,body];
     }));
     if(layout.widgets.length===0){host.replaceChildren(element('p','muted','No widgets have been added to this dashboard.'));return;}
     if(layout.arrangement==='board'){

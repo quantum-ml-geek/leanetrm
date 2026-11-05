@@ -389,11 +389,24 @@ export function setupAiSettings(options:{api:Api;act:(work:()=>Promise<void>)=>P
     render();sync();
   }
   // Each tab appears by its own permission and reads only its own directories.
+  const loadedTabs=new Set<AiTab>(),tabKey=(tab:AiTab)=>tab==='providers'?'models':tab;
   async function load(){
-    const tabs=options.tabs();
+    loadedTabs.clear();const tabs=options.tabs();
     for(const tab of aiTabNames)get('ai-tab-'+tab).hidden=!tabs.includes(tab);
     if(!tabs.some(tab=>!get('ai-'+tab).hidden))show(tabs[0]??'models');
-    await Promise.all([tabs.includes('usage')?usage.load():undefined,tabs.includes('models')?loadModels():undefined,tabs.includes('agents')?agents.load():undefined,tabs.includes('prompts')?prompts.load():undefined]);
+    const selected=tabs.find(tab=>!get('ai-'+tab).hidden);
+    if(selected)await loadTab(selected);
+  }
+  async function loadTab(tab:AiTab){
+    const key=tabKey(tab);
+    if(!options.tabs().includes(tab)||loadedTabs.has(key))return;
+    loadedTabs.add(key);
+    switch(tab){
+      case 'models':case 'providers':await loadModels();break;
+      case 'usage':await usage.load();break;
+      case 'agents':await agents.load();break;
+      case 'prompts':await prompts.load();break;
+    }
   }
   // A confirmed change clears only the form that made it.
   const resets:Record<string,(command:RequestCommand)=>void>={
@@ -432,7 +445,11 @@ export function setupAiSettings(options:{api:Api;act:(work:()=>Promise<void>)=>P
     return {effectiveFrom:await from.instant(),effectiveTo:open?null:await to.instant()};
   }
 
-  for(const tab of aiTabNames)get('ai-tab-'+tab).onclick=()=>{if(!options.busy())show(tab);};
+  for(const tab of aiTabNames)get('ai-tab-'+tab).onclick=()=>{
+    if(options.busy()||!options.tabs().includes(tab))return;
+    if(loadedTabs.has(tabKey(tab))){show(tab);return;}
+    void options.act(async()=>{show(tab);await loadTab(tab);});
+  };
   for(const id of ['ai-models-refresh','ai-providers-refresh'])get(id).onclick=()=>void options.act(loadModels);
   for(const id of ['ai-price-form','ai-withdraw-form'])form(id).addEventListener('change',sync);
   // A dimension marked not offered has no rate in either set, so nothing typed there lingers unsent.
@@ -514,7 +531,7 @@ export function setupAiSettings(options:{api:Api;act:(work:()=>Promise<void>)=>P
     unconfirmed:()=>[pending,providerPending,keyPending,testPending].some(p=>!!p.command)||agents.unconfirmed()||usage.unconfirmed()||prompts.unconfirmed(),
     refresh(){for(const zoned of [priceFrom,priceTo,withdrawFrom,withdrawTo])zoned.refresh();render();sync();agents.refresh();usage.refresh();},
     reset(){
-      generation++;clearDirectories();selected=undefined;selectedVendor=undefined;statementPair='';
+      generation++;loadedTabs.clear();clearDirectories();selected=undefined;selectedVendor=undefined;statementPair='';
       for(const id of ['ai-model-form','ai-rename-form','ai-key-form','ai-terms-form','ai-attest-form','ai-test-form'])form(id).reset();resetModelForms();show('models');
       // This identity's unconfirmed requests stay offered whether or not its directories can be read.
       pending.command=stored(pending,c=>modelPaths.includes(c.path));

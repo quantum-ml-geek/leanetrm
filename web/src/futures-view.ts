@@ -27,7 +27,9 @@ import {changeChart,changeScales,gapsText,lensCells,madeHere,noMoveText,position
   type LensCell,type ReadPlace,type RunGap} from './risk-lens.js';
 import {sensitivityFactors,type ExcludedPosition,type RiskReport} from './risk-report.js';
 import {setupFuturesBooking} from './futures-booking.js';
-import {draftShapes,otherRevision,readCurveShapes} from './curve-shapes.js';
+import {draftShapes,otherRevision,readCurveShapes,curvesPerRead} from './curve-shapes.js';
+import {batchReads} from './batch-reads.js';
+import {visibleReads} from './visible-read.js';
 import {newTradeControl,newTradeProducts,setupNewTrade,type NewProduct} from './new-trade.js';
 import {createTableWorkspace} from './table-workspace.js';
 import {setupBookScopePicker} from './scope-picker.js';
@@ -93,9 +95,6 @@ const rowGroupLabels:Readonly<Record<NonNullable<RowGroup>,string>>={book:'Book'
 const rowGroupLabel=(group:RowGroup)=>group===null?'None':rowGroupLabels[group];
 // The trade fields an export of trade rows states, beside the desk's own: money is in its currency.
 const numericFields=['tradeCount','lots','quantity','executionPrice','mark','executionPnl','fixedPrice','presentValue','revision'];
-// At most this many curves are shaped in one read (market/curve-shapes).
-const curvesPerShapeRead=64;
-
 export function setupFutures(options:{tickets:ProductTickets;api:Api;stream:(body:BlotterStreamRequest,handlers:BlotterStreamHandlers,signal:AbortSignal)=>Promise<void>;act:(work:()=>Promise<void>)=>Promise<void>;busy:()=>boolean;canRunRisk:()=>boolean;bookingUnavailableReason:()=>string;zone:()=>string;profile:()=>string;onReadContext:(at:string,known:string)=>void;
   riskReportUrl?:(id:string)=>string;
   // Opens an option product's volatility surface; null in a window with no Vol surfaces page.
@@ -163,7 +162,8 @@ export function setupFutures(options:{tickets:ProductTickets;api:Api;stream:(bod
   // The curve shapes of the current read, once read: by curve, a shape or why it is unavailable; or why none could be read.
   let shapes:{revision:string;curves:Map<string,CurveShape|string>}|{unavailable:string}|undefined;
   // The desk's read of its curves, while it is under way: what Price before booking waits for before it reads a curve of its own.
-  let shapesRead:Promise<void>=Promise.resolve();
+  let shapesRead:Promise<void>=Promise.resolve(),stopShapeReads=()=>{};
+  let requestShape:((holding:Holding)=>void)|undefined;
   const pending=new PendingCommand();
   // Price before booking draws the curve of each market the draft is for: from the desk's own read when it holds the curve, and otherwise
   // from one read of that curve, kept until the desk reads again.
@@ -934,7 +934,7 @@ export function setupFutures(options:{tickets:ProductTickets;api:Api;stream:(bod
     // Rows on screen while no valued read is, kept stale from the previous one, are not offered: opening them only says why.
     crudeFacts.querySelectorAll<HTMLButtonElement>('button').forEach(button=>button.disabled=busy());const grid=get('desk-positions').querySelector('[role=grid]');if(holdings)grid?.removeAttribute('aria-disabled');else grid?.setAttribute('aria-disabled','true');syncLens();booking.sync();risk.sync();editor.sync();swapEditor.sync();crudeOperations.sync();options.tickets.sync();syncProductPending();position.sync();entry.sync();panel.place();syncRiskReport();if(busy())workspace.busy(true);syncNewTrade();retained.hidden=!pending.command;if(pending.command)text('futures-pending-text',retainedText(pending.command));get<HTMLButtonElement>('blotter-export').disabled=busy()||!holdings||!table?.ready();get<HTMLButtonElement>('futures-retry').disabled=busy()||!pending.command||!retryAllowed(pending.command.path,catalog);get<HTMLButtonElement>('futures-reconcile').disabled=busy();if(view.mode==='pivot')get('blotter-column-choices').querySelectorAll<HTMLInputElement>('input').forEach(n=>{if(['instrumentType','unit','currency','priceUnit'].includes(n.value))n.disabled=true;});}
   function clearDesk(){get('desk').hidden=true;get('desk-charts').hidden=true;get('blotter-strip').replaceChildren();clearDeskCharts(get('desk-chart-pv'));clearDeskCharts(get('desk-chart-position'));for(const id of ['desk-chart-books','desk-chart-mix'])get(id).replaceChildren(get(id).querySelector('h3')!);}
-  function cancelRead(){generation++;pricingController?.abort();pricingController=undefined;}
+  function cancelRead(){stopShapeReads();requestShape=undefined;shapesRead=Promise.resolve();generation++;pricingController?.abort();pricingController=undefined;}
   function clear(){clearRead(false);}
   // A read again keeps on screen what the read before drew, its rows and the summary strip, charts and summary line, all marked stale
   // with the reason until the new values land.
@@ -1141,11 +1141,12 @@ export function setupFutures(options:{tickets:ProductTickets;api:Api;stream:(bod
     if('unavailable' in shapes)return shapes.unavailable;
     if(h.definitionRevisionId!==shapes.revision)return otherRevision;
     if(projectsFromSeveralCurves(h))return severalCurvesShape;
-    return shapes.curves.get(h.curve)??'Curve shape unavailable';
+    return shapes.curves.get(h.curve);
   }
   // The position at a row of the read on screen, as the details draw it; nothing while the desk draws no positions.
   function positionInput(index:number):PositionInput|undefined{
     const h=panelHoldings()?.[index],row=drawn?.rows[index];if(!h||!row)return;
+    if(shapeOf(h)===undefined)requestShape?.(h);
     return {holding:h,row,formats:holdingFormats(h),shape:shapeOf(h),color:drawn!.colors.get(row.commodity)!,risk:positionRisk(h,row)};
   }
   function renderPivot(scope:string){
@@ -1243,7 +1244,7 @@ export function setupFutures(options:{tickets:ProductTickets;api:Api;stream:(bod
         version=fresh.version;
         if(reuse&&holdings&&catalog&&summaries&&cachedRead?.key===cacheKey&&cachedRead.version===version){
           get('futures-page').classList.remove('checking-cache');
-          if(shapes===undefined)shapesRead=loadShapes(checking,scope,source);
+          loadShapes(checking,scope,source);
           options.onReadContext(holdings.asOf,holdings.context.knownAt);sync();return;
         }
         // Changed authority or data may make any previously visible name or row unavailable.
@@ -1331,7 +1332,7 @@ export function setupFutures(options:{tickets:ProductTickets;api:Api;stream:(bod
         readPlace={contextId:selected.contextId,asOf:combined.blotter.asOf,snapshotId:request.snapshotId,bookIds:[...selectedView.bookIds],portfolioIds:[...selectedView.portfolioIds]};
         try{viewControls();acceptValuedRows(holdings.holdings.slice(arrived.length));}catch(error){({catalog,holdings,summaries,shapes,lastReadRequest,readPlace}=previous);throw error;}
         facts=undefined;factsRequest=undefined;readInputs=inputs;showLoad(undefined);
-        shapesRead=view.mode==='trades'?loadShapes(started,scope,source):Promise.resolve();
+        if(view.mode==='trades')loadShapes(started,scope,source);
         await loadChart(reportRequest,started,scope);requireCurrentRead(started,scope);if(get('futures-page').hidden)return;
         get('futures-page').dataset.pricingContext=selected.contextId;get('futures-page').dataset.pricingState='complete';
         cachedRead=version?{key:cacheKey,version}:undefined;workspace.closeMenus();sync();
@@ -1348,7 +1349,7 @@ export function setupFutures(options:{tickets:ProductTickets;api:Api;stream:(bod
         // A Blotter read whose values were not drawn says why, once the count read beside it is in, and keeps what the previous read drew.
         else if(!live&&bookingCatalog==='directory'&&!holdings){if(arrived.length&&!kept){arrived=[];table=undefined;workspace.clear();}await factsRead.catch(()=>undefined);if(started!==generation||get('futures-page').hidden)return;readFailed(error,error===countFailed?'count':'valuation');}
         else if(!live)clear();
-        else{get('futures-page').dataset.pricingState='failed';showCrudeFacts();if(shapes===undefined)noShapes('the refresh that interrupted their read failed');}
+        else{get('futures-page').dataset.pricingState='failed';showCrudeFacts();noShapes('the refresh that interrupted their read failed',true);}
         // A read in the background is said by its own handler below; it still fails, for whoever awaits the values (valued).
         throw error;
       }finally{if(pricingController===controller)pricingController=undefined;}
@@ -1358,24 +1359,38 @@ export function setupFutures(options:{tickets:ProductTickets;api:Api;stream:(bod
       void pricingRead.catch(error=>{if(started===generation&&whereAmI()===scope&&!get('futures-page').hidden)options.failed(error);});
     }else await pricingRead;
   }
-  // Every row's curve unavailable, with the reason.
-  function noShapes(why:string){shapes={unavailable:`Curve shape unavailable · ${why}`};redrawCurves();syncPositionDetails();}
+  // A failed refresh keeps completed shapes and ends every unresolved cell's wait.
+  function noShapes(why:string,preserveCompleted:boolean){
+    const reason=`Curve shape unavailable · ${why}`;
+    if(preserveCompleted&&shapes&&'curves' in shapes){
+      for(const h of holdings?.holdings??[])if(!shapes.curves.has(h.curve))shapes.curves.set(h.curve,reason);
+    }else shapes={unavailable:reason};
+    redrawCurves();syncPositionDetails();
+  }
   // The rows' curve cells, once their shapes are read; the Risk lens draws none.
   function redrawCurves(){const column=tableColumns.indexOf('curve');if(column>=0)table?.redrawCells(column);}
-  // Sparklines follow the first render: the held curves of the close's definitions, at most 64 to a read, in the market
-  // context the positions were read in. A failed read leaves each of its curves unavailable with the reason, and never
-  // blanks the positions.
-  async function loadShapes(started:number,scope:string,source:{snapshotId:string;context?:{contextId?:string}}){
-    const current=()=>{try{requireCurrentRead(started,scope);return true;}catch{return false;}};
+  // Optional curve cells request shapes only when visible. Opening position details
+  // explicitly requests that position's curve, independently of grid visibility.
+  function loadShapes(started:number,scope:string,source:{snapshotId:string;context?:{contextId?:string}}){
+    stopShapeReads();shapesRead=Promise.resolve();
+    const current=()=>{try{requireCurrentRead(started,scope);return !get('futures-page').hidden;}catch{return false;}};
     let revision:string;
-    try{revision=options.definitionRevision();}catch{noShapes('the market definitions of this close are not loaded');return;}
-    const curves=[...new Set(holdings!.holdings.filter(h=>h.definitionRevisionId===revision).map(h=>h.curve))].sort();
-    const found=new Map<string,CurveShape|string>();
-    for(let i=0;i<curves.length;i+=curvesPerShapeRead){
-      for(const [curve,shape] of await readCurveShapes(api,source,curves.slice(i,i+curvesPerShapeRead)))found.set(curve,shape);
-      if(!current())return;
-    }
-    shapes={revision,curves:found};redrawCurves();syncPositionDetails();
+    try{revision=options.definitionRevision();}catch{noShapes('the market definitions of this close are not loaded',false);return;}
+    const found=shapes&&'curves' in shapes&&shapes.revision===revision?new Map(shapes.curves):new Map<string,CurveShape|string>();
+    shapes={revision,curves:found};
+    const reader=batchReads<string,CurveShape|string>({maximum:curvesPerRead,current,read:curves=>readCurveShapes(api,source,curves),
+      received:(read,curves)=>{for(const code of curves)found.set(code,read.get(code)??'Curve shape unavailable · the read did not return this curve');redrawCurves();syncPositionDetails();}});
+    requestShape=h=>{
+      if(!current()||h.definitionRevisionId!==revision||projectsFromSeveralCurves(h)||found.has(h.curve)||reader.has(h.curve))return;
+      void reader.get([h.curve]);shapesRead=reader.idle();
+    };
+    const observer=visibleReads(current,target=>{
+      const h=holdings?.holdings[Number((target as HTMLElement).dataset.shapeRow)];if(h)requestShape?.(h);
+    });
+    const observe=()=>observer.reset(get('futures-page').querySelectorAll('.sparkline-loading[data-shape-row]'));
+    const mutations=new MutationObserver(observe);mutations.observe(get('futures-page'),{childList:true,subtree:true});observe();
+    stopShapeReads=()=>{reader.cancel();observer.cancel();mutations.disconnect();};
+    syncPositionDetails();
   }
   async function loadChart(reportRequest:{context:unknown;view:unknown},started:number,scope:string){
     // Trade rows have the desk's charts; a pivot keeps its configurable chart.
