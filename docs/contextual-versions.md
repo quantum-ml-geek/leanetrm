@@ -1,6 +1,6 @@
 # Versions selected by workspace context
 
-D312 makes the shared As of date and knowledge cutoff select ordinary displayed
+D316 makes the shared As of date and knowledge cutoff select ordinary displayed
 versions. The UI offers logical objects and displays their resolved version as
 read-only evidence. Exact-version backend operations, immutable history and
 saved financial references remain available.

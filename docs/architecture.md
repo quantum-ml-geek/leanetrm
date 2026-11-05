@@ -1,6 +1,6 @@
 # Architecture and domain contracts
 
-D312 makes displayed versions follow the shared As of date and knowledge cutoff;
+D316 makes displayed versions follow the shared As of date and knowledge cutoff;
 exact backend history and retained financial pins remain available. See
 [contextual version presentation](contextual-versions.md) for implemented consumers
 and historical limits.
