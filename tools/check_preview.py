@@ -174,8 +174,9 @@ def run_checks(url,query,manifest,direct_reads,after_browser):
     from check_reference_reads import run_checks as check_reference_reads,run_scope_checks
     check_reference_reads(c,check)
     run_scope_checks(c,check,query,manifest)
-    from check_blotter_freshness import run_checks as check_blotter_freshness
+    from check_blotter_freshness import run_checks as check_blotter_freshness,run_update_checks as check_blotter_updates
     check_blotter_freshness(c,check,query,manifest)
+    check_blotter_updates(c,check,query)
     print(f'{passed} preview HTTP checks passed.',flush=True)
     return workspace
 

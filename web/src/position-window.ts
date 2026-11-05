@@ -21,7 +21,7 @@ type Api=<T>(path:string,body?:unknown,signal?:AbortSignal)=>Promise<T>;
 const operations=new Set(['bootstrap?includeFrames=false&includeAccess=true','options/holding','options/exercise','options/assignment','options/instruction','tickets/description','tickets/trade','tickets/choices','trading/crude','trading/lng','trading/gas','trading/position','futures/editor','swaps/editor','swaps/quantity-schedule','trade-formats/read','ppa/editor','ppa/preview','ppa/inspect','amounts/display']);
 let controller:AbortController|undefined,generation=0,loading=false,selection:PositionWindowSelection|undefined,reader:Api,readerActor='';
 const panel=setupPositionPanel({element:name=>get('position-window-'+name),form:on=>{if(on)throw Error('This trade window is read only.');},reveal(){},focusForm(){}},
- {zone:()=>selection!.zone,busy:()=>loading,canAmend:()=>false,tabs:['terms','history'],curveListed:()=>false,context:()=>JSON.stringify(selection),
+ {zone:()=>selection!.zone,busy:()=>loading,canAmend:()=>false,tabs:['terms','schedules','history'],curveListed:()=>false,context:()=>JSON.stringify(selection),
   read:async(h,formats)=>{
    const api=reader,actor=readerActor,context={...positionWindowRequest(selection!).context,
     convention:h.instrumentType==='future'?'contract_lot_execution_pnl_v2':'independent_side_financial_swap_v2'};
@@ -77,7 +77,7 @@ async function load(){
   reader=api;readerActor=boot.profile;loading=false;document.title=`${h.tradeReference} · Trade details · LeanETRM`;get('position-window-title').textContent=publicText(h.tradeReference);
   get('position-window-context').textContent=`As of ${displayInstant(read.asOf,picked.zone)} · Known at ${displayInstant(read.context.knownAt,picked.zone)} · Read only`;showRecorded();
   detail.dataset.context=read.context.contextId;detail.dataset.knownAt=read.context.knownAt;detail.dataset.asOf=read.asOf;
-  detail.hidden=false;panel.show({holding:h,row:positionRows([h])[0],formats:holdingFormats(h),shape:'This window explores retained trade terms and schedules.',
+  detail.hidden=false;panel.show({holding:h,row:positionRows([h])[0],formats:holdingFormats(h),
    color:commodityColors([h.commodity.code]).get(h.commodity.code)!,risk:{state:'none'}});
  }catch(refusal){if(started===generation&&!current.signal.aborted)fail(refusal instanceof Error?refusal.message:'The retained trade could not be read.');}
  finally{if(started===generation){loading=false;retry.disabled=false;document.body.setAttribute('aria-busy','false');panel.sync();}}

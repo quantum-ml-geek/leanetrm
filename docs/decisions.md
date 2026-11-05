@@ -2326,3 +2326,52 @@ becoming alternative-version pickers. Clearing one requires a new explicit
 choice. Optional dated catalog projections preserve the original backend APIs.
 Exact proposal recovery is independent of bounded catalog history. No migration or financial policy is introduced. See
 [contextual versions](contextual-versions.md) for implemented consumers and limits.
+
+## D317 — Blotter schedules, retained navigation and incremental updates
+
+Owner-requested presentation change: position details replace the Curve tab with
+Side schedules, using the existing backend-owned side payment and interval views.
+Swap sides share a pricing-row presentation of observation bounds, payment dates,
+exact weights, prices, states and per-unit cash contributions; payment rows retain
+their native quantities, discount factors, signed cash and trade PV.
+Terms, Risk and History remain separate. No Side or schedule is invented for a
+product without a supported viewer. The optional grid curve column is unchanged.
+
+Reentering the current saved sidebar view uses the same authorized server-version
+check as ordinary Blotter navigation. Completed positions, risk lenses and the
+expanded report's selected factor stay in this window while their inputs match.
+Pending reads cannot publish after leaving; retained data remains hidden until
+current access and the exact server selection are validated. A changed server
+version or financial scope requires a new authorized valuation and clears its
+former risk.
+No result is persisted across browser reload or shared with another account.
+
+A visible ordinary Blotter automatically waits for changed server heads. One
+bounded wait per session subscribes before reading the durable authorized head,
+then rereads it after a publication hint or eight-second timeout. No session gate
+or database connection is held during the wait. Every reply rechecks current
+authority and session identity. Leaving the page cancels its wait.
+
+The browser applies completed native values in place, briefly highlighting changed
+cells and retaining equal cells, completed graphics and detail presentation.
+Changed filters, sorting, metadata and SVG geometry are reconciled even when a
+numeric value is equal. Structural row changes use the existing keyed grid path.
+Optional visible curve cells keep their previous shapes marked updating while
+fresh shapes are read. Header Live corrections use the same grid update path.
+
+The backend still values the complete selected financial scope. A notification
+does not choose another close, change an explicit observation pin or reinterpret
+a mark. Updates defer while editors have unsaved changes or commands are pending,
+including operational day entries and option lifecycle actions. The same protection
+is rechecked before committing an admitted valuation. Detail controls stay inert
+during the final replacement read, with focus restored afterward; an action cannot
+start in the widget being replaced. Lifecycle controls remain in Terms, separate
+from Side schedules.
+Lifecycle requests retain their exact identity before an asynchronous permission
+read. Their transport belongs to the captured actor and trade; a late outcome
+settles only that request and updates only its current view. Native authority is
+checked again before sending.
+Transient read failures retry from the last successfully applied version; a
+structured business refusal keeps previous values visibly stale and waits for a
+later head or explicit Refresh. Unknown command outcomes are never retried here.
+This change adds no persistence schema or external dependency.

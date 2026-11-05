@@ -351,8 +351,8 @@ export function setupTicket(host:HTMLElement,o:TicketOptions):TicketHandle{
  }
  void load();
  return {
-  unsaved:()=>!!entry&&!!state&&booked===undefined&&(!!pending.command||sent()!==opened),
-  pending:()=>!!pending.command||!!day?.pending.command,
+  unsaved:()=>!!day||!!entry&&!!state&&booked===undefined&&(!!pending.command||sent()!==opened),
+  pending:()=>recording||!!pending.command||!!day?.pending.command,
   destroy(){alive=false;lifetime.abort();clearTimeout(settling);drawn?.destroy();host.replaceChildren();},
  };
 }

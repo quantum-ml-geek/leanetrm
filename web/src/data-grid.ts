@@ -1,3 +1,4 @@
+import {changedCells} from './grid-updates.js';
 import {TabulatorFull,type GridGroup,type GridRow,type GridColumn} from './vendor/tabulator.js';
 import {compareDecimalStrings} from './analytics-model.js';
 import {matchesTableRow,columnValues,validNumericFilter} from './regular-table.js';
@@ -33,7 +34,7 @@ type Cells=(string|HTMLElement)[][];
 // soon: the hover text of each coming-soon column by index, drawn greyed with a Coming soon tag and holding no values.
 type Chosen=void|boolean|Promise<boolean>;
 export type GridOptions={displayRows?:string[][];cellTitles?:string[][];visible?:boolean[];initial?:{query:string;columns:(string|null)[]};retainMissingFilters?:boolean;keys:string[];columnGroups?:Record<string,{key:string;title:string;measureTitle:string}>;layout:GridLayout;onLayout:(value:GridLayout)=>void;onReady?:()=>void;onRowOpen?:(index:number)=>Chosen;onRowSelect?:(index:number)=>Chosen;onRowEscape?:()=>void;onRowMenu?:(index:number,at:{x:number;y:number})=>void;onRowDoubleOpen?:(index:number)=>void;onMultiSelection?:(keys:string[])=>void;onCellPick?:(row:number,column:number)=>void;
-  cells?:(index:number,column:number)=>Node|null;searchText?:string[];visual?:number[];group?:GridGroupOption;rowKeys?:readonly string[];rowHeight?:number;stretch?:boolean;toolbarHost?:HTMLElement;fill?:boolean;giveUp?:readonly number[];
+  patchValues?:boolean;cells?:(index:number,column:number)=>Node|null;searchText?:string[];visual?:number[];group?:GridGroupOption;rowKeys?:readonly string[];rowHeight?:number;stretch?:boolean;toolbarHost?:HTMLElement;fill?:boolean;giveUp?:readonly number[];
   tree?:{parents:(string|null)[];open:ReadonlySet<string>;onToggle:(key:string,open:boolean)=>void};totals?:string[][];headerGroups?:{title:string;colour:string;columns:number[]}[];
   decorate?:(index:number,column:number)=>{sources:string[];changed:boolean;delivered:boolean}|null;soon?:Readonly<Record<number,string>>};
 /**
@@ -135,9 +136,17 @@ export function renderDataGrid(host:HTMLElement,key:string,scope:string,headers:
     for(const source of mark.sources){const tag=el('span',source);tag.className='grid-source';wrap.append(tag);}
     wrap.append(content);return wrap;
   };
+  function cellContent(index:number,column:number,value:string):Node{
+    const rich=options.cells?.(index,column);if(rich)return decorated(rich,index,column);
+    const span=document.createElement('span');span.textContent=publicText(options.displayRows?.[index]?.[column]??value);
+    if(numeric.includes(column)&&value.startsWith('-'))span.className='grid-negative';
+    if(options.cellTitles?.[index]?.[column]!==undefined)span.title=publicText(options.cellTitles[index][column]);
+    else if(options.displayRows?.[index]?.[column]!==undefined)span.title=value;
+    return decorated(span,index,column);
+  }
   for(const key of ordered(options.layout)){
     const i=options.keys.indexOf(key),group=columnGroupOf(key,i),title=publicText(group?.measureTitle??headers[i]);
-    const definition={title,titleFormatter:()=>document.createTextNode(title),field:field(i),visible:shown(i),minWidth:100,width:options.layout.widths[key],resizable:true,headerSort:!options.visual?.includes(i),hozAlign:numeric.includes(i)?'right':'left',cssClass:numeric.includes(i)?'grid-number':'',formatter:(cell:any)=>{const index=Number(cell.getRow().getData().__sourceIndex),rich=options.cells?.(index,i);if(options.onCellPick){const target=cell.getElement() as HTMLElement;target.tabIndex=0;target.onkeydown=event=>{if(event.target!==target||!current())return;if(['Enter',' '].includes(event.key)||menuKey(event)){event.preventDefault();pickCell(cell);if(menuKey(event))options.onRowMenu?.(index,placeOf(target));}};}if(rich)return decorated(rich,index,i);const span=document.createElement('span');span.textContent=publicText(options.displayRows?.[index]?.[i]??cell.getValue());if(numeric.includes(i)&&String(cell.getValue()).startsWith('-'))span.className='grid-negative';if(options.cellTitles?.[index]?.[i]!==undefined)span.title=publicText(options.cellTitles[index][i]);else if(options.displayRows?.[index]?.[i]!==undefined)span.title=String(cell.getValue());return decorated(span,index,i);},headerWordWrap:true,
+    const definition={title,titleFormatter:()=>document.createTextNode(title),field:field(i),visible:shown(i),minWidth:100,width:options.layout.widths[key],resizable:true,headerSort:!options.visual?.includes(i),hozAlign:numeric.includes(i)?'right':'left',cssClass:numeric.includes(i)?'grid-number':'',formatter:(cell:any)=>{const index=Number(cell.getRow().getData().__sourceIndex);if(options.onCellPick){const target=cell.getElement() as HTMLElement;target.tabIndex=0;target.onkeydown=event=>{if(event.target!==target||!current())return;if(['Enter',' '].includes(event.key)||menuKey(event)){event.preventDefault();pickCell(cell);if(menuKey(event))options.onRowMenu?.(index,placeOf(target));}};}return cellContent(index,i,String(cell.getValue()));},headerWordWrap:true,
       sorter:numeric.includes(i)?(a:string,b:string)=>a===''?(b===''?0:-1):b===''?1:compareDecimalStrings(a,b):'string',
       ...(options.totals?{bottomCalc:()=>options.totals!.map(row=>row[i]),bottomCalcFormatter:(cell:any)=>{const lines=el('span');lines.className='grid-total-lines';
         for(const value of cell.getValue() as string[]){const line=el('span',value);line.className=numeric.includes(i)&&value.startsWith('-')?'grid-total-line grid-negative':'grid-total-line';lines.append(line);}
@@ -211,6 +220,17 @@ export function renderDataGrid(host:HTMLElement,key:string,scope:string,headers:
     return options.tree?nested(flat):flat;
   };
   const height=()=>options.fill?'100%':Math.min(560,Math.max(140,values.length*(options.rowHeight??35)+(options.group?.order.length??0)*36+(groups.size?82:46)+(options.totals?options.totals.length*24+14:0)))+'px';
+  function groupHeading(key:string,count:number,group:GridGroup){
+      // A group header opens and closes its rows from the keyboard as well as the arrow, and says whether its rows show.
+      const header=options.group!.header(key,count);header.tabIndex=0;header.setAttribute('role','button');header.setAttribute('aria-expanded',String(group.isVisible()));
+      header.onkeydown=event=>{
+        if(event.target!==header||!['Enter',' '].includes(event.key))return;
+        event.preventDefault();group.toggle();
+        // Toggling draws every group header again, so the focus follows to the new header of this group.
+        const redrawn=table.getGroups().find(other=>other.getKey()===key)?.getElement();if(redrawn)redrawn.querySelector<HTMLElement>('[role=button]')?.focus();
+      };
+      return header;
+  }
   let drawnHeight=height();
   const table=new TabulatorFull(container,{
     index:'__key',
@@ -232,17 +252,7 @@ export function renderDataGrid(host:HTMLElement,key:string,scope:string,headers:
     },
     columns:definitions,
     layout:options.stretch?'fitDataStretch':'fitDataFill',height:drawnHeight,movableColumns:true,columnDefaults:{tooltip:false},placeholder:'No rows match this selection.',
-    groupHeader:(key:string,count:number,_rows:unknown,group:GridGroup)=>{
-      // A group header opens and closes its rows from the keyboard as well as the arrow, and says whether its rows show.
-      const header=options.group!.header(key,count);header.tabIndex=0;header.setAttribute('role','button');header.setAttribute('aria-expanded',String(group.isVisible()));
-      header.onkeydown=event=>{
-        if(event.target!==header||!['Enter',' '].includes(event.key))return;
-        event.preventDefault();group.toggle();
-        // Toggling draws every group header again, so the focus follows to the new header of this group.
-        const redrawn=table.getGroups().find(other=>other.getKey()===key)?.getElement();if(redrawn)redrawn.querySelector<HTMLElement>('[role=button]')?.focus();
-      };
-      return header;
-    },
+    groupHeader:(key:string,count:number,_rows:unknown,group:GridGroup)=>groupHeading(key,count,group),
     ...(options.group?{groupBy:groupOf}:{}),
     ...(options.tree?{dataTree:true,dataTreeStartExpanded:(row:GridRow)=>options.tree?.open.has(keyOf(row))??false}:{}),
     initialSort:options.layout.sort.filter(s=>options.keys.includes(s.key)).map(s=>({column:field(options.keys.indexOf(s.key)),dir:s.direction})),
@@ -312,7 +322,7 @@ export function renderDataGrid(host:HTMLElement,key:string,scope:string,headers:
     void restore(kept.place);
   }
   // The place is taken when the change is asked for, unless earlier changes are still to run: the place they leave is the one kept.
-  let waiting=0;
+  let waiting=0,updateError:unknown;
   function change(work:()=>void|Promise<void>,from?:()=>Place){
     const asked=from??(waiting===0&&ready&&alive?(place=>()=>place)(aimedPlace()):undefined);
     waiting++;
@@ -505,7 +515,7 @@ export function renderDataGrid(host:HTMLElement,key:string,scope:string,headers:
   showHidden.onclick=()=>{
     if(!current())return;
     const key=opened;clearFilters();
-    if(key!==null)whenDrawn(key,row=>{row.getElement().scrollIntoView({block:'nearest'});row.getElement().focus({preventScroll:true});});
+    if(key!==null)whenDrawn(key,row=>{choose(key);row.getElement().scrollIntoView({block:'nearest'});row.getElement().focus({preventScroll:true});},()=>current()&&opened===key);
   };
   report();
   const visibleIndices=()=>table.getColumns().map(c=>Number(c.getField().slice(1))).filter(i=>options.visible?.[i]!==false);
@@ -537,7 +547,7 @@ export function renderDataGrid(host:HTMLElement,key:string,scope:string,headers:
      * It relies on Tabulator 6.6.1 running a cell's formatter again when the cell is set to the value it already has
      * (Cell.setValue); a Tabulator upgrade has to keep that behavior, or this has to change with it.
      */
-    redrawCells(column:number){if(ready&&alive)for(const row of table.getRows()){const cell=row.getCell(field(column));if(cell)cell.setValue(row.getData()[field(column)]);}},
+    redrawCells(column:number,where?:(index:number)=>boolean){if(ready&&alive)for(const row of table.getRows()){if(where&&!where(sourceIndex(row)))continue;const cell=row.getCell(field(column)),element=row.getElement().querySelector(`[tabulator-field="${field(column)}"]`);if(cell&&element&&!element.firstChild?.isEqualNode(cellContent(sourceIndex(row),column,row.getData()[field(column)])))cell.setValue(row.getData()[field(column)]);}},
     /**
      * Draws the rows again for the room the grid now has, at the place the person last left them: for a grid whose element was moved,
      * which loses its scroll offset, or whose room changed while it was out of view.
@@ -572,19 +582,47 @@ export function renderDataGrid(host:HTMLElement,key:string,scope:string,headers:
      * layout change in place, and only once the new rows are in do they stop being marked stale. An update that fails puts the rows it
      * replaced back and keeps them marked stale with the reason; it never rejects.
      */
+    updated:async()=>{await queue;if(updateError)throw updateError;},
     reconfigure(next:Cells,nextOptions:GridOptions){
       const nextKeys=keysOf(next,nextOptions.rowKeys);requested=nextKeys;
       return change(async()=>{
-        const before={values,keys,options,order,query:state.query,columns:state.columns.slice()},grouped=!!options.group;
+        updateError=undefined;const before={values,keys,options,order,query:state.query,columns:state.columns.slice()},grouped=!!options.group;
         try{
           values=texts(next);keys=nextKeys;options=nextOptions;order=options.giveUp??[];
           if(options.initial){state.query=options.initial.query;state.columns=headers.map((_,i)=>options.initial!.columns[i]??null);search.value=state.query;}
-          drawFilters();report();
-          await regroup(grouped);
-          lay(given);applyLayout(options.layout);fit();
+          const changes=options.patchValues&&!options.tree&&!options.totals&&JSON.stringify(before.options.group?.keys??null)===JSON.stringify(options.group?.keys??null)
+            ?changedCells(before.keys,before.values,keys,values):null;
+          if(changes!==null){
+            report();
+            const patches=new Map<number,Record<string,string>>();
+            for(const cell of changes){let patch=patches.get(cell.row);if(!patch)patches.set(cell.row,patch={__key:keys[cell.row]});patch[field(cell.column)]=values[cell.row][cell.column];}
+            if(patches.size)await table.updateData([...patches.values()]);
+            if(patches.size||state.query!==before.query||JSON.stringify(state.columns)!==JSON.stringify(before.columns)||
+              JSON.stringify(before.options.searchText)!==JSON.stringify(options.searchText)||JSON.stringify(before.options.visible)!==JSON.stringify(options.visible)){
+              table.setFilter(matches);const sort=table.getSorters().map(s=>({column:s.field,dir:s.dir}));if(sort.length)table.setSort(sort);}
+            for(let column=0;column<headers.length;column++)if(before.options.visible?.[column]!==options.visible?.[column]){
+              const native=table.getColumn(field(column));if(native){if(shown(column))native.show();else native.hide();}}
+
+            // Precision/labels can change even if an exact amount is identical.
+            for(const row of table.getRows()){
+              const index=Number(row.getData().__sourceIndex),element=row.getElement();if(!element.isConnected)continue;
+              for(let column=0;column<headers.length;column++){
+                const cell=element.querySelector<HTMLElement>(`[tabulator-field="${field(column)}"]`);if(!cell)continue;
+                const content=cellContent(index,column,values[index][column]);
+                if(cell.childNodes.length!==1||!cell.firstChild?.isEqualNode(content)){const component=row.getCell(field(column));if(component)component.setValue(values[index][column]);if(!changes.some(c=>c.row===index&&c.column===column))changes.push({row:index,column});}
+              }
+            }
+            for(const group of table.getGroups()){
+              const element=group.getElement();if(!element||!options.group)continue;
+              const old=element.querySelector<HTMLElement>('[role=button]'),next=groupHeading(group.getKey(),group.getRows().length,group);
+              if(old&&old.innerHTML!==next.innerHTML){const focused=old.contains(document.activeElement);old.replaceWith(next);if(focused)next.focus({preventScroll:true});}
+            }
+            for(const cell of changes){const row=table.getRow(keys[cell.row]);const element=row?row.getElement().querySelector<HTMLElement>(`[tabulator-field="${field(cell.column)}"]`):null;
+              if(element?.isConnected){const animation=element.animate([{backgroundColor:'#fff1b8'},{backgroundColor:'transparent'}],{duration:1600});animation.id='value-update';}}
+          }else{drawFilters();report();await regroup(grouped);lay(given);applyLayout(options.layout);fit();}
           markStale(null);
         }catch(error){
-          ({values,keys,options,order}=before);if(requested===nextKeys)requested=keys;state.query=before.query;state.columns=before.columns;search.value=state.query;drawFilters();report();
+          updateError=error;({values,keys,options,order}=before);if(requested===nextKeys)requested=keys;state.query=before.query;state.columns=before.columns;search.value=state.query;drawFilters();report();
           await regroup(!!nextOptions.group).catch(()=>undefined);
           markStale(`These rows could not be updated: ${error instanceof Error&&error.message?error.message:'the update failed'}`);
         }

@@ -2300,3 +2300,16 @@ body.assistant-open.assistant-overlay main .floating-context{display:none}
 .assistant-walkthrough-cursor::after{content:attr(data-agent);position:absolute;left:20px;top:18px;max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:2px 6px;background:var(--accent,#365fc5);color:#fff;border-radius:4px;font:12px system-ui;}
 .assistant-walkthrough-target{outline:3px solid var(--accent,#365fc5)!important;outline-offset:3px;}
 @media(prefers-reduced-motion:reduce){.assistant-walkthrough-cursor{transition:none;}}
+
+/* Each side keeps its own payments and units in the position schedule view. */
+.position-side-schedules .swap-side-schedules{display:grid;grid-template-columns:minmax(0,1fr);gap:16px}
+.position-side-schedules .swap-schedule{min-width:0;padding:0 14px 14px;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--surface)}
+.position-side-schedules .swap-schedule>.ticket-card-head{margin:0 -14px 12px;background:var(--surface-2);border-bottom:1px solid var(--border)}
+.position-side-schedules .ticket-card-head h3{margin:0;flex:1}
+
+:is(#position-details-head,#position-window-head).schedule-header{padding:8px 12px;margin-bottom:8px}
+:is(#position-details-head,#position-window-head).schedule-header :is(.side-panel-sub,.side-panel-value,.side-panel-actions){display:none}
+:is(#position-details-head,#position-window-head).schedule-header .side-panel-title{font-size:14px;margin:4px 0 0}
+
+.curve-updating{opacity:.55}
+.position-side-schedules .regular-table-scroll{min-height:0;max-height:280px}

@@ -1,13 +1,12 @@
-// The side panel's position view (blotter-desk.md, Side panel): what one position is, worth and priced at, its market's curve
-// with the position's delivery and price on it, its terms, and its revisions. What is shown is selected from the rows and
+import {replaceChangedChildren} from './view-updates.js';
+// The position's value, retained terms, each side's schedule, risk and revisions. What is shown is selected from the rows and
 // reads the desk already holds; amounts stay the backend's exact strings in the backend's display text.
-import {clearChart,renderChart,type ChartSpec} from './chart-view.js';
-import {curveChart,curvePoints,minus,quantityText,signOf,signedText,type CurveShape,type DeskRow,type Format,type Holding,type HoldingFormats} from './desk-model.js';
+import {curvePoints,minus,quantityText,signOf,signedText,type CurveShape,type DeskRow,type Format,type Holding,type HoldingFormats} from './desk-model.js';
 import {publicText} from './market-view.js';
 import {gapsText,type LensCell,type RunGap} from './risk-lens.js';
 import {clearTabs,setupTabs,type SidePanel} from './side-panel.js';
 
-export const positionTabs=[['curve','Curve'],['terms','Terms'],['risk','Risk'],['history','History']] as const;
+export const positionTabs=[['terms','Terms'],['schedules','Side schedules'],['risk','Risk'],['history','History']] as const;
 export type PositionTab=typeof positionTabs[number][0];
 // The Risk tab's results come from the risk run on the desk (D222), and the Risk report sets one up.
 export const riskEmpty="This position's risk comes from the risk run on the desk, and there is none yet. Run one from the Risk report.";
@@ -93,28 +92,8 @@ export function positionSummary(h:Holding,row:DeskRow,formats:HoldingFormats):Po
     subtitle:[row.delivery,row.side,row.quantity===null?row.quantityNote:`${quantityText(row,formats.quantity)} ${row.unit}`].filter((part,i,all)=>part&&part!==all[i-1]).join(' · '),value,markMinusPrice,facts};
 }
 
-export type CurveView={state:'loading'}|{state:'unavailable';reason:string}|{state:'chart';spec:ChartSpec;note:string|null};
 const otherMarket='The curve shape belongs to another market than the position.';
 const ownShape=(shape:CurveShape,h:Holding)=>{if(shape.curve!==h.curve)throw Error(otherMarket);};
-/**
- * The position's market curve at the close, from the shape the desk read for it: the contracts of the position's delivery
- * period marked, and its price on the same axis when they share a unit. A shape still being read is loading; one that is
- * not there says why, in the row's own words. The price is never drawn against a curve in another unit.
- */
-export function curveView(shape:CurveShape|string|undefined,h:Holding,row:DeskRow,formats:HoldingFormats):CurveView{
-  if(shape===undefined)return {state:'loading'};
-  if(typeof shape==='string')return {state:'unavailable',reason:shape};
-  ownShape(shape,h);
-  const chart=curveChart(shape,row);
-  if(chart.state==='unavailable')return chart;
-  const {spec}=chart,unit=shape.unit!,notes:string[]=[];
-  if(row.price===null)notes.push('This position has no fixed price to draw.');
-  else if(row.priceUnit!==unit)notes.push(`The ${row.priceLabel.toLowerCase()} price is in ${row.priceUnit} and the curve in ${unit}, so the price is not drawn on it.`);
-  else spec.reference={value:row.price,label:`${row.priceLabel} ${minus(formats.price(row.price))} ${row.priceUnit}`};
-  if(!chart.marked)notes.push("This position's delivery is not on the curve at this close.");
-  return {state:'chart',spec,note:notes.length?notes.join(' '):null};
-}
-
 /**
  * The market and contract Open curve selects: a future is in its own contract; a swap is in the one contract of its delivery
  * period, when the curve shows exactly one, and otherwise names the curve alone.
@@ -131,15 +110,17 @@ export function openCurveTarget(h:Holding,row:DeskRow,shape:CurveShape|string|un
 export type TermSection={title:string;rows:readonly (readonly [string,string])[]};
 export type DetailView={
   terms:TermSection[];history:TermSection[];
-  /** Draws more of a revision into the Terms tab after its sections, as a swap's valuation and schedules are; returns what takes it down again. */
+  /** Draws the independently retained side schedules; returns their disposer. */
   schedules?:(host:HTMLElement)=>()=>void;
+  termsContent?:(host:HTMLElement)=>()=>void;
+  scheduleKey?:string;
   /** What the Terms tab offers beside the revision's terms, as a swap's settlement and P&L view is offered; each opens in the panel's form part. */
   actions?:readonly {id:string;label:string;run:()=>void}[];
 };
 /** Whether the editor can amend the revision, and why not when it cannot. */
 export type AmendState={allowed:true;reason:null}|{allowed:false;reason:string};
 /** An editor read of a trade revision: its amendment state, and the views drawn from it in the person's time zone. */
-export type DetailRead={amend:AmendState;view:(zone:string)=>DetailView};
+export type DetailRead={amend:AmendState;view:(zone:string)=>DetailView;updatesBlocked?:()=>boolean};
 
 /**
  * Why Amend is not offered: first that the account cannot amend, then why the revision cannot be, once the editor has been read.
@@ -170,10 +151,10 @@ export const curveNote=(listed:boolean,severalCurves=false)=>severalCurves?'This
   :listed?null:"Curves & prices does not list this position's market, so there is no curve to open.";
 
 /**
- * What the panel draws a position from: the workspace row and its desk row, how its amounts read, its market's curve shape, its
+ * What the panel draws a position from: the workspace row and its desk row, how its amounts read, its
  * commodity's color, and what the risk run on screen says of it.
  */
-export type PositionInput={holding:Holding;row:DeskRow;formats:HoldingFormats;shape:CurveShape|string|undefined;color:string;risk:PositionRisk};
+export type PositionInput={holding:Holding;row:DeskRow;formats:HoldingFormats;color:string;risk:PositionRisk};
 
 function el<K extends keyof HTMLElementTagNameMap>(tag:K,className?:string,text?:string){
   const element=document.createElement(tag);if(className)element.className=className;if(text!==undefined)element.textContent=publicText(text);return element;
@@ -191,6 +172,7 @@ export function setupPositionPanel(shell:Pick<SidePanel,'element'|'form'|'reveal
   tabs?:readonly PositionTab[];
   /** Whether Curves & prices lists a market: a position in one it does not list has no curve to open. */
   curveListed:(curve:string)=>boolean;
+  shape?:(holding:Holding)=>CurveShape|string|undefined;
   /** The market context the desk reads in, as a key: a trade read belongs to one. */
   context:()=>string;
   read:(h:Holding,formats:HoldingFormats)=>Promise<DetailRead>;
@@ -201,16 +183,17 @@ export function setupPositionPanel(shell:Pick<SidePanel,'element'|'form'|'reveal
   amendment:{open:(h:Holding)=>void;shown:(h:Holding)=>boolean;close:()=>Promise<void>};
   openCurve?:(curve:string,contractId:string|null)=>void;onDenied:()=>void;
 }){
-  let input:PositionInput|undefined,tab:PositionTab='terms',detail:Detail|undefined,generation=0,chart:HTMLElement|undefined,tabs:ReturnType<typeof setupTabs>|undefined,actions:{amend:HTMLButtonElement;open:HTMLButtonElement;note:HTMLElement;openNote:HTMLElement}|undefined;
+  let input:PositionInput|undefined,tab:PositionTab='terms',detail:Detail|undefined,generation=0,tabs:ReturnType<typeof setupTabs>|undefined,actions:{amend:HTMLButtonElement;open:HTMLButtonElement;note:HTMLElement;openNote:HTMLElement}|undefined;
   // Whether the last drawing found the position's amendment open, and whether the person has just opened it, which takes focus into it.
   let amending=false,focusOnOpen=false,reading:{key:string;done:Promise<unknown>}|undefined;
-  // What the Terms tab drew beyond its sections, which is taken down whenever the tab is drawn again or the panel is cleared.
-  let drawnSchedules:(()=>void)|undefined;
-  const takeDownSchedules=()=>{drawnSchedules?.();drawnSchedules=undefined;};
+  // Schedule widgets release their reads and grids when their tab or position changes.
+  let drawnSchedules:(()=>void)|undefined,drawnScheduleKey:string|undefined,drawnTab:PositionTab|undefined;
+  const takeDownSchedules=()=>{drawnSchedules?.();drawnSchedules=undefined;drawnScheduleKey=undefined;drawnTab=undefined;};
   const view=()=>shell.element('view');
   const key=(at:PositionInput)=>JSON.stringify([at.holding.tradeId,at.holding.revision,o.context()]);
   function status(text:string,className='side-panel-status'){const p=el('p',className,text);p.setAttribute('role','status');return p;}
   function drawHead(at:PositionInput,now:PositionSummary){
+    shell.element('head').classList.toggle('schedule-header',tab==='schedules');
     const kicker=el('div','side-panel-kicker');
     kicker.append(el('span',`desk-pill desk-pill-${now.pill.toLowerCase()}`,now.pill),el('span','side-panel-reference',now.reference),el('span','side-panel-meta',`Revision ${now.revision} · ${now.book}`));
     const title=el('h2','side-panel-title'),dot=el('i','commodity-dot');dot.style.background=at.color;dot.title=publicText(now.commodity.name);title.id='side-panel-title';title.append(dot,el('span',undefined,now.market));
@@ -227,9 +210,10 @@ export function setupPositionPanel(shell:Pick<SidePanel,'element'|'form'|'reveal
     const row=el('div','side-panel-actions'),amend=el('button',undefined,'Amend'),open=el('button','secondary','Open curve'),note=el('p','field-help side-panel-note'),openNote=el('p','field-help side-panel-note');
     amend.type=open.type='button';amend.id='side-panel-amend';open.id='side-panel-open-curve';note.id='side-panel-amend-note';openNote.id='side-panel-open-curve-note';note.hidden=openNote.hidden=true;
     amend.onclick=()=>{if(o.amendment.shown(at.holding))void o.amendment.close().then(sync);else o.amendment.open(at.holding);};
-    open.onclick=()=>{const target=openCurveTarget(at.holding,at.row,at.shape);o.openCurve?.(target.curve,target.contractId);};
+    open.onclick=()=>{const target=openCurveTarget(at.holding,at.row,o.shape?.(at.holding));o.openCurve?.(target.curve,target.contractId);};
     row.append(amend,open);actions={amend,open,note,openNote};
-    shell.element('head').replaceChildren(kicker,title,el('p','side-panel-sub',now.subtitle),value,row,note,openNote);
+    replaceChangedChildren(shell.element('head'),[kicker,title,el('p','side-panel-sub',now.subtitle),value,row,note,openNote],true);
+    const head=shell.element('head');actions={amend:head.querySelector<HTMLButtonElement>('#side-panel-amend')!,open:head.querySelector<HTMLButtonElement>('#side-panel-open-curve')!,note:head.querySelector<HTMLElement>('#side-panel-amend-note')!,openNote:head.querySelector<HTMLElement>('#side-panel-open-curve-note')!};
   }
   function drawRisk(host:HTMLElement,at:PositionInput){
     const view=riskTabView(at.risk,at.formats);
@@ -243,15 +227,7 @@ export function setupPositionPanel(shell:Pick<SidePanel,'element'|'form'|'reveal
       section.append(el('h3',undefined,shock.title),el('p','field-help',shock.detail),facts);host.append(section);
     }
   }
-  function drawCurve(host:HTMLElement,at:PositionInput,now:PositionSummary){
-    const view=curveView(at.shape,at.holding,at.row,at.formats);
-    if(view.state==='loading')host.append(status('Loading curve shape…'));
-    else if(view.state==='unavailable')host.append(status(view.reason));
-    else{
-      const plot=el('div','chart side-panel-chart');host.append(plot);
-      try{renderChart(plot,view.spec);chart=plot;}catch(error){plot.remove();host.append(status(failure(error,'The curve could not be drawn.'),'side-panel-status side-panel-error'));}
-      if(view.note)host.append(el('p','field-help side-panel-note',view.note));
-    }
+  function drawFacts(host:HTMLElement,now:PositionSummary){
     const facts=el('dl','side-panel-facts');
     for(const fact of now.facts){
       const item=el('div','side-panel-fact'),text=el('dd');text.append(el('b',undefined,fact.text),...(fact.unit?[' ',el('small',undefined,fact.unit)]:[]));
@@ -280,21 +256,26 @@ export function setupPositionPanel(shell:Pick<SidePanel,'element'|'form'|'reveal
       for(const action of read.actions){const button=el('button','secondary',action.label);button.type='button';button.id=action.id;button.disabled=o.busy();button.onclick=()=>action.run();row.append(button);}
       host.append(row);
     }
-    drawSections(host,tab==='terms'?read.terms:read.history);
-    if(tab==='terms'&&read.schedules)drawnSchedules=read.schedules(host);
+    if(tab==='schedules'){
+      if(read.schedules){const schedules=el('div','position-side-schedules');host.append(schedules);drawnSchedules=read.schedules(schedules);drawnTab=tab;}
+      else host.append(status('No side schedule view is available for this instrument.'));
+    }else{drawSections(host,tab==='terms'?read.terms:read.history);if(tab==='terms'&&read.termsContent){drawnSchedules=read.termsContent(host);drawnTab=tab;}}
   }
   function drawBody(at:PositionInput,now:PositionSummary){
     const host=view();
-    if(chart){clearChart(chart);chart=undefined;}
-    takeDownSchedules();host.replaceChildren();
+    const scheduleKey=tab==='schedules'&&detail?.state==='ready'&&detail.key===key(at)?detail.read.view(o.zone()).scheduleKey:undefined;
+    if(scheduleKey!==undefined&&drawnScheduleKey===key(at)+scheduleKey)return;
+    const ready=detail?.state==='ready'&&detail.key===key(at)?detail.read:undefined,read=ready?.view(o.zone());
+    const widget=tab==='schedules'||tab==='terms'&&!!read?.termsContent;
+    if(widget&&drawnSchedules&&drawnTab===tab&&ready?.updatesBlocked?.())return;
+    takeDownSchedules();
     // The amendment's form is the Terms tab's content while it is open: the other tabs keep it, and its edits, out of sight. Travelling
     // along the tabs back to it is not opening it, so only an Amend press takes focus into it, into its first control.
     const form=tab==='terms'&&amending;
     shell.form(form);
     if(form){if(focusOnOpen){focusOnOpen=false;shell.reveal();shell.focusForm();}return;}
-    if(tab==='curve')drawCurve(host,at,now);
-    else if(tab==='risk')drawRisk(host,at);
-    else drawDetail(host,at);
+    if(widget){host.replaceChildren();if(tab==='terms')drawFacts(host,now);drawDetail(host,at);drawnScheduleKey=scheduleKey===undefined?undefined:key(at)+scheduleKey;}
+    else{const next=el('div');if(tab==='risk')drawRisk(next,at);else{if(tab==='terms')drawFacts(next,now);drawDetail(next,at);}replaceChangedChildren(host,[...next.childNodes],true);}
   }
   // Keyboard focus. A control of the panel that has it when the page goes busy is disabled with the rest of the page, and the browser
   // drops focus a moment later without a word; a redraw replaces the control that has it. So the id of the control that has focus is
@@ -328,7 +309,7 @@ export function setupPositionPanel(shell:Pick<SidePanel,'element'|'form'|'reveal
     const keep=focused()??held;
     try{const now=positionSummary(input.holding,input.row,input.formats);amending=o.amendment.shown(input.holding);drawHead(input,now);drawBody(input,now);}
     catch(error){
-      actions=undefined;if(chart){clearChart(chart);chart=undefined;}
+      actions=undefined;
       takeDownSchedules();shell.form(false);shell.element('head').replaceChildren();view().replaceChildren(status(failure(error,'The position could not be shown.'),'side-panel-status side-panel-error'));
     }
     sync();
@@ -401,9 +382,12 @@ export function setupPositionPanel(shell:Pick<SidePanel,'element'|'form'|'reveal
     /** Forgets the position: the panel is closed or left, or the reads it was drawn from no longer stand. */
     clear(){
       input=undefined;actions=undefined;detail=undefined;held=undefined;tabs=undefined;amending=focusOnOpen=false;generation++;
-      if(chart){clearChart(chart);chart=undefined;}
+      view().inert=false;
       takeDownSchedules();view().replaceChildren();shell.element('head').replaceChildren();clearTabs(shell.element('tabs'),shell.element('body'));
     },
     sync,
+    block(value:boolean){if(value)held=focused()??held;view().inert=value;if(!value)refocus();},
+    /** Keep a rendered operational edit or unresolved write in place. */
+    updatesBlocked:()=>detail?.state==='ready'&&!!detail.read.updatesBlocked?.(),
   };
 }

@@ -174,11 +174,12 @@ export async function run({command,evaluate,wait,click,set:setValue,submit,perso
  await check('and its Terms show the structure and each side with its direction, from the editor\'s own read',
   "(()=>{const titles=[...document.querySelectorAll('#position-details-view .side-panel-section:has(.side-terms-list)>h3')].map(n=>n.textContent),read=window.__swaps.filter(r=>r.path==='/api/swaps/editor').at(-1);return titles[0]==='Trade'&&titles[1]==='Structure'&&titles.slice(2).length===2&&titles.slice(2).every(t=>/^(Fixed|Floating) side · (Pay|Receive)$/.test(t))&&!!read&&read.data.state.tradeReference===document.querySelector('#position-details-head .side-panel-reference').textContent;})()",
   "[...document.querySelectorAll('#position-details-view .side-panel-section>h3')].map(n=>n.textContent)");
+ await click('#position-details-tabs-schedules');
  await eventually("document.querySelectorAll('#position-details-view .swap-schedule canvas').length>=2");
  await check('and the swap\'s valuation and the schedule of each side too, which its read-only view draws as its form does',
   "(()=>{const view=document.querySelector('#position-details-view'),section=[...view.querySelectorAll('#position-details .side-panel-section')].find(n=>n.querySelector('h3')?.textContent==='Valuation & schedules');return !!section&&section.textContent.includes('Trade PV')&&section.querySelectorAll('.swap-schedule').length===2&&section.querySelectorAll('canvas').length>=2&&section.textContent.includes('reset rows')&&document.querySelector('#error').hidden;})()",
   "(()=>{const section=[...document.querySelectorAll('#position-details-view .side-panel-section')].find(n=>n.querySelector('h3')?.textContent==='Valuation & schedules');return section?[section.textContent.slice(0,200),section.querySelectorAll('.swap-schedule').length,section.querySelectorAll('canvas').length,document.querySelector('#error').hidden]:null;})()");
- await click('#position-details-tabs-curve');
+ await click('#position-details-tabs-terms');
  await evaluate('window.__retainedOnly=true');await reopen();
  await check('retained swap without new observation eligibility opens with exact disabled selections and valued schedules',"!document.querySelector('#swap-editing').hidden&&document.querySelector('#swap-reset-frequency').value==='daily'&&document.querySelector('#swap-averaging').value==='arithmetic'&&!!document.querySelector('#swap-projection').value&&document.querySelector('#swap-projection').selectedOptions[0].disabled&&document.querySelector('#swap-averaging').selectedOptions[0].textContent.includes('booked value (unavailable here)')&&document.querySelector('#swap-averaging-booked-value-note').textContent.includes('Your booked terms have not changed')&&document.querySelectorAll('#swap-schedules .swap-schedule').length===2");
  await evaluate('window.__retainedOnly=false');await closeNewTrade({click,evaluate,wait});
@@ -270,7 +271,7 @@ export async function run({command,evaluate,wait,click,set:setValue,submit,perso
  const swapRetained=`(()=>{const card=document.querySelector('#futures-pending');return document.querySelector('#futures-retained').contains(card)&&!card.hidden&&card.getClientRects().length>0&&card.textContent.includes(${JSON.stringify(reference)})&&card.textContent.includes('Swap amendment')&&!document.querySelector('#futures-reconcile').disabled&&!document.querySelector('#futures-retry').disabled;})()`;
  await eventually("!document.querySelector('#futures-pending').hidden");
  await check('a swap amendment whose outcome is unknown is kept, and the panel names it and its trade, with Check status and Retry',swapRetained,"[document.querySelector('#futures-pending').hidden,document.querySelector('#futures-pending').textContent,document.querySelector('#error').textContent]");
- await click('#position-details-tabs-curve');
+ await click('#position-details-tabs-terms');
  await check('on every tab the panel shows',swapRetained);
  await click('#futures-reconcile');
  await eventually("document.querySelector('#futures-pending').hidden&&document.querySelector('#position-details-head .side-panel-meta')?.textContent.startsWith('Revision 3')");
@@ -382,7 +383,7 @@ export async function run({command,evaluate,wait,click,set:setValue,submit,perso
   "document.querySelector('#position-details .side-panel-sub').textContent.includes('Receive fixed')&&document.querySelector('#position-details .side-panel-delta .side-panel-label').textContent==='Mark − fixed'&&!document.querySelector('#side-panel-open-curve').disabled&&document.querySelector('#side-panel-open-curve-note').hidden&&!document.querySelector('#side-panel-open-curve').hasAttribute('aria-describedby')",
   "document.querySelector('#position-details-head').innerText");
  const receiveMarket=await evaluate("document.querySelector('#side-panel-title').textContent");
- await click('#position-details-tabs-curve');await wait("!!document.querySelector('#position-details-body .chart canvas')");
+ await click('#position-details-tabs-terms');await wait("!!document.querySelector('#position-details-body .side-panel-section')");
  await click('#side-panel-open-curve');
  await wait("document.querySelector('#nav-market').classList.contains('active')&&!document.querySelector('#contract-panel').hidden&&!!document.querySelector('#history-values tbody tr')");
  await check('a swap\'s Open curve lands on its curve with its contract open in the panel, so the contract\'s point was found',

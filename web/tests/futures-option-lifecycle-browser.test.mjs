@@ -66,7 +66,7 @@ test('an exercise whose recording authority cannot be read again is not sent, sa
    const h={tradeId:'t1',component:'option',tradeReference:'T-1',instrumentReference:'I-1',book:'Book A',revision:'1',executedAt:'2026-10-16T18:00:00Z',
     booking:{tradeDate:'2026-10-16'},currency:'USD',closableLots:'2',actions:{exercise:allowed,assignment:not,instruction:not}};
    const read=await readOptionView(api,{snapshotId:'s1'},h,{writes,actor:()=>'trader',recorded:()=>{}});
-   read.view('UTC').schedules(document.querySelector('#host'));
+   read.view('UTC').termsContent(document.querySelector('#host'));
    document.querySelector('#option-exercise-lots').value='1';
    document.querySelector('#option-exercise').click();
    await new Promise(r=>setTimeout(r,20));

@@ -185,7 +185,8 @@ export async function readOptionView(api:Api,context:Record<string,unknown>&{sna
  const held=await api<HoldingRead>('options/holding',{context:{...context,convention:optionConvention},tradeId:h.tradeId});
  if(held.tradeId!==h.tradeId)throw Error('The option holding read is for another trade. Refresh the Blotter.');
  const option=h.component==='option',writes=await host.writes();
- return {amend:{allowed:false,reason:'Option trades are not amended; exercise, assignment and expiry are recorded as their own events.'},view:zone=>{
+ let widget:ReturnType<typeof lifecycle>|undefined;
+ return {amend:{allowed:false,reason:'Option trades are not amended; exercise, assignment and expiry are recorded as their own events.'},updatesBlocked:()=>!!widget?.blocked(),view:zone=>{
   const terms:TermSection[]=[{title:'Futures option trade',rows:[['Trade',h.tradeReference],['Instrument',h.instrumentReference],['Book',h.book],['Exchange',h.exchange?.name??''],
     ['Product',h.productName??''],['Call / put',h.right??''],['Strike',h.strike??''],['Expiry',h.expiryAt?displayInstant(h.expiryAt,zone):''],
     ['Underlying future',h.underlyingName&&h.deliveryFrom&&h.deliveryTo?underlyingLabel(h.deliveryFrom,h.deliveryTo,h.underlyingName):'']]},
@@ -198,16 +199,16 @@ export async function readOptionView(api:Api,context:Record<string,unknown>&{sna
    ...held.events.map(e=>({title:eventNames[e.kind]??publicText(e.kind),rows:[['Recorded for',displayInstant(e.businessAt,zone)],['Lots',e.lots??'Open lots at expiry'],['Open lots after',e.remainingLots],
     ['Linked future',e.futuresTradeReference??'None'],...(e.outcome?[['Outcome',publicText(e.outcome)] as const]:[])] as const}))];
   const surface=host.surface,product=h.product;
-  return {terms,history,...(option&&h.actions?{schedules:(box:HTMLElement)=>lifecycle(box,api,context.snapshotId,h,writes,host)}:{}),
+  return {terms,history,...(option&&h.actions?{termsContent:(box:HTMLElement)=>{widget=lifecycle(box,api,context.snapshotId,h,writes,host);return()=>{widget?.dispose();widget=undefined;};}}:{}),
    ...(surface&&product?{actions:[{id:'option-trade-vol-surface',label:'Volatility surface',run:()=>surface(product)}]}:{})};
  }};
 }
 
 // Each lifecycle request outlives the view that sent it, per person and trade, until its outcome is known: a redraw offers only its retry.
 const lifecycleRequests=new Map<string,ReturnType<typeof actorTransport<RequestCommand>>>();
-function lifecycleTransport(actor:()=>string,trade:string){
- let transport=lifecycleRequests.get(trade);
- if(!transport)lifecycleRequests.set(trade,transport=actorTransport<RequestCommand>(()=>`option-lifecycle-request:${actor()}:${trade}`,()=>sessionStorage));
+function lifecycleTransport(actor:string,trade:string){
+ const key=JSON.stringify([actor,trade]);let transport=lifecycleRequests.get(key);
+ if(!transport)lifecycleRequests.set(key,transport=actorTransport<RequestCommand>(()=>`option-lifecycle-request:${actor}:${trade}`,()=>sessionStorage));
  return transport;
 }
 
@@ -216,7 +217,8 @@ function lifecycleTransport(actor:()=>string,trade:string){
 function lifecycle(host:HTMLElement,api:Api,snapshotId:string,h:Holding,writes:LifecycleWrites,o:OptionHost){
  const actions=h.actions!,box=section('Lifecycle');box.classList.add('option-lifecycle');box.dataset.ownControls='';host.append(box);
  const blocked=el('p','field-help option-lifecycle-reason'),said=el('p','field-help');said.setAttribute('role','status');
- const transport=lifecycleTransport(o.actor,h.tradeId),pending=new PendingCommand(definite);let sending=false,recorded=false;
+ const owner=o.actor(),transport=lifecycleTransport(owner,h.tradeId),pending=new PendingCommand(definite);let sending=false,recorded=false,alive=true;
+ const current=()=>alive&&o.actor()===owner,owns=(command:RequestCommand)=>restoreTradeRequest(transport.read())?.operationId===command.operationId;
  const saved=restoreTradeRequest(transport.read());if(saved)pending.command={...saved,uncertain:true};
  const lots=el('input'),all=el('button','secondary','All open lots'),retry=el('button',undefined,'Retry the original request');
  lots.inputMode='numeric';all.type=retry.type='button';all.id='option-exercise-all';retry.id='option-lifecycle-retry';
@@ -234,26 +236,29 @@ function lifecycle(host:HTMLElement,api:Api,snapshotId:string,h:Holding,writes:L
   retry.hidden=!held;retry.disabled=sending||!writes.enabled;
  }
  async function send(){
-  const command=pending.command;if(!command||sending)return;
+  const command=pending.command;if(!current()||!command||sending)return;
   sending=true;said.textContent='Checking that events may be recorded…';sync();
   // Null until the request is sent: a failure before then sent nothing, and the request is kept as it was entered.
   let uncertain:boolean|null=null;
   try{
    // The view is asked again when the request is sent: its context or the person's authority may have changed since it was drawn.
-   const now=await o.writes();if(!now.enabled){writes=now;said.textContent=now.reason;return;}
+   const now=await o.writes();if(o.actor()!==owner||!owns(command))return;
+   if(!now.enabled){writes=now;if(current())said.textContent=now.reason;return;}
    uncertain=pending.sending();transport.write(pending.command);said.textContent='Recording…';
-   const r=await api<Outcome>(command.path,{...command.body,operationId:command.operationId});pending.clear();transport.write(undefined);recorded=true;
+   const r=await api<Outcome>(command.path,{...command.body,operationId:command.operationId});pending.clear();if(owns(command))transport.write(undefined);recorded=true;
+   if(!current())return;
    const note=`${eventNames[r.kind]??publicText(r.kind)} recorded${r.lots?` for ${lotsWord(r.lots)}`:''} · ${lotsWord(r.remainingLots)} open${r.futuresTradeId?' · a linked futures trade was booked':''}.`;
    said.textContent=note;o.recorded(note);
   }catch(error){
-   if(uncertain===null){said.textContent=publicText(`Not sent: ${reason(error)} Retry the request once events may be recorded.`);return;}
-   pending.failed(codeOf(error),uncertain);transport.write(pending.command);
-   said.textContent=pending.command?`Not confirmed: ${reason(error)} The request awaits its outcome; retry it as it was sent.`:`Refused: ${reason(error)}`;
-  }finally{sending=false;sync();}
+   if(uncertain===null){if(current())said.textContent=publicText(`Not sent: ${reason(error)} Retry the request once events may be recorded.`);return;}
+   pending.failed(codeOf(error),uncertain);if(owns(command))transport.write(pending.command);
+   if(current())said.textContent=pending.command?`Not confirmed: ${reason(error)} The request awaits its outcome; retry it as it was sent.`:`Refused: ${reason(error)}`;
+  }finally{sending=false;if(current())sync();}
  }
  const begin=(path:string,label:string,body:Record<string,unknown>)=>{
-  if(pending.command)return;
-  pending.begin(path,{snapshotId,convention:optionConvention,knowledgeMode:'current',tradeId:h.tradeId,...body},undefined,label);void send();
+  if(!current()||pending.command)return;
+  pending.begin(path,{snapshotId,convention:optionConvention,knowledgeMode:'current',tradeId:h.tradeId,...body},undefined,label);
+  transport.write(pending.command);void send();
  };
  all.onclick=()=>{lots.value=h.closableLots??'';};
  exercise.onclick=()=>begin('options/exercise','exercise',{lots:lots.value});
@@ -262,5 +267,5 @@ function lifecycle(host:HTMLElement,api:Api,snapshotId:string,h:Holding,writes:L
  atExpiry.onclick=()=>begin('options/instruction','exercise at expiry instruction',{instruction:'exercise'});
  retry.onclick=()=>void send();
  sync();
- return ()=>box.remove();
+ return {dispose:()=>{alive=false;box.remove();},blocked:()=>sending||!!pending.command||!recorded&&lots.value!==''};
 }

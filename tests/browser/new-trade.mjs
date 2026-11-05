@@ -7,6 +7,7 @@ const forms={futures:{form:'#futures-new-trade',head:'New future'},options:{form
 
 /** Presses New trade and waits for the panel to offer its switch. */
 export async function startNewTrade({click,wait}){
+  await wait("!!document.querySelector('#futures-new')&&!document.querySelector('#futures-new').disabled&&"+idle);
   await click('#futures-new');
   await wait("document.querySelector('#position-details').dataset.mode==='new'&&!!document.querySelector('#new-trade-product')&&"+idle);
 }

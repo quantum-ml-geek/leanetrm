@@ -1768,15 +1768,29 @@ the page. Working-close changes preserve the independent TOU editor.
 Completed Blotter values stay in window memory across page visits. Reentry checks
 current authority and an opaque version of the exact server selection and durable
 publication/display heads before showing retained rows. Unchanged reads avoid
-position and valuation requests; changed versions reload. Failed or superseded
-checks cannot reveal retained values. Explicit Refresh remains a new read.
+position and valuation requests; changed versions reload. D317 applies this same
+path to the currently selected sidebar view and retains completed risk lenses
+and the expanded report's factor selection. Pending display work is cancelled
+on exit without discarding completed results. Position details expose existing
+backend side schedules on their own tab instead of drawing a curve. Failed or
+superseded checks cannot reveal retained values. Explicit Refresh remains a new read.
+
+D317 adds bounded authorized change waits while an ordinary Blotter is visible.
+Completed native values patch the existing grid and briefly highlight changed
+cells; equal graphics and detail presentation stay mounted. Unsaved editors defer
+updates. Temporary read failures retry the last unapplied server head, while a
+business refusal keeps previous values explicitly stale until a later head or
+Refresh. Selected pins, historical context and complete pricing scope do not
+change as a consequence of a notification.
 
 The freshness head includes interval-series and collected-price publications,
 shared deal precision, workspace reference labels and all current context-capture
 source streams. New input streams must extend this head before their values are
 eligible for browser reuse. This increment does not persist values across reload,
-introduce a shared pricing cache or subscribe ordinary working pages to live
-corrections. Migration 0174 requires normal qualified schema release handling.
+introduce a shared pricing cache or subscribe ordinary working pages to the
+header's Live financial-context policy. D317 reuses the head for presentation
+refreshes under each page's existing selected context. Migration 0174 requires
+normal qualified schema release handling; D317 adds no migration.
 
 
 ### Parametric risk increment (D299)

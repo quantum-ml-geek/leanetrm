@@ -46,6 +46,7 @@ export function modeLabel(mode:NonNullable<PanelMode>):string{
 /** What new inputs on screen do to the risk report: whether its setup's choices are carried over, whether it is read again, and the note. */
 export type RiskRefresh={carry:boolean;reopen:boolean;note:string|null};
 const riskNotes={
+  updates:{cleared:'Risk results cleared · server updates changed the inputs',retained:'Risk results cleared · server updates changed the inputs; the original request remains available for reconciliation'},
   live:{cleared:'Risk results cleared · live corrections changed the inputs',
     retained:'Live corrections changed the inputs · the unconfirmed risk submission keeps the inputs it was captured at'},
   settlement:{cleared:'Risk results cleared · a settlement record changed the values they were run on',
@@ -64,10 +65,10 @@ export function riskRefreshPlan(state:{open:boolean;edited:boolean;run:boolean;r
  * What a live correction (D188) does to the panel. A panel showing a position or a new trade is read again, unless it holds unsaved edits,
  * which a refresh never takes from the person; the risk report follows `riskRefreshPlan`, whose edits are the setup's.
  */
-export function liveRefreshPlan(state:{panel:PanelMode;unsaved:boolean;riskRun:boolean;riskRetained:boolean}):{reloadPanel:boolean;risk:RiskRefresh}{
+export function liveRefreshPlan(state:{panel:PanelMode;unsaved:boolean;riskRun:boolean;riskRetained:boolean},cause:'live'|'updates'='live'):{reloadPanel:boolean;risk:RiskRefresh}{
   const open=state.panel?.kind==='risk';
   return {reloadPanel:state.panel!==null&&!open&&!state.unsaved,
-    risk:riskRefreshPlan({open,edited:open&&state.unsaved,run:state.riskRun,retained:state.riskRetained},'live')};
+    risk:riskRefreshPlan({open,edited:open&&state.unsaved,run:state.riskRun,retained:state.riskRetained},cause)};
 }
 
 /** The tab an arrow, Home or End key moves to from `current`, wrapping at the ends; null for any other key. */

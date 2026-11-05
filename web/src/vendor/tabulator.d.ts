@@ -1,6 +1,6 @@
 export type GridColumn={getField():string;getWidth():number;setWidth(width:number):void;move(to:string,after:boolean):void;show():void;hide():void};
 export type GridRow={getData():Record<string,string>;getElement():HTMLElement;getCell(field:string):{setValue(value:string):void;getElement():HTMLElement;getRow():GridRow;getColumn():GridColumn}|false;scrollTo(position?:'top'|'center'|'bottom'|'nearest',ifVisible?:boolean):Promise<void>;normalizeHeight():void};
-export type GridGroup={getKey():string;getElement():HTMLElement|false;isVisible():boolean;toggle():void};
+export type GridGroup={getKey():string;getElement():HTMLElement|false;isVisible():boolean;toggle():void;getRows():GridRow[]};
 export class TabulatorFull {
  // Pinned 6.6.1 adapter: redraw/resize re-reads this instance configuration.
  // The real grid checks qualify live changes for one expanded row and reset.
@@ -12,6 +12,7 @@ export class TabulatorFull {
  getData(range?:string):Record<string,string>[];
  /** Replaces every row, keeping the table's sort, filters and scroll offset. */
  replaceData(data:Record<string,string>[]):Promise<void>;
+ updateData(data:Record<string,string>[]):Promise<void>;
  /** Adds rows at the bottom (false) or top (true). */
  addData(data:Record<string,string>[],top:boolean):Promise<unknown>;
  setGroupBy(groupBy:((data:Record<string,string>)=>string)|false):void;

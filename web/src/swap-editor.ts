@@ -4,7 +4,7 @@ import {mountPriceSettlement,type PriceSettlement,type SettlementIndex} from './
 import {explainUnavailableValue,markUnavailableValue,renderChangeReview,unavailableValueLabel,type ChangeReview} from './saved-trade-terms.js';
 import {allocations,deliveryProducts,quantityBases,renderScheduledReview,retainedIntervals,setupScheduledSwapEditor,type QuantityReview,type Scheduled} from './scheduled-swap-editor.js';
 import {lifecycleMeasures,setupSwapSettlement} from './swap-settlement.js';
-import {renderSwapTradePayments,sideDirection} from './swap-trade-review.js';
+import {renderSwapTradePayments,renderSwapPricingRows,swapPaymentQuote,sideDirection} from './swap-trade-review.js';
 import {mountIntervalDataWidget} from './interval-data-widget.js';
 import {sideScheduleData} from './side-schedule.js';
 import {linkedValue,quantityChoice,filterSwapIndices,deliveryChoices,marketReferenceChoices} from './swap-selection.js';
@@ -26,7 +26,7 @@ import {projectionKeyLabel,projectionReference,type CustomProjection,type Projec
 import {publicText,displayInstant,deliveryLabel,curveName,friendly,timeLabels} from './market-view.js';
 import {renderRegularTable} from './regular-table.js';
 import type {RequestCommand} from './pending-command.js';
-import {renderSwapObservationInspection,setupSwapObservationControls} from './swap-observations-view.js';
+import {setupSwapObservationControls} from './swap-observations-view.js';
 import type {SamplingChoice,ObservationInspection,ObservationOptions,ObservationSchedule} from './swap-observations.js';
 import type {ContractObservationSource} from './contract-observation-ticket.js';
 type Api=<T>(path:string,body?:unknown)=>Promise<T>;
@@ -255,7 +255,7 @@ function factList(facts:readonly ValuationFact[]){
 function renderSchedules(host:HTMLElement,value:Valuation,c:ScheduleContext){
  const i=c.index,widgets:ReturnType<typeof mountIntervalDataWidget>[]=[];
  for(const side of value.sides){
-  const section=document.createElement('section');section.className='swap-schedule';const title=document.createElement('h3');title.textContent=sideTitle(side,c.pair);section.append(title);
+  const section=document.createElement('section');section.className='swap-schedule';const title=document.createElement('h3');title.textContent=sideTitle(side,c.pair);section.append(sideCardHeader(title,side.kind==='fixed'?'FIXED':'FLOATING'));
   renderSwapTradePayments(section,'swap',side,i,c.busy,(amount,kind,role)=>c.text(amount,kind,role));
   const sum=factList(sideFacts(side,i,c.text));
   const payments=document.createElement('div');payments.className='table-wrap';
@@ -263,16 +263,8 @@ function renderSchedules(host:HTMLElement,value:Valuation,c:ScheduleContext){
   const chart=document.createElement('div');normalized.insertBefore(chart,payments);host.append(section);
   const widget=mountIntervalDataWidget({table:payments,chart,key:`swap-${side.slot}-payments`,busy:c.busy});widgets.push(widget);
   widget.show(sideScheduleData(side.payments,JSON.stringify(side),unitOf(i),(amount,kind)=>c.text(amount,kind,side.kind)));
-  const source=c.sourceOf(side),price=`${source?.currency}/${source?.unit}${source?.quoteMultiplier==='1'?'':' × '+source?.quoteMultiplier}`;
-  if(side.kind==='floating'){
-   const prices=document.createElement('div');prices.className='table-wrap swap-contract-prices';section.append(prices);
-   const rows=side.payments.flatMap(p=>p.resets);
-   renderRegularTable(prices,`swap-${side.slot}-contract-prices`,JSON.stringify(rows),[`Price · ${price}`,'State','Observation start','Observation end · exclusive'],
-    rows.map(r=>[r.price,r.fixingState,r.from,r.to]),[0],c.busy,{displayRows:rows.map(r=>[c.text(r.price,'price',side.kind),r.fixingState,r.from,r.to])});
-  }
-  side.payments.forEach((payment,n)=>{if(payment.observationSchedule)renderSwapObservationInspection(section,payment.observationSchedule,payment.paymentDate,`swap-${side.slot}-${n}`,c.zone,{price,cash:unitOf(i),quantity:source?.unit??''},c.busy);});
-  const resets=document.createElement('details'),label=document.createElement('summary'),table=document.createElement('div');label.textContent=`${side.payments.flatMap(p=>p.resets).length} ${side.kind==='fixed'?'fixed price row':'reset rows'} · inspect price lookups`;table.className='table-wrap';resets.append(label,table);normalized.append(resets);
-  renderRegularTable(table,`swap-${side.slot}-resets`,JSON.stringify(side.payments),['Observation start','Observation end · exclusive',`Price · ${price}`,'Weight',`Cash · ${unitOf(i)}`,'State'],side.payments.flatMap(p=>p.resets.map(r=>[r.from,r.to,r.price,r.weight,r.cashContribution,r.fixingState])),[2,3,4],c.busy,{displayRows:side.payments.flatMap(p=>p.resets.map(r=>[r.from,r.to,c.text(r.price,'price',side.kind),c.text(r.weight,'quantity',side.kind),c.text(r.cashContribution,'money',side.kind),r.fixingState]))});
+  const source=c.sourceOf(side);
+  renderSwapPricingRows(section,'swap',side,source?{currency:source.currency,unit:source.unit,quoteMultiplier:source.quoteMultiplier}:swapPaymentQuote(side,[]),c.zone,c.busy,(amount,kind,role)=>c.text(amount,kind,role));
   const evidence=document.createElement('details'),evidenceLabel=document.createElement('summary'),evidenceBody=document.createElement('pre');evidenceLabel.textContent='Exact price lookups, observation lineage and discount inputs';evidenceBody.className='swap-evidence';evidenceBody.textContent=JSON.stringify(side.payments.map(p=>({paymentDate:p.paymentDate,discountMappingId:p.discountMappingId,discountCurve:p.discountCurve,discountPolicy:p.discountPolicy,pillars:p.pillars,resets:p.resets.map(r=>({from:r.from,to:r.to,spread:r.spread,lookup:r.lookup,lineage:r.lineage,fixingState:r.fixingState,fixing:r.fixing}))})),null,2);evidence.append(evidenceLabel,evidenceBody);section.append(evidence);
  }
  return widgets;
@@ -301,7 +293,7 @@ export type SwapReadOptions={busy:()=>boolean;act:(work:()=>Promise<void>)=>Prom
 export async function readSwapView(api:Api,context:Record<string,unknown>,h:Pick<Holding,'tradeId'|'contractId'|'revision'>,formats:HoldingFormats,o:SwapReadOptions):Promise<DetailRead>{
  const detail=await readSwapDetail(api,context,h.tradeId,Number(h.revision));
  holdsInstrument(detail,h);
- const deal=dealFormats(api);deal.use(await deal.read(h.tradeId,{...context,convention}));
+ const deal=dealFormats(api),display=await deal.read(h.tradeId,{...context,convention});deal.use(display);
  const valuation=detail.valuation,scheduled=detail.state.terms.scheduled;
  if(valuation){await deal.prepare(valuation);for(const side of valuation.sides)await deal.prepare(side,side.kind);}
  const actions=[{id:'side-panel-settlement',label:'Settlement and P&L',run:o.settle}];
@@ -311,7 +303,8 @@ export async function readSwapView(api:Api,context:Record<string,unknown>,h:Pick
    intervals:scheduled.first.power||scheduled.second.power?retainedIntervals(api,{...context,convention},detail):undefined});
   return()=>review.remove();
  }:(host:HTMLElement)=>renderValuation(host,detail,valuation,deal,zone,o.busy);
- return {amend:swapAmendState(detail),view:zone=>({...swapDetailView(detail,zone,formats,schedules(zone)),actions})};
+ return {amend:swapAmendState(detail),view:zone=>({...swapDetailView(detail,zone,formats,schedules(zone)),actions,
+  scheduleKey:JSON.stringify([valuation,detail.quantityInputs,detail.state.terms,detail.catalog.indices,display,zone,scheduled?.first.power||scheduled?.second.power?detail.catalog.context:null])})};
 }
 type Position=Pick<Holding,'tradeId'|'contractId'|'revision'>;
 export function setupSwapEditor(options:{api:Api;act:(work:()=>Promise<void>)=>Promise<void>;busy:()=>boolean;zone:()=>string;context:()=>Record<string,unknown>;queue:(command:RequestCommand)=>Promise<void>;pending:()=>RequestCommand|undefined;onDenied:()=>void;host:()=>HTMLElement;

@@ -263,11 +263,13 @@ over the desk, which keeps its layout beneath. Modes:
    evaluated schedule; until it is implemented it opens here. Header with instrument type, trade reference, revision and
    book. Title with market, delivery, side and quantity. The value, plus mark
    minus price. Tabs:
-   - **Curve**: the market's forward curve at the selected close, the delivery
-     period marked, and the trade's price as a reference line. **Open curve**
-     opens Curves & prices with that curve and contract selected. A scheduled
-     swap whose periods project from several curves has no one curve: it has no
-     curve shape and no Open curve, and says why.
+   - **Side schedules**: one view of each independently retained side's payment
+     or interval schedule, using its backend quantities, prices, cash, discount
+     factors and PV. Existing bounded side/month inspection remains available.
+     Swap pricing rows include observation bounds, payment dates, exact weights,
+     prices, states and per-unit cash contributions alongside payment totals.
+     An instrument without a schedule viewer states that limitation. The position
+     detail has no curve chart; **Open curve** still opens Curves & prices.
    - **Terms**: today's editor content (`trade-editor`, `swap-editor`) as a read
      view. **Amend** makes it editable in place, with the amendment reason and
      effective time as today. A scheduled swap (D214) amends in its own ticket,

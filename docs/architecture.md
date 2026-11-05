@@ -1,5 +1,13 @@
 # Architecture and domain contracts
 
+D317 refines [Blotter details](blotter-desk.md#side-panel) and navigation reuse:
+side schedules replace the position curve chart, and unchanged saved-view entry
+retains completed positions, risk lenses and report selection under a fresh
+server version and authority check. Visible Blotters wait for authorized server
+changes and patch changed values in place, retaining equal presentation and
+briefly highlighting changed cells. Native pricing scope and explicit market
+selection remain unchanged.
+
 D316 makes displayed versions follow the shared As of date and knowledge cutoff;
 exact backend history and retained financial pins remain available. See
 [contextual version presentation](contextual-versions.md) for implemented consumers

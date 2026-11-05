@@ -45,7 +45,7 @@ export async function sidePanelChecks({command,evaluate,wait,click,set,check,idl
   const editorReads="window.__futuresResponses.filter(r=>r.path==='/api/futures/editor').length";
   // The row's reference is read before it opens: the grid draws only the rows in its pane's view, which the opening details shrink. A row
   // opened leaves focus where it was; the checks then work in the details.
-  const open=async(kind,tab='curve')=>{const reference=await evaluate(referenceOf(kind));await click(rowSelector(kind));await wait(`!${panel}.hidden&&${panelReference}===${JSON.stringify(reference)}`);if(tab==='curve')await click('#position-details-tabs-curve');await evaluate(`${panel}.focus()`);};
+  const open=async(kind,tab='terms')=>{const reference=await evaluate(referenceOf(kind));await click(rowSelector(kind));await wait(`!${panel}.hidden&&${panelReference}===${JSON.stringify(reference)}`);await click('#position-details-tabs-'+tab);await evaluate(`${panel}.focus()`);};
   await settle(1440,900);
   // Capture the baseline while the desk's shape read is still in flight.
   // Its completion must not be mistaken for a new panel request.
@@ -56,9 +56,9 @@ export async function sidePanelChecks({command,evaluate,wait,click,set,check,idl
   await open('fut','terms');
   await wait("!!document.querySelector('#position-details-body .side-panel-section')");
   await check('opening a position starts on its retained Terms and reads them once',`document.querySelector('#position-details-tabs-terms').getAttribute('aria-selected')==='true'&&${editorReads}===${initialEditorReads}+1`);
-  await click('#position-details-tabs-curve');await evaluate(`${panel}.focus()`);
-  await check('a row opens its position in the details: the trade reference in its header, the curve drawn, and focus inside it',
-    `!${panel}.hidden&&${panel}.getAttribute('aria-label')==='Position details'&&${panelReference}===${JSON.stringify(futureReference)}&&!!document.querySelector('#position-details-body .chart canvas')&&document.activeElement===${panel}`,
+  await click('#position-details-tabs-terms');await evaluate(`${panel}.focus()`);
+  await check('a row opens its position in the details: the trade reference and facts, no curve chart, and focus inside it',
+    `!${panel}.hidden&&${panel}.getAttribute('aria-label')==='Position details'&&${panelReference}===${JSON.stringify(futureReference)}&&!document.querySelector('#position-details-body .chart canvas')&&document.activeElement===${panel}`,
     `[${panel}.hidden,${panelReference},document.activeElement.id]`);
   await check('the position shows in the details below the grid, not inside its row, without moving the summary strip',
     `${detailsGeometry}&&${tiles}===${JSON.stringify(tilesBefore)}`,`({tiles:${tiles},before:${JSON.stringify(tilesBefore)},detail:${panel}.getBoundingClientRect().toJSON(),grid:document.querySelector('#desk-positions .tabulator-tableholder').getBoundingClientRect().toJSON()})`);
@@ -78,9 +78,8 @@ export async function sidePanelChecks({command,evaluate,wait,click,set,check,idl
   await check('the panel states the position\'s backend value and measure, and its mark minus price labeled by what it was done at',
     `(()=>{const h=${held(futureReference)},delta=document.querySelector('#position-details .side-panel-delta'),value=document.querySelector('#position-details .side-panel-value .kpi-value');return document.querySelector('#position-details .side-panel-figure .side-panel-label').textContent==='Execution P&L'&&value.title===h.executionPnl+' '+h.currency&&(h.markMinusPrice===null?!delta:delta.querySelector('#position-details .side-panel-label').textContent==='Mark − executed'&&delta.title===h.markMinusPrice+' '+h.currency+'/'+h.unit&&delta.querySelector('b').textContent.replace(/^[+−]/,'').length>0);})()`,
     `document.querySelector('#position-details-head').innerText`);
-  await check('the curve is the desk\'s own read of its market, with the delivery period marked, and it is not read again for the panel',
-    `${shapeRequests}===${shapeRequestsBefore}&&document.querySelector('#position-details-body .chart-toolbar small').textContent==='Marked: delivery '+document.querySelector(${JSON.stringify(rowSelector('fut'))}+' [tabulator-field=c1] .desk-sub').textContent&&document.querySelector('#position-details-body .side-panel-facts').children.length>=3`,
-    `[${shapeRequests},${shapeRequestsBefore},document.querySelector('#position-details-body .chart-toolbar').textContent]`);
+  await check('position details reuse their retained facts without drawing or requesting a curve',
+    `${shapeRequests}===${shapeRequestsBefore}&&!document.querySelector('#position-details-body .chart')&&document.querySelector('#position-details-body .side-panel-facts').children.length>=3`);
 
   // Keyboard: Escape collapses the details and gives focus back to the row; Enter on a focused row opens it again, focus staying on the row.
   await press('Escape','Escape',27);
@@ -90,18 +89,18 @@ export async function sidePanelChecks({command,evaluate,wait,click,set,check,idl
     `[${panel}.hidden,document.activeElement.className,document.activeElement.textContent.slice(0,40)]`);
   await press('Enter','Enter',13,'\r');
   const onRow=`document.activeElement.classList.contains('tabulator-row')&&document.activeElement.querySelector('.desk-reference').textContent===${JSON.stringify(futureReference)}`;
-  // The details open on the tab last chosen, the Curve, which the trader keeps reading from position to position.
-  await wait(`!${panel}.hidden&&${onRow}&&!!document.querySelector('#position-details-body .chart canvas')`);
-  await check('Enter on a focused row opens the position in the details on the tab last chosen, and leaves focus on the row',`!${panel}.hidden&&${panelReference}===${JSON.stringify(futureReference)}&&${onRow}&&document.querySelector('#position-details-tabs-curve').getAttribute('aria-selected')==='true'`);
+  // The details open on the Terms tab last chosen, keeping keyboard focus on the row.
+  await wait(`!${panel}.hidden&&${onRow}&&!!document.querySelector('#position-details-body .side-panel-facts')`);
+  await check('Enter on a focused row opens the position in the details on the tab last chosen, and leaves focus on the row',`!${panel}.hidden&&${panelReference}===${JSON.stringify(futureReference)}&&${onRow}&&document.querySelector('#position-details-tabs-terms').getAttribute('aria-selected')==='true'`);
 
   // Tabs: a tablist the arrow keys move along; Terms and History share one read of the trade, in the desk's context, made the first time
   // either is shown.
   await click('#position-details-tabs-terms');await wait("!!document.querySelector('#position-details-body .side-panel-section')");
   const reads=await evaluate(editorReads);
-  await evaluate("document.querySelector('#position-details-tabs-curve').focus()");await press('ArrowRight','ArrowRight',39);
+  await evaluate("document.querySelector('#position-details-tabs-history').focus()");await press('ArrowRight','ArrowRight',39);
   await wait("!!document.querySelector('#position-details-body .side-panel-section')");
   await check('the tabs are a tablist, the arrow keys move along it and choose what they reach, and the tab panel is named by the selected tab',
-    `(()=>{const tabs=[...document.querySelectorAll('#position-details-tabs [role=tab]')];return document.querySelector('#position-details-tabs').getAttribute('role')==='tablist'&&tabs.map(t=>t.textContent).join()==='Curve,Terms,Risk,History'&&tabs.filter(t=>t.getAttribute('aria-selected')==='true').length===1&&document.activeElement.id==='position-details-tabs-terms'&&document.activeElement.getAttribute('aria-selected')==='true'&&tabs.filter(t=>t.tabIndex===0).length===1&&document.querySelector('#position-details-body').getAttribute('role')==='tabpanel'&&document.querySelector('#position-details-body').getAttribute('aria-labelledby')==='position-details-tabs-terms';})()`,
+    `(()=>{const tabs=[...document.querySelectorAll('#position-details-tabs [role=tab]')];return document.querySelector('#position-details-tabs').getAttribute('role')==='tablist'&&tabs.map(t=>t.textContent).join()==='Terms,Side schedules,Risk,History'&&tabs.filter(t=>t.getAttribute('aria-selected')==='true').length===1&&document.activeElement.id==='position-details-tabs-terms'&&document.activeElement.getAttribute('aria-selected')==='true'&&tabs.filter(t=>t.tabIndex===0).length===1&&document.querySelector('#position-details-body').getAttribute('role')==='tabpanel'&&document.querySelector('#position-details-body').getAttribute('aria-labelledby')==='position-details-tabs-terms';})()`,
     `[document.activeElement.id,document.querySelector('#position-details-body').getAttribute('aria-labelledby')]`);
   await check('Terms reuses the revision read on opening and lists its terms: the booking facts, the position and the dated contract',
     `(()=>{const read=window.__futuresResponses.filter(r=>r.path==='/api/futures/editor'),h=${held(futureReference)},terms=Object.fromEntries([...document.querySelectorAll('#position-details-body .side-term')].map(r=>[r.children[0].textContent,r.children[1].textContent]));return read.length===${reads}&&read.at(-1).data.state.tradeReference===${JSON.stringify(futureReference)}&&terms.Lots===h.lots.replace('-','−')&&terms['Execution price']?.endsWith(' '+h.currency+'/'+h.unit)&&!!terms.Product&&terms.Trade.startsWith(${JSON.stringify(futureReference)})&&[...document.querySelectorAll('#position-details-body h3')].map(n=>n.textContent).join()==='Trade,Position,Contract';})()`,
@@ -113,6 +112,9 @@ export async function sidePanelChecks({command,evaluate,wait,click,set,check,idl
   // The tab strip's keys below start from Terms, whichever tab the press left the panel on.
   await click('#position-details-tabs-terms');await evaluate("document.querySelector('#position-details-tabs-terms').focus()");
   await press('ArrowRight','ArrowRight',39);
+  await check('Side schedules is a separate tab and never substitutes a curve',
+    "document.activeElement.id==='position-details-tabs-schedules'&&!document.querySelector('#position-details-view .chart')&&document.querySelector('#position-details-view').textContent.includes('No side schedule view')");
+  await press('ArrowRight','ArrowRight',39);
   await check('Risk says its results come from the risk run on the desk, without claiming one, and points to the Risk report',`document.activeElement.id==='position-details-tabs-risk'&&document.querySelector('#position-details-view').textContent==="This position's risk comes from the risk run on the desk, and there is none yet. Run one from the Risk report."`);
   await press('ArrowRight','ArrowRight',39);
   await wait("!!document.querySelector('#position-details-view .side-panel-section')");
@@ -120,9 +122,9 @@ export async function sidePanelChecks({command,evaluate,wait,click,set,check,idl
     `(()=>{const read=window.__futuresResponses.filter(r=>r.path==='/api/futures/editor').at(-1).data,view=document.querySelector('#position-details-view'),sections=[...view.querySelectorAll('#position-details .side-panel-section')];return document.activeElement.id==='position-details-tabs-history'&&sections.length===read.history.length&&sections.every((section,i)=>section.querySelector('h3').textContent===\`Revision \${read.history[i].revision} · \${read.history[i].kind==='booked'?'Booked':'Amended'}\`&&[...section.querySelectorAll('dt')].map(n=>n.textContent).join()==='Effective,Recorded,Book,Instrument,Lots,Execution price,Trader ID,Memo,Trade date · when booked,Legal entity,Counterparty,Reason')&&!view.querySelector('table')&&view.scrollWidth<=view.clientWidth&&${editorReads}===${reads};})()`,
     `[${editorReads},${reads},document.querySelector('#position-details-view').innerText.slice(0,300)]`);
   await press('ArrowRight','ArrowRight',39);
-  await check('the arrow keys wrap from the last tab to the first, which draws the curve again',`document.activeElement.id==='position-details-tabs-curve'&&!!document.querySelector('#position-details-body .chart canvas')`);
+  await check('the arrow keys wrap from the last tab to the first, which shows Terms again',`document.activeElement.id==='position-details-tabs-terms'&&!!document.querySelector('#position-details-body .side-panel-section')`);
   await press('End','End',35);await press('Home','Home',36);
-  await check('End and Home go to the last and the first tab',`document.activeElement.id==='position-details-tabs-curve'&&document.querySelector('#position-details-tabs-curve').getAttribute('aria-selected')==='true'`);
+  await check('End and Home go to the last and the first tab',`document.activeElement.id==='position-details-tabs-terms'&&document.querySelector('#position-details-tabs-terms').getAttribute('aria-selected')==='true'`);
 
   // Amend puts the form of the position the panel shows in its Terms tab, in place of the read view, and the panel stays on its position.
   await click('#side-panel-amend');
@@ -138,15 +140,15 @@ export async function sidePanelChecks({command,evaluate,wait,click,set,check,idl
     `(()=>{const form=document.querySelector('#position-details-form'),box=${panel}.getBoundingClientRect();return form.scrollWidth<=form.clientWidth&&[...form.querySelectorAll('input:not([type=hidden]),select,textarea')].filter(n=>n.getClientRects().length).every(n=>n.getBoundingClientRect().right<=box.right+1)&&!document.querySelector('dialog[open]');})()`);
   // Another tab keeps the form out of sight, and what it holds.
   await evaluate("document.querySelector('#trade-lots').value='11'");
-  await click('#position-details-tabs-curve');
+  await click('#position-details-tabs-schedules');
   await check('another tab shows its own view, and keeps the form and what it holds out of sight',
-    `document.querySelector('#position-details-form').hidden&&!document.querySelector('#position-details-view').hidden&&!!document.querySelector('#position-details-view .chart canvas')&&document.querySelector('#position-details-form')?.contains(document.querySelector('#trade-editing'))&&document.querySelector('#trade-lots').value==='11'&&document.querySelector('#side-panel-amend').textContent==='Close editor'`);
+    `document.querySelector('#position-details-form').hidden&&!document.querySelector('#position-details-view').hidden&&document.querySelector('#position-details-view').textContent.includes('No side schedule view is available for this instrument.')&&document.querySelector('#position-details-form')?.contains(document.querySelector('#trade-editing'))&&document.querySelector('#trade-lots').value==='11'&&document.querySelector('#side-panel-amend').textContent==='Close editor'`);
   await click('#position-details-tabs-terms');
   await check('and Terms shows the form again as it was left',`${formShown}&&document.querySelector('#trade-lots').value==='11'`);
   await click('#side-panel-amend');
   await check('Close editor gives the Terms tab its read view again, and the head its Amend, on the same position',
     `document.querySelector('#position-details-form').hidden&&!document.querySelector('#position-details-view').hidden&&!!document.querySelector('#position-details-view .side-panel-section')&&document.querySelector('#trade-editing').hidden&&!document.querySelector('#position-details-form')?.contains(document.querySelector('#trade-editing'))&&document.querySelector('#side-panel-amend').textContent==='Amend'&&!${panel}.hidden&&${panelReference}===${JSON.stringify(futureReference)}`);
-  await click('#position-details-tabs-curve');
+  await click('#position-details-tabs-terms');
 
   // The panel follows the desk drawing its read again, and a new read closes it.
   await set('#blotter-row-group','market');
@@ -173,25 +175,26 @@ export async function sidePanelChecks({command,evaluate,wait,click,set,check,idl
   await click('#futures-refresh');
   await wait(redrawn(idle));
   await wait(`!${panel}.hidden&&${panelReference}===${JSON.stringify(refreshed)}`);
-  await check('a new read shows the position in the details again, on its tab',`!${panel}.hidden&&${panelReference}===${JSON.stringify(refreshed)}&&document.querySelector('#position-details-tabs-curve').getAttribute('aria-selected')==='true'&&document.querySelector('#error').hidden`);
+  await check('a new read shows the position in the details again, on its tab',`!${panel}.hidden&&${panelReference}===${JSON.stringify(refreshed)}&&document.querySelector('#position-details-tabs-terms').getAttribute('aria-selected')==='true'&&document.querySelector('#error').hidden`);
   await evaluate(`${panel}.focus()`);await press('Escape','Escape',27);await wait(`${panel}.hidden`);
 
-  // A curve the desk is still reading shows as loading in the panel, and is drawn there when it arrives, from the same read.
+  // A position's terms remain usable while the grid's optional curve shapes are pending.
   await evaluate('window.__holdShapes=true');await click('#futures-refresh');
   await wait("typeof window.__releaseShapes==='function'&&!!document.querySelector('#desk-positions .tabulator-row:not(.tabulator-group) .desk-pill')");
   await open('fut');
-  await check('while the desk is still reading the curves the panel says its curve is loading',
-    `document.querySelector('#position-details-view').textContent.startsWith('Loading curve shape')&&!document.querySelector('#position-details-body .chart canvas')&&!document.querySelector('#side-panel-open-curve').disabled`);
+  await wait("!!document.querySelector('#position-details-view .side-panel-section')");
+  await check('position terms do not wait for optional grid curve shapes',
+    "!document.querySelector('#position-details-body .chart')&&!document.querySelector('#position-details-view').textContent.includes('Loading curve')&&!document.querySelector('#side-panel-open-curve').disabled");
   const shapeReadsHeld=await evaluate(shapeReads);
   await evaluate("document.querySelector('#side-panel-amend').focus()");
   await evaluate('window.__releaseShapes()');
-  await wait("!!document.querySelector('#position-details-body .chart canvas')");
+  await wait(`${shapeReads}===${shapeReadsHeld}+1`);
   // The chart can arrive before the virtual grid finishes reattaching the row
   // and restoring its focused control. Both are asynchronous completion criteria.
   await wait("document.activeElement.id==='side-panel-amend'");
   await check('the panel drawn again, as its curve arrives, keeps keyboard focus on the control it was on',`document.activeElement.id==='side-panel-amend'`,'[document.activeElement.id,document.activeElement.tagName]');
   // The held read is the desk's own, and completes when it is released: the panel adds none to it.
-  await check('and draws it when it arrives, from the desk\'s read and no other',`${shapeReads}===${shapeReadsHeld}+1&&!document.querySelector('#position-details-view').textContent.startsWith('Loading curve shape')`,`[${shapeReads},${shapeReadsHeld}]`);
+  await check('the grid shape arriving adds no chart or extra request to position details',`${shapeReads}===${shapeReadsHeld}+1&&!document.querySelector('#position-details-view .chart')`);
   await evaluate(`${panel}.focus()`);await press('Escape','Escape',27);
   await wait(`${panel}.hidden`);
 
@@ -472,7 +475,7 @@ export async function sidePanelChecks({command,evaluate,wait,click,set,check,idl
   await click('#trade-reload');await wait(idle);
   await check('Reload latest revision reloads a form with no edits without a question: the editor is read again, and nothing is asked',`${prompt}.hidden&&${editing}&&${editorReads}>${editorReadsBeforeReload}`,`[${prompt}.textContent,${editorReads},${editorReadsBeforeReload}]`);
   await amend(refA);await typeInto('#trade-lots','17');
-  await click('#position-details-tabs-curve');await evaluate("document.querySelector('#position-details-tabs-curve').focus()");await press('ArrowRight','ArrowRight',39);
+  await click('#position-details-tabs-history');await evaluate("document.querySelector('#position-details-tabs-history').focus()");await press('ArrowRight','ArrowRight',39);
   await check('arrow keys travelling to Terms leave focus on the tab, and the form keeps what it held',`document.activeElement.id==='position-details-tabs-terms'&&!document.querySelector('#position-details-form').hidden&&document.querySelector('#trade-lots').value==='17'`,`[document.activeElement.id,document.querySelector('#trade-lots').value]`);
   await click('#trade-reload');await asks();
   await check('Reload latest revision, which replaces what the form holds, asks first as every other route does',`${prompt}.querySelectorAll('button').length===2&&${editing}&&document.querySelector('#trade-lots').value==='17'`,`[${prompt}.textContent,document.querySelector('#trade-lots').value]`);

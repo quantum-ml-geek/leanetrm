@@ -1177,7 +1177,7 @@ function renderBlotterViews(){
     const entry=document.createElement('button'),icon=document.createElement('span'),label=document.createElement('span');
     entry.type='button';entry.className='nav-item nav-view';entry.classList.toggle('active',name===shown);entry.title=entry.ariaLabel=`Blotter view · ${name}`;entry.disabled=busy;
     icon.className='nav-icon';icon.ariaHidden='true';icon.textContent='▤';label.className='nav-text';label.textContent=name;entry.append(icon,label);
-    entry.onclick=()=>leaving(async()=>{if(contextDirty)await applyContext();await setPage('futures');if(futures.poppedOut()){futures.front();notice('The Blotter is in its own window, now in front. Choose the saved view there.');return;}futures.reset('read');await futures.openView(name);if(select('snapshot').value)await futures.load();},contextDirty?'discards':'page');
+    entry.onclick=()=>leaving(async()=>{if(contextDirty)await applyContext();await setPage('futures');if(futures.poppedOut()){futures.front();notice('The Blotter is in its own window, now in front. Choose the saved view there.');return;}await futures.openView(name);if(select('snapshot').value)await futures.open();},contextDirty?'discards':'page');
     return entry;
   }));
 }

@@ -49,7 +49,7 @@ export async function run({command,evaluate,wait,click,persona,set,submit,check,
  await persona('risk');await click('#example');await click('#nav-futures');await click('#follow-live');
  await wait("document.querySelector('#live-status').dataset.state==='live'&&"+idle);
  // A refresh that fails while a curve read is still waiting must not leave the kept desk loading for ever.
- const shapesLoading="document.querySelectorAll('#desk-positions .sparkline-loading').length";
+ const shapesLoading="document.querySelectorAll('#desk-positions .sparkline-loading,#desk-positions .curve-updating').length";
  await evaluate('window.holdShapes=true');await correct('base','3.35');
  // The correction is recomputed on the server before the page reads the curves again, which on a shared runner can take longer than
  // an ordinary action's wait.
@@ -78,9 +78,11 @@ export async function run({command,evaluate,wait,click,persona,set,submit,check,
  const swapReference=await evaluate("window.liveResponses.filter(r=>r.path==='/api/trading/workspace').at(-1).data.blotter.holdings.find(h=>h.instrumentType==='financial_swap').tradeReference");
  await set('#blotter-filters .table-search',swapReference);await click('#desk-positions .tabulator-row:not(.tabulator-group)');
  await click('#position-details-tabs-terms');await wait("!!document.querySelector('#position-details-view .side-panel-section')&&"+idle);
- await check('a swap\'s Terms are read in a live context: its structure, each side, and its valuation and schedules, with no error',
-  `(()=>{const titles=[...document.querySelectorAll('#position-details-view .side-panel-section>h3')].map(n=>n.textContent);return titles[0]==='Trade'&&titles[1]==='Structure'&&titles.includes('Valuation & schedules')&&document.querySelectorAll('#position-details-view .swap-schedule').length>=1&&!document.querySelector('#position-details-view .side-panel-error')&&document.querySelector('#error').hidden;})()`,
+ await check('a swap\'s Terms are read in a live context: its structure and each side, with no error',
+  `(()=>{const titles=[...document.querySelectorAll('#position-details-view .side-panel-section>h3')].map(n=>n.textContent);return titles[0]==='Trade'&&titles[1]==='Structure'&&!document.querySelector('#position-details-view .side-panel-error')&&document.querySelector('#error').hidden;})()`,
   "[document.querySelector('#position-details-view').innerText.slice(0,300),document.querySelector('#error').textContent]");
+ await click('#position-details-tabs-schedules');await wait("document.querySelectorAll('#position-details-view .swap-schedule').length===2&&"+idle);
+ await check('the live swap exposes each side pricing and payment rows on Side schedules',"document.querySelectorAll('#position-details-view .swap-pricing-rows').length===2&&document.querySelectorAll('#position-details-view .swap-payment-table').length===2&&!document.querySelector('#position-details-view .side-panel-error')");
  await click('#details-collapse');await set('#blotter-filters .table-search','');
  // A position in a market Curves & prices lists, so that its Open curve is available to hold focus below.
  const reference=await evaluate("(async()=>{const listed=new Set((await(await fetch('/api/workspace/navigation')).json()).curves.map(c=>c.code));return window.liveResponses.filter(r=>r.path==='/api/trading/workspace').at(-1).data.blotter.holdings.find(h=>listed.has(h.curve)).tradeReference;})()");
