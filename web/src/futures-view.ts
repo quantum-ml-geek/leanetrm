@@ -99,7 +99,7 @@ const rowGroupLabels:Readonly<Record<NonNullable<RowGroup>,string>>={book:'Book'
 const rowGroupLabel=(group:RowGroup)=>group===null?'None':rowGroupLabels[group];
 // The trade fields an export of trade rows states, beside the desk's own: money is in its currency.
 const numericFields=['tradeCount','lots','quantity','executionPrice','mark','executionPnl','fixedPrice','presentValue','revision'];
-export function setupFutures(options:{tickets:ProductTickets;api:Api;stream:(body:BlotterStreamRequest,handlers:BlotterStreamHandlers,signal:AbortSignal)=>Promise<void>;act:(work:()=>Promise<void>)=>Promise<void>;busy:()=>boolean;canRunRisk:()=>boolean;bookingUnavailableReason:()=>string;zone:()=>string;profile:()=>string;onReadContext:(at:string,known:string)=>void;
+export function setupFutures(options:{tickets:ProductTickets;api:Api;stream:(body:BlotterStreamRequest,handlers:BlotterStreamHandlers,signal:AbortSignal)=>Promise<void>;act:(work:()=>Promise<void>)=>Promise<void>;busy:()=>boolean;updatesBlocked:()=>boolean;canRunRisk:()=>boolean;bookingUnavailableReason:()=>string;zone:()=>string;profile:()=>string;onReadContext:(at:string,known:string)=>void;
   riskReportUrl?:(id:string)=>string;
   // Opens an option product's volatility surface; null in a window with no Vol surfaces page.
   volSurface:((product:string)=>void)|null;
@@ -1382,7 +1382,7 @@ export function setupFutures(options:{tickets:ProductTickets;api:Api;stream:(bod
       void pricingRead.catch(error=>{if(started===generation&&whereAmI()===scope&&!get('futures-page').hidden)options.failed(error);});
     }else await pricingRead;
   }
-  function valuesHeld(){return !!document.querySelector('dialog[open]')||(editing()&&panel.current()?.kind!=='risk')||!!pending.command||options.tickets.pending().length>0||position.updatesBlocked()||risk.unconfirmed();}
+  function valuesHeld(){return options.updatesBlocked()||!!document.querySelector('dialog[open]')||(editing()&&panel.current()?.kind!=='risk')||!!pending.command||options.tickets.pending().length>0||position.updatesBlocked()||risk.unconfirmed();}
   function startUpdates(expected=cachedRead?.version){
     stopUpdates();stopUpdates=()=>{};
     if(!expected||!cachedRead||!holdings||get('futures-page').hidden||options.knowledge()==='live')return;

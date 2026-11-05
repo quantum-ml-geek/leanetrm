@@ -383,7 +383,7 @@ export function setupAssistant(options:PanelOptions){
     finally{if(started===identity){working=false;sync();if(!source)void reread();}}
   }
   async function allow(){
-    const agent=consent;if(!agent||working)return;
+    const agent=consent;if(!agent||working||options.pageBusy())return;
     const body={agentId:agent.id,version:agent.version};
     if(granting.command&&JSON.stringify(granting.command.body)!==JSON.stringify(body))granting.clear();
     const command=granting.command??granting.begin('assistant/grants/grant',body);
@@ -392,9 +392,9 @@ export function setupAssistant(options:PanelOptions){
     try{
       await options.api(command.path,{...command.body,operationId:command.operationId});
       if(started!==identity)return;
-      granting.clear();consent=undefined;working=false;await readAgents();
+      granting.clear();consent=undefined;await readAgents();
       // The question goes again only to the conversation it was written for.
-      if(started===identity&&shown===conversationGeneration)await ask(false);
+      if(started===identity&&shown===conversationGeneration){working=false;await ask(false);}
     }catch(caught){
       if(started!==identity)return;
       granting.failed((caught as {code?:string}).code,previouslyUncertain);
@@ -477,7 +477,7 @@ export function setupAssistant(options:PanelOptions){
     text('assistant-composer-note',!agents.length?agentsError||'No agent is available to you.':!agent?'Choose an agent to ask.':'');
     get('assistant-consent').hidden=!consent;
     if(consent)text('assistant-consent-text',consentText(consent,vendors,grantExpiry(new Date(),consent.grantDays,options.zone())));
-    get<HTMLButtonElement>('assistant-allow').disabled=get<HTMLButtonElement>('assistant-deny').disabled=working;
+    get<HTMLButtonElement>('assistant-allow').disabled=working||options.pageBusy();get<HTMLButtonElement>('assistant-deny').disabled=working;
     text('assistant-error',error);get('assistant-error').hidden=!error;
     get('assistant-stream').hidden=!note;text('assistant-stream-text',note?.text??'');
     get('assistant-resume').hidden=!note?.resume;get('assistant-reload').hidden=!note?.reload;
@@ -568,7 +568,7 @@ export function setupAssistant(options:PanelOptions){
   get('assistant-resume').onclick=()=>{note=undefined;reopened=false;if(running())openStream(lastSequence());else void reread();sync();};
   get('assistant-reload').onclick=()=>location.reload();
 
-  return {sync,
+  return {sync,working:()=>working,
     /** Opens the panel with `text` in the composer to start from, unless it already holds a question. */
     draft(text:string){
       if(!options.available())return;

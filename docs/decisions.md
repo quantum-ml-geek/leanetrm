@@ -2361,11 +2361,13 @@ fresh shapes are read. Header Live corrections use the same grid update path.
 
 The backend still values the complete selected financial scope. A notification
 does not choose another close, change an explicit observation pin or reinterpret
-a mark. Updates defer while a modal dialog is open, editors have unsaved changes
-or commands are pending, including operational day entries and option lifecycle
+a mark. Updates defer while a modal dialog is open, an independent assistant action
+is awaiting its response, editors have unsaved changes or commands are pending,
+including operational day entries and option lifecycle
 actions. The same protection is rechecked before committing an admitted valuation.
-Detail controls stay inert
-during the final replacement read, with focus restored afterward; an action cannot
+Assistant consent keeps that gate through the grant response, agent directory
+refresh and question admission. Detail controls stay inert during the final
+replacement read, with focus restored afterward; an action cannot
 start in the widget being replaced. Lifecycle controls remain in Terms, separate
 from Side schedules.
 Lifecycle requests retain their exact identity before an asynchronous permission
