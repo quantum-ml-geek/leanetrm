@@ -11,12 +11,12 @@ see the implementation contract for supported native controls and literal fills.
 Unsaved draft/close-out/request counts lack server-readable identities and remain
 explicitly unavailable; a concrete pointer-backed consumer must precede any store.
 Keep requires source-bound read artifacts and an exact existing Blotter/risk
-definition mapping. Current prose tables have no source-bound read operation/input identity and
-`show_card` has no artifact consumer. Keep is deferred until that named consumer
+definition mapping. Current prose tables have no source-bound read operation/input
+identity and `show_card` has no artifact consumer. Keep is deferred until that named consumer
 and exact definition mapping exist. Unmappable reads remain unkeepable; no generic
 artifact store is planned. Additional ticket/editor field adapters and pivot column
-layout controls require their own explicit capabilities and checks. Outside browser agents need separately enforced agent
-identity/delegation (O29). Generated pages and model-call prefetch are excluded.
+layout controls require their own explicit capabilities and checks. Outside browser
+agents need separately enforced agent identity/delegation (O29). Generated pages and model-call prefetch are excluded.
 
 D297 separates physical reference choices from pricing coverage in crude, gas
 and the existing physical PPA consumer. Crude entry has individual master fields

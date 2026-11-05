@@ -2,11 +2,11 @@
 
 Status: approved for local implementation; per-slice qualification is recorded in
 [the implementation contract](assistant-walkthroughs.md). Baseline `2fdcd927`: `turns_v12`, D311;
-decision numbers below are provisional. Extend the [existing assistant](assistant-workspace.md)
+D312–D315 record the approved slices. Extend the [existing assistant](assistant-workspace.md)
 and `TurnWorker` loop. Backend evidence/plans/values; typed browser presentation.
 No generated pages/code or model-call prefetch.
 
-## Draft D312 — Server page digest (slice 4.1)
+## D312 — Server page digest (slice 4.1)
 
 Add `read_page_digest` / `workspace.digest_v1`: read admitted `PageReport` at
 `TurnPin`. Preserve mode, book/portfolio ids, grouping, shown/primary measures
@@ -34,7 +34,7 @@ unsaved tickets, close-out drafts and uncertain browser requests have no server
 records. Mark unavailable, never zero; exact counts need an agreed pointer-backed
 consumer. Record the gap in `plan.md`; no draft store.
 
-## Draft D313 — Selection asks (slice 4.2)
+## D313 — Selection asks (slice 4.2)
 
 Add selected trade ids and pivot-cell group identities independently of the docked
 trade. Pivot identity includes native partition/measure, never amounts. Resolve
@@ -44,7 +44,7 @@ single-selection grid, **Ask about these positions**, pivot and docked asks.
 Prefill the editable composer without sending. Looking at/send-time comparison
 and strict pop-out reports carry identical pointers, never table cells.
 
-## Draft D314 — Visible walkthrough (slice 4.3)
+## D314 — Visible walkthrough (slice 4.3)
 
 Add `present_walkthrough` / `workspace.walkthrough_v1`: at most twelve `go`,
 `select`, `sort`, `filter`, `open`, `scroll_to`, `fill`, `say`, `pause` steps.
@@ -69,7 +69,7 @@ halt with the failed ordinal. Fixed instructions use walkthroughs for screen
 requests. Review waits for turn completion; consent/Authorize and ticket booking
 remain human actions.
 
-## Draft D315 — Keep existing definitions only (slice 4.4)
+## D315 — Keep existing definitions only (slice 4.4)
 
 Map source-bound reads exactly to `TableViews`' Blotter definition or
 `RiskRunDefinitions`' supported preset/books/unit sizes. Classify newly exposed
@@ -104,7 +104,7 @@ Independent adversarial review must try cross-owner/scope handles, revocation an
 expiry during reads/publication, retained-pin substitution, injected fill evidence,
 commit controls disguised as fields, duplicate/resumed events, stale callbacks
 and older-runtime admission. Resolve findings before publication.
-**Draft O29:** outside browser-agent page tools remain unexposed until separate
+**O29:** outside browser-agent page tools remain unexposed until separate
 agent identity/delegation is enforceable; the person's browser session is
-insufficient. The design is approved for local implementation; publication requires separate
-approval. No commits or push in this design task.
+insufficient. Implementation and qualification are recorded in the linked contract; source
+publication and production activation remain separate release steps.

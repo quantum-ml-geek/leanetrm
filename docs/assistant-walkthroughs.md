@@ -1,6 +1,6 @@
 # Page digests and presentation walkthroughs
 
-D312–D315 are approved for local implementation. This extends the existing
+D312–D314 are implemented in the bounded contract below; D315 is deferred. This extends the existing
 [workspace assistant](assistant-workspace.md); it adds no independent agent loop.
 Runtime `turns_v13` is a single local compatibility increment, not a hosted release.
 Migration 0194 is consumed by digest admission, tool consent and Looking at;
@@ -164,7 +164,7 @@ native price-partition ambiguity; row-background pivot menus cannot reuse focus.
 No production rollout or publication is approved by local implementation.
 
 The completed local v13 check run passes 39 workspace integration checks, twelve
-owned application-browser checks, all 1,330 web checks, thirteen orchestration
+owned application-browser checks, all 1,336 web checks, thirteen orchestration
 checks, standalone boundaries and the ordinary assistant runtime suite.
 The browser verifies administrator tool choices, exact selected ids, every
 presentation kind, visible cursor/narration, unsaved fields, Stop and suppression
@@ -175,5 +175,5 @@ blocking issue after fixes to fill intent, resume scope/form generations, pivot
 read provenance, deferred Review and later-event suppression. Review did not
 independently rerun the suites. The complete release command in
 [verification.md](verification.md#required-tools) remains required before any
-publication; it now includes the dedicated workspace browser gate. No release
-qualification, commit or push is claimed by these local checks.
+release publication; it now includes the dedicated workspace browser gate.
+Targeted checks alone do not qualify production activation.
