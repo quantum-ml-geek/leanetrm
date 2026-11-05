@@ -129,6 +129,7 @@ if (args is ["--schedules"])
     TicketDescriptionChecks.Run();
     GasTicketChecks.Run();
     DateWorkspaceChecks.Run();
+    CurveDefinitionChecks.Run();
     SchedulePublicationChecks.Run();
     DirectReadChecks.ReportsDifferences();
     PpaLimitChecks.Run();
