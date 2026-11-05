@@ -2259,3 +2259,48 @@ no tables or raw grants. Risk/Blotter, queued reports, archive and export distin
 model estimates, observed full PV and consented complete fallback. See the
 [execution and user contract](pca-hybrid-risk.md#hybrid-monte-carlo-valuation-d311).
 Production activation remains a separately qualified release.
+
+## D312 — Bounded server page digest
+
+Implemented locally. `read_page_digest` reads the immutable page
+report and exact turn pin through shared authorized page operations. Blotter
+counts, partitioned totals and exact ranked extremes use backend display strings;
+the docked revision is independent of the table scope. Successful text is bounded
+to 4 KiB and ordinary complete-result bounds still apply. Browser-only draft or
+pending-request state stays unavailable. Fixed instructions require the digest
+first when enabled. New versions and explicit tool consent use `turns_v13`;
+older binaries cannot admit new work. See [contract and remaining slices](assistant-walkthroughs.md).
+
+## D313 — Ask from selected identities
+
+Implemented locally. Multi-selection, pivot-cell and docked asks
+carry identifiers and native group identities, never table cells. Looking at
+states the pointers and the server reads every selected value at the pin.
+
+## D314 — Visible, bounded presentation plans
+
+Implemented locally. `present_walkthrough` publishes at most twelve
+closed presentation steps through the existing turn/event loop. Server validation
+binds the plan to successful page reads, issued targets and explicit ask terms.
+Literal fills require the entire dedicated ask grammar and support lots,
+executionPrice and memo on an unsaved futures ticket. Progress is scoped to owner,
+conversation, turn and event, with page/form-generation guards against competing
+edits. The browser provides a labelled cursor, narration, Stop/Esc and accessible resume.
+No presentation step can authorize a business effect; Review → Authorize and the
+person's ordinary ticket action remain the only effect paths.
+
+## D315 — Keep only supported saved definitions
+
+Approved conditionally on an exact existing definition mapping. Persist read
+inputs, not values, using existing saved Blotter/risk definitions and normal human
+authorization. No read right means no Keep. Missing source bindings and unsupported
+mappings are planned gaps, not permission to add a general artifact store. The
+current prose renderer and unimplemented `show_card` have no source-bound artifact
+consumer, so Keep is deferred and no store or save endpoint is introduced.
+
+## O29 — Outside browser-agent page access
+
+Unresolved. Exposing page tools through the person's browser would erase the
+separate agent principal/delegation boundary. Keep them unexposed until that
+boundary is specified and enforced. This does not authorize model-generated pages
+or model-call prefetch.

@@ -95,9 +95,15 @@ static class TradingBlotterChecks
     {
         var groups=TradingBlotter.Groups(Pivot(MoneyConvention,["instrumentType"],MoneyMeasures),Positions());
         Require(groups.Count==4,"Money groups were not one per instrument type and exact currency: "+groups.Count);
-        string[] stated=["currency","currencyReference","executionPnl","instrumentType","presentValue","tradeCount","unvaluedPositions"];
+        string[] stated=["currency","currencyReference","executionPnl","groupId","instrumentType","presentValue","tradeCount","unvaluedPositions"];
         Require(groups.All(group=>group.Select(member=>member.Key).Order(StringComparer.Ordinal).SequenceEqual(stated)),
             "A money group stated a unit or quantity specification, or lacked its type, currency, measures or unvalued count");
+        var identities=groups.Select(g=>Text(g,"groupId")).ToArray();
+        Require(identities.Distinct().Count()==groups.Count&&identities.All(id=>id is {Length:64}&&id.All(c=>char.IsAsciiHexDigit(c)&&!char.IsUpper(c))),
+            "Native money partitions must each issue a distinct opaque group identity.");
+        var reordered=TradingBlotter.Groups(Pivot(MoneyConvention,["instrumentType"],MoneyMeasures),Positions().AsEnumerable().Reverse().ToList());
+        Require(identities.Order(StringComparer.Ordinal).SequenceEqual(reordered.Select(g=>Text(g,"groupId")).Order(StringComparer.Ordinal)),
+            "A native group identity changed when the same source rows arrived in another order.");
         Require(Text(Group(groups,"financial_swap","usd"),"presentValue")=="11.6",
             "Swap present value was not added across quantity units and definition revisions of one currency");
         Require(Text(Group(groups,"financial_swap","eur"),"presentValue")=="7","A second currency was added to the first, or lost");
