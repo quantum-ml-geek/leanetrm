@@ -1,5 +1,10 @@
 # Delivery plan and acceptance criteria
 
+D316 makes displayed versions follow the shared As of date and knowledge cutoff;
+exact backend history and retained financial pins remain available. See
+[contextual version presentation](contextual-versions.md) for implemented consumers
+and historical limits.
+
 Status: design baseline approved for implementation on 2026-10-16. Milestone 0 is
 complete. The broad product milestones below remain incomplete; the bounded
 capabilities described here have their own implementation and verification records.

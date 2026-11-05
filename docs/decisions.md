@@ -2304,3 +2304,24 @@ Unresolved. Exposing page tools through the person's browser would erase the
 separate agent principal/delegation boundary. Keep them unexposed until that
 boundary is specified and enforced. This does not authorize model-generated pages
 or model-call prefetch.
+
+## D316 — Select displayed versions from the workspace context
+
+Ordinary frontend browsing and new choices use the shared As of date and resolved
+knowledge cutoff. Offer logical objects and display the eligible version as
+read-only evidence; remove manual alternative-version controls. Preserve exact
+backend reads, immutable history, saved contract dependencies and uncertain
+commands. Eligibility and authority remain managed backend responsibilities.
+
+Reuse each family's existing selection policy: gas definition-level setup,
+crude logical binding codes, effective/certified schedules, exact published graph/projection contracts and bundle-qualified TOUs. Working proposals
+remain authoring artifacts, never recency inferred from UUID ordering. Crude
+head discovery must be independent of the bounded raw history window. A failed
+newer numerical qualification cannot choose an older version.
+
+Context changes invalidate libraries and permissions and reload the active page;
+ask before discarding edits. Retained exact bindings remain displayed without
+becoming alternative-version pickers. Clearing one requires a new explicit
+choice. Optional dated catalog projections preserve the original backend APIs.
+Exact proposal recovery is independent of bounded catalog history. No migration or financial policy is introduced. See
+[contextual versions](contextual-versions.md) for implemented consumers and limits.

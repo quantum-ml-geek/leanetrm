@@ -213,6 +213,7 @@ async function mayLeave(move:Move='discards',modal?:HTMLDialogElement){
   if(page==='crude'&&move!=='keeps'&&move!=='follows'){if(modal?.open)modal.close();return crude.leave();}
   if(page==='crude-setup'&&move!=='keeps'&&move!=='follows'){if(modal?.open)modal.close();return crudeSetup.leave();}
   if(page==='gas-setup'&&move!=='keeps'&&move!=='follows'){if(modal?.open)modal.close();return gasSetup.leave();}
+  if((page==='schedules'||page==='configuration')&&move!=='keeps'&&move!=='follows'){if(modal?.open)modal.close();if(dateEditor.contractsEditing()&&!await dateEditor.leave('configuration'))return false;return dateEditor.leave('schedules',schedules.unsaved());}
   if(page==='reference'){
     if(move==='keeps'||move==='follows'||!referenceEditor.editing())return true;
     if(modal?.open)modal.close();
@@ -234,7 +235,7 @@ async function mayLeave(move:Move='discards',modal?:HTMLDialogElement){
 }
 // Whether the page showing holds edits that a move to another page, context or account gives up: the Blotter's amendment or the edits
 // its popped-out window holds, a custom curve's unsaved edits or a reference item's.
-function holdsEdits(){return (page==='facilities'&&facilities.edited())||futures.windowEdits()||(page==='futures'?futures.editing():page==='risk'?riskJobs.edited():page==='reference'?referenceEditor.editing():page==='custom-curves'&&customCurves.holds('edits'));}
+function holdsEdits(){return (page==='schedules'&&(dateEditor.datesUnsaved()||dateEditor.contractsEditing()||schedules.unsaved()))||(page==='configuration'&&dateEditor.contractsEditing())||(page==='gas-setup'&&gasSetup.unsaved())||(page==='crude-setup'&&crudeSetup.unsaved())||(page==='facilities'&&facilities.edited())||futures.windowEdits()||(page==='futures'?futures.editing():page==='risk'?riskJobs.edited():page==='reference'?referenceEditor.editing():page==='custom-curves'&&customCurves.holds('edits'));}
 // What the profile dialog does gives up what the Blotter holds, which is asked about with the dialog closed, for a modal dialog keeps the panel, and
 // the question, out of reach. Keeping the amendment leaves the dialog closed and nothing done, which is said, for a closed dialog looks like a done one.
 async function mayLeaveForDialog(notDone:string,move:Move='discards'){
@@ -613,7 +614,7 @@ function renderRevisions(){
   text('edit-help',isRates()?'Enter an annual decimal rate: 0.025 means 2.5%. Earlier versions stay available.':'Earlier prices stay available. Saving adds a new version for you to view.');
   if(draftFor!==input){$<HTMLInputElement>('correction-value').value=val(o,'value');draftFor=input;}
   const revisions=data().observations.filter(r=>r.series_id===o.series_id&&r.source_code===o.source_code&&r.source_event_id===o.source_event_id&&r.observed_at===o.observed_at&&r.role===o.role);
-  table('revisions',['Version','Value','Saved',''],revisions.map((r,i)=>[i===0?'Original':`Change ${i}`,val(r,'value'),instant(val(r,'received_at')),r.id===input?'Viewing':action('View this version',async()=>{const next=await api<{frame:Frame}>('select-observation',{snapshotId:frame().id,observationId:r.id});clearPrices();await reload(next.frame.id);input=val(r,'id');await build();})]),[1]);
+  table('revisions',['Version','Value','Saved','Context'],revisions.map((r,i)=>[i===0?'Original':`Change ${i}`,val(r,'value'),instant(val(r,'received_at')),r.id===input?'Selected by context':'Recorded history']),[1]);
 }
 function pricingPoint(){
   if(!result)throw Error('Choose a market date first.');
@@ -939,11 +940,14 @@ $('open').onclick=()=>void (async()=>{if(!await mayLeaveForDialog('The user was 
 // A newly selected As of close replaces what the previous one showed, and the badge takes its basis afresh.
 function closeChanged(){
   shownClose=select('snapshot').value;closeBasis=undefined;
-  marketCalendar.selectedChanged();customCurves.snapshotChanged();riskJobs.contextChanged();gas.reset();crude.reset();parties.reset();futures.reset('inputs');clearPrices();
+  marketCalendar.selectedChanged();dateEditor.contextChanged();customCurves.snapshotChanged();riskJobs.contextChanged();gas.reset();crude.reset();parties.reset();futures.reset('inputs');clearPrices();
   // The board and the library show nothing of the previous close while the new one is read.
   if(navigation)renderBrowse();renderMarketBoard();
 }
 async function loadSelectedClose(){
+  if(page==='schedules'||page==='configuration'){await dateEditor.load();return;}
+  if(page==='gas-setup'){await gasSetup.load();return;}
+  if(page==='crude-setup'){await crudeSetup.load();return;}
   if(!select('snapshot').value)return;
   if(page==='facilities')await facilities.load();else if(page==='risk')await riskJobs.load();else if(page==='crude')await crude.load();else if(page==='parties')await parties.load();else if(page==='futures')await futures.load();else if(page==='power')await loadPowerPage({refreshProducts:false});else if(page==='custom-curves')await customCurves.load();else if(page==='interval-curves')await intervalCurves.load();else if(page==='market'){if(curve)await build();await loadBoard();}else if(page==='dashboard')await dashboard.load();else if(page==='vol-surfaces')await volSurfaces.refresh();
 }
@@ -961,7 +965,7 @@ document.querySelectorAll<HTMLButtonElement>('[data-type]').forEach(b=>b.onclick
 document.querySelectorAll<HTMLButtonElement>('.tab').forEach(b=>b.onclick=()=>{if(busy)return;prefs.tab=b.dataset.view as Preferences['tab'];persist();showView(prefs.tab);assistant.sync();});
 let scheduleWorkspace:ReturnType<typeof setupScheduleWorkspace>|undefined;
 const schedules=setupShortcutEditor(act,{time:api,load:()=>api('schedules'),preview:draft=>api('schedules/preview',draft),keep:draft=>api('schedules/keep',draft),resolve:body=>api('schedules/resolve',body)},()=>busy,()=>prefs.timeZone);
-function dirtyContext(){facilities.reset();riskJobs.contextChanged();volSurfaces.reset();scheduleWorkspace?.calendar.reset();dateEditor.invalidatePreview();stopLive();marketGeneration++;jobs.contextChanged();customCurves.contextChanged();deliveryPrices.reset();intervalSeries.reset();intervalCurves.reset();ppa.reset();gas.reset();crude.reset();parties.reset();clearReference();referenceNavigation.clear();futures.reset('inputs');power.reset();contextDirty=true;clearPrices();if(navigation)renderBrowse();renderMarketBoard();text('environment-context-note','Context changed · choose Apply to use it.');renderWorkspaceMode();}
+function dirtyContext(){facilities.reset();riskJobs.contextChanged();volSurfaces.reset();scheduleWorkspace?.calendar.reset();dateEditor.contextChanged();touProducts.reset();gasSetup.reset();crudeSetup.reset();stopLive();marketGeneration++;jobs.contextChanged();customCurves.contextChanged();deliveryPrices.reset();intervalSeries.reset();intervalCurves.reset();ppa.reset();gas.reset();crude.reset();parties.reset();clearReference();referenceNavigation.clear();futures.reset('inputs');power.reset();contextDirty=true;clearPrices();if(navigation)renderBrowse();renderMarketBoard();text('environment-context-note','Context changed · choose Apply to use it.');renderWorkspaceMode();}
 const parties=setupPartyEditors({api,act,busy:()=>busy,zone:()=>prefs.timeZone,profile:()=>administrationScope+':'+currentProfile,source:()=>{if(contextDirty)throw Error('Apply the changed context first.');return frame().id;}});
 
 const facilities=setupFacilityQuantities({api,act,busy:()=>busy,zone:()=>prefs.timeZone,identity:()=>administrationScope+':'+exampleId+':'+currentProfile,
@@ -975,7 +979,7 @@ $('profile-dialog').addEventListener('close',agentGrants.hide);
 const accessPolicy=setupOperatingPolicy($('access-policy-page'),'access',{api,act,identity:()=>administrationScope+':'+currentProfile,can:()=>can('ManageAccess'),busy:()=>busy});
 const assistantPolicy=setupOperatingPolicy($('assistant-policy-page'),'assistant',{api,act,identity:()=>administrationScope+':'+currentProfile,can:()=>can('ManageAgents'),busy:()=>busy});
 const aiSettings=setupAiSettings({api,act,busy:()=>busy,zone:()=>prefs.timeZone,identity:()=>administrationScope+':'+currentProfile,tabs:()=>aiTabs(permissions)});
-const dateEditor=setupDateEditor(act,api,()=>busy,()=>prefs.timeZone,dirtyContext,()=>administrationScope+':'+currentProfile,{holds:holdsEdits,mayChange:async()=>!busy&&await mayLeave()},work=>act(work,{keepNotice:true}),(title,events,owner)=>{if(events.length)scheduleWorkspace?.calendar.show(title,events,owner);else scheduleWorkspace?.calendar.clear(owner);});
+const dateEditor=setupDateEditor(act,api,()=>busy,()=>prefs.timeZone,dirtyContext,()=>administrationScope+':'+currentProfile,{holds:holdsEdits,mayChange:async()=>!busy&&await mayLeave()},work=>act(work,{keepNotice:true}),(title,events,owner)=>{if(events.length)scheduleWorkspace?.calendar.show(title,events,owner);else scheduleWorkspace?.calendar.clear(owner);},()=>{if(contextDirty)throw Error('Apply the changed context first.');return select('snapshot').value;});
 $('date-context').addEventListener('input',dirtyContext);
 $('knowledge-context').addEventListener('toggle',renderWorkspaceMode);
 document.addEventListener('input',refreshContextPanels);
@@ -983,14 +987,14 @@ document.addEventListener('change',refreshContextPanels);
 async function applyContext(){
   jobs.contextChanged();
   const context=await dateEditor.context();
-  await viewContext(await api<{context:Context}>('market/context',{effectiveOn:context.effectiveOn,knownAt:context.knownAt,mode:'at',selection:'latest_correction'}));
+  await viewContext(await api<{context:Context;snapshotId:string|null;frameSelectionPolicy:string}>('market/context',{effectiveOn:context.effectiveOn,knownAt:context.knownAt,mode:'at',selection:'latest_correction',snapshotId:select('snapshot').value||null,frameSelectionPolicy:'preserve_origin_or_unique_asof_frame_v1'}));
 }
-async function viewContext(snapshot:{context:Context}){
-  facilities.reset();futures.reset('inputs');dateEditor.setContext(snapshot.context);contextDirty=false;clearPrices();await reload('');$<HTMLDetailsElement>('knowledge-context').open=false;
-  if(page==='schedules'){await dateEditor.load();}
+async function viewContext(snapshot:{context:Context;snapshotId?:string|null;frameSelectionPolicy?:string|null}){
+  if(snapshot.snapshotId&&snapshot.frameSelectionPolicy!=='preserve_origin_or_unique_asof_frame_v1')throw Error('The context returned an unsupported frame-selection policy.');
+  facilities.reset();futures.reset('inputs');dateEditor.setContext(snapshot.context);contextDirty=false;clearPrices();await reload(snapshot.snapshotId??'');$<HTMLDetailsElement>('knowledge-context').open=false;
   text('environment-context-note','Historical view · working snapshots use the latest known corrections; stored closes retain their original inputs. Changes are disabled.');
 }
-$('apply-view-context').onclick=()=>leaving(async()=>{await applyContext();if(page==='facilities')await facilities.load();else if(page==='dashboard')await dashboard.load();else if(page==='reference')await loadReference();else if(page==='power')await loadPowerPage({refreshProducts:false});else if(page==='custom-curves')await customCurves.load();else if(page==='interval-series')await intervalSeries.load();else if(page==='interval-curves')await intervalCurves.load();else if(page==='vol-surfaces')await volSurfaces.refresh();});
+$('apply-view-context').onclick=()=>leaving(async()=>{await applyContext();if(page==='facilities')await facilities.load();else if(page==='dashboard')await dashboard.load();else if(page==='reference')await loadReference();else if(page==='power')await loadPowerPage({refreshProducts:false});else if(page==='custom-curves')await customCurves.load();else if(page==='interval-series')await intervalSeries.load();else if(page==='interval-curves')await intervalCurves.load();else if(page==='vol-surfaces')await volSurfaces.refresh();else await loadSelectedClose();});
 async function currentInputs(){facilities.reset();scheduleWorkspace?.calendar.reset();dateEditor.invalidatePreview();jobs.contextChanged();customCurves.contextChanged();intervalSeries.reset();intervalCurves.reset();ppa.reset();gas.reset();crude.reset();parties.reset();unitConverter.reset();futures.reset('inputs');power.reset();await api('market/current',{});contextDirty=false;dateEditor.clearContext();clearPrices();await reload('');$<HTMLDetailsElement>('knowledge-context').open=false;text('environment-context-note','Working data uses current knowledge. These controls select a historical context when applied.');}
 // Returning to working data opens it on its newest close, as opening the workspace does (D217, D219), and the page that is
 // showing reads it. A latest instant with several closes opens the calendar on its date and selects nothing.
@@ -1017,8 +1021,9 @@ $('live-retry').onclick=()=>{if(liveStream?.readyState===EventSource.CLOSED&&nav
 // shows its views' tab groups side by side only from a main area this wide (dock.ts).
 const main=document.querySelector('main')!,phone=window.matchMedia('(max-width:760px)');
 const panelDocked=()=>panelPlacement(main.clientWidth,document.body.classList.contains('assistant-open'))==='docked';
-const customCurves=setupCustomCurves($('custom-curves-page'),{api,act,marketScopeChanged:invalidateMarketDates,unsavedChanged:()=>{if(initialWorkspaceReady)syncUnloadQuestion();},narrow:()=>main.clientWidth<dockedGroupsFrom,assistant:{available:()=>can('UseAgents'),draft:text=>assistant.draft(text)},busy:()=>busy,zone:()=>prefs.timeZone,identity:()=>administrationScope+':'+currentProfile,historical:()=>contextDirty||!!historicalContext(),source:()=>{if(contextDirty)throw Error('Apply the changed market context first.');return {snapshotId:frame().id,context:historicalContext()};}});
+const customCurves=setupCustomCurves($('custom-curves-page'),{api,act,catalogSnapshot:()=>{if(contextDirty)throw Error('Apply the changed market context first.');return select('snapshot').value;},marketScopeChanged:invalidateMarketDates,unsavedChanged:()=>{if(initialWorkspaceReady)syncUnloadQuestion();},narrow:()=>main.clientWidth<dockedGroupsFrom,assistant:{available:()=>can('UseAgents'),draft:text=>assistant.draft(text)},busy:()=>busy,zone:()=>prefs.timeZone,identity:()=>administrationScope+':'+currentProfile,historical:()=>contextDirty||!!historicalContext(),source:()=>{if(contextDirty)throw Error('Apply the changed market context first.');return {snapshotId:frame().id,context:historicalContext()};}});
 scheduleWorkspace=setupScheduleWorkspace();
+$('schedules-page').prepend($('schedules-page-prompt'));
 // The hidden select remains the shared exact-frame adapter consumed by the
 // existing pricing, trading and knowledge-context widgets. The calendar is its UI.
 const marketCalendar=setupMarketCalendar($('market-date-calendar'),{
@@ -1029,8 +1034,8 @@ const marketCalendar=setupMarketCalendar($('market-date-calendar'),{
  workspace:{enabled:()=>page==='market',open:()=>void act(async()=>{await selectCurve('');await openMarketCalendar();})}
 });
 const deliveryPrices=setupPowerImports({zone:()=>prefs.timeZone,api,act,busy:()=>busy,instant});
-const crudeSetup=setupCrudeConfiguration({api,act,busy:()=>busy,actor:()=>administrationScope+':'+currentProfile,historical:()=>contextDirty||!!historicalContext(),source:()=>({snapshotId:frame().id}),marketLabel:()=>select('snapshot').value?`Market date: ${instant(frame().at)}`:'Select a market date above for preview.'});
-const gasSetup=setupGasConfiguration({api,act,busy:()=>busy,actor:()=>administrationScope+':'+currentProfile,historical:()=>contextDirty||!!historicalContext()});
+const crudeSetup=setupCrudeConfiguration({api,act,busy:()=>busy,actor:()=>administrationScope+':'+currentProfile,historical:()=>contextDirty||!!historicalContext(),source:()=>({snapshotId:contextDirty?'':select('snapshot').value}),marketLabel:()=>select('snapshot').value?`Market date: ${instant(frame().at)}`:'Select a market date above for preview.'});
+const gasSetup=setupGasConfiguration({api,act,busy:()=>busy,actor:()=>administrationScope+':'+currentProfile,historical:()=>contextDirty||!!historicalContext(),source:()=>contextDirty?'':select('snapshot').value});
 const crude=setupPhysicalCrude({api,act,zone:()=>prefs.timeZone,busy:()=>busy,source:()=>({snapshotId:frame().id}),historical:()=>contextDirty||!!historicalContext(),actor:()=>administrationScope+':'+currentProfile,onBooked:ticketBooked});
 const lng=setupPhysicalLng({api,act,zone:()=>prefs.timeZone,busy:()=>busy,canBook:()=>can('BookTrade'),source:()=>({snapshotId:frame().id}),historical:()=>contextDirty||!!historicalContext(),actor:()=>administrationScope+':'+currentProfile,onBooked:ticketBooked});
 const gas=setupGasTicket({api,source:()=>({snapshotId:frame().id}),historical:()=>contextDirty||!!historicalContext(),actor:()=>administrationScope+':'+currentProfile,instant,zone:()=>prefs.timeZone,onBooked:ticketBooked});
