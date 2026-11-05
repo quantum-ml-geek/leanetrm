@@ -11,3 +11,12 @@ export async function sideSession(url,profile='admin'){
  async function replaceRoles(member,roles){return call('admin/update',{operationId:crypto.randomUUID(),id:member.id,expectedVersion:member.version,name:member.name,enabled:member.enabled,roles});}
  return{call,replaceRoles};
 }
+
+/** A real publication in the owned fixture, independent of the displayed selected pins. */
+export async function correctSyntheticBase(actor,value){
+ const data=await actor.call('workspace'),selected=data.frames.find(f=>f.at.startsWith('2020-12-18')&&!f.originCloseId);
+ let fact=data.observations.find(o=>o.id==='70000000-0000-0000-0000-000000000001');
+ while(data.observations.some(o=>o.corrects_id===fact.id))fact=data.observations.find(o=>o.corrects_id===fact.id);
+ const picked=selected.observationIds.includes(fact.id)?selected:(await actor.call('select-observation',{snapshotId:selected.id,observationId:fact.id})).frame;
+ await actor.call('corrections',{snapshotId:picked.id,observationId:fact.id,value});
+}

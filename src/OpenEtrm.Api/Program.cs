@@ -1519,8 +1519,9 @@ api.MapPost("/trading/positions",(HttpContext c,TradingPositionsRequest body)=>T
  body.Context??throw new MarketDataException("position_facts","Supply the selected context."),
  (connection,view,ct)=>tradeReads.Positions(connection,view,body.BookIds,body.PortfolioIds,body.Offset,body.Limit,ct),
  expectedConvention:TradingBlotter.Convention));
-// Current access is checked on every reuse; no valuation or position rows are fetched here.
-api.MapPost("/trading/freshness",(HttpContext c,FuturesReadRequest body)=>Locked(c,session=>database.WithIdentity(Profile(session),"ReadTrades",async(connection,ct)=>
+// The foreground reuse check and the update waiter share the exact authorization/selection contract.
+Task<string> BlotterVersion(PreviewSession session,FuturesReadRequest body,CancellationToken cancellation)=>
+ database.WithIdentity(Profile(session),"ReadTrades",async(connection,ct)=>
 {
  RequireConvention(body,TradingBlotter.Convention);
  var selection=Capture(session,body);
@@ -1533,8 +1534,31 @@ api.MapPost("/trading/freshness",(HttpContext c,FuturesReadRequest body)=>Locked
  await MarketBundle.RequireReferenceVisibility(connection,database.Manifest,ct);
  var version=await BlotterFreshness.Read(connection,database.Manifest,body,selection,ct);
  await RequireReadAccess(connection,ct);selection.RequireSession(session);
- return Results.Ok(new{version});
-},c.RequestAborted)));
+ return version;
+},cancellation);
+api.MapPost("/trading/freshness",(HttpContext c,FuturesReadRequest body)=>Locked(c,async session=>
+ Results.Ok(new{version=await BlotterVersion(session,body,c.RequestAborted)})));
+api.MapPost("/trading/changes",async Task<IResult>(HttpContext c,BlotterChangesRequest body)=>
+{
+ if(body.Context is null)throw new MarketDataException("blotter_context","Supply the exact displayed selection.");
+ var session=Session(c);var profile=Profile(session);var ct=c.RequestAborted;
+ if(!await session.BlotterWait.WaitAsync(0,ct))throw new MarketDataException("blotter_wait_active","Only one Blotter update wait is allowed per session.");
+ try
+ {
+  async Task<string> Read()
+  {
+   await session.Gate.WaitAsync(ct);
+   try
+   {
+    if(!ReferenceEquals(session,Session(c))||session.Profile!=profile)throw new PreviewDeniedException();
+    return await BlotterVersion(session,body.Context,ct);
+   }
+   finally{session.Gate.Release();}
+  }
+  return Results.Ok(new{version=await BlotterFreshness.Wait(changes,body.Version,Read,ct)});
+ }
+ finally{session.BlotterWait.Release();}
+});
 api.MapPost("/trading/directory",(HttpContext c,FuturesReadRequest body)=>TradingRead(c,body,
  (connection,view,ct)=>tradeReads.Directory(connection,view,ct),expectedConvention:TradingBlotter.Convention));
 api.MapPost("/trading/gas",(HttpContext c,TradePositionReadRequest body)=>TradingRead(c,body.Context,
@@ -2073,6 +2097,7 @@ public sealed partial class PreviewSession
     // session's digest in hosted mode, otherwise random, so it reveals nothing of the session's cookie.
     public string Digest {get;}
     public SemaphoreSlim Gate {get;}=new(1,1);
+    internal SemaphoreSlim BlotterWait {get;}=new(1,1);
     public string? Profile {get;set;}
     public ScheduleContext? MarketContext {get;set;}
     public Dictionary<string,string> CustomProfiles {get;}=[];

@@ -1,3 +1,4 @@
+import {renderSwapObservationInspection} from './swap-observations-view.js';
 import {renderRegularTable} from './regular-table.js';
 import type {Valuation} from './swap-editor.js';
 type Side=Valuation['sides'][number];
@@ -21,4 +22,21 @@ export function renderSwapTradePayments(section:HTMLElement,prefix:string,side:S
    const compact=document.createElement('div');compact.className='swap-payment-summary';
    for(const p of side.payments){const row=document.createElement('p');row.textContent=`${p.deliveryFrom} to ${p.deliveryTo} (exclusive) · total ${display.text(p.resolvedQuantity,'quantity')} ${i?.unit}. ${direction} · signed cash ${display.text(p.tradeCashAmount,'money',side.kind)} ${i?.currency} on ${p.paymentDate}. Discount factor ${display.text(p.discountFactor,'factor',side.kind)} · PV ${display.text(p.tradePresentValue,'money',side.kind)} ${i?.currency}.`;compact.append(row);}section.append(compact);
    if(side.kind==='fixed'&&new Set(side.payments.flatMap(p=>p.resets.map(r=>r.price))).size===1){const price=document.createElement('p');price.className='field-help';price.textContent=`Contractual fixed price: ${display.text(side.payments[0].resets[0].price,'price',side.kind)} ${i?.currency}/${i?.unit}${i?.quoteMultiplier==='1'?'':' × '+i?.quoteMultiplier}`;section.append(price);}
+}
+
+/** Every backend pricing observation remains associated with its payment; no averages or cash are computed here. */
+export const swapPricingRows=(side:Side)=>side.payments.flatMap(p=>p.resets.map(r=>
+ [p.paymentDate,r.from,r.to,r.weight,r.price,r.fixingState,r.cashContribution]));
+
+export function renderSwapPricingRows(host:HTMLElement,prefix:string,side:Side,quote:Quote,zone:string,busy:()=>boolean,format:Format){
+ const section=document.createElement('section');section.className='swap-pricing-rows';
+ const title=document.createElement('h4');title.textContent=`Pricing rows · ${side.payments.reduce((n,p)=>n+p.resets.length,0)}`;
+ const note=document.createElement('p');note.className='field-help';note.textContent='Exact averaging weights and price observations. Cash contributions are per normalized unit; the payment rows include trade quantity and direction.';
+ const table=document.createElement('div');table.className='table-wrap swap-contract-prices';section.append(title,note,table);host.append(section);
+ const price=`${quote.currency}/${quote.unit}${quote.quoteMultiplier==='1'?'':' × '+quote.quoteMultiplier}`;
+ const rows=swapPricingRows(side);
+ renderRegularTable(table,`${prefix}-${side.slot}-pricing`,JSON.stringify(rows),
+  ['Payment date','Observation start','Observation end · exclusive','Weight',`Price · ${price}`,'State',`Unit cash contribution · ${quote.currency}`],rows,[3,4,6],busy,
+  {displayRows:rows.map(r=>r.map((v,n)=>n===3?format(v,'quantity',side.kind):n===4?format(v,'price',side.kind):n===6?format(v,'money',side.kind):v))});
+ side.payments.forEach((p,n)=>{if(p.observationSchedule)renderSwapObservationInspection(section,p.observationSchedule,p.paymentDate,`${prefix}-${side.slot}-${n}`,zone,{price,cash:quote.currency,quantity:quote.unit},busy);});
 }

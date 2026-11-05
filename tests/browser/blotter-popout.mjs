@@ -12,6 +12,7 @@ export async function run({command,evaluate,wait,click,set,persona,check,idle,ur
   const control=new URL(provider);
   if(control.protocol!=='http:'||control.hostname!=='127.0.0.1'||!control.port||control.pathname!=='/'||control.search)throw Error('The fake provider control must be the owned loopback listener.');
   const script=async(...answers)=>{if(!(await fetch(new URL('/respond',control),{method:'POST',body:JSON.stringify(answers)})).ok)throw Error('The fake provider refused a scripted answer.');};
+  const release=async name=>{if(!(await fetch(new URL('/release/'+name,control),{method:'POST'})).ok)throw Error('The fake provider refused to release an answer.');};
   // A guide that navigates, published for traders through an administrator's own session.
   const stamp=Date.now(),side=await sideSession(url),administrator='browser_popout_admin_'+stamp;
   await side.call('admin/create',{operationId:crypto.randomUUID(),login:administrator,name:'Browser pop-out administrator',kind:'human',roles:['access_administrator','viewer']});
@@ -26,7 +27,7 @@ export async function run({command,evaluate,wait,click,set,persona,check,idle,ur
   const guide=await side.call('settings/ai/agents/publish',{operationId:crypto.randomUUID(),agentId:saved.id,expectedVersion:saved.version});
 
   // Each window records the API paths and bodies it sends.
-  const recorder="window.__reads=[];{const send=window.fetch;window.fetch=async(...args)=>{window.__reads.push({path:String(args[0]).replace('/api/trading/workspace/stream','/api/trading/workspace'),body:args[1]?.body?JSON.parse(args[1].body):null});return send(...args);};}";
+  const recorder="window.__reads=[];window.__streams=[];{const send=window.fetch;window.fetch=async(...args)=>{window.__reads.push({path:String(args[0]).replace('/api/trading/workspace/stream','/api/trading/workspace'),body:args[1]?.body?JSON.parse(args[1].body):null});return send(...args);};const Native=window.EventSource;window.EventSource=class extends Native{constructor(...args){super(...args);window.__streams.push(this);}};}";
   await command('Runtime.enable');await command('Page.enable');await command('Emulation.setDeviceMetricsOverride',{width:1440,height:1050,deviceScaleFactor:1,mobile:false});
   await command('Page.addScriptToEvaluateOnNewDocument',{source:recorder});
   await command('Page.navigate',{url:url+'/'});await wait(idle,30000);await persona('trader');
@@ -120,8 +121,10 @@ export async function run({command,evaluate,wait,click,set,persona,check,idle,ur
   const readsBefore=await evaluate("window.__reads.filter(r=>r.path==='/api/trading/workspace').length");
   await set('#assistant-question','Take me to the Blotter.');await wait(`!${q('#assistant-send')}.disabled`);
   await evaluate(`${q('#assistant-composer')}.requestSubmit()`);await wait(shown('#assistant-consent'),30000);
-  await script({tools:[['toolu_popout_01','navigate',{page:'blotter',target:null}]]},{text:'The Blotter is in front.'});
+  // Automatic navigation consumes a live event; a completed history read deliberately offers Go instead.
+  await script({tools:[['toolu_popout_01','navigate',{page:'blotter',target:null}]],hold:'popout-navigation'},{text:'The Blotter is in front.'});
   await click('#assistant-allow');
+  await wait('window.__streams.at(-1)?.readyState===EventSource.OPEN');await release('popout-navigation');
   await wait(`${q('#page-title')}.textContent==='Blotter'&&${q('#assistant-send')}.textContent==='Send'&&${idle}`,60000).catch(async error=>{
     throw Error(error.message+' · observed '+JSON.stringify(await evaluate(`({title:${q('#page-title')}.textContent,send:${q('#assistant-send')}.textContent,turn:document.querySelector('#assistant-turns > li:last-child')?.textContent,error:${q('#assistant-error')}.textContent,banner:${q('#error')}.textContent,consent:${shown('#assistant-consent')}})`)));});
   await check('a Navigate target to the Blotter brings the pop-out to the front instead of drawing a second Blotter',
@@ -132,8 +135,9 @@ export async function run({command,evaluate,wait,click,set,persona,check,idle,ur
   await lots(popup,'4');
   // A live target of the assistant does not move this window either while the pop-out holds edits: its notice says so and offers Go anyway.
   const turns="document.querySelectorAll('#assistant-turns > li').length",turnsBefore=await evaluate(turns);
-  await script({tools:[['toolu_popout_02','navigate',{page:'schedules',target:null}]]},{text:'Here are the schedules.'});
+  await script({tools:[['toolu_popout_02','navigate',{page:'schedules',target:null}]],hold:'popout-edits'},{text:'Here are the schedules.'});
   await set('#assistant-question','Take me to the schedules.');await wait(`!${q('#assistant-send')}.disabled`);await evaluate(`${q('#assistant-composer')}.requestSubmit()`);
+  await wait('window.__streams.at(-1)?.readyState===EventSource.OPEN');await release('popout-edits');
   const notice="document.querySelector('#assistant-turns > li:last-child .assistant-target')";
   await wait(`${turns}>${turnsBefore}&&${q('#assistant-send')}.textContent==='Send'&&!!${notice}&&${idle}`,60000);
   await check('an assistant target does not move the main window while the pop-out holds edits: it says so and offers Go anyway',

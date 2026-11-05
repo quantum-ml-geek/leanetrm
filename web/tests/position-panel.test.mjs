@@ -2,12 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {positionRows} from '../dist/desk-model.js';
-import {positionSummary,curveView,openCurveTarget,positionTabs,riskEmpty,riskTabView,amendNote,amendControl,amendRefusal,curveNote} from '../dist/position-panel.js';
-import {chartOptions} from '../dist/chart-view.js';
+import {positionSummary,openCurveTarget,positionTabs,riskEmpty,riskTabView,amendNote,amendControl,amendRefusal,curveNote} from '../dist/position-panel.js';
 import {setCurveNames} from '../dist/market-view.js';
 const fixture=JSON.parse(readFileSync(new URL('./fixtures/desk.json',import.meta.url),'utf8'));
 setCurveNames(fixture.curveNames);
-const [gasShape,unreadShape]=fixture.shapes;
+const [gasShape]=fixture.shapes;
 // The fixture's rows: a valued pay-fixed swap, a valued future, an expired future, a multi-side swap, a receive-fixed swap
 // in euros whose curve cannot be read, and a swap the close cannot value.
 const held=Object.fromEntries(fixture.holdings.map(h=>[h.tradeReference,h]));
@@ -84,50 +83,8 @@ test('the facts are the position\'s own price, mark, size and settlement, each i
  assert.deepEqual(positionSummary(settled,rows['TR-000002'],formats).facts.at(-1),{label:'Settlement',text:'Unprocessed',unit:null});
 });
 
-test('the curve tab draws the desk\'s curve shape, marks the delivery period and puts the trade price on the same axis',()=>{
- const view=curveView(gasShape,held['TR-000001'],rows['TR-000001'],formats);
- assert.equal(view.state,'chart');
- const {spec}=view;
- assert.deepEqual([spec.axis,spec.unit,spec.kind],['delivery','USD/MMBtu (IT)','line']);
- assert.deepEqual(spec.series[0].points.map(p=>[p.x,p.label,p.y]),gasShape.points.map(p=>[p.contractId,{ '2021-01-01':'Jan 2021','2021-02-01':'Feb 2021','2021-03-01':'Mar 2021','2021-04-01':'Apr 2021'}[p.deliveryFrom],p.price]));
- assert.deepEqual(spec.marked,['k0000000-0000-0000-0000-000000000001']);assert.equal(spec.subtitle,'Marked: delivery Jan 2021');
- assert.deepEqual(spec.reference,{value:'3.5',label:'Fixed 3.5 USD/MMBtu (IT)'});
- assert.equal(view.note,null);
- assert.doesNotThrow(()=>chartOptions(spec));
-});
-
-test('a position over several contracts marks each of them, and one outside the curve marks none',()=>{
- const quarter={...rows['TR-000001'],deliveryFrom:'2021-02-01',deliveryTo:'2021-05-01'};
- assert.deepEqual(curveView(gasShape,held['TR-000001'],quarter,formats).spec.marked,['k0000000-0000-0000-0000-000000000002','k0000000-0000-0000-0000-000000000003','k0000000-0000-0000-0000-000000000004']);
- const outside={...rows['TR-000001'],deliveryFrom:'2022-01-01',deliveryTo:'2022-02-01'};
- const view=curveView(gasShape,held['TR-000001'],outside,formats);
- assert.deepEqual(view.spec.marked,[]);assert.equal(view.spec.subtitle,undefined);assert.match(view.note,/delivery is not on the curve/);
-});
-
-test('a curve still being read says it is loading, and one that cannot be shown says why, as the row does',()=>{
- assert.deepEqual(curveView(undefined,held['TR-000001'],rows['TR-000001'],formats),{state:'loading'});
- const reason='Curve shape unavailable · the curve read failed';
- assert.deepEqual(curveView(reason,held['TR-000001'],rows['TR-000001'],formats),{state:'unavailable',reason});
- assert.deepEqual(curveView(unreadShape,held['TR-000005'],rows['TR-000005'],formats),{state:'unavailable',reason:"Curve shape unavailable · this market's curve is not in the definitions of this close"});
-});
-
-test('the trade price is not drawn on a curve quoted in another unit, nor when the position has no price, and the panel says so',()=>{
- const euro={...gasShape,unit:'EUR/MMBtu (IT)'};
- const other=curveView(euro,held['TR-000001'],rows['TR-000001'],formats);
- assert.equal(other.state,'chart');assert.equal(other.spec.reference,undefined);
- assert.equal(other.note,'The fixed price is in USD/MMBtu (IT) and the curve in EUR/MMBtu (IT), so the price is not drawn on it.');
- const none=curveView(shapeOf('power_forward'),held['TR-000004'],rows['TR-000004'],formats);
- assert.equal(none.spec.reference,undefined);assert.equal(none.note,'This position has no fixed price to draw.');
-});
-
-test('a shape of another market is refused instead of drawn',()=>{
- assert.throws(()=>curveView(gasShape,held['TR-000002'],rows['TR-000002'],formats),{message:'The curve shape belongs to another market than the position.'});
+test('Open curve refuses a shape of another market',()=>{
  assert.throws(()=>openCurveTarget(held['TR-000001'],rows['TR-000001'],shapeOf('gas_future')),{message:'The curve shape belongs to another market than the position.'});
-});
-
-test('a price is labeled with its own text and unit, not the curve\'s', ()=>{
- const view=curveView(shapeOf('gas_future'),held['TR-000002'],rows['TR-000002'],{...formats,price:v=>`${v}0`});
- assert.equal(view.spec.reference.label,'Executed 3.3150 USD/MMBtu (IT)');assert.equal(view.spec.reference.value,'3.315');
 });
 
 test('Open curve names the curve and the one contract the position is in, or the curve alone when there is none',()=>{
@@ -140,8 +97,8 @@ test('Open curve names the curve and the one contract the position is in, or the
  assert.deepEqual(openCurveTarget(held['TR-000001'],rows['TR-000001'],'Curve shape unavailable'),{curve:'gas_forward',contractId:null});
 });
 
-test('the tabs are Curve, Terms, Risk and History, and the Risk tab says its results come from the desk\'s run, which is not there yet',()=>{
- assert.deepEqual(positionTabs.map(([id,label])=>[id,label]),[['curve','Curve'],['terms','Terms'],['risk','Risk'],['history','History']]);
+test('position details offer Terms, Side schedules, Risk and History without a curve chart, and the Risk tab says its results come from the desk\'s run, which is not there yet',()=>{
+ assert.deepEqual(positionTabs.map(([id,label])=>[id,label]),[['terms','Terms'],['schedules','Side schedules'],['risk','Risk'],['history','History']]);
  assert.equal(riskEmpty,"This position's risk comes from the risk run on the desk, and there is none yet. Run one from the Risk report.");
 });
 
@@ -225,10 +182,7 @@ test('a swap valued by its settlement lifecycle says it has no curve mark, and i
  assert.deepEqual(facts.at(-1),{label:'Settlement',text:'Active',unit:null});
 });
 
-test('a position that projects from several curves draws none of them, and Open curve says there is no one curve to open',()=>{
- const h=scheduledHeld({marketKey:JSON.stringify(['gas_forward','power_forward']),marketLabel:'Gas forward / Power forward',projectionCurves:['gas_forward','power_forward']});
- const row=positionRows([h])[0];
- assert.deepEqual(curveView('Curve shape unavailable · this position projects from several curves',h,row,formats),{state:'unavailable',reason:'Curve shape unavailable · this position projects from several curves'});
+test('Open curve explains that a position with several projection curves has no single market to open',()=>{
  assert.equal(curveNote(true,true),'This position projects from several curves, so there is no one curve to open.');
  assert.equal(curveNote(false,true),'This position projects from several curves, so there is no one curve to open.');
  assert.equal(curveNote(true,false),null);

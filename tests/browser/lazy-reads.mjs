@@ -22,8 +22,8 @@ export async function run({command,evaluate,wait,click,persona,check,idle,url}){
     await click('#nav-market');await evaluate('window.__lazyShapes=[];window.__lazyDeskShapes=[]');await click('#nav-futures');await wait(idle);
     await check('returning to a cached Blotter does not fetch hidden curve cells',"window.__lazyDeskShapes.length===0","({reads:window.__lazyShapes,positionHidden:document.querySelector('#position-details').hidden,details:document.querySelector('#position-details').textContent})");
     await click('#desk-positions .tabulator-row:not(.tabulator-group)');
-    await wait("window.__lazyDeskShapes.length>0&&document.querySelector('#position-details').hidden===false");
-    await check('a position opened after cached Blotter reuse loads only its demanded curve',"window.__lazyDeskShapes.length===1&&window.__lazyDeskShapes[0].curves.length===1",'window.__lazyDeskShapes');
+    await wait("document.querySelector('#position-details').hidden===false&&!!document.querySelector('#position-details-view .side-terms-list')");
+    await check('opening position terms after cached Blotter reuse does not read a removed detail curve',"window.__lazyDeskShapes.length===0&&!document.querySelector('#position-details-view .sparkline')",'window.__lazyDeskShapes');
     await persona('admin');await evaluate('window.__lazyRequests=[]');await click('#nav-ai');
     await check('opening Models does not read hidden AI tabs',"!window.__lazyRequests.some(path=>['/api/settings/ai/usage','/api/settings/ai/agents','/api/settings/ai/page-prompts'].includes(path))",'window.__lazyRequests');
     await click('#ai-tab-providers');await click('#ai-tab-models');

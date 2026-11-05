@@ -3,7 +3,8 @@
 // booked trade opened read-only in the Blotter's Details pane and in the trade's own window, a day's quantity recorded in its physical side's
 // tab, whose lost response is checked once, the coming-soon items drawn and never sent, and the quantity links of a linked side.
 import {newTrade} from './new-trade.mjs';
-import {blotterAt,bookedTicket as booked,decemberClose,gasTicket,q} from './gas-ticket.mjs';
+import {sideSession,correctSyntheticBase} from './side-session.mjs';
+import {blotterAt,bookedTicket as booked,decemberClose,gasTicket,openBookedSchedules,q} from './gas-ticket.mjs';
 
 export async function run(actions){
  const {command,evaluate,wait,set,click,check,persona,shot,idle,url,tab}=actions;
@@ -92,11 +93,16 @@ export async function run(actions){
    return ${q(soonIds)}.every(id=>!sent.includes(id))&&b.draft.sides.every(s=>s.kind!=='floating');})&&${q(soonIds)}.length===10`,`({soon:${q(soonIds)},bodies:ticketBodies.length})`);
  await check('a booking whose response is lost keeps its request and locks the ticket',`document.querySelector('#gas-ticket > div').inert&&document.querySelector('#gas-ticket .ticket-booking').textContent.includes('The booking is not confirmed')`,"document.querySelector('#gas-ticket .ticket-booking').textContent");
  await command('Page.navigate',{url:url+'/'});await wait("document.querySelectorAll('.curve-button').length>0&&"+idle);
- await set('#snapshot',frame);await wait(idle);await click('#nav-futures');await wait("document.querySelector('#page-title').textContent==='Blotter'&&"+idle);
+ await set('#snapshot',frame);await wait(idle);
+ await evaluate("window.__pendingChangeWaits=0;{const send=window.fetch;window.fetch=(input,init)=>{if(String(input)==='/api/trading/changes')window.__pendingChangeWaits++;return send(input,init);};}");
+ await click('#nav-futures');await wait("document.querySelector('#page-title').textContent==='Blotter'&&"+idle);
+ await evaluate('new Promise(resolve=>setTimeout(resolve,1200))');
+ await check('an unconfirmed product booking defers automatic Blotter value updates',"!document.querySelector('#product-trade-pending').hidden&&window.__pendingChangeWaits===0","({waits:window.__pendingChangeWaits,pending:document.querySelector('#product-trade-pending').textContent})");
  await evaluate("[...document.querySelectorAll('#product-trade-pending button')].find(b=>b.textContent==='Reconcile physical gas request').click()");
  await wait(`!!${reconcile}&&document.querySelectorAll(${q(ticket+' .ticket-card')}).length===3`);
  await check('the reconciled ticket shows the request\'s exact terms, locked',`document.querySelector(${q(control('physical-1','quantity'))}).value==='10000'&&document.querySelector('#gas-ticket > div').inert`);
  await evaluate(`${reconcile}.click()`);
+ await openBookedSchedules(actions);
  await until(`!!document.querySelector(${q(booked)})&&`+current(booked),`({error:document.querySelector('#error').textContent,booking:document.querySelector('#gas-ticket .ticket-booking')?.textContent,details:document.querySelector('#position-details').textContent.slice(0,300)})`);
  await check('the booked trade opens read-only in the Details pane with the schedule it was previewed with',
   `${month(booked)}===${q(previewed)}&&document.querySelectorAll(${q(booked+' .ticket-card')}).length===3&&!document.querySelector(${q(booked+' .ticket-control:not([disabled])')})&&!document.querySelector(${q(booked+' .ticket-book')})`,
@@ -113,6 +119,7 @@ export async function run(actions){
  const own=await tab();
  try{
   await own.command('Page.navigate',{url:await evaluate('window.__opened[0]')});
+  await own.wait("!!document.querySelector('#position-window-tabs-schedules')");await own.evaluate("document.querySelector('#position-window-tabs-schedules').click()");
   const windowTicket='#position-window-view .deal-ticket[data-mode=booked]';
   await own.wait(`!!document.querySelector(${q(windowTicket+' .tabulator-row[data-row-key="2021-01"]')})`,30000);
   await check('the trade\'s own window opens the same read-only ticket',`${q(await own.evaluate(month(windowTicket)))}===${q(previewed)}`);
@@ -135,11 +142,20 @@ export async function run(actions){
  await wait(`!!document.querySelector(${q(cell)})`);
  await check('only the physical side\'s day quantities are entries',`document.querySelectorAll(${q(booked+' .tabulator-row[data-row-key="2021-01"] .ticket-cell-input')}).length===0&&document.querySelectorAll(${q(booked+' .tabulator-row[data-row-key="2021-01-05"] .ticket-cell-input')}).length===1`);
  const before={day:await evaluate(row('2021-01-04')),month:await evaluate(row('2021-01'))};
+ // A user can start a daily edit after an automatic valuation has already begun.
+ await evaluate("{const send=window.fetch;window.__holdAutomaticValues=true;window.fetch=async(input,init)=>{const response=await send(input,init);if(String(input)==='/api/trading/workspace'&&window.__holdAutomaticValues){window.__holdAutomaticValues=false;await new Promise(resolve=>window.__releaseAutomaticValues=resolve);}if(String(input)==='/api/gas/quantities/read'&&window.__holdQuantityRead){window.__holdQuantityRead=false;await new Promise(resolve=>window.__releaseQuantityRead=resolve);}if(String(input)==='/api/trading/gas'&&window.__holdGasDetail){window.__holdGasDetail=false;await new Promise(resolve=>window.__releaseGasDetail=resolve);}return response;};}");
+ const publisher=await sideSession(url,'editor');await correctSyntheticBase(publisher,'3.491');await wait("typeof window.__releaseAutomaticValues==='function'",30000);
  await set(cell,'9000');
  const record=`${booked} .ticket-record`;
  await wait(`!!document.querySelector(${q(record)})`);
  for(const [id,value] of [['kind','nominated'],['status','provisional'],['evidence','Synthetic nomination']])await set(`${record} [data-field="${id}"] .ticket-control`,value);
+ await evaluate(`window.__heldTicket=document.querySelector(${q(booked)}).parentElement;window.__releaseAutomaticValues()`);await wait(idle);await evaluate('new Promise(resolve=>setTimeout(resolve,350))');
+ await check('an edit started during automatic valuation keeps its original ticket and entered quantity',`document.querySelector(${q(booked)}).parentElement===window.__heldTicket&&document.querySelector(${q(record+' [data-field="quantity"] .ticket-control')}).value==='9000'&&document.querySelector('#error').hidden`);
+ await evaluate('window.__holdQuantityRead=true');
  await click(`${record} .ticket-record-send`);
+ await wait("typeof window.__releaseQuantityRead==='function'");await correctSyntheticBase(publisher,'3.492');await evaluate('new Promise(resolve=>setTimeout(resolve,350))');
+ await check('a pending native daily-record preparation survives a server publication',`document.querySelector(${q(booked)}).parentElement===window.__heldTicket&&!!document.querySelector(${q(record+' .ticket-record-send[disabled]')})`);
+ await evaluate('window.__releaseQuantityRead()');
  await until(`${row('2021-01-05')}.includes('-9,000')&&!document.querySelector(${q(record)})`,`({record:document.querySelector(${q(record)})?.textContent,day:${row('2021-01-05')},status:${status(booked)}?.textContent})`);
  await check('a recorded day quantity changes that day and its month only, after the trade is read again',
   `${row('2021-01-05')}.includes('Nominated')&&${row('2021-01')}.includes('-309,000')&&${row('2021-01-04')}===${q(before.day)}&&
@@ -149,6 +165,11 @@ export async function run(actions){
  const sources=(key,column)=>`[...document.querySelectorAll(${q(booked+' .tabulator-row[data-row-key="'+key+'"] .tabulator-cell[tabulator-field="'+column+'"] .grid-source')})].map(t=>t.textContent)`;
  await check('the recorded day\'s amount is tagged as the contract\'s while its quantity is tagged as recorded',
   `${sources('2021-01-05','c3')}.includes('Contract')&&${sources('2021-01-05','c1')}.join()==='Nominated'`,`({amount:${sources('2021-01-05','c3')},quantity:${sources('2021-01-05','c1')}})`);
+
+ await evaluate('window.__holdGasDetail=true');await correctSyntheticBase(publisher,'3.493');await wait("typeof window.__releaseGasDetail==='function'",30000);
+ await check('the final detail refresh blocks new actions in the widget it is replacing',"document.querySelector('#position-details-view').inert");
+ await evaluate('window.__releaseGasDetail()');await wait(idle);await wait("!document.querySelector('#position-details-view').inert&&!!document.querySelector("+q(booked+' .ticket-level')+")");
+ await set(`${booked} .ticket-level`,'day');await click(`${booked} .ticket-tab[data-tab="physical-1"]`);
 
  // A day record whose response is lost keeps its command, offers only Check and Retry, and Check finds the one record it made.
  await evaluate(`{const original=window.recordFetch=window.fetch;window.recordRequests=0;window.fetch=async(...args)=>{const response=await original(...args);

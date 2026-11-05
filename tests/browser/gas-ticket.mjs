@@ -5,6 +5,11 @@ import {idle} from './owned-browser.mjs';
 export const q=JSON.stringify;
 export const newTicket='#gas-ticket .deal-ticket',bookedTicket='#position-details .deal-ticket[data-mode=booked]';
 
+export async function openBookedSchedules({wait,click}){
+ await wait("document.querySelector('#position-details-tabs-schedules')&&!document.querySelector('#position-details').hidden&&"+idle);
+ await click('#position-details-tabs-schedules');
+}
+
 export function gasTicket({evaluate,wait,set},ticket=newTicket){
  const card=(code,root=ticket)=>`${root} .ticket-card[data-side="${code}"]`;
  const field=(code,id)=>`${code===null?ticket+' .ticket-strip':card(code)} .ticket-field[data-field="${id}"]`;

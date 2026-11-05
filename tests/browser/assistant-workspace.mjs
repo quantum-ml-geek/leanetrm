@@ -2,6 +2,7 @@ import {sideSession} from './side-session.mjs';
 
 // Real page selection -> admitted report -> pinned digest, in the owned synthetic workspace fixture.
 export async function run({command,evaluate,wait,click,set,submit,persona,check,shot,idle,url,provider}){
+  const sendQuestion=async()=>{await wait("!document.querySelector('#assistant-send').disabled&&"+idle);await submit('#assistant-composer');};
   const control=new URL(provider);
   if(control.protocol!=='http:'||control.hostname!=='127.0.0.1'||!control.port)throw Error('Use the owned synthetic provider.');
   const side=await sideSession(url);
@@ -16,7 +17,18 @@ export async function run({command,evaluate,wait,click,set,submit,persona,check,
     legalEntityId:'d4000000-0000-0000-0000-000000000001',legalEntityRevision:1,counterpartyId:'d5000000-0000-0000-0000-000000000001',counterpartyRevision:1,memo:'Synthetic selection browser fixture'});
   await command('Page.enable');await command('Runtime.enable');
   await command('Emulation.setDeviceMetricsOverride',{width:1440,height:1050,deviceScaleFactor:1,mobile:false});
-  await command('Page.addScriptToEvaluateOnNewDocument',{source:`window.__selectionRequests=[];{const send=window.fetch;window.fetch=(path,options)=>{__selectionRequests.push({path:String(path),body:options?.body?JSON.parse(options.body):null});return send(path,options);};}`});
+  await command('Page.addScriptToEvaluateOnNewDocument',{source:`
+    window.__selectionRequests=[];window.__selectionChangedHeads=window.__selectionWaits=0;
+    {const send=window.fetch;window.fetch=async(path,options)=>{
+      __selectionRequests.push({path:String(path),body:options?.body?JSON.parse(options.body):null});
+      if(path==='/api/trading/changes')__selectionWaits++;
+      const response=await send(path,options);
+      if(path==='/api/trading/changes'){__selectionWaits--;if(response.ok&&(await response.clone().json()).version!==JSON.parse(options.body).version)__selectionChangedHeads++;}
+      if(path==='/api/assistant/grants/grant'&&window.__holdConsentGrant)await new Promise(resolve=>window.__releaseConsentGrant=resolve);
+      if(path==='/api/assistant/agents'&&window.__holdConsentAgents)await new Promise(resolve=>window.__releaseConsentAgents=resolve);
+      if(path==='/api/trading/workspace'&&window.__holdConsentPricing)await new Promise(resolve=>window.__releaseConsentPricing=resolve);
+      return response;
+    };}`});
   await command('Page.navigate',{url});await wait(idle);await persona('admin');await click('#nav-ai');await click('#ai-tab-agents');
   await check('an administrator can explicitly configure both new workspace tools',"['read_page_digest','present_walkthrough'].every(code=>[...document.querySelectorAll('#ai-agent-tools input')].some(i=>i.value===code))&&document.querySelector('#error').hidden");
   await persona('trader');await click('#nav-futures');await wait(idle);
@@ -36,10 +48,19 @@ export async function run({command,evaluate,wait,click,set,submit,persona,check,
   await set('#assistant-agent',agent.id+':'+agent.publishedVersion);
   await check('Looking at states the selection and the server digest',"document.querySelector('#assistant-looking-shows').textContent.includes('3 selected positions')&&document.querySelector('#assistant-looking-shows').textContent.includes('server will read a page digest')");
   await check('the prefilled ask remains editable and unsent',"document.querySelector('#assistant-question').value.includes('selected positions')&&!__selectionRequests.some(r=>r.path.endsWith('/assistant/turns/ask'))");
-  await submit('#assistant-composer');await wait("!document.querySelector('#assistant-consent').hidden");
+  await sendQuestion();await wait("!document.querySelector('#assistant-consent').hidden");
   const answers=[{tools:[['toolu_selection_digest','read_page_digest',{}]]},{text:'Synthetic selected positions were read at the question pin.'}];
   if(!(await fetch(new URL('/respond',control),{method:'POST',body:JSON.stringify(answers)})).ok)throw Error('Synthetic provider refused the script.');
-  await click('#assistant-allow');
+  await wait('__selectionWaits>0');
+  const consentPrices=await evaluate("__selectionRequests.filter(r=>r.path==='/api/trading/workspace').length"),changedHeads=await evaluate('__selectionChangedHeads');
+  await evaluate("window.__holdConsentGrant=window.__holdConsentPricing=true;document.querySelector('#assistant-allow').click()");
+  await wait("typeof window.__releaseConsentGrant==='function'&&__selectionChangedHeads>"+changedHeads);
+  await evaluate('new Promise(resolve=>setTimeout(resolve,600))');
+  await check('a grant publication waits behind the admitted assistant consent action',`__selectionRequests.filter(r=>r.path==='/api/trading/workspace').length===${consentPrices}&&document.body.getAttribute('aria-busy')==='false'`);
+  await evaluate('window.__holdConsentAgents=true;window.__releaseConsentGrant()');
+  await wait("typeof window.__releaseConsentAgents==='function'");await evaluate('new Promise(resolve=>setTimeout(resolve,600))');
+  await check('consent keeps its admission gate through the agent directory refresh',`__selectionRequests.filter(r=>r.path==='/api/trading/workspace').length===${consentPrices}&&document.body.getAttribute('aria-busy')==='false'`);
+  await evaluate('window.__holdConsentGrant=window.__holdConsentAgents=window.__holdConsentPricing=false;window.__releaseConsentAgents();window.__releaseConsentPricing?.()');
   await wait("document.querySelector('#assistant-turns .assistant-answer')?.textContent.includes('Synthetic selected positions')&&document.querySelector('#assistant-send').textContent==='Send'");
   await check('the admitted ask sends exactly the three trade ids and no browser cell evidence',"(()=>{const request=__selectionRequests.filter(r=>r.path.endsWith('/assistant/turns/ask')).at(-1).body;return JSON.stringify(request.pageReport.focus.tradeIds)===JSON.stringify(__selectedTradeIds)&&request.pageReport.focus.pivotCell===null&&!JSON.stringify(request).includes('918273');})()");
   await check('the server digest completes without a selection refusal',"document.querySelector('#assistant-turns .assistant-steps').textContent.includes('Read page digest')&&!document.querySelector('#assistant-turns .assistant-steps').textContent.includes('refused')");
@@ -49,8 +70,8 @@ export async function run({command,evaluate,wait,click,set,submit,persona,check,
   const stopAnswers=[{tools:[['toolu_stop_digest','read_page_digest',{}],['toolu_stop_plan','present_walkthrough',{planJson:JSON.stringify(stopPlan)}]]},
     {hold:'walkthrough_later_plan',tools:[['toolu_later_plan','present_walkthrough',{planJson:JSON.stringify(stopPlan)}]]},{text:'Synthetic stopped walkthrough.'}];
   if(!(await fetch(new URL('/respond',control),{method:'POST',body:JSON.stringify(stopAnswers)})).ok)throw Error('Synthetic provider refused the stop script.');
-  await set('#assistant-question','Show this selection and pause.');await submit('#assistant-composer');
-  await wait("!document.querySelector('.assistant-walkthrough-continue').hidden");
+  await set('#assistant-question','Show this selection and pause.');await sendQuestion();
+  await wait("!document.querySelector('.assistant-walkthrough-continue').hidden").catch(async error=>{throw Error(error.message+' · '+JSON.stringify(await evaluate("({turns:document.querySelector('#assistant-turns').textContent,error:document.querySelector('#assistant-error').textContent,busy:document.body.getAttribute('aria-busy')})")));});
   await command('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
   await fetch(new URL('/release/walkthrough_later_plan',control),{method:'POST'});
   await wait("document.querySelector('#assistant-turns').textContent.includes('Synthetic stopped walkthrough.')&&document.querySelector('#assistant-send').textContent==='Send'");
@@ -69,7 +90,7 @@ export async function run({command,evaluate,wait,click,set,submit,persona,check,
   const script=async answers=>{if(!(await fetch(new URL('/respond',control),{method:'POST',body:JSON.stringify(answers)})).ok)throw Error('Synthetic provider refused the script.');};
   await set('#assistant-question','Fill unsaved futures ticket\nSet ticket.lots = "2"\nSet ticket.executionPrice = "3.4"');
   await script([{tools:[['toolu_walk_digest','read_page_digest',{}],['toolu_walk_plan','present_walkthrough',{planJson:JSON.stringify(plan)}]]},{text:'Synthetic walkthrough presented.'}]);
-  await submit('#assistant-composer');
+  await sendQuestion();
   try{await wait("!document.querySelector('.assistant-walkthrough-continue').hidden");}catch(error){throw Error(error.message+' · '+JSON.stringify(await evaluate("({walk:document.querySelector('.assistant-walkthrough-status').textContent,turns:document.querySelector('#assistant-turns').textContent,status:document.querySelector('#assistant-status')?.textContent})")));}
   await check('the live walkthrough visibly changes only presentation and pauses',"document.querySelector('.assistant-walkthrough-label').textContent.includes('workspace operations')&&document.querySelector('#assistant-looking-shows').textContent.includes('3 selected positions')&&!__selectionRequests.some(r=>r.path.endsWith('/futures/book'))","({label:document.querySelector('.assistant-walkthrough-label').textContent,looking:document.querySelector('#assistant-looking-shows').textContent,rows:document.querySelectorAll('#desk-positions .tabulator-row[aria-selected=true]').length,walk:document.querySelector('.assistant-walkthrough-status').textContent})");
   await click('.assistant-walkthrough-continue');

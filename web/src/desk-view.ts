@@ -1,3 +1,4 @@
+import {replaceChangedChildren} from './view-updates.js';
 // The Blotter desk's DOM: the summary strip, the desk charts, the run bar of a risk run, and the cells and group headers of
 // the positions grid, under the Values or the Risk lens. It draws what desk-model and risk-lens selected; every figure is a
 // backend string shown in the backend's display format.
@@ -26,7 +27,7 @@ const signs={pos:'positive',neg:'negative',zero:'zero'} as const;
 
 /** The summary strip: each figure after its label, with its currency, and why, where it is not complete or leaves positions out. */
 export function renderSummaryStrip(host:HTMLElement,items:readonly StripItem[]){
-  host.replaceChildren(...items.map(item=>{
+  replaceChangedChildren(host,items.map(item=>{
     const entry=node('li','strip-item'),value=node('span','strip-value',item.value);entry.dataset.state=item.state;
     if(item.sign)value.dataset.sign=signs[item.sign];
     if(item.currency)entry.dataset.currency=item.currency;
@@ -52,7 +53,7 @@ export function renderBookBars(host:HTMLElement,tiles:readonly Tile[],money:Form
     }
     block.append(splits);return block;
   }));
-  host.replaceChildren(host.querySelector('h3')!,...(blocks.length?blocks:[node('p','desk-chart-empty','No positions in the selected books')]));
+  replaceChangedChildren(host,[host.querySelector('h3')!,...(blocks.length?blocks:[node('p','desk-chart-empty','No positions in the selected books')])]);
 }
 
 /** The positions read, mixed by the backend commodity and instrument type groups: one segment per group, never summed per commodity. */
@@ -64,7 +65,7 @@ export function renderPositionMix(host:HTMLElement,tile:PositionsTile,colors:Rea
     const item=node('li'),swatch=node('i',`desk-swatch desk-mix-${segment.instrumentType}`);swatch.style.background=colors.get(segment.commodity)!;
     item.append(swatch,node('span',undefined,segment.label),space(),node('b',undefined,String(segment.trades)));legend.append(item);
   }
-  host.replaceChildren(host.querySelector('h3')!,...(tile.segments.length?[bar,legend]:[node('p','desk-chart-empty','No positions in the selected books')]),...(tile.note?[node('p','desk-chart-note',tile.note)]:[]));
+  replaceChangedChildren(host,[host.querySelector('h3')!,...(tile.segments.length?[bar,legend]:[node('p','desk-chart-empty','No positions in the selected books')]),...(tile.note?[node('p','desk-chart-note',tile.note)]:[])]);
 }
 
 /** What the run bar says, and what its Edit shocks, Export and Clear do. */
@@ -101,16 +102,21 @@ function textAlternative(spec:ChartSpec){
  * The panels of one desk chart under its card's heading, each sized to its bars, or a quiet note when there is nothing to chart, and
  * what the card says of all of its panels, such as the positions it leaves out.
  */
+const chartPresentations=new WeakMap<HTMLElement,string>();
 export function renderDeskCharts(host:HTMLElement,specs:readonly ChartSpec[],empty:string,notes:readonly string[]=[]){
+  const presentation=JSON.stringify([specs,empty,notes]);
+  if(!specs.some(spec=>spec.onSelect||spec.formatValueAxis)&&chartPresentations.get(host)===presentation)return;
   clearDeskCharts(host);
   host.append(...notes.map(text=>node('p','desk-chart-note',text)));
-  if(!specs.length){host.append(node('p','desk-chart-empty',empty));return;}
+  if(!specs.length){host.append(node('p','desk-chart-empty',empty));chartPresentations.set(host,presentation);return;}
   for(const spec of specs){
     const panel=node('div','chart');panel.style.setProperty('--plot-height',`${plotPadding+Math.max(1,...spec.series.map(s=>s.points.length))*barBand}px`);
     host.append(panel);renderChart(panel,spec);panel.append(textAlternative(spec));
   }
+  chartPresentations.set(host,presentation);
 }
-export function clearDeskCharts(host:HTMLElement){host.querySelectorAll<HTMLElement>('.chart').forEach(panel=>clearChart(panel));host.querySelectorAll('.chart,.desk-chart-empty,.desk-chart-note').forEach(element=>element.remove());}
+export function clearDeskCharts(host:HTMLElement){
+  chartPresentations.delete(host);host.querySelectorAll<HTMLElement>('.chart').forEach(panel=>clearChart(panel));host.querySelectorAll('.chart,.desk-chart-empty,.desk-chart-note').forEach(element=>element.remove());}
 
 // How many of a group's positions show, against all of them: row filters may hide some.
 const shownOf=(count:number,header:GroupHeader)=>count===header.positions?`${count} ${count===1?'position':'positions'}`:`${count} of ${header.positions} positions`;
@@ -212,6 +218,7 @@ export function deskCells(rows:readonly DeskRow[],colors:ReadonlyMap<string,stri
       case 'curve':{
         const shown=curve(index);
         if(shown===undefined){const waiting=node('span','sparkline-loading');waiting.dataset.shapeRow=String(index);waiting.setAttribute('role','img');waiting.setAttribute('aria-label','Loading curve shape');return waiting;}
+        cell.dataset.shapeRow=String(index);
         cell.append(sparklineSvg(shown,row,color));return cell;}
       default:return null;
     }
