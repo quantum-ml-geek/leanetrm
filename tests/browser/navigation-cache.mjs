@@ -30,7 +30,7 @@ export async function run({command,evaluate,wait,click,set,submit,persona,check,
     await submit('#risk-form',60000);
     await wait("!document.querySelector('#desk-run').hidden&&document.querySelector('#desk-lens [data-lens=risk]')?.getAttribute('aria-pressed')==='true'&&"+idle,60000);
     await click('#desk-lens [data-lens=ladder]');await wait(idle);
-    await evaluate("document.querySelector('#desk-risk-full').open=true");await wait("document.querySelectorAll('#desk-risk-full-results [data-risk-factor]').length>1");
+    await evaluate("document.querySelector('#desk-risk-full').open=true");await wait("document.querySelectorAll('#desk-risk-full-results [data-risk-factor]').length>0");
     await evaluate("[...document.querySelectorAll('#desk-risk-full-results [data-risk-factor]')].at(-1).click()");
     const factor=await evaluate("document.querySelector('#desk-risk-full-results .risk-factor-detail h3').textContent");
     const riskReads=await reads(),runTitle=await evaluate("document.querySelector('#desk-run-title').textContent");

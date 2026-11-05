@@ -94,7 +94,8 @@ export async function run({command,evaluate,wait,click,set,submit,persona,check,
   "[...document.querySelectorAll('#desk-chart-position .chart-toolbar small')].some(n=>n.textContent.startsWith('Not drawn: ')&&n.textContent.includes(' · Swaps · no single quantity'))",
   "[...document.querySelectorAll('#desk-chart-position .chart-toolbar')].map(n=>n.textContent)");
  await evaluate("new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))");await shot('scheduled-desk');await copyFile(join(dirname(process.argv[2]),'scheduled-desk.png'),join(artifacts,'desk.png'));
- // Terms is taller than the curve: the grid draws its rows again around the grown detail, which is checked once it has stayed in place.
+ // The row summary is immediate; the retained terms arrive in their own authorized read.
+ await wait("!!document.querySelector('#position-details-view .side-terms-list')&&!!document.querySelector('#side-panel-settlement')");
  await check('Terms retain the independent side terms and settlement action',"document.querySelector('#position-details-view').textContent.includes('QuantityBy period')&&!!document.querySelector('#side-panel-settlement')");
  await click('#position-details-tabs-schedules');await wait("(async()=>{for(let i=0;i<2;i++){if(!document.querySelector('#position-details-view .scheduled-review h3'))return false;await new Promise(r=>requestAnimationFrame(r));}return !!document.querySelector('#position-details-view .scheduled-review h3')&&"+idle+";})()");
  await check('Side schedules show the selected trade PV and both independent side reviews',"(()=>{const view=document.querySelector('#position-details-view');return /^Trade PV · -?\\d+\\.\\d{3} /.test(view.querySelector('.scheduled-review h3').textContent)&&document.querySelector('#error').hidden;})()","document.querySelector('#position-details-view').innerText.slice(0,1200)");

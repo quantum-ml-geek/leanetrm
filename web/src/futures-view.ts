@@ -1382,7 +1382,7 @@ export function setupFutures(options:{tickets:ProductTickets;api:Api;stream:(bod
       void pricingRead.catch(error=>{if(started===generation&&whereAmI()===scope&&!get('futures-page').hidden)options.failed(error);});
     }else await pricingRead;
   }
-  function valuesHeld(){return (editing()&&panel.current()?.kind!=='risk')||!!pending.command||options.tickets.pending().length>0||position.updatesBlocked()||risk.unconfirmed();}
+  function valuesHeld(){return !!document.querySelector('dialog[open]')||(editing()&&panel.current()?.kind!=='risk')||!!pending.command||options.tickets.pending().length>0||position.updatesBlocked()||risk.unconfirmed();}
   function startUpdates(expected=cachedRead?.version){
     stopUpdates();stopUpdates=()=>{};
     if(!expected||!cachedRead||!holdings||get('futures-page').hidden||options.knowledge()==='live')return;

@@ -62,7 +62,7 @@ export async function run({command,evaluate,wait,click,set,persona,check,idle,ur
   await check('↓ selects the next row and focuses it, and the details stay collapsed',`${collapsed}&&document.querySelector('#position-details')?.hidden!==false`);
   const before=await evaluate(anchor);
   await press('Enter');
-  await wait(`document.querySelector('#position-details')?.hidden===false&&!!document.querySelector('#position-details-view .swap-side-schedules')&&${idle}`);
+  await wait(`document.querySelector('#position-details')?.hidden===false&&!!document.querySelector('#position-details-view .side-terms-list')&&${idle}`);
   await evaluate(frames);
   await check('Enter expands the details pane below the grid on the swap\'s Terms, with its sides, and the grid keeps its rows',
     `(()=>{const pane=document.querySelector('#blotter-pane-details'),details=document.querySelector('#position-details'),gridBox=${holder}.getBoundingClientRect();
