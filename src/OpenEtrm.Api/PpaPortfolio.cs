@@ -167,6 +167,10 @@ internal static class PpaPortfolio
             SELECT row_to_json(r)::text FROM(SELECT instrument_id,reference_number AS instrument_reference FROM trading.instrument_references
             WHERE catalog_id=$1 AND instrument_id=ANY($2::uuid[]))r
             """,[catalog,instruments.ToArray()],ct);
-        return(tradeRows.ToDictionary(r=>r.Id("trade_id"),TradingReference.Trade),instrumentRows.ToDictionary(r=>r.Id("instrument_id"),TradingReference.Instrument));
+        var tradeReferences=tradeRows.ToDictionary(r=>r.Id("trade_id"),TradingReference.Trade);
+        var instrumentReferences=instrumentRows.ToDictionary(r=>r.Id("instrument_id"),TradingReference.Instrument);
+        if(trades.Any(id=>!tradeReferences.ContainsKey(id))||instruments.Any(id=>!instrumentReferences.ContainsKey(id)))
+            throw new PreviewDeniedException();
+        return(tradeReferences,instrumentReferences);
     }
 }
