@@ -167,8 +167,16 @@ export async function run({command,evaluate,wait,click,set,submit,persona,check,
   // Queued: one job for each part, each stating the run it is a part of, and the run shown as one.
   await choose('held');
   const jobsBefore=await evaluate('window.__riskJobs.length');
+  // Admission submits each part in sequence. Keep a real accepted reply pending
+  // beyond an ordinary UI action's deadline before the remaining parts submit.
+  await evaluate(`(()=>{const fetch=window.fetch;window.fetch=async(...args)=>{
+    if(String(args[0])!=='/api/portfolio/risk/jobs'||args[1]?.method!=='POST')return fetch(...args);
+    window.fetch=fetch;const response=await fetch(...args),started=performance.now();
+    await new Promise(resolve=>setTimeout(resolve,11000));window.__slowRiskAdmission=performance.now()-started;return response;
+  };})()`);
   // Each part's job is read as under way for a few polls, so that polling can be seen to leave the panes and the grid as they are.
-  await evaluate('window.__holdRiskJobs=true;window.__heldPolls=0');await click('#risk-queue');
+  await evaluate('window.__holdRiskJobs=true;window.__heldPolls=0');await click('#risk-queue',60000);
+  await check('queued multi-part admission waits for a slow real accepted reply',"window.__slowRiskAdmission>10000");
   await evaluate(`(()=>{const h=document.querySelector('#desk-positions .tabulator-tableholder');window.__polling={redraws:0,widths:new Set([h.clientWidth])};
     window.__pollingObserver=new MutationObserver(records=>{window.__polling.redraws+=records.length;});window.__pollingObserver.observe(document.querySelector('#blotter-dock'),{childList:true});
     window.__pollingWidths=setInterval(()=>window.__polling.widths.add(document.querySelector('#desk-positions .tabulator-tableholder').clientWidth),50);})()`);
@@ -224,7 +232,7 @@ export async function run({command,evaluate,wait,click,set,submit,persona,check,
   await check('the download of a run that lacks a part is refused, and says why',"document.querySelector('#risk-export').disabled&&!document.querySelector('#risk-export-note').hidden&&document.querySelector('#risk-export-note').textContent==='The download needs the results of every part of the run.'");
   // A queued part whose submission is refused is not queued, and says why; the other parts are queued and complete as the run.
   const jobsBeforeRefusal=await evaluate('window.__riskJobs.length');
-  await evaluate("window.__rejectRiskSubmission='risk_convention'");await click('#risk-queue');
+  await evaluate("window.__rejectRiskSubmission='risk_convention'");await click('#risk-queue',60000);
   await wait(inline+'&&'+idle,60000);
   await check('a queued part that is refused says it was not queued and why, and the other parts complete and show their results',
     `(()=>{const items=[...document.querySelectorAll('#risk-job-parts li')],failed=[...document.querySelectorAll('#desk-run-notes .risk-part-failed')];return window.__riskJobs.length-${jobsBeforeRefusal}===${parts}&&items.length===${parts}&&items[0].textContent.startsWith('Part 1 of '+${parts}+' · Not queued · ')&&items.slice(1).every(li=>li.textContent.endsWith('Completed'))&&failed.length===1&&failed[0].textContent.startsWith('Part 1 of '+${parts}+' failed: ')&&${shocksShown}===${heldTargets}.length-16;})()`,
@@ -232,7 +240,7 @@ export async function run({command,evaluate,wait,click,set,submit,persona,check,
   // A queued part whose submission has no known outcome keeps the run retained: the parts that were queued complete and show their
   // results, the part says it has none, and Reconcile sends its same request again, which returns its job with its result.
   const jobsBeforeLoss=await evaluate('window.__riskJobs.length');
-  await evaluate("window.__loseRiskSubmission='network'");await click('#risk-queue');
+  await evaluate("window.__loseRiskSubmission='network'");await click('#risk-queue',60000);
   await wait(inline+'&&'+idle,60000);
   await check('a queued part whose submission has no known outcome keeps the run to reconcile, and the parts that were queued show their results',
     `(()=>{const items=[...document.querySelectorAll('#risk-job-parts li')],missing=[...document.querySelectorAll('#desk-run-notes .risk-part-missing')];return window.__riskJobs.length-${jobsBeforeLoss}===${parts}&&items[0].textContent==='Part 1 of '+${parts}+' · Submission outcome unknown'&&items.slice(1).every(li=>li.textContent.endsWith('Completed'))&&!document.querySelector('#risk-job-retry').hidden&&document.querySelector('#risk-form').hidden&&missing.length===1&&missing[0].textContent==='Part 1 of '+${parts}+' has no results: its submission has no known outcome.'&&${shocksShown}===${heldTargets}.length-16&&document.querySelector('#risk-export').disabled;})()`,
@@ -418,7 +426,7 @@ export async function run({command,evaluate,wait,click,set,submit,persona,check,
   await click('#futures-refresh');await openReport();await choose('custom');await set('#risk-factor',factor);await set('#risk-bump','0.1');
   for(const outcome of ['network','server']){
     if(await evaluate("!document.querySelector('#risk-job-return').hidden"))await click('#risk-job-return');
-    await choose('custom');await set('#risk-factor',factor);await set('#risk-bump','0.1');await evaluate('window.__loseRiskSubmission='+JSON.stringify(outcome));await click('#risk-queue');
+    await choose('custom');await set('#risk-factor',factor);await set('#risk-bump','0.1');await evaluate('window.__loseRiskSubmission='+JSON.stringify(outcome));await click('#risk-queue',60000);
     await check(`${outcome} unknown queue outcomes retain their exact request for safe reconciliation`,"!document.querySelector('#risk-job-retry').hidden&&document.querySelector('#risk-fields').disabled&&document.querySelector('#risk-form').hidden&&document.querySelector('#risk-job-status').textContent.includes('unknown')&&window.__riskJobs.at(-1).request.context.knowledgeMode==='retained'");
     await evaluate('window.__riskCatalogCount=window.__riskReads.filter(r=>r.path==="/api/portfolio/risk/catalog").length;window.__rejectRiskSubmission='+JSON.stringify(outcome==='server'?'access_denied':'request_format'));await click('#risk-job-retry');
     if(outcome==='server')await click('#futures-refresh');else await click('#details-collapse');
@@ -470,15 +478,15 @@ export async function run({command,evaluate,wait,click,set,submit,persona,check,
     window.__riskHarness=(await import('/risk-view.js')).setupRisk({api,act:work=>work().catch(error=>{if(window.__riskScopeChanged){window.__riskScopeRefused=error.message;return;}throw error;}),busy:()=>false,zone:()=> 'America/Chicago',canRun:()=>true,profile:()=> 'synthetic-risk-races',scope:()=>{if(window.__riskScopeChanged)throw Error('Synthetic selected financial context changed.');return window.__riskJobs.at(-1).request;},onDenied:()=>{},onChange:()=>{}});
     await window.__riskHarness.open();
   })()`);
-  await choose('custom');await set('#risk-factor',factor);await set('#risk-bump','0.1');await click('#risk-queue');await wait('window.__riskRaceResponses.length===1');
+  await choose('custom');await set('#risk-factor',factor);await set('#risk-bump','0.1');await click('#risk-queue',60000);await wait('window.__riskRaceResponses.length===1');
   await click('#risk-job-cancel');
   await check('cancellation requested remains distinct from confirmed termination',"document.querySelector('#risk-job-status').textContent.includes('Cancellation requested')&&document.querySelector('#risk-job-status').textContent.includes('Waiting for the worker to stop')&&document.querySelector('#risk-job-cancel').hidden");
   await evaluate("(async()=>{window.__riskRaceResponses.shift()({...window.__riskRaceJob,state:'running',result:undefined});await Promise.resolve();})()");
   await check('a delayed earlier status cannot overwrite the accepted cancellation response',"document.querySelector('#risk-job-status').textContent.includes('Cancellation requested')&&document.querySelector('#risk-job-cancel').hidden");
-  await evaluate('(async()=>{window.__riskHarness.reset();await window.__riskHarness.open();})()');await choose('custom');await set('#risk-factor',factor);await set('#risk-bump','0.1');await click('#risk-queue');await wait('window.__riskRaceResponses.length===1');
+  await evaluate('(async()=>{window.__riskHarness.reset();await window.__riskHarness.open();})()');await choose('custom');await set('#risk-factor',factor);await set('#risk-bump','0.1');await click('#risk-queue',60000);await wait('window.__riskRaceResponses.length===1');
   await evaluate("(async()=>{window.__riskHarness.reset();window.__riskRaceResponses.shift()(window.__riskRaceJob);await Promise.resolve();})()");
   await check('late completed status after a financial-context reset cannot repopulate the old results',"window.__riskHarness.current()===undefined&&document.querySelector('#risk-job').hidden");
-  await evaluate('(async()=>{await window.__riskHarness.open();})()');await choose('custom');await set('#risk-factor',factor);await set('#risk-bump','0.1');await click('#risk-queue');await wait('window.__riskRaceResponses.length===1');
+  await evaluate('(async()=>{await window.__riskHarness.open();})()');await choose('custom');await set('#risk-factor',factor);await set('#risk-bump','0.1');await click('#risk-queue',60000);await wait('window.__riskRaceResponses.length===1');
   await evaluate("(async()=>{window.__riskRaceResponses.shift()(window.__riskRaceJob);await Promise.resolve();})()");await wait("window.__riskHarness.current()?.parts.every(p=>p.report)===true");
   await evaluate('window.__beforeLateRiskExport=window.__riskBlob;window.__lateRiskExport=window.__riskHarness.download().catch(()=>undefined);0');await wait('window.__riskRaceResponses.length===1');
   await evaluate("(async()=>{window.__riskHarness.reset();window.__riskRaceResponses.shift()(window.__riskRaceJob);await window.__lateRiskExport;})()");
