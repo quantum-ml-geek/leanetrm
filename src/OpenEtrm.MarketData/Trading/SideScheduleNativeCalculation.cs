@@ -14,7 +14,8 @@ public abstract partial class SideScheduleSnapshot
   ScheduleCalculationRow Cell(string key,string operation,string kind,string? value,ImmutableArray<ScheduleCalculationInput> inputs=default)=>
    new(key,"native_evaluation",operation,kind,value,value is null?"OutsideMeasure":"Resolved",inspected.DeliveryFrom,inspected.DeliveryTo,inspected.Start,inspected.End,
     null,null,row.ValueAt,kind=="quantity"?row.Quantity.Specification:null,kind is "money" or "price"?row.Amount.Currency:null,
-    kind=="quantity"?row.QuantityState.ToString():null,[],inputs.IsDefault?[]:inputs,[],null,null,null,[]);
+    kind=="quantity"?row.QuantityState.ToString():null,[],inputs.IsDefault?[]:inputs,[],null,null,null,[])
+    {PaymentDate=row.Kind==ComponentKind.Payment?PaymentDatePolicy.Date(row.ValueAt):null};
   result.Add(Cell("quantity","quantity","quantity",row.Quantity.ToExactString()));
   var prices=ImmutableArray.CreateBuilder<ScheduleCalculationInput>();
   if(row.Row.DeliveryWindow is DatedScheduleWindow)

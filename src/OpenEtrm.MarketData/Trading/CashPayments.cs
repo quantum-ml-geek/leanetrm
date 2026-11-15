@@ -22,7 +22,7 @@ public sealed record CashPayment : Instrument
     public override bool SupportsQuantityScaling => true;
     // The cash is due from the start of its UTC payment date. Payment remains a separate recorded fact.
     public SidePaymentKey Payment => new(Id, 0, new(PaymentDate.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero), Currency);
-    public bool Due(DateTimeOffset at) => at >= Payment.PaymentAt;
+    public bool Due(DateTimeOffset at) => PaymentDatePolicy.IsDue(Payment.PaymentAt,at);
 
     public CashPayment(ReferenceKey currency, DateOnly paymentDate) : base(ContractIdentity.CashPayment(currency, paymentDate))
     {

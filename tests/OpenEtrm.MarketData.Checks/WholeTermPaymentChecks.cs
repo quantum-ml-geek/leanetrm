@@ -16,9 +16,9 @@ internal static class WholeTermPaymentChecks
         var payment=originals[1].Fixed.PaymentAt;
         UnitPrice Price(string value)=>new(D(value),f.Quote);
         FixedSide Fixed(FixedPriceTerm price)=>new(Guid.NewGuid(),price,f.Quote,unit,
-            [..originals.Select(p=>p.Fixed.Periods[0] with{PaymentAt=payment,PaymentSchedule=null})]);
+            [..originals.Select(p=>p.Fixed.Periods[0] with{PaymentAt=payment,PaymentSchedule=null})],SyntheticSideCalendars.FixedPeriods([..originals.Select(p=>p.Fixed.Periods[0] with{PaymentAt=payment,PaymentSchedule=null})]));
         var floating=new FloatingSide(Guid.NewGuid(),originals[0].Floating.Settlement,f.Quote,unit,
-            [..originals.Select(p=>p.Floating.Periods[0] with{PaymentAt=payment,PaymentSchedule=null})]);
+            [..originals.Select(p=>p.Floating.Periods[0] with{PaymentAt=payment,PaymentSchedule=null})],SyntheticSideCalendars.FloatingPeriods([..originals.Select(p=>p.Floating.Periods[0] with{PaymentAt=payment,PaymentSchedule=null})]));
         FinancialSwapInstrument Swap(FixedSide side,FloatingSide? second=null)=>new(Guid.NewGuid(),
             [new(side,D("-1")),new(second??floating,D("1"))],FinancialSwapInstrument.Implementation,true);
         Reject("side_price_cadence",()=>Fixed(new SteppedPrice([new(jan,Price("4")),new(jan.AddDays(8),Price("5")),new(jan.AddDays(15),Price("4"))])));
@@ -40,7 +40,7 @@ internal static class WholeTermPaymentChecks
         if(swap.Price(market,new(D("10"),unit.Specification),D("0.5"),FinancialSwapInstrument.Discounted).Amount.ToString()!="-7.495")
             throw new Exception("Two independent monthly differences must each receive the one explicit common discount factor and quantity.");
         var otherDate=new FloatingSide(Guid.NewGuid(),floating.Settlement,f.Quote,unit,
-            floating.Periods.SetItem(1,floating.Periods[1] with{PaymentAt=payment.AddDays(1)}));
+            floating.Periods.SetItem(1,floating.Periods[1] with{PaymentAt=payment.AddDays(1)}),SyntheticSideCalendars.FloatingPeriods(floating.Periods.SetItem(1,floating.Periods[1] with{PaymentAt=payment.AddDays(1)})));
         Reject("swap_valuation",()=>Swap(plain,otherDate).Price(f.Build(otherDate.Dependencies),new(D("10"),unit.Specification),D("0.5"),FinancialSwapInstrument.Discounted));
         var retainedDefinitions=swap.Sides.ToDictionary(m=>m.Side.Id,m=>ScheduleDefinitionCompiler.Generate(m.Side));
         var fixedDefinition=retainedDefinitions[plain.Id];var storedRows=fixedDefinition.Rows.ToArray();
@@ -90,7 +90,7 @@ internal static class WholeTermPaymentChecks
         var changedValue=ValueMeasures.From(changedInputs.Session(ppaMarket.Build).Value(changedProfile,new(ppaFixture.From,ppaFixture.To),
             new ExplicitDiscounting(D("1"),DiscountFactorSource.Undiscounted)));
         if(changedValue.ValueExcludingOverdue.ToExactString()!="1442")throw new Exception("A retained2MWh quantity column must feed all721 native cells and its sibling payment through the declared input port.");
-        var indexedSide=new FloatingSide(Guid.NewGuid(),ppa.Memberships[1].Side.Terms,new(ppaFixture.C("synthetic_hub"),D("1"),new(default,ppaFixture.EnergyPrice),null));
+        var indexedSide=new FloatingSide(Guid.NewGuid(),ppa.Memberships[1].Side.Terms,new(ppaFixture.C("synthetic_hub"),D("1"),new(default,ppaFixture.EnergyPrice),null),SyntheticSideCalendars.Interval(ppa.Memberships[1].Side.Terms,true));
         var indexed=new PpaInstrument(Guid.NewGuid(),ppaFixture.Definitions,ppaFixture.Reference,
             [ppa.Memberships[0],new(new(PpaRole.IndexedPayment),indexedSide,D("-1"))],false,PpaInstrument.Implementation);
         var indexedDefinitions=indexed.Memberships.ToDictionary(m=>m.Side.Id,m=>ScheduleDefinitionCompiler.Generate(m.Side));var indexedDefinition=indexedDefinitions[indexedSide.Id];

@@ -8,12 +8,16 @@ public sealed record ContractObservationBindings([property:IdentityField]Immutab
 public sealed partial record FloatingSide
 {
     public const string ContractObservationImplementation="contract_observation_average_v1";
-    public FloatingSide(Guid id,QuoteSpecification quote,Quantity unitQuantity,ImmutableArray<FloatingSidePeriod> periods):base(id)
+    public FloatingSide(Guid id,QuoteSpecification quote,Quantity unitQuantity,ImmutableArray<FloatingSidePeriod> periods,SideCalendarPolicy calendarPolicy,ScheduledPowerQuantityParameters? powerQuantity=null,Gas.GasDayClock? gasDeliveryClock=null):base(id,calendarPolicy)
     {
+        CalendarPolicy.RequirePurposes(true,true,true);
         if(quote is null||unitQuantity is null||quote.Kind!=QuoteKind.Outright||unitQuantity.Amount!=ExactDecimal.Parse("1")||
             unitQuantity.Specification!=quote.Quantity||periods.IsDefaultOrEmpty||periods.Any(p=>p is null))throw ContractObservationLookup.Invalid();
         _=PriceUnit.FromQuote(quote);
-        SwapSidePeriods.Validate([..periods.Select(p=>(p.DeliveryFrom,p.DeliveryTo,p.PaymentAt,p.Allocation,p.PaymentSchedule))],quote.Currency);
+        SwapSidePeriods.Validate([..periods.Select(p=>(p.DeliveryFrom,p.DeliveryTo,p.PaymentAt,p.Allocation,p.PaymentSchedule,p.DeliveryCompletionAt))],CalendarPolicy,powerQuantity,gasDeliveryClock);
+        powerQuantity?.RequireAllocations(CalendarPolicy,unitQuantity.Specification,[..periods.Select(p=>new QuantityPeriod(p.DeliveryFrom,p.DeliveryTo))],[..periods.Select(p=>p.Allocation)]);
+        PowerQuantity=powerQuantity;GasDeliveryClock=gasDeliveryClock;
+        foreach(var period in periods)CalendarPolicy.RequireObservation(period.DeliveryFrom,period.DeliveryTo,period.Calendar);
         foreach(var period in periods)
         {
             var rows=period.ContractObservations;
@@ -25,7 +29,8 @@ public sealed partial record FloatingSide
             for(var n=0;n<rows.Length;n++)
             {
                 var row=rows[n];row.Validate();
-                if(row.Quote!=quote||row.Ordinal!=n||row.FixingAt>=period.PaymentAt||row.To!=row.From.AddDays(1)||
+                CalendarPolicy.For(CalendarPurpose.Observation).RequireCoverage(row.From,row.To);
+                if(row.Quote!=quote||row.Ordinal!=n||PaymentDatePolicy.Date(row.FixingAt)>PaymentDatePolicy.Date(period.PaymentAt)||row.To!=row.From.AddDays(1)||
                     n>0&&(rows[n-1].To>row.From||rows[n-1].FixingAt>=row.FixingAt||period.Averaging==FloatingAveraging.CalendarDayArithmetic&&rows[n-1].To!=row.From))throw ContractObservationLookup.Invalid();
             }
         }

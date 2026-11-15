@@ -40,7 +40,7 @@ public static class IntervalPrices
         ArgumentNullException.ThrowIfNull(clock);
         var step=TimeSpan.FromMinutes(minutes);
         if(!IntervalSeriesGrid.Resolutions.Contains(minutes) || from.Offset!=TimeSpan.Zero || to.Offset!=TimeSpan.Zero || to<=from ||
-            to-from>step*MaximumWindowIntervals || !PowerHours.IsCell(clock.Zone,from,step) || !PowerHours.IsCell(clock.Zone,to,step))
+            to-from>step*MaximumWindowIntervals || !PowerHours.IsCell(clock,from,step) || !PowerHours.IsCell(clock,to,step))
             throw InvalidWindow();
     }
 

@@ -1,10 +1,11 @@
+import {displayPaymentDate} from './payment-date.js';
 import type {Holding} from './desk-model.js';
 import type {DetailRead,TermSection} from './position-panel.js';
 import {displayExactInstant} from './market-view.js';
 import {standardTemperature} from './crude-selection.js';
 type Api=<T>(path:string,body?:unknown)=>Promise<T>;
 type Row=Record<string,string|number|null>;
-export type CrudeTerms={assignmentCode:string;direction:string;considerationDirection:string;quantity:string;fixedPrice:string;handlingFee:string|null;handlingFeeDirection:string|null;paymentAt:string;deliveryFrom:string;deliveryTo:string;profile:string;tolerance:string};
+export type CrudeTerms={assignmentCode:string;direction:string;considerationDirection:string;quantity:string;fixedPrice:string;handlingFee:string|null;handlingFeeDirection:string|null;handlingFeePaymentAt:string|null;paymentAt:string;deliveryFrom:string;deliveryTo:string;profile:string;tolerance:string};
 const direction=(value:string)=>value==='receive'?'Receive':value==='deliver'?'Deliver':value==='pay'?'Pay':value;
 // Retained contractual facts remain inspectable when delivery has started and PV is unavailable.
 export async function readCrudeView(api:Api,context:Record<string,unknown>,h:Holding):Promise<DetailRead>{
@@ -21,6 +22,6 @@ export type CrudeInstrumentFacts={head:{revision:number;instrument_id:string;req
 export function crudeInstrumentSections(detail:CrudeInstrumentFacts,zone:string):TermSection[]{
  const t=detail.head.request,p=detail.physical,priceUnit=`${p.multiplier==='1'?'':p.multiplier+' '}${p.currency} / ${p.unit}`;
  return [   {title:'Crude',rows:[['Commodity',String(p.commodity_name)],['Grade',String(p.grade_name)],['Facility',String(p.facility_name)],['Custody point',String(p.custody_point_name)],['Physical direction',direction(t.direction)],['Contract volume',`${t.quantity} ${p.unit}`],['Standard temperature',standardTemperature(String(p.standard_temperature),String(p.temperature_scale))],['Delivery',`${displayExactInstant(t.deliveryFrom,zone)} to ${displayExactInstant(t.deliveryTo,zone)} · exclusive`],['Pricing curve',String(p.curve_name)],['Profile',detail.profileName],['Tolerance',t.tolerance]]},
-   {title:'Fixed price',rows:[['Consideration direction',direction(t.considerationDirection)],['Fixed price',t.fixedPrice],['Price unit',priceUnit],['Payment',displayExactInstant(t.paymentAt,zone)]]},
-   {title:'Handling fee',rows:t.handlingFee===null?[['Handling fee','None']]:[['Handling fee',t.handlingFee],['Price unit',priceUnit],['Handling fee direction',direction(t.handlingFeeDirection!)],['Payment',displayExactInstant(t.paymentAt,zone)]]}];
+   {title:'Fixed price',rows:[['Consideration direction',direction(t.considerationDirection)],['Fixed price',t.fixedPrice],['Price unit',priceUnit],['Payment',displayPaymentDate(t.paymentAt)]]},
+   {title:'Handling fee',rows:t.handlingFee===null?[['Handling fee','None']]:[['Handling fee',t.handlingFee],['Price unit',priceUnit],['Handling fee direction',direction(t.handlingFeeDirection!)],['Payment',displayPaymentDate(t.handlingFeePaymentAt!)]]}];
 }

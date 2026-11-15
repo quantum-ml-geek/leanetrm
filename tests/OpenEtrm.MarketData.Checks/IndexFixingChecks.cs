@@ -21,7 +21,7 @@ internal static class IndexFixingChecks
         {
             var indexed=daily.Floating();
             Reject("index_fixing_definition",()=>new FloatingSide(indexed.Id,indexed.Settlement,indexed.Quote,indexed.UnitQuantity,
-                [..indexed.Periods.Select(period=>period with{Fixings=[],ObservationImplementation="prefixing_index_projection_v1"})]));
+                [..indexed.Periods.Select(period=>period with{Fixings=[],ObservationImplementation="prefixing_index_projection_v1"})],SyntheticSideCalendars.FloatingPeriods([..indexed.Periods.Select(period=>period with{Fixings=[],ObservationImplementation="prefixing_index_projection_v1"})])));
         });
         Check("a raw row selector validates the complete fixing definition before consuming a selected value", () =>
         {
@@ -187,10 +187,10 @@ internal static class IndexFixingChecks
             Equal(actual.Lineage.Single(), snapshot.Selections.Single(s => s.Input == new InputKey(daily.Series[0].Key, InputUse.FrozenFact)).Observation.Key);
             Reject("risk_factor", () => daily.Model.Scenarios(build, [bump with { Input = new(daily.Series[0].Key, InputUse.FrozenFact) }]).ToArray());
         });
-        Check("due payments retain lifecycle rejection", () =>
+        Check("overdue payments retain lifecycle rejection", () =>
         {
-            Reject("side_payment_due", () => Value(daily, daily.Snapshot(daily.Payment, 3), swap));
-            Equal(DefinitionIdentity.For(swap.Floating).Version, "FloatingSide_v8");
+            Reject("side_payment_due", () => Value(daily, daily.Snapshot(daily.Payment.AddDays(1), 3), swap));
+            Equal(DefinitionIdentity.For(swap.Floating).Version, "FloatingSide_v9");
         });
         Check("new indexed economic identity includes the qualified schedule but excludes selected actual values", () =>
         {
@@ -267,14 +267,14 @@ internal static class IndexFixingChecks
         public DateOnly From { get; } = new(2041, 1, 1);
         public DateOnly To { get; }
         public DateTimeOffset Payment { get; } = Fixture.Utc("2041-02-18T00:00:00Z");
-        public FixingFixture(bool monthly = false,bool delayedMonthlyPublication=false)
+        public FixingFixture(bool monthly = false,bool delayedMonthlyPublication=false,DateTimeOffset? projectionExpiry=null)
         {
             Quote = Base.Quotes[0];
             To = monthly ? From.AddMonths(1) : From.AddDays(3);
             var contracts = Enumerable.Range(0, monthly ? 1 : 3).Select(n =>
                 new MarketContract(new(Base.Revision, Guid.NewGuid()), ContractKind.Forward,
                     From.AddDays(n), monthly ? To : From.AddDays(n + 1),
-                    monthly ? Fixture.Utc(delayedMonthlyPublication?"2041-02-02T00:00:00Z":"2040-12-31T00:00:00Z") : Fixture.Utc("2041-01-01T12:00:00Z").AddDays(n), null)).ToImmutableArray();
+                    projectionExpiry??(monthly ? Fixture.Utc(delayedMonthlyPublication?"2041-02-02T00:00:00Z":"2040-12-31T00:00:00Z") : Fixture.Utc("2041-01-01T12:00:00Z").AddDays(n)), null)).ToImmutableArray();
             Series = contracts.Select(c => new MarketSeries(new(Base.Revision, Guid.NewGuid()), c.Key, Quote.Key, null)).ToImmutableArray();
             var curve = Curve = new Curve(Base.C("fixing_projection"), Quote.Key, Base.R("location"), Base.R("uniform"),
                 new(SettlementKind.Index, Base.R("index"), null), CurveRule.Direct,
@@ -297,10 +297,10 @@ internal static class IndexFixingChecks
         public FloatingSide Floating(ImmutableArray<IndexFixing>? fixings = null, QuoteSpecification? quote = null) => new(Guid.NewGuid(), PriceSettlementSelection.CurveTarget(Base.R("index")), quote ?? Quote,
             new(ExactDecimal.Parse("1"), Quote.Quantity), From, To, fixings ?? Fixings, Payment,
             Projections.Length == 1 ? FloatingAveraging.MonthlyIndexPrice : FloatingAveraging.CalendarDayArithmetic,
-            Projections, FloatingSide.IndexedImplementation);
+            Projections, FloatingSide.IndexedImplementation,SyntheticSideCalendars.Dated(true,null,null));
         public FinancialSwapInstrument Swap(FloatingSide? floating = null) => new(Guid.NewGuid(),
             [new(new FixedSide(Guid.NewGuid(), new(ExactDecimal.Parse("15"), Quote), new(ExactDecimal.Parse("1"), Quote.Quantity),
-                From, To, Payment, FixedSide.Implementation, Quote), ExactDecimal.Parse("-1")), new(floating ?? Floating(), ExactDecimal.Parse("1"))],
+                From, To, Payment, FixedSide.Implementation, Quote,SyntheticSideCalendars.Dated(false)), ExactDecimal.Parse("-1")), new(floating ?? Floating(), ExactDecimal.Parse("1"))],
             FinancialSwapInstrument.Implementation, false);
     }
 }

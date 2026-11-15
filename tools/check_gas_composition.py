@@ -3,6 +3,7 @@ from copy import deepcopy
 from decimal import Decimal
 from fractions import Fraction
 from uuid import uuid4
+from synthetic_side_calendars import side_calendar_policy
 from preview_client import PreviewClient, initial_frame
 from preview_fixture import held_gas_measures, trade_booking
 
@@ -12,14 +13,15 @@ def run_checks(url,query=None,manifest=None,run_worker=None):
     frame=initial_frame(c.call('workspace'),'2020-12-18')
     context={'snapshotId':frame['id'],'convention':'physical_gas_fixed_quantity_v4','knowledgeMode':'current'}
     cat=c.call('gas/catalog',context)
+    reference=next(c['reference'] for c in cat['sideCalendars'] if c['code']=='test_utc_every_day')
     def physical(code,point,direction,quantity,link):
         p=next(p for p in cat['locations'] if p['deliveryPoint']==point)
         return {'code':code,'pipeline':p['pipeline'],'zone':p['zone'],'deliveryPoint':p['deliveryPoint'],'product':p['product'],
-                'direction':direction,'deliveryFrom':'2021-01-01','deliveryTo':'2021-02-01','quantityBasis':'period_total_equal_days','quantity':quantity,'link':link}
+                'direction':direction,'deliveryFrom':'2021-01-01','deliveryTo':'2021-02-01','quantityBasis':'period_total_equal_days','quantity':quantity,'link':link,'calendarPolicy':side_calendar_policy(reference,delivery=True,observation=False,payment=False)}
     body={**context,**trade_booking(),'operationId':str(uuid4()),'bookId':cat['books'][0]['id'],'definitionRevisionId':cat['locations'][0]['definitionRevisionId'],
           'gasSetupId':cat['gasSetupId'],'discounting':False,'profile':'fixed_gas_composition_v1',
           'physicalSides':[physical('receipt','synthetic_gas_point_a','receive','1000',None),physical('delivery','synthetic_gas_point_b','deliver',None,{'source':'receipt','formula':'gross_less_fraction','fraction':'0.02'})],
-          'cashSides':[{'code':'usage','role':'fee','direction':'pay','source':'delivery','stage':'delivery','price':'0.1','tariffCode':None,'paymentAt':'2021-02-02T00:00:00Z'}]}
+          'cashSides':[{'code':'usage','role':'fee','direction':'pay','source':'delivery','stage':'delivery','price':'0.1','tariffCode':None,'paymentAt':'2021-02-02T00:00:00Z','calendarPolicy':side_calendar_policy(reference,delivery=True,observation=False,payment=True)}]}
     value=c.call('gas/composition/preview',body)
     assert Decimal(value['presentValue'])==64
     assert value['sides'][0]['deliveryRows'][0]['meter']['identifier']=='SYN-METER-A-JAN'

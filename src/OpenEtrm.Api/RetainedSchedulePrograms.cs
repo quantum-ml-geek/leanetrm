@@ -12,13 +12,13 @@ internal sealed partial class RetainedScheduleStore
     // This adapter takes no Side, definition or parameter source. The authorized
     // read supplies the complete published instructions and their trusted identity.
     internal async Task<ImmutableArray<RetainedSideProgram>> LoadPrograms(NpgsqlConnection connection,Guid instrument,
-        Guid? context,DateTimeOffset? asOf,CancellationToken cancellation)
+        Guid? context,DateTimeOffset? asOf,CancellationToken cancellation,bool recoverMissing=false)
     {
         var result=ImmutableArray.CreateBuilder<RetainedSideProgram>();
         await using var query=ScheduleStore.Command(connection,
             "SELECT * FROM security.read_instrument_side_programs($1,$2,$3,$4)",Catalog,instrument,
             (object?)context??DBNull.Value,(object?)asOf??DBNull.Value);
-        try
+        await ReadArtifact(connection,async()=>
         {
             await using var reader=await query.ExecuteReaderAsync(cancellation);
             while(await reader.ReadAsync(cancellation))
@@ -33,11 +33,8 @@ internal sealed partial class RetainedScheduleStore
                 if(slot!=result.Count)throw Error("The executable schedules require complete ordered instrument memberships.");
                 result.Add(new(slot,reader.GetGuid(0),reader.GetGuid(1),identity,program));
             }
-        }
-        catch(PostgresException error)when(error.SqlState=="P0001"&&error.MessageText is "side_schedule_missing" or "side_schedule_unsupported")
-        {
-            throw new MarketDataException(error.MessageText,"The booked instrument has no supported complete executable schedule and must be rebooked.");
-        }
+            return true;
+        },recoverMissing,cancellation);
         if(result.Count==0)throw new MarketDataException("side_schedule_missing","The booked instrument has no executable schedules and must be rebooked.");
         // Deserialization can outlast a source grant's expiry. Recheck the same
         // membership/source authority after consuming the protected byte columns.

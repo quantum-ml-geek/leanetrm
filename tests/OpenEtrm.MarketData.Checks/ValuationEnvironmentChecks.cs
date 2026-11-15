@@ -15,6 +15,12 @@ internal static class ValuationEnvironmentChecks
         if(next.At!=friday.AddHours(23)||next.Calendar is null)throw new Exception("A DST calendar day was treated as 24 elapsed hours.");
         Reject("clock_rule",()=>ClockChange.NextCalendarDay(new(2026,3,7,7,30,0,TimeSpan.Zero),ny));
         Reject("clock_rule",()=>ClockChange.NextCalendarDay(new(2026,10,31,5,30,0,TimeSpan.Zero),ny));
+        var southernFrom=new DateTimeOffset(2026,12,31,13,0,0,TimeSpan.Zero);
+        var southern=ClockChange.NextCalendarDay(southernFrom,PowerClock.Capture(TimeZoneInfo.FindSystemTimeZoneById("Australia/Sydney")));
+        if(southern.At!=new DateTimeOffset(2027,1,1,13,0,0,TimeSpan.Zero))throw new Exception("The southern calendar target must retain local midnight.");
+        southern.Require(southernFrom,southernFrom);
+        var replayClock=PowerClock.Restore(southern.Calendar!.Rules,southern.Calendar.Fingerprint);
+        if(replayClock.LocalAt(southernFrom).Offset!=TimeSpan.FromHours(11))throw new Exception("A scenario must retain executable clock offsets without OS deserialization.");
         var seed=new JointScenarioRiskChecks.Fixture((x,_)=>x);
         var source=seed.Prepared.Scenario.Plan.Context.ValuationAt;
         var end=source.AddDays(5);
@@ -120,7 +126,7 @@ internal static class ValuationEnvironmentChecks
         public override SideScheduleSnapshot InspectSchedule(string manifest,ExactDecimal scale,OpenEtrm.Shared.Numerics.SignedRatio coefficient,Func<DateOnly,DateTimeOffset> boundary)=>
             throw new MarketDataException("clock_probe","This check values an explicit clock-dependent Side.");
     }
-    private sealed record ClockSide(Guid Identity,ReferenceKey Currency,Quantity Unit):Side(Identity)
+    private sealed record ClockSide(Guid Identity,ReferenceKey Currency,Quantity Unit):Side(Identity,SideCalendarPolicy.UseOne(SyntheticSideCalendars.AllDates,false,false,false))
     {
         public override ImmutableArray<CurveRequest> Dependencies=>[];
         public override SideSchedule GenerateSchedule()=>new ClockSchedule(Id,Currency,Unit);

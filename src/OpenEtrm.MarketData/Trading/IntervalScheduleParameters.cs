@@ -9,11 +9,12 @@ public sealed record IntervalScheduleMonth(DateOnly Month, int FirstRowOrdinal,
 
 // Resolve the exact clock before constructing a side. Generation consumes this
 // captured rule payload; it performs no reference lookup or market-data read.
-[EconomicDefinition("interval_side_schedule_parameters_v1")]
+[EconomicDefinition("interval_side_schedule_parameters_v2")]
 public sealed record IntervalScheduleParameters
 {
     [IdentityField] public PpaDelivery Delivery { get; }
-    public string ClockRules => Clock.Rules;
+    [IdentityField]public string ClockRules => Clock.Rules;
+    [IdentityField]public string ClockFingerprint => Clock.Fingerprint;
     [IdentityField] public IntervalScheduleCadence Cadence { get; }
     [IdentityField] public DeliveryHours? Hours { get; }
     public PowerClock Clock { get; }
@@ -31,7 +32,7 @@ public sealed record IntervalScheduleParameters
                 hours.Membership != BlockMembership.All && hours.Peak is null || hours.Holidays.Distinct().Count() != hours.Holidays.Length))
             throw new MarketDataException("side_schedule_parameters", "Supply a complete term, captured exact clock, cadence and explicit native delivery mask.");
         Money.RequireKey(delivery.Clock);
-        Delivery = delivery; Clock = clock; Cadence = cadence; Hours = hours;
+        Delivery = delivery; Clock = clock.CaptureForDelivery(delivery.From,delivery.To); Cadence = cadence; Hours = hours;
         grids = new(BuildGrids);
     }
 
@@ -52,14 +53,14 @@ public sealed record IntervalScheduleParameters
 
     public ImmutableArray<IntervalScheduleMonth> Generate(Guid side, ReferenceKey currency, PaymentRule paymentRule)
     {
-        if (side == Guid.Empty || paymentRule is null || currency.Revision != Delivery.Clock.Revision ||
-            paymentRule.Calendar is { } calendar && calendar.Key.Revision != Delivery.Clock.Revision)
+        if (side == Guid.Empty || paymentRule is null || currency.Revision != Delivery.Clock.Revision)
             throw new MarketDataException("side_schedule_parameters", "Schedule generation requires an exact side, currency and payment rule under its pinned reference revision.");
         Money.RequireKey(currency);
         var result = ImmutableArray.CreateBuilder<IntervalScheduleMonth>(); var ordinal = 0;
         foreach (var (month, intervals) in grids.Value)
         {
             var valueAt = FixedSide.PaymentBoundary(paymentRule.Generate(month, month.AddMonths(1)).Date);
+            PaymentDatePolicy.RequireCompletion(valueAt,Clock.StartOfDay(month.AddMonths(1)).ToUniversalTime());
             result.Add(new(month, ordinal, intervals, new(side, result.Count, valueAt, currency)));
             ordinal = checked(ordinal + intervals.Length);
         }

@@ -100,8 +100,7 @@ def run_checks(query, manifest, psql, environment, dotnet, temporary):
     calendar_request, calendar_sql = temporary/'finality-calendar.json', temporary/'finality-calendar.sql'
     calendar_request.write_text(json.dumps({'referenceCatalogId': manifest['referenceCatalogId'],
         'referenceRevisionId': manifest['referenceRevisionId'], 'from': '2020-11-01', 'through': '2020-11-01',
-        'clocks': [{'code': 'synthetic_eastern', 'kind': 'iana', 'fixedOffsetSeconds': None,
-                    'ianaZone': 'America/New_York', 'tzdbVersion': installed_tzdb()}]}))
+        'clockCodes':['synthetic_eastern']}))
     subprocess.run([str(dotnet), 'src/OpenEtrm.Api/bin/Debug/net10.0/OpenEtrm.Api.dll',
                     '--render-power-days', str(calendar_request), str(calendar_sql)],
                    env=environment, check=True, timeout=30)
@@ -111,7 +110,7 @@ def run_checks(query, manifest, psql, environment, dotnet, temporary):
                  f"WHERE(reference_catalog_id,reference_revision_id,clock_code)=('{manifest['referenceCatalogId']}',"
                  f"'{manifest['referenceRevisionId']}','synthetic_eastern');")
     try:
-        query('BEGIN;'+ambiguous+runtime(publish()).removeprefix('BEGIN;').removesuffix('COMMIT;')+'ROLLBACK;')
+        query('BEGIN;ALTER TABLE power_data.operating_days DISABLE TRIGGER USER;'+ambiguous+'ALTER TABLE power_data.operating_days ENABLE TRIGGER USER;'+runtime(publish()).removeprefix('BEGIN;').removesuffix('COMMIT;')+'ROLLBACK;')
     except RuntimeError as error:
         assert 'meter_finality_calendar' in str(error), str(error)
     else:

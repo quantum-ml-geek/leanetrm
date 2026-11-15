@@ -2,6 +2,35 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {browserAvailable,withBrowserPage,browserTestTimeout} from './browser-page.mjs';
 
+test('payment-date filters and hover text retain dates across display zones while publication events retain instants',{skip:!browserAvailable,timeout:browserTestTimeout},async()=>{
+ await withBrowserPage('<link rel="stylesheet" href="/vendor/tabulator.css"><div id="host" style="width:1000px"></div>',async evaluate=>{
+  await evaluate(`(async()=>{
+   const {scheduleGridData}=await import('/schedule-grid.js'),{renderDataGrid}=await import('/data-grid.js');
+   const at='2027-02-01T00:00:00.123456+00:00';
+   const column=(id,label,measure)=>({id,label,measure,unit:null,input:[]});
+   const description={product:'synthetic_flow',version:1,sides:[],tradeColumns:[column('payment','Payment date','payment_date'),column('publication','Publication','time')]};
+   const cells={'trade.payment':{value:at,sources:[]},'trade.publication':{value:at,sources:[]}};
+   window.schedule={levels:['day'],rows:[{key:'2027-01-31',parent:null,level:'day',cells,delivered:false}],delivered:null,remaining:null,totals:cells};
+   window.draw=async zone=>{
+    window.grid?.destroy();
+    const data=scheduleGridData(schedule,description,[],'instrument','day',{quantityUnit:'MMBtu',instant:value=>new Intl.DateTimeFormat('en',{dateStyle:'medium',timeStyle:'short',timeZone:zone}).format(new Date(value))});
+    await new Promise(ready=>{window.grid=renderDataGrid(document.querySelector('#host'),'dates',zone,data.headers,data.rows,data.numeric,()=>false,{keys:data.columns,displayRows:data.displayRows,rowKeys:data.keys,layout:{order:[],widths:{},sort:[]},onLayout:()=>{},onReady:ready});});
+    await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+   };
+  })()`);
+  const events=[];
+  for(const zone of ['America/Chicago','Asia/Kathmandu']){
+   await evaluate(`draw(${JSON.stringify(zone)})`);
+   assert.deepEqual(await evaluate("[...document.querySelector('[aria-label=\"Filter Payment date\"]').options].map(o=>o.textContent)"),['All values','2027-02-01']);
+   assert.deepEqual(await evaluate("{const cell=document.querySelector('.tabulator-tableholder [tabulator-field=c1] span');[cell.textContent,cell.title]}"),['Feb 1, 2027','2027-02-01']);
+   assert.equal(await evaluate("document.querySelector('.tabulator-tableholder [tabulator-field=c2] span').title"),'2027-02-01T00:00:00.123456+00:00');
+   events.push(await evaluate("document.querySelector('.tabulator-tableholder [tabulator-field=c2]').textContent"));
+   assert.equal(await evaluate("schedule.rows[0].cells['trade.payment'].value"),'2027-02-01T00:00:00.123456+00:00');
+  }
+  assert.notEqual(events[0],events[1]);
+ });
+});
+
 // A disposable browser and static server draw a synthetic schedule view in the real grid dependency; no application runtime is attached.
 test('a schedule draws as a tree with coloured header groups, decorations and the backend totals',{skip:!browserAvailable,timeout:browserTestTimeout},async()=>{
  await withBrowserPage('<link rel="stylesheet" href="/vendor/tabulator.css"><link rel="stylesheet" href="/app.css"><div id="host" style="width:1200px"></div>',async evaluate=>{

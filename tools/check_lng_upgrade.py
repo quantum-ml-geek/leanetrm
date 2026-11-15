@@ -31,7 +31,7 @@ def run_checks(query, root, manifest, retained):
     edges=[dict(target=t,port=p,ordinal=0,source=s,sequence=n) for n,(t,p,s) in enumerate([
         (2,'quantity',0),(2,'price',1),(4,'amount',2),(4,'discount',3),(5,'amount',2),(5,'discounted',4),(6,'input',5)])]
     roots=[dict(name='cash',row=2,measure='contractual_amount',sequence=0),dict(name='pv',row=6,measure='pv',sequence=1)]
-    program=json.dumps(literal_program(header,rows,roots),separators=(',',':')).encode().hex()
+    program=json.dumps(literal_program(header,rows,roots,version='booked_side_program_v1'),separators=(',',':')).encode().hex()
     migrations=[root/'db/migrations'/name for name in ['0176_lng_cargo_references.sql','0177_lng_cargo_programs.sql','0178_lng_cargo_admission.sql','0179_lng_portfolio_scope.sql']]
     upgrade='\n'.join(body(p.read_text()) for p in migrations)
     guarded='\n'.join(body(p.read_text()) for p in migrations[:2]).replace("'","''")

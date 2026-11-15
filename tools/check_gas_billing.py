@@ -3,6 +3,7 @@ from check_physical_operations import january_delivery_frame
 from uuid import uuid4
 from preview_client import PreviewClient, initial_frame
 from preview_fixture import trade_booking
+from synthetic_side_calendars import side_calendar_policy
 
 
 def run_checks(url, query=None, manifest=None):
@@ -11,11 +12,12 @@ def run_checks(url, query=None, manifest=None):
     before={'snapshotId':initial_frame(workspace,'2020-12-18')['id'],'convention':'physical_gas_fixed_quantity_v4','knowledgeMode':'current'}
     after={**before,'snapshotId':january_delivery_frame(workspace)}
     catalog=c.call('gas/catalog',before)
+    calendar=next(row['reference'] for row in catalog['sideCalendars'] if row['code']=='test_utc_every_day')
     point=next(p for p in catalog['locations'] if p['deliveryPoint']=='synthetic_gas_point_a')
     terms={**before,**trade_booking(),'operationId':str(uuid4()),'bookId':catalog['books'][0]['id'],'definitionRevisionId':point['definitionRevisionId'],'gasSetupId':catalog['gasSetupId'],'discounting':False,'profile':'fixed_gas_composition_v1',
-      'physicalSides':[{'code':'receipt','pipeline':point['pipeline'],'zone':point['zone'],'deliveryPoint':point['deliveryPoint'],'product':point['product'],'direction':'receive','deliveryFrom':'2021-01-01','deliveryTo':'2021-01-03','quantityBasis':'per_operating_day','quantity':'100','link':None}],
-      'cashSides':[{'code':'payment','role':'consideration','direction':'pay','source':'receipt','stage':'delivery','price':'3','tariffCode':None,'paymentAt':'2021-02-02T00:00:00Z'},
-                   {'code':'fee','role':'fee','direction':'receive','source':'receipt','stage':'delivery','price':'0.1','tariffCode':None,'paymentAt':'2021-02-02T00:00:00Z'}]}
+      'physicalSides':[{'code':'receipt','pipeline':point['pipeline'],'zone':point['zone'],'deliveryPoint':point['deliveryPoint'],'product':point['product'],'direction':'receive','deliveryFrom':'2021-01-01','deliveryTo':'2021-01-03','quantityBasis':'per_operating_day','quantity':'100','link':None,'calendarPolicy':side_calendar_policy(calendar,delivery=True,observation=False,payment=False)}],
+      'cashSides':[{'code':'payment','role':'consideration','direction':'pay','source':'receipt','stage':'delivery','price':'3','tariffCode':None,'paymentAt':'2021-02-02T00:00:00Z','calendarPolicy':side_calendar_policy(calendar,delivery=True,observation=False,payment=True)},
+                   {'code':'fee','role':'fee','direction':'receive','source':'receipt','stage':'delivery','price':'0.1','tariffCode':None,'paymentAt':'2021-02-03T00:00:00Z','calendarPolicy':side_calendar_policy(calendar,delivery=True,observation=False,payment=True)}]}
     booked=c.call('gas/composition/book',terms);trade=booked['tradeId']
     original_pv=c.call('gas/composition/editor',dict(context=before,tradeId=trade))['valuation']['presentValue']
     view=c.call('gas/quantities/read',{'context':after,'tradeId':trade,'selectionPolicy':'operational_projection_v1'})
@@ -27,6 +29,7 @@ def run_checks(url, query=None, manifest=None):
     allocation=quantity('100')
     first=c.call('gas/billing/preview',preview)
     assert first['amount']=='-300' and first['contribution']=='-300' and first['previousId'] is None
+    assert first['contractualDueAt'][:10]=='2021-02-02'
     request=dict(preview=preview,operationId=str(uuid4()),previewHash=first['previewHash'],sourceId=first['sourceId'],expectedPreviousId=None,correctionDueAt=None,reason=None,evidence='Synthetic original billing review')
     original=c.call('gas/billing/determine',request)
     assert c.call('gas/billing/determine',request)==original
@@ -69,6 +72,7 @@ def run_checks(url, query=None, manifest=None):
     c.call('gas/billing/preview',{**preview,'decimalPlaces':3},expected=422)
     fee=c.call('gas/billing/preview',{**preview,'cashSlot':2})
     assert fee['amount']=='9.8' and fee['contribution']=='9.8'
+    assert fee['contractualDueAt'][:10]=='2021-02-03'
     if query:
         import json
         principal=query("SELECT principal_id FROM security.identity_bindings WHERE issuer='https://preview.invalid' AND subject='trader';")

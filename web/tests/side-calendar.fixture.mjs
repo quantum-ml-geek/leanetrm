@@ -5,42 +5,44 @@ export async function sideCalendarChecks(){
  const refused=read=>{try{read();return false;}catch{return true;}};
  const host=document.createElement('main');document.body.append(host);
  const {componentEditor}=await import('/ppa-components.js');
+ const {calendarKey}=await import('/side-calendar.js');
+ const ref=code=>({revision:{catalogId:'synthetic',revisionId:code==='beta'?'independent-calendar-version':'synthetic'},code});
+ const policy=(delivery,observation,payment)=>({implementation:'side_calendar_policy_v1',delivery:{applicable:!!delivery,calendar:delivery?ref(delivery):null},observation:{applicable:!!observation,calendar:observation?ref(observation):null},payment:{applicable:!!payment,calendar:payment?ref(payment):null}});
  const row=code=>({code,name:code});
- const catalog={references:{locations:[row('synthetic_hub')],quantityGroups:{contract:[{code:'capacity',unit_code:'mw'}],energy:[{code:'energy',unit_code:'mwh'}],capacity:[],certificate:[]},units:[{code:'mw',symbol:'MW'},{code:'mwh',symbol:'MWh'}],calendars:['alpha','beta'].map(row),priceIndices:[]},
+ const catalog={reference:ref('alpha').revision,references:{locations:[row('synthetic_hub')],quantityGroups:{contract:[{code:'capacity',unit_code:'mw'}],energy:[{code:'energy',unit_code:'mwh'}],capacity:[],certificate:[]},units:[{code:'mw',symbol:'MW'},{code:'mwh',symbol:'MWh'}],calendars:['alpha','beta'].map(row),priceIndices:[]},
   priceKinds:['flat'],definitionsMetadata:{priceCurves:[],volumeSources:[],generationAssets:[]},authoringPolicies:{escalationBases:[],certificateEligibility:[],certificateHolding:[],certificateDisposition:[],capacityRules:[],quantityStages:[],hourMemberships:['all']},contextTouVersions:[],touVersions:[],
   paymentOptions:{implementation:'payment_rule_v1',frequencies:[{value:'monthly',label:'Monthly'}],rules:[{value:'day_of_following_month',label:'Following month'}],dayBases:[],shortMonths:[{value:'last_day',label:'Last day'}],adjustments:['following','unadjusted'].map(value=>({value,label:value}))}};
- const quantity={kind:'profile',sources:[],assets:[],slots:[],stage:null,capacity:'capacity',energy:'energy',hours:{membership:'all',calendar:'alpha',touProduct:null,touVersion:null}};
- const payment={frequency:'monthly',rule:'day_of_following_month',days:null,dayOfMonth:5,dayBasis:null,shortMonth:'last_day',adjustment:'following',calendar:'alpha',implementation:'payment_rule_v1'};
+ catalog.sideCalendars=['alpha','beta'].map(code=>({code,reference:ref(code),coverageFrom:'2020-01-01',coverageTo:'2040-01-01',weekendMask:48,exceptions:[{date:'2031-01-02',open:true}]}));
+ const quantity={kind:'profile',sources:[],assets:[],slots:[],stage:null,capacity:'capacity',energy:'energy',hours:{membership:'all',calendar:null,touProduct:null,touVersion:null}};
+ const payment={frequency:'monthly',rule:'day_of_following_month',days:null,dayOfMonth:5,dayBasis:null,shortMonth:'last_day',adjustment:'following',calendar:null,implementation:'payment_rule_v1'};
  const template={role:'energy',ordinal:1,sideKind:'energy',sideKinds:['energy'],linkedSlots:[],quantityKinds:['profile','slots'],linkRoles:['energy']};
- const member={role:'energy',ordinal:1,coefficient:'1',side:{kind:'energy',location:'synthetic_hub',quantity,paymentRule:payment,fixedPrice:null,indexPrice:null,attribute:null}};
+ const member={role:'energy',ordinal:1,coefficient:'1',side:{calendarPolicy:policy('alpha',null,'alpha'),kind:'energy',location:'synthetic_hub',quantity,paymentRule:payment,fixedPrice:null,indexPrice:null,attribute:null}};
  let ordinal=20;
  const mount=(initial,composition)=>{const card=document.createElement('section');host.append(card);const editor=componentEditor(card,catalog,template,ordinal++,()=>{},initial,composition);return{card,editor,calendar:card.querySelector('[data-side-calendar]')};};
- const preset=mount(structuredClone(member));change(preset.calendar,'beta');
+ const preset=mount(structuredClone(member));change(preset.calendar,calendarKey(ref('beta')));
  let submitted=preset.editor.read(quantity);
- check('PPA preset applies one calendar to retained profile and payment',submitted.side.quantity.hours.calendar==='beta'&&submitted.side.paymentRule.calendar==='beta');
- check('PPA calendar edits leave original retained inputs unchanged',quantity.hours.calendar==='alpha'&&payment.calendar==='alpha');
- change(preset.card.querySelector('[data-field=quantity-choice]'),'selected');submitted=preset.editor.read(quantity);
- check('PPA selected profile uses the side calendar',submitted.side.quantity.hours.calendar==='beta'&&quantity.hours.calendar==='alpha');
- const composed=mount(structuredClone(member),{delivery:()=>({clock:'synthetic',cadence:'60'}),links:()=>[]});change(composed.calendar,'beta');submitted=composed.editor.read(quantity);
- check('Composed PPA profile and payment share the calendar',submitted.side.quantity.hours.calendar==='beta'&&submitted.side.paymentRule.calendar==='beta');
- check('Composed PPA exposes exactly one visible calendar selector',[...composed.card.querySelectorAll('select')].filter(field=>field.labels[0]?.textContent.includes('calendar')&&field.getClientRects().length).length===1);
- const mixed=structuredClone(member);mixed.side.paymentRule.calendar='beta';const conflict=mount(mixed);
- check('Mixed saved PPA calendars require explicit resolution',!conflict.calendar.value&&refused(()=>conflict.editor.read(quantity))&&conflict.card.textContent.includes('different saved calendars'));
- change(conflict.calendar,'beta');submitted=conflict.editor.read(quantity);
- check('Resolving a PPA conflict updates both owned schedules',submitted.side.quantity.hours.calendar==='beta'&&submitted.side.paymentRule.calendar==='beta');
- const unadjusted=structuredClone(member);unadjusted.side.paymentRule={...payment,adjustment:'unadjusted',calendar:null};const plain=mount(unadjusted);change(plain.calendar,'beta');
- check('Unadjusted PPA payments retain a null calendar',plain.editor.read(quantity).side.paymentRule.calendar===null);
- const linked=structuredClone(member);linked.side.quantity={...quantity,kind:'slots',hours:null,slots:[{role:'energy',ordinal:1}]};const cash=mount(linked);change(cash.calendar,'beta');submitted=cash.editor.read(quantity);
- check('Linked quantities remain source-side references',submitted.side.quantity.hours===null&&submitted.side.quantity.slots[0].role==='energy'&&quantity.hours.calendar==='alpha');
- change(cash.calendar,'alpha');check('Changing one side leaves other side selections intact',cash.calendar.value==='alpha'&&preset.calendar.value==='beta');
- const {setupScheduledSwapEditor}=await import('/scheduled-swap-editor.js'),{calendarKey}=await import('/side-calendar.js');
+ check('PPA delivery changes leave payment binding independent',submitted.side.calendarPolicy.delivery.calendar.code==='beta'&&submitted.side.calendarPolicy.payment.calendar.code==='alpha');
+ check('Calendar inspection exposes exact independent version, weekend and exception terms',preset.card.textContent.includes('independent-calendar-version')&&preset.card.textContent.includes('2020-01-01 to 2040-01-01')&&preset.card.textContent.includes('Friday, Saturday')&&preset.card.textContent.includes('2031-01-02: open'));
+ check('PPA nested rules carry no independent calendars',submitted.side.quantity.hours.calendar===null&&submitted.side.paymentRule.calendar===null);
+ check('Editing leaves retained inputs unchanged',member.side.calendarPolicy.delivery.calendar.code==='alpha');
+ const composed=mount(structuredClone(member),{delivery:()=>({clock:'synthetic',cadence:'60'}),links:()=>[]});
+ const shared=composed.card.querySelector('select[id$="-shared"]');change(shared,calendarKey(ref('beta')));
+ [...composed.card.querySelectorAll('button')].find(b=>b.textContent==='Use one calendar for all applicable schedules').click();submitted=composed.editor.read(quantity);
+ check('Explicit shared action expands independent concrete bindings',submitted.side.calendarPolicy.delivery.calendar.code==='beta'&&submitted.side.calendarPolicy.payment.calendar.code==='beta');
+ const mixed=structuredClone(member);mixed.side.calendarPolicy.payment.calendar=ref('beta');const restored=mount(mixed);submitted=restored.editor.read(quantity);
+ check('Different saved purpose bindings remain valid and visible',submitted.side.calendarPolicy.delivery.calendar.code==='alpha'&&submitted.side.calendarPolicy.payment.calendar.code==='beta'&&restored.card.textContent.includes('different calendar versions'));
+ const linked=structuredClone(member);linked.side.quantity={...quantity,kind:'slots',hours:null,slots:[{role:'energy',ordinal:1}]};linked.side.calendarPolicy=policy(null,null,'alpha');const cash=mount(linked);submitted=cash.editor.read(quantity);
+ check('Linked quantities retain source ownership',submitted.side.quantity.hours===null&&submitted.side.quantity.slots[0].role==='energy'&&!submitted.side.calendarPolicy.delivery.applicable);
+ change(cash.card.querySelector('[data-side-calendar=payment]'),calendarKey(ref('beta')));
+ check('Changing one Side leaves another unchanged',preset.editor.read(quantity).side.calendarPolicy.payment.calendar.code==='alpha');
+ const {setupScheduledSwapEditor}=await import('/scheduled-swap-editor.js');
  const {setCurveNames}=await import('/market-view.js');setCurveNames([{code:'curve',name:'Synthetic power'}]);
  const shelf=document.createElement('div');shelf.id='editor-shelf';document.body.append(shelf);
  const swapHost=document.createElement('section');host.append(swapHost);
- const ref=code=>({revision:{catalogId:'synthetic',revisionId:'synthetic'},code}),mode={resetFrequency:'daily',averagingMethod:'observation_arithmetic',label:'Business-day observations',requiresObservationCalendar:true,requiresQuantityWeights:false};
+ const mode={resetFrequency:'daily',averagingMethod:'observation_arithmetic',label:'Business-day observations',requiresObservationCalendar:true,requiresQuantityWeights:false};
  const index={definitionRevisionId:'definition',curve:'curve',index:'index',commodity:'power',currency:'USD',currencyCode:'usd',quantityCode:'energy',unit:'MWh',quoteMultiplier:'1',quantityChoices:[{specification:ref('energy'),unit:'MWh'}],samplings:[mode],customProjections:[],settlementIndices:[],contracts:[],powerQuantitySupported:true};
  const calendarRows=['alpha','beta'].map(code=>({definitionRevisionId:'definition',code,reference:ref(code)}));
- const swapCatalog={bookingActor:{name:'Synthetic trader'},books:[],legalEntities:[],counterparties:[],commodities:[{code:'power',name:'Power'}],context:{},canBook:true,indices:[index],paymentCalendars:calendarRows,paymentOptions:catalog.paymentOptions,
+ const swapCatalog={bookingActor:{name:'Synthetic trader'},books:[],legalEntities:[],counterparties:[],commodities:[{code:'power',name:'Power'}],context:{},canBook:true,indices:[index],sideCalendars:catalog.sideCalendars,paymentCalendars:calendarRows,paymentOptions:catalog.paymentOptions,
   scheduledOptions:{implementation:'scheduled_financial_swap_v1',priceApplication:'period_average_times_period_quantity_v1',powerQuantities:[{definitionRevisionId:'definition',specification:ref('power'),unit:'MW',commodity:'power'}],clocks:[{definitionRevisionId:'definition',reference:ref('clock'),label:'Synthetic clock'}]},entryTemplate:{payment},factorOptions:{}};
  let jobs=[],captured;
  const flush=async()=>{for(let n=0;n<16;n++){await Promise.resolve();await Promise.all(jobs.splice(0));}};
@@ -57,7 +59,7 @@ export async function sideCalendarChecks(){
  for(const [id,value] of [['scheduled-kind','fixed_floating'],['scheduled-commodity','power'],['scheduled-market','definition'],['scheduled-direction','-1'],['scheduled-discounting','none'],['scheduled-price-mode','agreed']])await set(document.getElementById(id),value);
  const cards=[...swapHost.querySelectorAll('.entry-side-card')];
  for(const [slot,card] of cards.entries()){
-  await set(card.querySelector('[data-side-calendar]'),calendarKey(ref(slot?'beta':'alpha')));
+  for(const field of card.querySelectorAll('[data-side-calendar]'))if(!field.disabled)await set(field,calendarKey(ref(slot?'beta':'alpha')));
   await set(card.querySelector('[data-role=quantity-basis]'),'period_total');await set(card.querySelector('[data-role=quantity-unit]'),JSON.stringify(ref('energy')));
   card.querySelector('[data-role=delivery-from]').value='2031-11-01';card.querySelector('[data-role=delivery-to]').value='2032-01-01';
   [...card.querySelectorAll('button')].find(b=>b.textContent==='Generate monthly period rows').click();await flush();
@@ -70,15 +72,19 @@ export async function sideCalendarChecks(){
  }
  const submit=async()=>{captured=undefined;document.getElementById('scheduled-swap-form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));await flush();if(!captured)throw Error('No scheduled preview request: '+swapHost.querySelector('[role=alert]').textContent);return captured.scheduled;};
  let request=await submit();
- check('Every fixed payment period uses its side calendar',request.first.periods.every(p=>p.fixed.paymentSchedule.calendar==='alpha'));
- check('Every floating observation and payment uses its side calendar',request.second.periods.every(p=>p.floating.paymentSchedule.calendar==='beta'&&p.floating.observationSchedule.calendar.code==='beta'));
- await set(cards[1].querySelector('[data-side-calendar]'),calendarKey(ref('alpha')));request=await submit();
- check('Changing a whole-side calendar refreshes every floating period',request.second.periods.every(p=>p.floating.paymentSchedule.calendar==='alpha'&&p.floating.observationSchedule.calendar.code==='alpha'));
+ check('Fixed periods use one whole-Side payment binding',request.first.calendarPolicy.payment.calendar.code==='alpha'&&request.first.periods.every(p=>p.fixed.paymentSchedule.calendar===null&&!p.fixed.calendarPolicy));
+ check('Floating periods retain whole-Side observation and payment bindings',request.second.calendarPolicy.observation.calendar.code==='beta'&&request.second.calendarPolicy.payment.calendar.code==='beta'&&request.second.periods.every(p=>p.floating.paymentSchedule.calendar===null&&p.floating.observationSchedule.calendar===null));
+ await set(cards[1].querySelector('[data-side-calendar=observation]'),calendarKey(ref('alpha')));request=await submit();
+ check('Observation edits retain independent payment calendars and refresh periods',request.second.calendarPolicy.observation.calendar.code==='alpha'&&request.second.calendarPolicy.payment.calendar.code==='beta'&&request.second.periods.every(p=>p.floating.observationSchedule.calendar===null));
  await set(cards[1].querySelector('[data-role=quantity-basis]'),'selected_interval_power');await set(cards[1].querySelector('[data-role=quantity-unit]'),JSON.stringify(ref('power')));
  for(const [label,value] of [['Contract time zone / market clock',JSON.stringify(ref('clock'))],['Delivery product','weekday_block'],['Local hour beginning · inclusive','8'],['Local hour end · exclusive','20'],['Include Saturdays','false']])await set(labelled(cards[1],label),value);
- request=await submit();check('Holiday-aware delivery uses the same exact side calendar',calendarKey(request.second.power.calendar)===calendarKey(ref('alpha')));
+ request=await submit();check('Power quantity generation uses the Side delivery binding',request.second.power.calendar===null&&request.second.calendarPolicy.delivery.calendar.code==='beta');
  await set(labelled(cards[1],'Delivery product'),'all_hours');for(const period of cards[1].querySelectorAll('.scheduled-period'))await set(labelled(period,'Date adjustment'),'unadjusted');request=await submit();
  check('All-hours delivery and unadjusted payments retain null calendars',request.second.power.calendar===null&&request.second.periods.every(p=>p.floating.paymentSchedule.calendar===null));
+ // A retained amendment has only its pinned definition in the market selector.
+ document.getElementById('scheduled-market').replaceChildren(new Option('Synthetic retained definition','definition'));
+ scheduled.reset();scheduled.sync();
+ check('Closing a retained ticket disposes calendar controls before global synchronization',document.getElementById('scheduled-swap-editor').hidden&&!document.querySelector('#scheduled-swap-editor [data-side-calendar]'));
  const report=document.createElement('section'),heading=document.createElement('h2');heading.textContent=`${results.filter(r=>r.passed).length} calendar checks passed; ${results.filter(r=>!r.passed).length} failed`;report.append(heading);
  for(const result of results){const line=document.createElement('p');line.textContent=(result.passed?'PASS: ':'FAIL: ')+result.name;report.append(line);}document.body.prepend(report);
  return results;

@@ -3,6 +3,7 @@ import type {RequestCommand} from './pending-command.js';
 import {trackEdits} from './edit-tracking.js';
 import {zonedInput} from './user-time.js';
 import {displayInstant} from './market-view.js';
+import {displayPaymentDate} from './payment-date.js';
 type Api=<T>(path:string,body?:unknown)=>Promise<T>;
 type Claim={cashSlot:number;code:string;role:string;stage:string;sideCode:string;day:string;price:string;currency:string;decimalPlaces:number;supported:boolean;completed:boolean};
 type Fact={id:string;cash_slot:number;day:string;ordinal:number;rounded_total:string;contribution:string;currency_code:string;due_at:string;reason:string|null;evidence:string};
@@ -57,7 +58,7 @@ export function setupGasBilling(host:HTMLElement,o:{api:Api;context:()=>Record<s
    options('rounding',[[data.roundingPolicy,'Currency minor units · ties to even']],get<HTMLSelectElement>('rounding').value);
    options('reason',data.correctionReasons.map(r=>[r,r.replaceAll('_',' ')]),get<HTMLSelectElement>('reason').value);
    get('zone').textContent='Display timezone: '+o.zone()+'. Corrections require an explicit due time.';
-   renderRegularTable(get('history'),'gas-billing:'+o.tradeId,o.tradeId,['Day','Cash component','Revision','Restated total','New contribution','Currency','Due','Cause','Evidence'],data.determinations.map(d=>[d.day,data.claims.find(c=>c.cashSlot===d.cash_slot)?.code??String(d.cash_slot),String(d.ordinal),d.rounded_total,d.contribution,d.currency_code,displayInstant(d.due_at,o.zone()),d.reason??'Original',d.evidence]),[2,3,4],()=>busy);
+   renderRegularTable(get('history'),'gas-billing:'+o.tradeId,o.tradeId,['Day','Cash component','Revision','Restated total','New contribution','Currency','Due','Cause','Evidence'],data.determinations.map(d=>[d.day,data.claims.find(c=>c.cashSlot===d.cash_slot)?.code??String(d.cash_slot),String(d.ordinal),d.rounded_total,d.contribution,d.currency_code,d.ordinal===1?displayPaymentDate(d.due_at):displayInstant(d.due_at,o.zone()),d.reason??'Original',d.evidence]),[2,3,4],()=>busy);
    if(!workflow?.pending())message.textContent=data.canWrite&&!o.readOnly?'Select and preview one completed delivery claim.':'Billing history is read only in this context.';
   }catch(error){if(!disposed)message.textContent=String(error);}
   finally{busy=false;if(!disposed)sync();}
@@ -79,7 +80,7 @@ export function setupGasBilling(host:HTMLElement,o:{api:Api;context:()=>Record<s
    if(p.previousId&&(!reason||!due.value))throw Error('Choose the correction reason and its due time, then preview again.');
    const correctionDueAt=p.previousId?await time.instant():null;if(disposed||o.actor()!==owner||epoch!==generation)return;
    reviewed={preview:request,previewHash:p.previewHash,sourceId:p.sourceId,expectedPreviousId:p.previousId,correctionDueAt,reason:p.previousId?reason:null,evidence};
-   const review=get('review');review.hidden=false;review.textContent=`Restated amount: ${p.amount} ${p.currency}\nNew contribution: ${p.contribution} ${p.currency}\nDue: ${displayInstant(correctionDueAt??p.contractualDueAt,o.zone())}\nCause: ${p.previousId?reason:'Original'}\nEvidence: ${evidence}`;
+   const review=get('review');review.hidden=false;review.textContent=`Restated amount: ${p.amount} ${p.currency}\nNew contribution: ${p.contribution} ${p.currency}\nDue: ${correctionDueAt?displayInstant(correctionDueAt,o.zone()):displayPaymentDate(p.contractualDueAt)}\nCause: ${p.previousId?reason:'Original'}\nEvidence: ${evidence}`;
    message.textContent='Review the amount and supporting terms, then accept.';
   }catch(error){if(!disposed)message.textContent=String(error);}
   finally{busy=false;if(!disposed)sync();}

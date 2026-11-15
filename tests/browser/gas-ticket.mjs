@@ -1,6 +1,7 @@
 // How the browser checks drive the physical gas deal ticket (docs/deal-ticket.md): its selectors, choices the backend lists, and the January
 // terms at a synthetic point the scenarios enter.
 import {idle} from './owned-browser.mjs';
+import {chooseCalendars} from './side-calendars.mjs';
 
 export const q=JSON.stringify;
 export const newTicket='#gas-ticket .deal-ticket',bookedTicket='#position-details .deal-ticket[data-mode=booked]';
@@ -12,7 +13,7 @@ export async function openBookedSchedules({wait,click}){
 
 export function gasTicket({evaluate,wait,set},ticket=newTicket){
  const card=(code,root=ticket)=>`${root} .ticket-card[data-side="${code}"]`;
- const field=(code,id)=>`${code===null?ticket+' .ticket-strip':card(code)} .ticket-field[data-field="${id}"]`;
+ const field=(code,id)=>`${code===null?ticket+' :is(.ticket-strip,.ticket-ownership)':card(code)} .ticket-field[data-field="${id}"]`;
  const control=(code,id)=>field(code,id)+' .ticket-control';
  // Choices use the ticket settling window: an API request may outlast the ordinary action wait.
  // A value is chosen only once the backend lists it, with field diagnostics if it never arrives.
@@ -38,14 +39,19 @@ export function gasTicket({evaluate,wait,set},ticket=newTicket){
   for(const [id,value] of [['delivery_from','2021-01-01'],['delivery_to','2021-02-01'],...quantity===null?[]:[['quantity',quantity]]])await set(control(code,id),value);
   for(const [id,value] of [['direction',direction],['product','test_gas'],['quantity_basis','per_operating_day'],['pipeline','test_pipeline_a'],['zone',zone],['delivery_point',point]])
    await choose(code,id,value);
+  await chooseCalendars({evaluate,set,wait},card(code),'test_utc_every_day');
  };
  // A payment or fee side charged on a physical side's delivery quantity at a manual price, paid on 5 February.
  const cashTerms=async(code,kind,direction,source,price)=>{
   for(const [id,value] of [['direction',direction],['source',source],['stage','delivery']])await choose(code,`${kind}_${id}`,value);
   await set(control(code,`${kind}_price`),price);await setInstant(code,`${kind}_payment_at`,'2021-02-05T00:00:00Z');
+  await chooseCalendars({evaluate,set,wait},card(code),'test_utc_every_day');
  };
  // A date-time field takes a local time in the zone it names: the one the instant falls on there.
  const setInstant=async(code,id,instant)=>{
+  if(await evaluate(`document.querySelector(${q(control(code,id))}).type==='date'`)){
+   await set(control(code,id),new Date(instant).toISOString().slice(0,10));return;
+  }
   const local=await evaluate(`(()=>{const zone=document.querySelector(${q(control(code,id))}).getAttribute('aria-label').split(' · ').pop();
    const p=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:zone,hourCycle:'h23',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}).formatToParts(new Date(${q(instant)})).map(x=>[x.type,x.value]));
    return p.year+'-'+p.month+'-'+p.day+'T'+p.hour+':'+p.minute;})()`);

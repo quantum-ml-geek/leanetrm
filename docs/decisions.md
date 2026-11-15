@@ -5195,6 +5195,8 @@ not application financial contracts, database state or release admission. See
 
 ## D399 · One holiday calendar per side in manual entry
 
+Superseded by D400 for the calendar contract and authoring policy.
+
 Swap and PPA booking exposes one holiday-calendar selection per side. The chosen
 calendar supplies that side's calendar-consuming observation, quantity/delivery
 and payment inputs across every period. Each side remains independent. Existing
@@ -5212,3 +5214,62 @@ choice. Owned PPA profiles are copied before their calendar is changed; linked
 source-side schedules remain untouched. Historical mixed-calendar contracts stay
 readable and retain their original behavior.
 
+## D400 · Explicit schedule-purpose calendars and UTC payment days
+
+Each Side requires one immutable, versioned calendar policy with concrete exact
+bindings for its applicable delivery, authored observation/reset and payment
+schedules. Different purposes may use different calendars; periods within one
+purpose use the same captured definition. Inapplicable purposes are explicit.
+An explicit “Use one calendar for all applicable schedules” action expands to
+identical bindings. Published product bindings remain locked. Published fixing
+events and linked quantity schedules retain their source ownership.
+
+Calendar capture includes the published reference, coverage, weekend mask, dated
+open/closed exceptions and definition digest. Missing references, coverage or
+observations refuse execution. A published TOU owns its calendar, clock, weekly
+hour mask and holiday convention. Peak closures respect that weekly mask;
+reopening cannot add an excluded weekday. Off-peak complements peak on the same
+all-hours grid, and all-hours includes holidays.
+
+Standard payment terms may keep an internal UTC instant coordinate. Their UTC
+date is the contractual payment date shown to users, without timezone conversion.
+Under `utc_payment_day_v1`, cash is due on that date and overdue on a later UTC
+date. Same-day unpaid cash remains nominally valued; a later qualified fixing
+continues to carry projection and risk until available. Payment dates cannot
+precede required delivery completion or fixing dates. Actual payment/publication
+events and separately agreed correction due instants remain instants. Exchange
+option expiry also remains an instant. Discount keys retain this distinction;
+a same-day correction or option cannot inherit standard cash’s nominal shortcut.
+A cross-commodity quantity factor does not transfer the source Side’s delivery
+clock to the independent derived Side.
+
+There is one supported execution contract, without separate old/new behavior.
+Incompatible stored contracts require explicit review and replacement. An
+upgrade must not rewrite existing trade terms, retained bytes, manifests,
+invoices or completed-operation outcomes. Updating terms alone is insufficient
+when the retained schedule/program no longer matches them; the reviewed exact
+terms, relationships, identities and executable publication must agree.
+
+Implemented for supported product families. Synthetic checks cover managed Side
+policies, exact calendar capture and immutable native relationships, retained power generation,
+published TOU terms, UTC-day valuation, financial/PPA booking and replay, crude
+consideration/fee dates, daily gas with monthly settlement and billing, and LNG
+cargo completion/payment. Independent calendar-source certification preserves
+knowledge cutoffs and retained proofs without creating financial date contexts.
+Published clock replay rejects ambiguous wire data; collection verifies exact
+published operating-day boundaries and fingerprints. Distinct PPA memberships
+may reference one canonical Side definition. Agent schemas expose required
+bindings and forbid independent nested calendar choices.
+
+The mandatory domain, native database, populated-upgrade, agent and browser
+matrix passed for supported swaps, scheduled power, PPAs, gas, crude and LNG,
+including cash and fee Sides. Native admission independently checks retained
+programs against authored dates, quantities, units, source bindings and canonical
+identities. Browser checks include calendar locks, stale receipts, recovery and
+date-only payment cells, filters, hover text and calculation evidence. Listed
+futures/options keep their exchange-defined contracts and explicit instant timing.
+Runner-contract checks and CI require every verification group.
+
+This is synthetic implementation qualification. Activation of an existing database
+requires its separately reviewed contract migration and application/schema release;
+no stored trade or published source version is rewritten automatically.

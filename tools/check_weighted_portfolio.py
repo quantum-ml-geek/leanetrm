@@ -1,4 +1,5 @@
 """Explicit multi-source weights through saved graph, booking and the retained worker."""
+from synthetic_side_calendars import all_dates_policy
 from copy import deepcopy
 from fractions import Fraction
 from uuid import uuid4
@@ -59,14 +60,14 @@ def run_checks(url, manifest, query, run_worker):
     choice = next(p for p in index['customProjections'] if p['reference']['curveId'] == saved['id'])
     assert choice['samplings'] == [{'resetFrequency': 'monthly', 'averagingMethod': 'none'}]
     delivery = next(c for c in index['contracts'] if c['deliveryFrom'] == '2021-01-01')
-    payment = {'frequency': 'monthly', 'rule': 'days_after_period_end', 'days': 0, 'dayOfMonth': None,
+    payment = {'frequency': 'monthly', 'rule': 'days_after_period_end', 'days': 1, 'dayOfMonth': None,
                'dayBasis': 'calendar_days', 'shortMonth': None, 'adjustment': 'unadjusted', 'calendar': None,
                'implementation': 'monthly_payment_date_rules_v1'}
     terms = {**context, **trade_booking(), 'operationId': str(uuid4()), 'bookId': swaps['books'][0]['id'],
         'definitionRevisionId': index['definitionRevisionId'], 'commodity': index['commodity'], 'quantity': '10',
         'fixedCoefficient': '-1', 'discounting': False,
-        'fixed': {'price': '0', 'currency': index['currencyCode'], **delivery, 'paymentSchedule': payment},
-        'floating': {'spread': '0', 'settlement': {'mode': 'curve_target', 'index': None, 'projectionPolicy': None}, 'curve': index['curve'], 'index': index['index'], 'currency': index['currencyCode'], **delivery,
+        'fixed': {'calendarPolicy': all_dates_policy(observation=False), 'price': '0', 'currency': index['currencyCode'], **delivery, 'paymentSchedule': payment},
+        'floating': {'calendarPolicy': all_dates_policy(observation=True), 'spread': '0', 'settlement': {'mode': 'curve_target', 'index': None, 'projectionPolicy': None}, 'curve': index['curve'], 'index': index['index'], 'currency': index['currencyCode'], **delivery,
          'paymentSchedule': payment, 'resetFrequency': 'monthly', 'averagingMethod': 'none', 'customProjection': choice['reference']}}
     booked = client.call('swaps/book', terms)
     assert client.call('swaps/book', terms) == booked

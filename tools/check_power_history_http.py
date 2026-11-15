@@ -2,6 +2,7 @@
 from uuid import uuid4
 from datetime import datetime, timedelta, timezone
 import json
+import hashlib
 
 
 def run_checks(client, query, manifest):
@@ -37,7 +38,10 @@ def run_checks(client, query, manifest):
             values.append(f"'{alternate_catalog}'::uuid" if column=='catalog_id' else f"'{shadow}'::uuid" if column=='revision_id' else f"CASE WHEN code='{change[0]}' THEN {change[1]} ELSE {column} END" if change else column)
         selected=','.join(values)
         query(f"INSERT INTO ref_data.{table}({columns}) SELECT {selected} FROM ref_data.{table} WHERE(catalog_id,revision_id)=('{r}','{rr}');")
-    query(f"""UPDATE ref_data.revisions SET state='sealed' WHERE(catalog_id,id)=('{alternate_catalog}','{shadow}');
+    capture=json.dumps(dict(Implementation='captured_power_grid_clock_v1',Id='synthetic_eastern',
+        From='2026-11-01T05:00:00Z',To='2026-11-04T05:00:00Z',Runs=[dict(From='2026-11-01T05:00:00Z',Minutes=-300)]),separators=(',',':'))
+    query(f"""SELECT ref_data.publish_clock_capture('{alternate_catalog}','{shadow}','synthetic_eastern','2026-11-01','2026-11-04','{capture}',decode('{hashlib.sha256(capture.encode()).hexdigest()}','hex'),NULL);
+    UPDATE ref_data.revisions SET state='sealed' WHERE(catalog_id,id)=('{alternate_catalog}','{shadow}');
     INSERT INTO power_data.sources SELECT '{alternate}',catalog_id,'Synthetic alternate metadata source',provider,dataset,market,'synthetic-alternate-point',minutes,'{alternate_catalog}','{shadow}',location_code,clock_code,currency_code,quantity_code FROM power_data.sources WHERE id='{source['id']}';""")
     try:
         after, _ = client.call('/api/power-imports')

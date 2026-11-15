@@ -1,10 +1,11 @@
+import {sideCalendar,referenceCalendarChoices,type SideCalendarCatalogRow} from './side-calendar.js';
 import {setupVersionLabels} from './setup-versions.js';
 import {crudeChoices,type CrudeReferenceData} from './crude-selection.js';
 import type {ClockRow} from './market-view.js';
 import {describeDeliveryField,selectOnlyDeliveryChoice} from './delivery-setup-fields.js';
 type Configuration={code:string;deliveryReferenceCatalogId:string;deliveryReferenceRevisionId:string;commodity:string;grade:string;facility:string;custodyPoint:string;clock:string;definitionRevisionId:string;curve:string;validFrom:string;validTo:string;quantityPolicy:string};
 type Version={id:string;state:'draft'|'published';base_setup_id:string|null;publication_order:number|null;configuration:Configuration};
-type Catalog={deliveryReferences:CrudeReferenceData;sources:{definitionRevisionId:string;curve:string;name:string;suggestedDeliveryPeriod?:{from:string;to:string}|null}[];clocks:ClockRow[];quantityPolicies:{code:string;label:string}[];versions:Version[];proposals:Version[];contextSetups:Version[];proposal:Version|null;fieldDescriptions:Record<string,string>;canSave:boolean;canPublish:boolean};
+type Catalog={sideCalendars:SideCalendarCatalogRow[];deliveryReferences:CrudeReferenceData;sources:{definitionRevisionId:string;curve:string;name:string;suggestedDeliveryPeriod?:{from:string;to:string}|null}[];clocks:ClockRow[];quantityPolicies:{code:string;label:string}[];versions:Version[];proposals:Version[];contextSetups:Version[];proposal:Version|null;fieldDescriptions:Record<string,string>;canSave:boolean;canPublish:boolean};
 type Pending={path:string;body:Record<string,unknown>;uncertain:boolean};
 
 export function setupCrudeConfiguration(o:{api:<T>(path:string,body?:unknown)=>Promise<T>;act:(work:()=>Promise<void>)=>Promise<void>;busy:()=>boolean;actor:()=>string;historical:()=>boolean;source:()=>{snapshotId:string};marketLabel:()=>string}){
@@ -18,7 +19,10 @@ export function setupCrudeConfiguration(o:{api:<T>(path:string,body?:unknown)=>P
  const get=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id) as T;
  const value=(id:string)=>get<HTMLInputElement|HTMLSelectElement>(id).value;
  const sourceKey=(p:{definitionRevisionId:string;curve:string})=>JSON.stringify([p.definitionRevisionId,p.curve]);
- let catalog:Catalog|undefined,selected:Version|undefined,base:string|null=null,dirty=false,valid=false,newEntry=false,deliveryDatesTouched=false,epoch=0,pending:Pending|undefined;
+ let catalog:Catalog|undefined,selected:Version|undefined,base:string|null=null,dirty=false,valid=false,newEntry=false,deliveryDatesTouched=false,epoch=0,previewEpoch=0,pending:Pending|undefined;
+ const calendar=sideCalendar({id:'cs-calendar',choices:()=>referenceCalendarChoices(catalog?.sideCalendars??[]),purposes:()=>({delivery:true,observation:false,payment:false}),changed:clearPreview});
+ get('cs-preview').before(calendar.element);
+ function clearPreview(){previewEpoch++;get('cs-value').textContent='';}
  const storageKey=()=>`crude-setup-command:${o.actor()}`;
  function retain(){try{if(pending)sessionStorage.setItem(storageKey(),JSON.stringify(pending));else sessionStorage.removeItem(storageKey());}catch{/* The exact command remains in memory. */}}
  const definiteRefusals=new Set(['access_denied','historical_read_only','crude_setup_conflict','crude_setup_input','crude_setup_compatibility','crude_setup_coverage','crude_setup_market_scope','request_invalid','request_too_large']);
@@ -33,13 +37,14 @@ export function setupCrudeConfiguration(o:{api:<T>(path:string,body?:unknown)=>P
   get<HTMLButtonElement>('cs-publish').disabled=locked||!catalog?.canPublish||selected?.state!=='draft'||dirty||!valid;
   const previewLocked=readLocked||!o.source().snapshotId;
   for(const id of ['cs-preview-from','cs-preview-to','cs-quantity'])get<HTMLInputElement>(id).disabled=previewLocked;
+  calendar.sync(previewLocked);
   get<HTMLButtonElement>('cs-preview').disabled=previewLocked||selected?.state!=='published'||dirty;
   get<HTMLSelectElement>('cs-binding').disabled=o.busy()||!!pending;
   get<HTMLButtonElement>('cs-new').disabled=locked||!catalog?.canSave;
   get<HTMLButtonElement>('cs-revise').disabled=locked||!catalog?.canSave||selected?.state!=='published';
   get('cs-retry').hidden=!pending;get<HTMLButtonElement>('cs-retry').disabled=o.busy()||o.historical();
  }
- function edited(){dirty=true;valid=false;get('cs-value').textContent='';get('cs-status').textContent='Save and validate these changes.';sync();}
+ function edited(){dirty=true;valid=false;clearPreview();get('cs-status').textContent='Save and validate these changes.';sync();}
  function open(version?:Version,revise=false){
   get<HTMLInputElement>('cs-version').value=version?.id??'';
   get<HTMLSelectElement>('cs-binding').value=version?.state==='published'?version.configuration.code:'';
@@ -60,7 +65,7 @@ export function setupCrudeConfiguration(o:{api:<T>(path:string,body?:unknown)=>P
   }
   const visible=catalog?.versions??[],labels=setupVersionLabels(version&&!visible.some(v=>v.id===version.id)?[...visible,version]:visible);
   get('cs-version-state').textContent=version?`${revise?'Revision of ':''}${labels.get(version.id)??'a saved setup not listed here'}`:'New binding · review starting values and complete the remaining terms.';
-  get('cs-status').textContent=sameReferences?'':`This setup was saved against an earlier delivery reference revision (${c!.commodity}, ${c!.grade}, ${c!.facility}, ${c!.custodyPoint}, ${c!.clock}). Revising it into the current masters requires choosing each physical field again.`;get('cs-value').textContent='';sync();
+  get('cs-status').textContent=sameReferences?'':`This setup was saved against an earlier delivery reference revision (${c!.commodity}, ${c!.grade}, ${c!.facility}, ${c!.custodyPoint}, ${c!.clock}). Revising it into the current masters requires choosing each physical field again.`;clearPreview();sync();
  }
  function suggestPeriod(){const period=catalog?.sources.find(s=>sourceKey(s)===value('cs-source'))?.suggestedDeliveryPeriod;if(period&&!deliveryDatesTouched&&!value('cs-from')&&!value('cs-to')){get<HTMLInputElement>('cs-from').value=period.from;get<HTMLInputElement>('cs-to').value=period.to;}}
  async function refresh(id?:string){
@@ -98,7 +103,7 @@ export function setupCrudeConfiguration(o:{api:<T>(path:string,body?:unknown)=>P
   }catch(error){if(e===epoch&&actor===o.actor()&&!uncertain&&definiteRefusals.has((error as {code?:string}).code??'')){pending=undefined;retain();}throw error;}finally{sync();}
  }
  async function mutate(path:string,body:Record<string,unknown>){if(pending)throw Error('Retry the original change first.');pending={path,body:structuredClone({...body,operationId:crypto.randomUUID()}),uncertain:false};retain();await send();}
- function reset(){get('cs-starting-values').hidden=true;newEntry=false;deliveryDatesTouched=false;epoch++;catalog=undefined;selected=undefined;pending=undefined;dirty=false;valid=false;base=null;restore();for(const input of root.querySelectorAll<HTMLInputElement|HTMLSelectElement>('input,select')){input.value='';if(input instanceof HTMLSelectElement)input.replaceChildren();}for(const id of ['cs-proposals','cs-coverage','cs-version-state','cs-market','cs-value'])get(id).replaceChildren();get('cs-status').textContent=pending?'A previous change awaits confirmation. Retry its original request.':'';sync();}
+ function reset(){get('cs-starting-values').hidden=true;newEntry=false;deliveryDatesTouched=false;epoch++;previewEpoch++;catalog=undefined;calendar.reset();selected=undefined;pending=undefined;dirty=false;valid=false;base=null;restore();for(const input of root.querySelectorAll<HTMLInputElement|HTMLSelectElement>('input,select')){input.value='';if(input instanceof HTMLSelectElement)input.replaceChildren();}for(const id of ['cs-proposals','cs-coverage','cs-version-state','cs-market','cs-value'])get(id).replaceChildren();get('cs-status').textContent=pending?'A previous change awaits confirmation. Retry its original request.':'';sync();}
  async function load(){reset();await refresh();}
  for(const input of get('cs-fields').querySelectorAll('input,select'))input.addEventListener('input',edited);
  for(const id of ['cs-from','cs-to'])get(id).addEventListener('input',()=>{deliveryDatesTouched=true;});
@@ -117,11 +122,12 @@ export function setupCrudeConfiguration(o:{api:<T>(path:string,body?:unknown)=>P
  get('cs-preview').onclick=()=>void o.act(async()=>{
   const id=selected?.id,e=epoch,actor=o.actor();if(!id||dirty)throw Error('Choose a published binding.');
   const from=value('cs-preview-from'),to=value('cs-preview-to'),quantity=value('cs-quantity');if(!from||!to||!quantity)throw Error('Choose delivery instants and total standard volume.');
+  const version=previewEpoch,calendarPolicy=calendar.read();
   const utc=(s:string)=>s+(s.length===16?':00Z':'Z');
-  const result=await o.api<{presentValue:string;currency:{code:string};curve:string}>('crude-setup/preview',{...o.source(),setupId:id,knowledgeMode:'context',deliveryFrom:utc(from),deliveryTo:utc(to),quantity});
-  if(e===epoch&&actor===o.actor()&&selected?.id===id)get('cs-value').textContent=`Delivery value: ${result.presentValue} ${result.currency.code} · ${result.curve}`;
+  const result=await o.api<{presentValue:string;currency:{code:string};curve:string}>('crude-setup/preview',{...o.source(),setupId:id,knowledgeMode:'context',deliveryFrom:utc(from),deliveryTo:utc(to),quantity,calendarPolicy});
+  if(e===epoch&&version===previewEpoch&&actor===o.actor()&&selected?.id===id)get('cs-value').textContent=`Delivery value: ${result.presentValue} ${result.currency.code} · ${result.curve}`;
  });
- for(const id of ['cs-preview-from','cs-preview-to','cs-quantity'])get(id).oninput=()=>{get('cs-value').textContent='';};
+ for(const id of ['cs-preview-from','cs-preview-to','cs-quantity'])get(id).oninput=()=>{clearPreview();};
  const dialog=document.createElement('dialog');dialog.id='cs-leave';dialog.innerHTML='<p>Discard unsaved crude setup changes?</p><div class="schedule-actions"><button type="button" id="cs-keep">Keep editing</button><button type="button" id="cs-discard">Discard changes</button></div>';root.append(dialog);
  let leaving:((go:boolean)=>void)|undefined;
  function finish(go:boolean){if(go)dirty=false;dialog.close();const done=leaving;leaving=undefined;done?.(go);}

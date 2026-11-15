@@ -89,9 +89,9 @@ def prepare(reference, market, security, manifest):
     shape, factor, source = identity('d', 750001), identity('d', 750002), identity('d', 760001)
     identities, security = moved(security)
     # Published TOU products move ahead of the definitions that bind blocks to them.
-    tou = [line for line in market.split('\n') if line.startswith('INSERT INTO market_data.tou_product')]
+    tou = [line for line in market.split('\n') if line.startswith(('INSERT INTO market_data.tou_product', 'DO $tou_fixture$'))]
     market = '\n'.join(line for line in market.split('\n') if line not in tou)
-    definitions = tou + [
+    definitions = [line.replace("'test_business','weekly_mask_explicit_closures_v1'",f"'{HOLIDAYS}','weekly_mask_explicit_closures_v1'") for line in tou] + [
         identities,
         f"INSERT INTO market_data.interval_series VALUES('{CAT}','{shape}','test_power_hourly_shape','Synthetic hourly shape · offsets','additive_price_shape',"
         f"{R},'test_power_outright',NULL,NULL,'synthetic_eastern',60,'{EDITOR}','{TENANT}','{WORKSPACE}','{now}');",

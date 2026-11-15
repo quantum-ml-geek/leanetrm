@@ -104,11 +104,14 @@ internal static class PpaPortfolio
             var envelope=envelopes[id];
             try
             {
+                var programs=await retained.LoadPrograms(connection,id,context.ContextId,frame.At,ct,recoverMissing:admission is not null);
+                var sideIds=envelope.GetProperty("sideIds").EnumerateArray().ToDictionary(s=>new SideSlot(PpaCompiler.Role(s.Text("role")),s.GetProperty("ordinal").GetInt32()),s=>s.Id("sideId"));
+                terms[id]=SideCalendarPolicies.Retain(terms[id],slot=>programs.Single(p=>p.SideId==sideIds[slot]).Identity.EconomicIdentity);
                 var schedules=await retained.Load(connection,id,context.ContextId,frame.At,ct,recoverMissing:admission is not null);
                 // Report exclusions do not waive an admitted instrument's own bound.
                 if(admission is not null)RequirePreparationWork(rows.Where(r=>r.Id("instrument_id")==id),terms);
                 var instrument=PpaCompiler.Compile(data,terms[id],tou,await PpaCompiler.ReadQuantityTypes(connection,data,terms[id],ct),id,
-                    envelope.GetProperty("sideIds").EnumerateArray().ToDictionary(s=>new SideSlot(PpaCompiler.Role(s.Text("role")),s.GetProperty("ordinal").GetInt32()),s=>s.Id("sideId")));
+                    sideIds);
                 instrument=retainedSides.Attach(instrument,schedules);
                 await PpaCompiler.ValidateDefinitions(connection,data,instrument,ct);instruments.Add(id,instrument);
             }

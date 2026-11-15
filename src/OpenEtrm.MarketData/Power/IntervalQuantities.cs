@@ -2,7 +2,10 @@ using System.Collections.Immutable;
 
 namespace OpenEtrm.MarketData.Power;
 
-public sealed record DeliveryHours(BlockMembership Membership,TouPeak? Peak,ImmutableArray<DateOnly> Holidays);
+public sealed record DeliveryHours(BlockMembership Membership,TouPeak? Peak,ImmutableArray<DateOnly> Holidays)
+{
+    public PublishedTouBinding? Product { get; init; }
+}
 public sealed record UnitQuantityRow(DeliveryInterval Interval,ExactQuantity PerUnit,VolumeState State,ImmutableArray<NormalizedContribution> Contributions);
 public interface IIntervalQuantitySource { ImmutableArray<UnitQuantityRow> Rows(DateOnly operatingMonth); }
 
@@ -38,7 +41,7 @@ public sealed class ContractProfileQuantity : IIntervalQuantitySource
     public static ExactQuantity PerUnit(DeliveryInterval interval,ReferenceKey energy,PowerClock clock,ImmutableArray<ExactDecimal> factors)
     {
         var quantity=new ExactQuantity((interval.End-interval.Start).Ticks,TimeSpan.TicksPerHour,energy);
-        return factors.IsDefaultOrEmpty?quantity:quantity.Scale(factors[TimeZoneInfo.ConvertTime(interval.Start,clock.Zone).Hour]);
+        return factors.IsDefaultOrEmpty?quantity:quantity.Scale(factors[clock.LocalAt(interval.Start).Hour]);
     }
     public ImmutableArray<UnitQuantityRow> Rows(DateOnly operatingMonth)
     {

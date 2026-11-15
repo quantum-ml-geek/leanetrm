@@ -23,7 +23,13 @@ public sealed record PhysicalLngWriteRequest(Guid SnapshotId, string? Convention
     string? DischargeFrom, string? DischargeTo, string? Quantity, string? QuantityCode, string? QuantityUnit,
     [property:JsonRequired] string? ConversionCode, string? QuantityBasis, string? Tolerance,
     LngIncotermsSelection Incoterms, string? Direction, string? ConsiderationDirection, string? FixedPrice, string? PaymentAt,
-    bool? Discounting, Guid? LegalEntityId, int? LegalEntityRevision, Guid? CounterpartyId, int? CounterpartyRevision);
+    bool? Discounting, Guid? LegalEntityId, int? LegalEntityRevision, Guid? CounterpartyId, int? CounterpartyRevision)
+{
+    [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+ public SideCalendarPolicyInput DeliveryCalendarPolicy { get; init; }=null!;
+    [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+ public SideCalendarPolicyInput ConsiderationCalendarPolicy { get; init; }=null!;
+}
 public sealed record PhysicalLngEditorRequest(FuturesReadRequest Context, Guid TradeId);
 
 public sealed class PhysicalLngStore(PreviewDatabase database)
@@ -79,6 +85,7 @@ public sealed class PhysicalLngStore(PreviewDatabase database)
             [revision.CatalogId, revision.RevisionId], ct);
         return new
         {
+            sideCalendars=await SideCalendarPolicies.Catalog(connection,ct),
             referenceCatalogId = revision.CatalogId, referenceRevisionId = revision.RevisionId,
             commodities = await Rows("commodities"), products = await Rows("lng_products"), custodyPoints = await Rows("lng_custody_points"),
             locations = await Rows("locations"), quantities = await Rows("quantity_specifications"), units = await Rows("units"),
@@ -199,6 +206,7 @@ public sealed class PhysicalLngStore(PreviewDatabase database)
     private async Task<(PhysicalLngInstrument Instrument, LngValuationAssignment Assignment, LngCargoQuantity Quantity)> Resolve(
         NpgsqlConnection connection, PreviewData data, InputFrame frame, PhysicalLngWriteRequest body, CancellationToken ct)
     {
+        data=await SideCalendarPolicies.Prepare(connection,data,[body.DeliveryCalendarPolicy,body.ConsiderationCalendarPolicy],ct);
         if (body.Convention != Convention || body.KnowledgeMode != "current" || body.Profile != Profile ||
             body.QuantityBasis != "gross_discharge_energy_total" || body.Tolerance is null || ExactDecimal.Parse(body.Tolerance) != default || body.Discounting != false)
             throw Invalid("Select the explicit fixed gross discharge-energy, zero-tolerance and undiscounted LNG profile.");
@@ -210,12 +218,12 @@ public sealed class PhysicalLngStore(PreviewDatabase database)
             throw new MarketDataException("lng_market_context", "The physical mapping requires a different explicit LNG source revision.");
         var assignment = await Metadata(connection, data, body.Physical, mapping.Text("assignmentCode"), Instant(body.DischargeFrom), Instant(body.DischargeTo), ct);
         var cargo = new PhysicalLngCargoSide(Guid.NewGuid(), assignment, new(data.ReferenceRevision, body.Physical.LoadFacility),
-            new(data.ReferenceRevision, body.Physical.LoadCustody), Instant(body.LoadFrom), Instant(body.LoadTo), Instant(body.DischargeFrom), Instant(body.DischargeTo));
+            new(data.ReferenceRevision, body.Physical.LoadCustody), Instant(body.LoadFrom), Instant(body.LoadTo), Instant(body.DischargeFrom), Instant(body.DischargeTo),SideCalendarPolicies.Resolve(data,body.DeliveryCalendarPolicy));
         var price = ExactDecimal.Parse(Required(body.FixedPrice));
         if (price.CompareTo(ExactDecimal.Parse("1000000000000")) >= 0 || price.CompareTo(ExactDecimal.Parse("-1000000000000")) <= 0)
             throw Invalid("The fixed consideration price must have absolute value below 10^12.");
         var cash = new FixedSide(Guid.NewGuid(), new FlatPrice(new UnitPrice(price, assignment.Quote)), assignment.Quote, cargo.UnitQuantity,
-            [new(cargo.DateFrom, cargo.DateTo, Instant(body.PaymentAt), new(1, 1), null)]);
+            [new(cargo.DateFrom, cargo.DateTo, Instant(body.PaymentAt), new(1, 1), null){DeliveryCompletionAt=cargo.DischargeTo}],SideCalendarPolicies.Resolve(data,body.ConsiderationCalendarPolicy));
         var quantity = ResolveQuantity(data, body, assignment);
         var instrument = new PhysicalLngInstrument(Guid.NewGuid(), cargo, cash, await ResolveIncoterms(connection, data, body.Incoterms, ct),
             Sign(body.Direction, true), Sign(body.ConsiderationDirection));

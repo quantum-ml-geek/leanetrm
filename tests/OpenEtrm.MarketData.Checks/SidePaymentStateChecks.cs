@@ -15,7 +15,7 @@ internal static class SidePaymentStateChecks
         var before=f.Snapshot(determinedAt,1).WithKnowledge(Guid.NewGuid(),determinedAt);
         var receipt=FinalSidePayment.Determine(Guid.NewGuid(),trade,binding,0,0,new(f.Model.Build(before,[]),discount));
         var cash=new SideCashAllocation(Guid.NewGuid(),receipt.Id,at,at,ExactMoney.Parse("500",instrument.Currency));
-        var snapshot=f.Snapshot(at,1).WithKnowledge(Guid.NewGuid(),at);
+        var snapshot=f.Snapshot(at.AddDays(1),1).WithKnowledge(Guid.NewGuid(),at.AddDays(1));
         CashflowBindingValuation State(ImmutableArray<SideCashAllocation> allocations)=>new(trade.Id,binding,trade.Instruments[0].Quantity,
             [new(trade,binding,0,[receipt],allocations,PaymentSideState.Policy)]);
         ExactMoney Value(CashflowBindingValuation state,MarketSnapshot? selected=null)
@@ -30,6 +30,17 @@ internal static class SidePaymentStateChecks
         Equal(Value(State([cash])),"1500");
         Equal(Value(State([cash with{Amount=ExactMoney.Parse("2000",instrument.Currency)}])),"0");
         Equal(Value(State([cash]),snapshot.WithKnowledge(Guid.NewGuid(),at.AddDays(-1))),"2000");
+        foreach(var moment in new[]{at,at.AddHours(8),at.AddDays(1).AddTicks(-10),at.AddDays(1)})
+        {
+            var view=f.Snapshot(moment,1).WithKnowledge(Guid.NewGuid(),moment);
+            Equal(Value(State([]),view),"2000");
+            Equal(Value(State([cash]),view),"1500");
+            Equal(Value(State([cash with{Amount=ExactMoney.Parse("2000",instrument.Currency)}]),view),"0");
+            Equal(Value(State([cash with{KnownAt=at.AddDays(2)}]),view),"2000");
+            var valued=(PaymentSideValuation)side.PV(new SideValuationContext(f.Model.Build(view,[]),discount).WithBindingState(State([cash])));
+            var wanted=moment<at.AddDays(1)?CashPaymentState.PartPaid:CashPaymentState.PartPaidOverdue;
+            if(valued.Payments[0].CashBalance!.State!=wanted)throw new Exception("Cash became overdue before the following UTC day.");
+        }
         var revised=snapshot with{Selections=[..snapshot.Selections.Select(s=>s.Input.Use==InputUse.FrozenFact?s with{Observation=s.Observation with{Value=ExactDecimal.Parse("99")}}:s)]};
         Equal(Value(State([cash]),revised),"1500");
         foreach(var invalid in new[]{"-1","2001"})
@@ -54,7 +65,7 @@ internal static class SidePaymentStateChecks
         if(prepaid.Payments[0].CashBalance!.State!=CashPaymentState.Paid||prepaid.Payments[0].Coverage!=ValueCoverage.UnpaidCashPresentValue||prepaid.Payments[0].Discount is not null)
             throw new Exception("A prepaid future row became overdue or requested a discount factor.");
         var noFinals=new CashflowBindingValuation(trade.Id,binding,trade.Instruments[0].Quantity,[new(trade,binding,0,[],[],PaymentSideState.Policy)]);
-        var changed=new FloatingSide(side.Id,side.Settlement,side.Quote,side.UnitQuantity,[side.Periods[0] with{Allocation=new(2,1)}]);
+        var changed=new FloatingSide(side.Id,side.Settlement,side.Quote,side.UnitQuantity,[side.Periods[0] with{Allocation=new(2,1)}],SyntheticSideCalendars.FloatingPeriods([side.Periods[0] with{Allocation=new(2,1)}]));
         Reject("payment_state",()=>changed.PV(ordinary.WithBindingState(noFinals)));
         var zeroSnapshot=snapshot with{Selections=[..snapshot.Selections.Select(s=>s with{Observation=s.Observation with{Value=default}})]};
         var zeroValue=(PaymentSideValuation)side.PV(new SideValuationContext(f.Model.Build(zeroSnapshot,[]),discount).WithBindingState(noFinals));
@@ -77,7 +88,7 @@ internal static class SidePaymentStateChecks
         var unqualifiedContext=new SideValuationContext(f.Model.Build(unqualified,[]),discount);
         Reject("payment_state",()=>side.PV(unqualifiedContext.WithBindingState(currentState)));
         Reject("payment_determination",()=>FinalSidePayment.Determine(Guid.NewGuid(),trade,binding,0,0,unqualifiedContext));
-        var fraction=new FloatingSide(Guid.NewGuid(),side.Settlement,side.Quote,side.UnitQuantity,[side.Periods[0] with{Allocation=new(1,3)}]);
+        var fraction=new FloatingSide(Guid.NewGuid(),side.Settlement,side.Quote,side.UnitQuantity,[side.Periods[0] with{Allocation=new(1,3)}],SyntheticSideCalendars.FloatingPeriods([side.Periods[0] with{Allocation=new(1,3)}]));
         var fractionalInstrument=new CashSpecimen(Guid.NewGuid(),fraction);var fractionalBinding=Guid.NewGuid();
         var fractionalTrade=new Trade(Guid.NewGuid(),trade.BookId,[new(fractionalBinding,fractionalInstrument,new(ExactDecimal.Parse("1"),side.UnitQuantity.Specification))]);
         var fractionalReceipt=FinalSidePayment.Determine(Guid.NewGuid(),fractionalTrade,fractionalBinding,0,0,new(f.Model.Build(before,[]),discount));

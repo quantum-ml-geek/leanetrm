@@ -19,7 +19,7 @@ public static class GasCashBilling
     {
         if (terms is null || terms.Day is null || terms.Price is null || selected is null ||
             terms.Day.Quantity is null || selected.Quantity is null || !TradingInstant.IsSupported(at) || !TradingInstant.IsSupported(terms.PaymentAt) ||
-            terms.Day.Start >= terms.Day.End || at < terms.Day.End || terms.PaymentAt < terms.Day.End ||
+            terms.Day.Start >= terms.Day.End || at < terms.Day.End || PaymentDatePolicy.Date(terms.PaymentAt) < PaymentDatePolicy.Date(terms.Day.End) ||
             terms.Direction != ExactDecimal.Parse("1") && terms.Direction != ExactDecimal.Parse("-1") ||
             terms.RoundingPolicy != RoundingImplementation || terms.DecimalPlaces is < 0 or > 12 ||
             selected.Kind != "allocated" || selected.RevisionId is null || selected.RevisionId == Guid.Empty ||

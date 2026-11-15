@@ -76,7 +76,7 @@ internal static class ScheduleMarketSourceChecks
             var wrongManifest=new ResolvedCalculationContext(m.Snapshot.Knowledge!.ContextId,"wrong_manifest",m.Snapshot.ValuationAt,
                 oracle.KnownAt,m.Snapshot.ValuationAt,m.Snapshot.MarketCutoff);
             Reject("side_market_sources",()=>new ScheduleMarketSources(wrongManifest,m.Build,oracle.Reference,oracle.Read,oracle.KnowledgePolicy,oracle.Policy,[],[]));
-            var fixedVolume=new FixedSide(Guid.NewGuid(),f.Terms(f.Volume),new FlatPrice(new(ExactDecimal.Parse("40"),f.EnergyPrice)));
+            var fixedVolume=new FixedSide(Guid.NewGuid(),f.Terms(f.Volume),new FlatPrice(new(ExactDecimal.Parse("40"),f.EnergyPrice)),SyntheticSideCalendars.Interval(f.Terms(f.Volume),false));
             var fixedInputs=new ScheduleMarketSources(m.Build.Graph.Plan.Context,m.Build,oracle.Reference,
                 oracle.Read with{Curves=ImmutableDictionary<CurveKey,PreparedCurve>.Empty},oracle.KnowledgePolicy,oracle.Policy,[],[]);
             Equal(fixedInputs.Evaluate(Load(fixedVolume),fixedVolume.Id,m.Build,df).PresentValue.ToExactString(),"7210");
@@ -178,7 +178,7 @@ internal static class ScheduleMarketSourceChecks
             Equal(new InstrumentScheduleExecution(Guid.NewGuid(),alternateMembers,alternateConnections).Evaluate(payment.Id,sources,m.Build,df).Value.PresentValue.ToExactString(),"7210");
             if(!originalBytes.SequenceEqual(input.Write()))throw new Exception("An instrument connection must not rewrite or specialize the independent receiving Side.");
             var combined=new FixedSide(Guid.NewGuid(),f.Terms(new SlotQuantity([new(PpaRole.EnergyDelivery),new(PpaRole.EnergyDelivery,1)]),normalization:f.Normalization([f.Asset.Key])),
-                new FlatPrice(new(ExactDecimal.Parse("40"),f.EnergyPrice)));
+                new FlatPrice(new(ExactDecimal.Parse("40"),f.EnergyPrice)),SyntheticSideCalendars.Interval(f.Terms(new SlotQuantity([new(PpaRole.EnergyDelivery),new(PpaRole.EnergyDelivery,1)]),normalization:f.Normalization([f.Asset.Key])),false));
             var combinedProgram=Load(combined);var combinedInputs=combinedProgram.Document.Instructions.Where(row=>row.Bindings.Any(binding=>binding.Kind=="sibling_quantity")).ToArray();
             var combinedMembers=ImmutableArray.Create(members[0],alternateMembers[0],new InstrumentScheduleMember(combined.Id,combinedProgram,normalization,null));
             var combinedConnections=combinedInputs.Select((row,n)=>new InstrumentQuantityConnection(combined.Id,row.Output.Ordinal,n==0?delivery.Id:another.SideId,root.Name,
@@ -196,7 +196,7 @@ internal static class ScheduleMarketSourceChecks
             Equal(diamond.Value.PresentValue.ToExactString(),"40");
             if(diamond.MemberValues.Count!=4||diamond.MemberValues.Where(pair=>pair.Key!=combined.Id).Any(pair=>pair.Value.RequestedOutputs.Contains("pv")))
                 throw new Exception("A shared upstream member must execute once for merged quantity demands, without pricing intermediate sides.");
-            var delivered=new PowerPhysicalSide(Guid.NewGuid(),f.Terms(f.Volume with{Stage=QuantityStage.Delivered}),f.Asset.Location);
+            var delivered=new PowerPhysicalSide(Guid.NewGuid(),f.Terms(f.Volume with{Stage=QuantityStage.Delivered}),f.Asset.Location,SyntheticSideCalendars.Interval(f.Terms(f.Volume with{Stage=QuantityStage.Delivered}),false));
             var deliveredMember=new InstrumentScheduleMember(delivered.Id,Load(delivered),normalization,null);
             var mixedConnections=combinedConnections.Select(connection=>connection.OutputSide==another.SideId?connection with{OutputSide=delivered.Id}:connection).ToImmutableArray();
             Reject("ppa_quantity_source",()=>new InstrumentScheduleExecution(Guid.NewGuid(),[members[0],deliveredMember,combinedMembers[2]],mixedConnections).Evaluate(combined.Id,sources,m.Build,df));
@@ -282,13 +282,13 @@ internal static class ScheduleMarketSourceChecks
         var period=PreparedCurve.Prepare(periodCurve,
             [(new DateTimeOffset(f.Month.ToDateTime(TimeOnly.MinValue),TimeSpan.Zero),new DateTimeOffset(f.Month.AddMonths(1).ToDateTime(TimeOnly.MinValue),TimeSpan.Zero))],
             [],[],market.Snapshot.ValuationAt,market.Snapshot.Knowledge!.KnownAt);
-        var side=new FloatingSide(Guid.NewGuid(),f.Terms(f.Profile),new(key,ExactDecimal.Parse("1"),new(default,f.EnergyPrice),selection));
+        var side=new FloatingSide(Guid.NewGuid(),f.Terms(f.Profile),new(key,ExactDecimal.Parse("1"),new(default,f.EnergyPrice),selection),SyntheticSideCalendars.Interval(f.Terms(f.Profile),true));
         var source=new ScheduleMarketSources(market.Build.Graph.Plan.Context,market.Build,data.Reference,
             data.Read with{Curves=data.Read.Curves.SetItem(key,period)},data.KnowledgePolicy,data.Policy,[],[selection]);
         var program=Load(side);var df=new ExplicitDiscounting(ExactDecimal.Parse("1"),DiscountFactorSource.Undiscounted);
         Reject("ppa_cadence",()=>source.Evaluate(program,side.Id,market.Build,df,nativePriceAttribute:ValuedAttribute.Energy));
         Reject("ppa_quantity_unit",()=>source.Evaluate(program,side.Id,market.Build,df,nativePriceAttribute:ValuedAttribute.Capacity));
-        var nativeSide=new FloatingSide(Guid.NewGuid(),f.Terms(f.Profile),new(key,ExactDecimal.Parse("2"),new(ExactDecimal.Parse("3"),f.EnergyPrice),null));
+        var nativeSide=new FloatingSide(Guid.NewGuid(),f.Terms(f.Profile),new(key,ExactDecimal.Parse("2"),new(ExactDecimal.Parse("3"),f.EnergyPrice),null),SyntheticSideCalendars.Interval(f.Terms(f.Profile),true));
         var nativeProgram=Load(nativeSide);
         var nativeSource=new ScheduleMarketSources(market.Build.Graph.Plan.Context,market.Build,data.Reference,data.Read,data.KnowledgePolicy,data.Policy,[],[]);
         Reject("side_market_sources",()=>nativeSource.Evaluate(nativeProgram,nativeSide.Id,market.Build,df));

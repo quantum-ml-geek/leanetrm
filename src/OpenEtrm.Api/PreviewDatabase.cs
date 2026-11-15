@@ -125,7 +125,7 @@ public sealed partial class PreviewDatabase : IAsyncDisposable
     // rows in key order, so identical pins give identical rows in the same order whatever plan the database uses.
     private static readonly (string Table,string Key)[] ReferenceKeys = [("currencies","code"), ("dimensions","code"), ("units","code"),
         ("unit_conversions","from_unit_code,to_unit_code"), ("commodities","code"), ("measurement_bases","code"), ("quantity_specifications","code"),
-        ("quote_specifications","code"), ("value_specifications","code"), ("locations","code"), ("clock_rules","code"), ("calendars","code"),
+        ("quote_specifications","code"), ("value_specifications","code"), ("locations","code"), ("clock_rules","code"), ("clock_captures","clock_code"), ("calendars","code"),
         ("calendar_days","calendar_code,business_date"), ("commodity_units","commodity_code,unit_code"), ("location_types","code"),
         ("commodity_locations","commodity_code,location_code"), ("pipeline_zones","pipeline_code,zone_code"),
         ("pipeline_delivery_points","pipeline_code,zone_code,point_code"),
@@ -840,6 +840,8 @@ public sealed class PreviewData
     public CurveModel Model { get; }
     // Whether this read loaded calendar days; without them no holiday is known, which is not the same as none.
     public bool CalendarDaysRead { get; init; }
+    internal ImmutableDictionary<ReferenceKey,CalendarDefinition> CapturedCalendars { get; private init; }=ImmutableDictionary<ReferenceKey,CalendarDefinition>.Empty;
+    internal PreviewData WithCalendars(ImmutableDictionary<ReferenceKey,CalendarDefinition> calendars)=>new(this,Observations,CompletePins){CapturedCalendars=calendars};
     public ImmutableArray<MarketContract> Contracts { get; }
     public ImmutableArray<QuoteSpecification> Quotes { get; }
     public ImmutableArray<FuturesSeriesSpecification> FuturesSeries { get; }
@@ -855,7 +857,7 @@ public sealed class PreviewData
     private PreviewData(PreviewData metadata,ImmutableArray<JsonElement> observations,bool completePins)
     {
         CompletePins=completePins;manifest=metadata.manifest;Definitions=metadata.Definitions;References=metadata.References;
-        ExecutionPolicies=metadata.ExecutionPolicies;Model=metadata.Model;CalendarDaysRead=metadata.CalendarDaysRead;
+        ExecutionPolicies=metadata.ExecutionPolicies;Model=metadata.Model;CalendarDaysRead=metadata.CalendarDaysRead;CapturedCalendars=metadata.CapturedCalendars;
         Contracts=metadata.Contracts;Quotes=metadata.Quotes;FuturesSeries=metadata.FuturesSeries;FuturesOptionSeries=metadata.FuturesOptionSeries;
         revision=metadata.revision;reference=metadata.reference;
         referenceRows=metadata.referenceRows;definitionRows=metadata.definitionRows;contractDefinitions=metadata.contractDefinitions;

@@ -13,6 +13,7 @@ across quantity units within one currency and instrument type; its totals are co
 The risk catalog's held targets, which the risk report's presets shock, are compared with what each position is priced from:
 a future's own contract and the contracts of a swap's projected resets, as the swap's own editor read states them.
 """
+from synthetic_side_calendars import all_dates_policy
 from collections import defaultdict
 from fractions import Fraction
 import json
@@ -493,12 +494,12 @@ def run_checks(url):
     local = next(i for i in catalog['indices'] if i['curve'] == 'local_gas')
 
     def floating(index):
-        return {'spread': '0', 'settlement': {'mode': 'curve_target', 'index': None, 'projectionPolicy': None}, 'curve': index['curve'], 'index': index['index'], 'currency': index['currencyCode'], 'deliveryFrom': '2021-01-01',
+        return {'calendarPolicy': all_dates_policy(observation=True), 'spread': '0', 'settlement': {'mode': 'curve_target', 'index': None, 'projectionPolicy': None}, 'curve': index['curve'], 'index': index['index'], 'currency': index['currencyCode'], 'deliveryFrom': '2021-01-01',
                 'deliveryTo': '2021-02-01', 'paymentSchedule': payment, 'resetFrequency': 'monthly', 'averagingMethod': 'none'}
     common = {**swap_context, **trade_booking(), 'definitionRevisionId': base['definitionRevisionId'], 'commodity': base['commodity'],
               'bookId': BOOKS[0], 'quantity': '1000'}
     receive = {**common, 'operationId': str(uuid4()), 'fixedCoefficient': '1', 'discounting': True, 'floating': floating(base),
-               'fixed': {'price': '3.5', 'currency': base['currencyCode'], 'deliveryFrom': '2021-01-01', 'deliveryTo': '2021-02-01', 'paymentSchedule': payment}}
+               'fixed': {'calendarPolicy': all_dates_policy(observation=False), 'price': '3.5', 'currency': base['currencyCode'], 'deliveryFrom': '2021-01-01', 'deliveryTo': '2021-02-01', 'paymentSchedule': payment}}
     both_floating = {**common, 'operationId': str(uuid4()), 'swapType': 'financial_floating_floating', 'firstCoefficient': '-1', 'fixedCoefficient': None,
                      'fixed': None, 'discounting': False, 'firstFloating': {**floating(base), 'spread': '0'}, 'floating': {**floating(local), 'spread': '0'}}
     received, paired = c.call('swaps/book', receive), c.call('swaps/book', both_floating)

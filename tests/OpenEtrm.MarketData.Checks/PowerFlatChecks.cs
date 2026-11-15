@@ -204,11 +204,11 @@ internal static class PowerFlatChecks
         var shapedInputs=PreparedCurve.Prepare(shapedDay,[(shapedDayFrom,shapedDayTo)],offsets,[],at,at);
         var shapedBuild=model.Build(snapshot,shapedInputs.Dependencies(new(2020,12,1)));
         var shapedPrices=new IntervalPriceResolver(shapedBuild,ImmutableDictionary<CurveKey,PreparedCurve>.Empty.Add(shapedDay.Key,shapedInputs)).Prices(shapedDay.Key,new(2020,12,1));
-        Equal(shapedPrices.Single(p=>clock.OperatingDate(p.Start)==new DateOnly(2020,12,19)&&TimeZoneInfo.ConvertTime(p.Start,clock.Zone).Hour==7).Price!.ToExactString(),"56");
-        Equal(shapedPrices.Single(p=>TimeZoneInfo.ConvertTime(p.Start,clock.Zone).Hour==15).Price!.ToExactString(),"48");
-        Equal(shapedPrices.Where(p=>TimeZoneInfo.ConvertTime(p.Start,clock.Zone).Hour<7).All(p=>p.Price!.ToExactString()=="29"),true);
+        Equal(shapedPrices.Single(p=>clock.OperatingDate(p.Start)==new DateOnly(2020,12,19)&&clock.LocalAt(p.Start).Hour==7).Price!.ToExactString(),"56");
+        Equal(shapedPrices.Single(p=>clock.LocalAt(p.Start).Hour==15).Price!.ToExactString(),"48");
+        Equal(shapedPrices.Where(p=>clock.LocalAt(p.Start).Hour<7).All(p=>p.Price!.ToExactString()=="29"),true);
         Equal(shapedPrices.Sum(p=>decimal.Parse(p.Price!.ToExactString(),System.Globalization.CultureInfo.InvariantCulture)),1064m);
-        Equal(shapedPrices.Sum(p=>decimal.Parse(p.Price!.ToExactString(),System.Globalization.CultureInfo.InvariantCulture)*(TimeZoneInfo.ConvertTime(p.Start,clock.Zone).Hour is >=7 and <15?2:1)),1512m);
+        Equal(shapedPrices.Sum(p=>decimal.Parse(p.Price!.ToExactString(),System.Globalization.CultureInfo.InvariantCulture)*(clock.LocalAt(p.Start).Hour is >=7 and <15?2:1)),1512m);
         var partialCurve=shapedDay with{Policy=FlatIntervalCurve.ReplaceActuals,ActualRule=new("interval_end",0,IntervalActualRule.SupportedVersion)};
         var fixedCell=offsets[7];
         var oneActual=new IntervalActual(fixedCell.Start,fixedCell.End,new(ExactDecimal.Parse("10"),curve.Unit),at,Guid.NewGuid(),1);
@@ -217,7 +217,7 @@ internal static class PowerFlatChecks
         var partialPrices=new IntervalPriceResolver(partialBuild,ImmutableDictionary<CurveKey,PreparedCurve>.Empty.Add(shapedDay.Key,partialShape)).Prices(shapedDay.Key,new(2020,12,1));
         Equal(partialPrices.Single(p=>p.Start==fixedCell.Start).Price!.ToExactString(),"10");
         Equal(partialPrices.Single(p=>p.Start==fixedCell.End).Price!.ToExactString(),"56");
-        Equal(partialPrices.Single(p=>TimeZoneInfo.ConvertTime(p.Start,clock.Zone).Hour==15).Price!.ToExactString(),"48");
+        Equal(partialPrices.Single(p=>clock.LocalAt(p.Start).Hour==15).Price!.ToExactString(),"48");
         Refuses("interval_shape_coverage",()=>PreparedCurve.Prepare(partialCurve,[(shapedDayFrom,shapedDayTo)],[..offsets.Where(c=>c.Start!=fixedCell.Start)],[oneActual],at,at));
         var allActual=offsets.Select(c=>new IntervalActual(c.Start,c.End,new(ExactDecimal.Parse("10"),curve.Unit),at,Guid.NewGuid(),1)).ToArray();
         var actualOnly=PreparedCurve.Prepare(partialCurve,[(shapedDayFrom,shapedDayTo)],[],allActual,at,at);

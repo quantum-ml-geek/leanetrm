@@ -25,7 +25,9 @@ internal static class PowerIntervalCurves
         int Number(JsonElement row,string key)=>int.Parse(row.Text(key),CultureInfo.InvariantCulture);
         return [..rows.Select(v=>new TouProductVersion(v.Id("product_id"),v.Text("code"),Number(v,"version"),Number(v,"generation"),v.Text("state"),v.Text("name"),
             new(v.Id("clock_catalog_id"),v.Id("clock_revision_id"),v.Text("clock_code")),Number(v,"peak_start_hour"),Number(v,"peak_end_hour"),
-            v.GetProperty("peak_saturday").GetBoolean(),Number(v,"publication_order"),v.Instant("published_at")))];
+            v.GetProperty("peak_saturday").GetBoolean(),Number(v,"publication_order"),v.Instant("published_at"))
+            {Calendar=v.OptionalText("calendar_code") is {} calendar?new(new(v.Id("calendar_catalog_id"),v.Id("calendar_revision_id")),calendar):null,
+             HolidayTreatment=v.OptionalText("holiday_treatment")})];
     }
 
     internal static Definition Read(PreviewData data,RecipeDefinition recipe,IReadOnlyCollection<TouProductVersion> products,PublishedRecipeReference? output=null,IReadOnlyCollection<CustomCurveVersion>? versions=null)
@@ -41,8 +43,9 @@ internal static class PowerIntervalCurves
         if(profile.ValueKind==JsonValueKind.Undefined||profile.Text("interval_minutes")!="60"||
             product.Clock!=new ClockReference(data.ReferenceRevision.CatalogId,data.ReferenceRevision.RevisionId,profile.Text("clock_code")))
             throw Invalid("Choose an hourly output profile with the TOU version's exact reference clock.");
-        var rule=data.References["clock_rules"].Single(r=>r.Text("code")==profile.Text("clock_code"));
-        var clock=PowerClock.FromRule(ReferenceClockJson.Read(rule),TimeZoneDatabase.Installed());
+        product.Binding(data.DefinitionRevision.CatalogId).RequireGrid(new(data.ReferenceRevision,profile.Text("clock_code")),
+            new(data.ReferenceRevision,profile.Text("calendar_code")));
+        var clock=PublishedClocks.Resolve(data,profile.Text("clock_code"));
         var sources=new List<(JsonElement Curve,BlockMembership Membership,ImmutableArray<MarketContract> Contracts)>();
         foreach(var port in ports.Keys)
         {

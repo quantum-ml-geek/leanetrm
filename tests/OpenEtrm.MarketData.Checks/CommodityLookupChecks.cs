@@ -173,11 +173,11 @@ internal sealed class CommodityLookupFixture
         var from = contracts[first].DeliveryFrom; var to = monthly ? contracts[first].DeliveryTo : contracts[^1].DeliveryTo;
         var payment = new DateTimeOffset(to.AddDays(2).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
         var unit = new Quantity(ExactDecimal.Parse("1"), Quote.Quantity);
-        var fixedSide = new FixedSide(Guid.NewGuid(), new(ExactDecimal.Parse("4"), Quote), unit, from, to, payment, FixedSide.Implementation, Quote);
+        var fixedSide = new FixedSide(Guid.NewGuid(), new(ExactDecimal.Parse("4"), Quote), unit, from, to, payment, FixedSide.Implementation, Quote,SideCalendarPolicy.UseOne(SyntheticSideCalendars.HundredYearTerm,true,false,true));
         var projections = Enumerable.Range(first, count).Select(n => new SwapProjection(Request(n), contracts[n])).ToImmutableArray();
         var floating = new FloatingSide(Guid.NewGuid(), PriceSettlementSelection.CurveTarget(R("local_index")), Quote, unit, from, to,
             Enumerable.Range(first - firstMonth, count).Select(Fixing).ToImmutableArray(), payment,
-            averaging, projections, FloatingSide.IndexedImplementation);
+            averaging, projections, FloatingSide.IndexedImplementation,SideCalendarPolicy.UseOne(SyntheticSideCalendars.HundredYearTerm,true,true,true));
         return new(Guid.NewGuid(), [new(fixedSide, ExactDecimal.Parse("-1")), new(floating, ExactDecimal.Parse("1"))], FinancialSwapInstrument.Implementation, false);
     }
 }

@@ -12,6 +12,9 @@ internal static class GasPointIndexCash
 {
  internal static FloatingSide Resolve(PreviewData data,PhysicalGasSide physical,GasCashRequest cash,JsonElement point)
  {
+  var calendars=SideCalendarPolicies.Resolve(data,cash.CalendarPolicy);
+  calendars.RequirePurposes(true,true,true);
+  calendars.For(CalendarPurpose.Observation).RequireCoverage(physical.Quantities.From,physical.Quantities.To);
   var terms=cash.Indexed!;
   if(cash.Role!="indexed_consideration"||cash.Price is not null||cash.TariffCode is not null||cash.PaymentAt is not null||terms.Index is not null||
    terms.PaymentConvention!=GasIndexedCash.Payment||terms.PaymentDay is <1 or >28||string.IsNullOrWhiteSpace(terms.Spread))throw Invalid();
@@ -33,12 +36,12 @@ internal static class GasPointIndexCash
    if(contracts.Length!=1)throw Invalid();var contract=contracts[0];
    var fixings=PriceSettlementInputs.Fixings(data,PriceSettlementSelection.CurveTarget(index),quote,[contract]);if(fixings.Length!=1)throw Invalid();
    var month=new DateOnly(day.OperatingDay.Year,day.OperatingDay.Month,1).AddMonths(1);
-   var payment=new DateTimeOffset(month.AddDays(terms.PaymentDay-1).ToDateTime(TimeOnly.MinValue,DateTimeKind.Utc));if(payment<day.End)throw Invalid();
+   var payment=new DateTimeOffset(month.AddDays(terms.PaymentDay-1).ToDateTime(TimeOnly.MinValue,DateTimeKind.Utc));PaymentDatePolicy.RequireCompletion(payment,day.End);
    periods.Add(new(day.OperatingDay,to,fixings[0].FixingAt,payment,FloatingAveraging.CalendarDayArithmetic,
     [new(new(new(data.DefinitionRevision,code),contract.Key),contract)],fixings,null,new UnitPrice(spread,quote),null,projection.ToBinding(),
-    new(BigInteger.Parse(day.Delivery.Numerator,CultureInfo.InvariantCulture),BigInteger.Parse(day.Delivery.Denominator,CultureInfo.InvariantCulture)),FloatingSide.DeliveryIndexImplementation));
+    new(BigInteger.Parse(day.Delivery.Numerator,CultureInfo.InvariantCulture),BigInteger.Parse(day.Delivery.Denominator,CultureInfo.InvariantCulture)),FloatingSide.DeliveryIndexImplementation){DeliveryCompletionAt=day.End});
   }
-  return new(Guid.NewGuid(),quote,physical.UnitQuantity,periods.ToImmutable(),FloatingSide.DeliveryIndexImplementation);
+  return new(Guid.NewGuid(),quote,physical.UnitQuantity,periods.ToImmutable(),FloatingSide.DeliveryIndexImplementation,calendars,gasDeliveryClock:physical.Quantities.Clock);
  }
  static MarketDataException Invalid()=>new("gas_point_index_terms","Select location publication pricing with explicit spread and payment day; every gas day requires one exact point index period and compatible publication contract.");
 }

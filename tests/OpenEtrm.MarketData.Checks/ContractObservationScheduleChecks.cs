@@ -24,7 +24,7 @@ internal static class ContractObservationScheduleChecks
         var period=new FloatingSidePeriod(from,to,observations[0].Observation.FixingAt,payment,FloatingAveraging.CalendarDayArithmetic,
             [..observations.Select(o=>new SwapProjection(o.Market,o.Contract))],[],null,null,null,null,new ExactRatio(1,1),FloatingSide.ContractObservationImplementation)
             {ContractObservations=observations};
-        var floating=new FloatingSide(Guid.NewGuid(),quote,new(ExactDecimal.Parse("1"),quote.Quantity),[period]);
+        var floating=new FloatingSide(Guid.NewGuid(),quote,new(ExactDecimal.Parse("1"),quote.Quantity),[period],SyntheticSideCalendars.FloatingPeriods([period]));
         var definition=ScheduleDefinitionCompiler.Generate(floating);var program=BookedSideProgram.Compile(definition);var content=program.Write();
         var loaded=BookedSideProgram.Read(content,new(BookedSideProgram.Digest(content),definition.Manifest,definition.Family,definition.EconomicIdentity,definition.PricingBindingIdentity));
         var prices=loaded.Document.Instructions.Where(i=>i.Output.Operation=="contract_observation_price").ToArray();
@@ -52,7 +52,7 @@ internal static class ContractObservationScheduleChecks
             "A retained source must reject a changed selection anchor.");
         Reject(first.Output,first.Bindings.Select(b=>b.Port=="settlement"?b with{Coordinate="TraderMark"}:b),
             "A futures source must reject a retained trader-mark role.");
-        var fixedSide=new FixedSide(Guid.NewGuid(),new(ExactDecimal.Parse("3"),quote),new(ExactDecimal.Parse("1"),quote.Quantity),from,to,payment,FixedSide.Implementation,quote);
+        var fixedSide=new FixedSide(Guid.NewGuid(),new(ExactDecimal.Parse("3"),quote),new(ExactDecimal.Parse("1"),quote.Quantity),from,to,payment,FixedSide.Implementation,quote,SyntheticSideCalendars.Dated(false));
         var swap=new FinancialSwapInstrument(Guid.NewGuid(),[new(fixedSide,ExactDecimal.Parse("-1")),new(floating,ExactDecimal.Parse("1"))],FinancialSwapInstrument.Implementation,false);
         var retained=RetainedSideSchedules.Attach(swap,new Dictionary<Guid,ScheduleDefinition>{{fixedSide.Id,ScheduleDefinitionCompiler.Generate(fixedSide)},{floating.Id,definition}});
         var reloaded=((SidePaymentSchedule)retained.Floating.GenerateSchedule()).Payments.SelectMany(p=>p.Prices).Select(p=>p.ContractObservation).ToArray();

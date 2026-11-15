@@ -44,7 +44,7 @@ public sealed record PpaNormalization
 [EconomicDefinition("schedule_quantity_input_port_v1")]
 public sealed record ScheduleInputPort([property:IdentityField]SideSlot Slot,[property:IdentityField]ReferenceKey Quantity,
     [property:IdentityField]IntervalScheduleParameters Schedule);
-[EconomicDefinition("ppa_side_terms_v2")]
+[EconomicDefinition("ppa_side_terms_v3")]
 public sealed record PpaSideTerms([property:IdentityField]PpaDelivery Delivery,[property:IdentityField]PpaQuantity Quantity,
     [property:IdentityField]ReferenceKey Currency,[property:IdentityField]Quantity UnitQuantity,[property:IdentityField]PaymentRule DateRule,
     [property:IdentityField]IntervalScheduleParameters Schedule,[property:IdentityField]ReferenceKey ScheduleQuantity,[property:IdentityField]PpaNormalization Normalization,

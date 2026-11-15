@@ -90,6 +90,7 @@ def run_checks(client, context, view, expected, query, earlier, owned_root):
     print('PASS PPA report: missing retained schedule isolates whole trades, preserves exact healthy values, and leaves complete PPA totals unavailable', flush=True)
     print('PASS individual positions: another PPA missing its retained schedule cannot block the selected PPA', flush=True)
 
+    # Program admission verifies the retained digest before reconstructing terms.
     # Unsupported storage is a rebooking refusal. A supported-format artifact
     # with corrupt content remains a hard failure, even in the report path.
     schedule = json.loads(mappings)[0]['schedule_id']
@@ -104,8 +105,8 @@ def run_checks(client, context, view, expected, query, earlier, owned_root):
         report('side_schedule_unsupported', affected)
         change(f"UPDATE trading.side_schedules SET schema_version='{header['version']}',content_hash=decode(repeat('ab',32),'hex') WHERE id='{schedule}';")
         failed = client.call('trading/workspace', dict(context=selected, view=view, bookingCatalog='directory', summaries=[]), expected=422)
-        assert failed['code'] == 'pilot_close_inputs' and {b['reason'] for b in failed['affectedBindings']} == {'side_schedule_definition'}, failed
-        strict('side_schedule_definition')
+        assert failed['code'] == 'pilot_close_inputs' and {b['reason'] for b in failed['affectedBindings']} == {'side_schedule_program'}, failed
+        strict('side_schedule_program')
         client.call('profile', {'profile': 'admin'})
         try:
             client.call('trading/workspace', dict(context=selected, view=view, bookingCatalog='directory', summaries=[]), expected=403)

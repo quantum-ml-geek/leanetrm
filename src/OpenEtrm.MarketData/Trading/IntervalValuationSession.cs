@@ -70,7 +70,7 @@ public sealed class IntervalValuationSession
     {
         var expected=keys.ToHashSet();
         if(factors.IsDefault || factors.Length!=keys.Length || factors.Any(f=>f is null || !expected.Contains(f.Payment) ||
-            f.DiscountFactor.CompareTo(default)<=0 || !Enum.IsDefined(f.Source) || (!ReferenceEquals(Scenario.Snapshot,f.Snapshot)&&!Scenario.Snapshot.HasSameInputs(f.Snapshot)) ||
+            f.DiscountFactor.CompareTo(default)<=0 || !Enum.IsDefined(f.Source) || !f.HasValidPaymentDayTerms(Scenario.Snapshot.ValuationAt) || (!ReferenceEquals(Scenario.Snapshot,f.Snapshot)&&!Scenario.Snapshot.HasSameInputs(f.Snapshot)) ||
             instrument.Discounting==(f.Source==DiscountFactorSource.Undiscounted) || f.Source==DiscountFactorSource.Undiscounted && f.DiscountFactor!=PpaErrors.One) ||
             factors.Select(f=>f.Payment).Distinct().Count()!=factors.Length)
             throw PpaErrors.Error("side_payment_factors","discounting","Each future value date requires its exact selected factor and context.");

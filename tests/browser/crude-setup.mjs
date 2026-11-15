@@ -1,3 +1,4 @@
+import {chooseCalendars} from './side-calendars.mjs';
 import {openPhysical} from './physical-workspace.mjs';
 import {newTrade} from './new-trade.mjs';
 // Owned synthetic browser qualification; no existing installation is opened.
@@ -38,14 +39,14 @@ export async function run(actions){
  await set('#snapshot',frame);await wait(idle);
  // A financial-context change reloads the configuration page; explicitly reopen the retained version.
  await set('#cs-binding','synthetic_browser_binding');await wait(idle);
- await set('#cs-preview-from','2021-01-01T00:00:00');await set('#cs-preview-to','2021-02-01T00:00:00');await set('#cs-quantity','1000');await click('#cs-preview');await wait("document.querySelector('#cs-value').textContent.includes('80000')&&"+idle);
+ await set('#cs-preview-from','2021-01-01T00:00:00');await set('#cs-preview-to','2021-02-01T00:00:00');await set('#cs-quantity','1000');await chooseCalendars(actions,'#crude-setup-page','test_utc_every_day');await click('#cs-preview');await wait("document.querySelector('#cs-value').textContent.includes('80000')&&"+idle);
  await check('published binding previews the original source with exact delivery volume',"document.querySelector('#cs-value').textContent.includes('synthetic_crude_forward')&&"+fitsWidth);
  await shot('crude-delivery-setup');
  await persona('trader');await set('#snapshot',frame);await wait(idle);await click('#nav-futures');await wait(idle);await newTrade(actions,'crude');await wait("document.querySelector('#crude-grade').options.length>1&&"+idle);
  for(const field of ['crude-book','crude-entity','crude-party'])await set('#'+field,await evaluate(`document.querySelector('#${field}').options[1].value`));
  await check('physical trade choices contain no curve or binding override and keep single options explicit',"!document.querySelector('#crude-curve')&&!document.querySelector('#crude-binding-choice')&&document.querySelector('#crude-commodity').value===''&&!document.querySelector('#crude-quantityCode').disabled&&document.querySelector('#crude-quantityCode').value===''");
  for(const [field,value] of [['commodity','synthetic_crude'],['grade','synthetic_unmapped_grade'],['facility','test_facility_a'],['custodyPoint','test_delivery_point_a'],['quantityCode','synthetic_crude_quantity'],['clock','test_utc'],['profile','physical_crude_standard_volume_v1']])await set('#crude-'+field,value);
- await set('#crude-direction','receive');await set('#crude-cash-direction','pay');await set('#crude-from','2021-01-10T00:00:00');await set('#crude-to','2021-01-11T00:00:00');await set('#crude-quantity','1000');await set('#crude-price','78');await set('#crude-payment','2021-02-02T00:00:00');await set('#crude-fee-mode','none');
+ await set('#crude-direction','receive');await set('#crude-cash-direction','pay');await set('#crude-from','2021-01-10T00:00:00');await set('#crude-to','2021-01-11T00:00:00');await set('#crude-quantity','1000');await set('#crude-price','78');await set('#crude-payment','2021-02-02');await set('#crude-fee-mode','none');
  await wait("document.querySelector('#crude-assignment').value!==''");
  await evaluate(`(()=>{const original=window.fetch;window.fetch=async function(input,init){const response=await original.call(this,input,init);if(String(input).endsWith('/api/crude/resolve')&&response.ok){window.fetch=original;return new Promise(resolve=>{window.releaseCrudeResolution=()=>resolve(response);});}return response;};})()`);
  await set('#crude-from','2021-01-09T00:00:00');await wait("!!window.releaseCrudeResolution");
@@ -53,11 +54,11 @@ export async function run(actions){
  await evaluate('window.releaseCrudeResolution()');
  await check('a late mapping response cannot restore pricing after a physical selection changes',"document.querySelector('#crude-assignment').value===''&&!document.querySelector('#crude-reference').textContent.includes('synthetic_crude_forward')&&document.querySelector('#crude-book-submit').disabled");
  await set('#crude-grade','synthetic_unmapped_grade');await set('#crude-from','2021-01-10T00:00:00');await set('#crude-quantity','1000');await set('#crude-price','78');
- await submit('#crude-form');await wait("document.querySelector('#crude-total').textContent==='Contractual present value: 2,000.000 USD'&&"+idle);
+ await chooseCalendars(actions,'#crude-form','test_utc_every_day');await submit('#crude-form');await wait("document.querySelector('#crude-total').textContent==='Contractual present value: 2,000.000 USD'&&"+idle);
  await evaluate(`(()=>{const original=window.fetch;window.fetch=async function(input,init){if(String(input).endsWith('/api/crude/book')){window.fetch=original;window.syntheticRejectedCrudeCommand=JSON.parse(init.body);return new Response(JSON.stringify({code:'crude_setup_conflict',message:'Synthetic definite stale publication rollback'}),{status:409,headers:{'Content-Type':'application/json'}});}return original.call(this,input,init);};})()`);
  await click('#crude-book-submit');await wait(idle);
  await check('a definite stale-setup booking refusal unlocks the ticket for review',"document.querySelector('#crude-pending').hidden&&!document.querySelector('#crude-price').disabled");
- await submit('#crude-form');await wait("!document.querySelector('#crude-book-submit').disabled&&"+idle);
+ await chooseCalendars(actions,'#crude-form','test_utc_every_day');await submit('#crude-form');await wait("!document.querySelector('#crude-book-submit').disabled&&"+idle);
  await evaluate(`(()=>{const original=window.fetch;window.fetch=async function(input,init){const response=await original.call(this,input,init);if(String(input).endsWith('/api/crude/book')){window.fetch=original;window.syntheticCrudeCommand=JSON.parse(init.body);window.syntheticCrudeReceipt=await response.clone().json();}return response;};})()`);
  await click('#crude-book-submit');await wait("window.syntheticCrudeReceipt?.tradeId&&"+idle);
  await check('the native crude ticket books the backend derived setup version',`window.syntheticCrudeCommand.crudeSetupId===${JSON.stringify(id)}&&!!window.syntheticCrudeReceipt.tradeId&&window.syntheticCrudeCommand.operationId!==window.syntheticRejectedCrudeCommand.operationId`);

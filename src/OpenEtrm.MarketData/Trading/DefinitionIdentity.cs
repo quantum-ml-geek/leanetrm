@@ -45,10 +45,9 @@ public sealed record DefinitionIdentity(string Version, string Digest, string Ca
         definition switch
         {
             Crude.CrudeValuationAssignment a when a.QuantityEquivalence is not null => "crude_valuation_assignment_v2",
-            Crude.PhysicalCrudeSide s when s.QuantityEquivalence is not null => "physical_crude_side_v2",
             PpaInstrument p=>p.TermImplementation,
             ProfileQuantity p when !p.HourlyFactors.IsDefaultOrEmpty=>"ppa_profile_quantity_v2",
-            FloatingSidePeriod p when !p.ContractObservations.IsDefaultOrEmpty=>"floating_side_period_v2",
+            FloatingSidePeriod p when !p.ContractObservations.IsDefaultOrEmpty=>"floating_side_period_v4",
             FloatingProjectionBinding b when !b.ContractObservations.IsDefaultOrEmpty=>"floating_projection_binding_v2",
             _=>contract.Version
         };
@@ -68,8 +67,7 @@ public sealed record DefinitionIdentity(string Version, string Digest, string Ca
                 if(field.Name==nameof(FloatingSidePeriod.ContractObservations)&&
                     (value is FloatingSidePeriod p&&p.ContractObservations.IsDefaultOrEmpty||value is FloatingProjectionBinding b&&b.ContractObservations.IsDefaultOrEmpty))continue;
                 if (field.Name == nameof(Crude.CrudeValuationAssignment.QuantityEquivalence) &&
-                    (value is Crude.CrudeValuationAssignment { QuantityEquivalence: null } ||
-                     value is Crude.PhysicalCrudeSide { QuantityEquivalence: null })) continue;
+                    value is Crude.CrudeValuationAssignment { QuantityEquivalence: null }) continue;
                 if(field.Name==nameof(ProfileQuantity.HourlyFactors)&&value is ProfileQuantity profileIdentity&&profileIdentity.HourlyFactors.IsDefaultOrEmpty)continue;
                 var selected=field.GetValue(value);
                 writer.WritePropertyName(field.Name);Write(writer,selected);
@@ -127,7 +125,7 @@ public sealed record DefinitionIdentity(string Version, string Digest, string Ca
             Power.AssetKey k => ["asset", k.Revision, k.Code],
             Power.VolumeSourceKey k => ["volume_source", k.Revision, k.Code],
             Power.DeliveryCoverage c => ["coverage", c.From, c.To],
-            Power.DeliveryHours h => ["delivery_hours", h.Membership, h.Peak, h.Holidays],
+            Power.DeliveryHours h => ["delivery_hours_v2", h.Membership, h.Peak, h.Holidays, h.Product],
             Power.TouPeak p => ["tou_peak", p.StartHour, p.EndHour, p.Saturday],
             PaymentRule r => ["payment_rule", PaymentRule.Implementation, r.Frequency, r.Rule, r.Days, r.DayOfMonth,
                 r.DayBasis, r.ShortMonthPolicy, r.Adjustment, r.Calendar],

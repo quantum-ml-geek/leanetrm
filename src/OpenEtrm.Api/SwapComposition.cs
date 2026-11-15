@@ -33,6 +33,7 @@ public sealed partial class SwapStore
   {
    var selected=One((await database.ReadInputMarkets(connection,frame,ct,data)).Where(m=>m.Data.DefinitionRevision.RevisionId==body.DefinitionRevisionId));data=selected.Data;frame=selected.Frame;
   }
+  data=await SideCalendarPolicies.Prepare(connection,data,SideCalendarPolicies.Inputs(body),ct);
   return OpenEtrm.MarketData.Trading.SideComponents.ActualFixingPins(data.Snapshot(frame),Resolve(data,body).Instrument.Sides.Select(m=>m.Side)).ToArray();
  }
 

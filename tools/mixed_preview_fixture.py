@@ -2,7 +2,7 @@
 import json
 from decimal import Decimal
 from datetime import datetime, timezone
-from preview_fixture import TENANT, WORKSPACE, security_fixture
+from preview_fixture import TENANT, WORKSPACE, security_fixture, fixture_clock_publications
 from rate_curve_fixture import dated_curve
 
 
@@ -58,6 +58,7 @@ def fixture(export_path):
     r('interest_rate_definitions',('basic_rate','usd','synthetic_calendar','actual_365_fixed','simple','openetrm_rates_v1'),
       columns='catalog_id,revision_id,code,currency_code,calendar_code,day_count,compounding,implementation')
     r('value_specifications',('zero_rate','dimensionless',None,None,'-0.1',1))
+    ref.append(fixture_clock_publications(dict(referenceCatalogId=rcat,referenceRevisionId=rrev,clocks=[dict(code='utc',kind='fixed_offset',fixedOffsetSeconds=0,ianaZone=None,tzdbVersion=None)],**{'from':'2020-01-01','to':'2100-01-01'})))
     ref.extend([f"UPDATE ref_data.revisions SET state='sealed' WHERE catalog_id={value(rcat)} AND id={value(rrev)};",'COMMIT;'])
     market.extend(['BEGIN;',insert('market_data.catalogs',[(cat,'mixed_gas')]),
                    insert('market_data.revisions',[(cat,rev,rcat,rrev,'draft',0)])])

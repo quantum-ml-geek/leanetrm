@@ -12,7 +12,12 @@ namespace OpenEtrm.Api;
 public sealed record PhysicalGasTerms(Guid SnapshotId,string? Convention,string? KnowledgeMode,Guid OperationId,Guid BookId,
  Guid DefinitionRevisionId,string? Pipeline,string? Zone,string? DeliveryPoint,string? Product,string? DeliveryFrom,string? DeliveryTo,string? Quantity,string? QuantityBasis,
  string? Direction,string? FixedPrice,string? UsageFee,string? UsageTariffCode,string? UsageFeeDirection,string? PaymentAt,bool? Discounting,
- Guid? LegalEntityId,int? LegalEntityRevision,Guid? CounterpartyId,int? CounterpartyRevision,Guid? GasSetupId);
+ Guid? LegalEntityId,int? LegalEntityRevision,Guid? CounterpartyId,int? CounterpartyRevision,Guid? GasSetupId)
+{
+ public SideCalendarPolicyInput? DeliveryCalendarPolicy {get;init;}
+ public SideCalendarPolicyInput? ConsiderationCalendarPolicy {get;init;}
+ public SideCalendarPolicyInput? FeeCalendarPolicy {get;init;}
+}
 public sealed record PhysicalGasEditorRequest(FuturesReadRequest Context,Guid TradeId);
 
 internal sealed record GasMeterBinding(ReferenceKey? Reference,Guid? SetupId,Guid CatalogId,string Code,string Pipeline,string Identifier,string QuantitySpecification,string ValidFrom,string ValidTo);
@@ -127,7 +132,7 @@ public sealed class PhysicalGasStore(PreviewDatabase database)
     valuation=matched.Length==1?ValuationDetails(data,matched[0]):null};
   }).ToArray();
   var books=await PreviewDatabase.Rows(c,"SELECT row_to_json(b)::text FROM trading.books b WHERE catalog_id=$1 ORDER BY name",[Catalog],ct);
-  return new{gasSetupId=setup,gasSetupPublication=publication,physicalReferences=referencePaths.Select(ReferencePath).ToArray(),locations,tariffs=(await Tariffs(c,data,setup,ct)).Select(t=>new{code=t.Text("code"),name=t.OptionalText("logical_code")??t.Text("code"),pipeline=t.Text("pipeline_code"),product=t.Text("product_code"),quote=t.Text("quote_code"),rate=t.Text("rate"),validFrom=t.Text("valid_from"),validTo=t.Text("valid_to"),basis="contractual_delivery_quantity"}),books,legalEntities=await TradeParties.Catalog(c,Catalog,true,ct),counterparties=await TradeParties.Catalog(c,Catalog,false,ct),
+  return new{sideCalendars=await SideCalendarPolicies.Catalog(c,ct),gasSetupId=setup,gasSetupPublication=publication,physicalReferences=referencePaths.Select(ReferencePath).ToArray(),locations,tariffs=(await Tariffs(c,data,setup,ct)).Select(t=>new{code=t.Text("code"),name=t.OptionalText("logical_code")??t.Text("code"),pipeline=t.Text("pipeline_code"),product=t.Text("product_code"),quote=t.Text("quote_code"),rate=t.Text("rate"),validFrom=t.Text("valid_from"),validTo=t.Text("valid_to"),basis="contractual_delivery_quantity"}),books,legalEntities=await TradeParties.Catalog(c,Catalog,true,ct),counterparties=await TradeParties.Catalog(c,Catalog,false,ct),
    scope="Future physical gas delivery with fixed contractual quantities, separate fixed consideration and optional usage fee. This profile admits up to 1200 operating days with exact monthly index coverage, fixed-offset gas days and no discounting. Actuals and settlement remain unavailable."};
  }
  internal async Task<(ImmutableArray<GasValuationAssignment> Assignments,GasDayClock Clock,JsonElement Mapping)> Metadata(NpgsqlConnection c,PreviewData data,PhysicalGasTerms body,CancellationToken ct)
@@ -159,7 +164,7 @@ public sealed class PhysicalGasStore(PreviewDatabase database)
   }
   var clockCode=row.Text("clock_code");
   if(One(data.References["clock_rules"].Where(x=>x.Text("code")==clockCode)).Text("kind")!="fixed_offset")throw Invalid("This booking profile requires a fixed-offset delivery clock.");
-  var clock=new GasDayClock(R(clockCode),PpaQuantitiesStore.Clock(data,clockCode).Rules,int.Parse(row.Text("day_start_minute"),CultureInfo.InvariantCulture));
+  var clock=new GasDayClock(R(clockCode),PpaQuantitiesStore.FixedClockRules(data,clockCode),int.Parse(row.Text("day_start_minute"),CultureInfo.InvariantCulture));
   return(assignments.ToImmutable(),clock,row);
  }
  internal static async Task RequirePortfolioScope(NpgsqlConnection c,Guid catalog,ImmutableArray<Guid> books,ImmutableArray<Guid> portfolios,CancellationToken ct)
@@ -177,8 +182,11 @@ public sealed class PhysicalGasStore(PreviewDatabase database)
  // A booked single-point trade's retained terms, read as the request that booked it under this read's snapshot, and its instrument.
  internal async Task<(PhysicalGasTerms Terms,Guid Instrument)> Retained(NpgsqlConnection c,InputFrame frame,Guid trade,CancellationToken ct)
  {
-  var row=One(await PreviewDatabase.Rows(c,"SELECT row_to_json(x)::text FROM(SELECT r.*,i.definition_revision_id,i.assignment_code,i.delivery_from,i.delivery_to,i.quantity_basis,i.fixed_price,i.usage_fee,i.usage_tariff_code,i.usage_fee_direction,i.gas_setup_id,i.payment_at,a.pipeline_code,a.zone_code,a.point_code,a.product_code FROM trading.gas_trade_revisions r JOIN trading.gas_instruments i USING(catalog_id,instrument_id) JOIN market_data.gas_valuation_assignments a ON(a.catalog_id,a.revision_id,a.code)=(i.catalog_id,i.definition_revision_id,i.assignment_code) WHERE r.catalog_id=$1 AND r.trade_id=$2 AND NOT i.composition)x",[Catalog,trade],ct));
+  var row=One(await PreviewDatabase.Rows(c,"SELECT row_to_json(x)::text FROM(SELECT r.*,t.request AS original_request,i.definition_revision_id,i.assignment_code,i.delivery_from,i.delivery_to,i.quantity_basis,i.fixed_price,i.usage_fee,i.usage_tariff_code,i.usage_fee_direction,i.gas_setup_id,i.payment_at,a.pipeline_code,a.zone_code,a.point_code,a.product_code FROM trading.gas_trade_revisions r JOIN trading.gas_instruments i USING(catalog_id,instrument_id) JOIN trading.trades t ON(t.catalog_id,t.id)=(r.catalog_id,r.trade_id) JOIN market_data.gas_valuation_assignments a ON(a.catalog_id,a.revision_id,a.code)=(i.catalog_id,i.definition_revision_id,i.assignment_code) WHERE r.catalog_id=$1 AND r.trade_id=$2 AND NOT i.composition)x",[Catalog,trade],ct));
   var body=new PhysicalGasTerms(frame.Id,Convention,"current",Guid.Empty,row.Id("book_id"),row.Id("definition_revision_id"),row.Text("pipeline_code"),row.Text("zone_code"),row.Text("point_code"),row.Text("product_code"),row.Text("delivery_from"),row.Text("delivery_to"),row.Text("quantity"),row.Text("quantity_basis"),row.Text("direction")=="1"?"receive":"deliver",row.Text("fixed_price"),row.OptionalText("usage_tariff_code") is null?row.OptionalText("usage_fee"):null,row.OptionalText("usage_tariff_code"),row.OptionalText("usage_fee_direction") switch{"-1"=>"pay","1"=>"receive",_=>null},row.Text("payment_at"),false,row.Id("legal_entity_id"),int.Parse(row.Text("legal_entity_revision"),CultureInfo.InvariantCulture),row.Id("counterparty_id"),int.Parse(row.Text("counterparty_revision"),CultureInfo.InvariantCulture),row.OptionalText("gas_setup_id") is {} gasSetup?Guid.Parse(gasSetup):null);
+  var request=row.GetProperty("original_request");
+  SideCalendarPolicyInput? Policy(string name)=>request.TryGetProperty(name,out var value)&&value.ValueKind!=JsonValueKind.Null?value.Deserialize<SideCalendarPolicyInput>(JsonSerializerOptions.Web):null;
+  body=body with{DeliveryCalendarPolicy=Policy("deliveryCalendarPolicy"),ConsiderationCalendarPolicy=Policy("considerationCalendarPolicy"),FeeCalendarPolicy=Policy("feeCalendarPolicy")};
   return(body,row.Id("instrument_id"));
  }
 }

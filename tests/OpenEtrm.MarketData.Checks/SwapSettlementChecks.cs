@@ -39,7 +39,7 @@ internal static class SwapSettlementChecks
             throw new Exception("Different trade memberships shared an occurrence.");
 
         // Determination needs no discount factor, even after payment is due.
-        var due = final with { Id = Guid.NewGuid(), ValuationAt = f.Payment, MarketCutoff = f.Payment };
+        var due = final with { Id = Guid.NewGuid(), ValuationAt = f.Payment.AddDays(1), MarketCutoff = f.Payment.AddDays(1) };
         Equal(Calculate(1, due).ExactAmount, floatingCash.ExactAmount);
         Reject("side_payment_due", () => swap.PV(Context(due)));
 

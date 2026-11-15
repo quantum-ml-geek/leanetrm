@@ -38,7 +38,8 @@ public abstract class PreparedValuationEnvironment
     {
         var factors=input.Provider.ResolveForValuation([input.Payment],Snapshot,CalculationAt,ClockPolicy);
         if(factors.IsDefault||factors.Length!=1||factors[0] is null||factors[0].Payment!=input.Payment||
-            !factors[0].Snapshot.HasSameInputs(Snapshot)||factors[0].DiscountFactor.CompareTo(default)<=0)
+            !factors[0].Snapshot.HasSameInputs(Snapshot)||factors[0].DiscountFactor.CompareTo(default)<=0||
+            !factors[0].HasValidPaymentDayTerms(CalculationAt))
             throw new MarketDataException("risk_dependency","A discount provider must return its exact declared payment and retained source context.");
         return factors[0];
     }

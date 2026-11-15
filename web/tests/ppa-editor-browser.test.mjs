@@ -20,8 +20,8 @@ async function fixture(work){
    const binding={trade_id:'trade-a',revision:1,binding_id:'binding-a',instrument_id:'instrument-a',coverage_from:'2031-11-01T00:00:00Z',coverage_to:'2031-12-01T00:00:00Z',quantity:'1'};
    const head={trade_id:'trade-a',revision:1,book_id:'book-a',action:'booked'};
    const editor={tradeId:'trade-a',knownAt:catalog.knownAt,head,bindings:[binding],instruments:[],history:[head],revisionBindings:[]};
-   const preview={...measures,currency:{code:'usd'},scope:{explicitSubset:false},receipt:{selected:'original'},bindings:[{bindingId:'binding-a',measures,sides:[{sideId:'side-a',coefficient:'1',measures:{...measures,periods:[],rows:[]}}]}]};
-   window.calls=[];window.release=null;window.hold=null;window.total=64;window.errors=[];
+   const preview={...measures,currency:{code:'usd'},scope:{explicitSubset:false},receipt:{selected:'original',payment:{paymentAt:'2031-12-10T00:00:00Z'},publishedAt:'2031-12-09T12:00:00Z'},bindings:[{bindingId:'binding-a',measures,sides:[{sideId:'side-a',coefficient:'1',measures:{...measures,periods:[],rows:[{interval:{start:'2031-11-01T00:00:00Z',end:'2031-11-01T01:00:00Z'},kind:'Payment',quantity:amount(1),amount:amount(999),quantityState:'Projected',economicClass:'Unrealised',coverage:'Discounted',valueAt:'2031-12-10T00:00:00Z'}]}}]}]};
+   window.zone='America/New_York';window.calls=[];window.release=null;window.hold=null;window.total=64;window.errors=[];
    const api=async(path,body)=>{
     calls.push({path,body:structuredClone(body)});
     const result=path==='ppa/frames'?[{id:'frame-a',name:'Synthetic frame',at:catalog.knownAt}]:path==='ppa/catalog'?catalog:path==='ppa/editor'?editor:
@@ -33,7 +33,7 @@ async function fixture(work){
    };
    let busy=false;window.action=Promise.resolve();let ppa;
    const act=work=>{if(busy)return Promise.resolve();return window.action=(async()=>{busy=true;ppa.sync();try{await work();}catch(e){errors.push(e.message);}finally{busy=false;ppa.sync();}})();};
-   ppa=setupPpa({api,act,busy:()=>busy,zone:()=> 'America/New_York',actor:()=> 'synthetic-actor',can:()=>true,historical:()=>false});
+   ppa=setupPpa({api,act,busy:()=>busy,zone:()=>window.zone,actor:()=> 'synthetic-actor',can:()=>true,historical:()=>false});
    window.ppa=ppa;await ppa.load();
    window.set=(id,value,type='change')=>{const n=document.getElementById(id);n.value=value;n.dispatchEvent(new Event(type,{bubbles:true}));};
    window.click=async id=>{document.getElementById(id).click();await window.action;};
@@ -74,5 +74,24 @@ test('PPA termination offset choices invalidate an already reviewed boundary',{s
   await evaluate("(async()=>{await inspectTrade();await click('ppa-terminate-open');set('ppa-termination-at','2031-11-02T01:00','input');set('ppa-termination-reason','Synthetic correction','input');await click('ppa-terminate-review');const offset=document.querySelector('#ppa-termination-at + select');offset.value='2031-11-02T05:00:00Z';offset.dispatchEvent(new Event('change',{bubbles:true}));await click('ppa-terminate-review');document.querySelector('#ppa-termination-confirm').checked=true;document.querySelector('#ppa-termination-confirm').dispatchEvent(new Event('change'));offset.value='2031-11-02T06:00:00Z';offset.dispatchEvent(new Event('change',{bubbles:true}));})()");
   assert.equal(await evaluate("document.querySelector('#ppa-terminate').disabled"),true);
   assert.equal(await evaluate("document.querySelector('#ppa-termination-review').textContent"),'');
+ });
+});
+
+
+test('PPA inspection and evidence keep contractual payment dates across display zones',{skip:!browserAvailable,timeout:browserTestTimeout},async()=>{
+ await fixture(async evaluate=>{
+  for(const zone of ['America/New_York','Asia/Kathmandu']){
+   await evaluate(`(async()=>{window.zone=${JSON.stringify(zone)};ppa.refresh();await inspectTrade();await click('ppa-value-trade');set('ppa-detail-binding','binding-a');set('ppa-detail-side','side-a');set('ppa-detail-month','2031-11');await click('ppa-detail-show');})()`);
+   const result=await evaluate(`({errors,receiptText:document.querySelector('#ppa-receipt').textContent,row:document.querySelector('#ppa-detail tbody tr')?.textContent,evidenceText:document.querySelector('#ppa-detail-evidence').textContent,previewEvidence:document.querySelector('#ppa-preview-evidence').textContent})`);
+   assert.deepEqual(result.errors,[]);
+   result.receipt=JSON.parse(result.receiptText);result.evidence=JSON.parse(result.evidenceText);
+   assert.equal(JSON.parse(result.previewEvidence)[0].paymentDate,'Dec 10, 2031');
+   assert.equal(JSON.parse(result.previewEvidence)[0].valueAt,undefined);
+   assert.equal(result.receipt.payment.paymentDate,'Dec 10, 2031');
+   assert.equal(result.receipt.payment.paymentAt,undefined);
+   assert.equal(result.receipt.publishedAt,'2031-12-09T12:00:00Z');
+   assert.match(result.row,/Dec 10, 2031$/);
+   assert.equal(result.evidence[0].paymentDate,'Dec 10, 2031');assert.equal(result.evidence[0].valueAt,undefined);
+  }
  });
 });

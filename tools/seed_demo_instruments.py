@@ -1,4 +1,5 @@
 """Additional explicitly synthetic instruments, booked through ordinary operations."""
+from synthetic_side_calendars import all_dates_policy
 from copy import deepcopy
 from pathlib import Path
 from uuid import UUID, uuid5
@@ -38,7 +39,7 @@ def seed_heat_rates(c):
         power = next(i for i in catalog['indices'] if i['definitionRevisionId'] == REV and i['curve'] == 'local_power_all_in')
         for sample, amount, rate, coefficient in [('receive_power', '1000', '7', '1'), ('pay_power', '250', '8', '-1')]:
             def side(index, quantity):
-                return dict(basis='period_total', quantity=next(q['specification'] for q in index['quantityChoices'] if q['specification']['code'] == index['quantityCode']), amount=None,
+                return dict(calendarPolicy=all_dates_policy(observation=True), basis='period_total', quantity=next(q['specification'] for q in index['quantityChoices'] if q['specification']['code'] == index['quantityCode']), amount=None,
                             allocation=None, priceApplication='period_average_times_quantity_v1', power=None,
                             periods=[dict(amount=quantity, fixed=None, floating=dict(settlement=dict(mode='curve_target',index=None,projectionPolicy=None),curve=index['curve'], index=index['index'], currency=index['currencyCode'],
                                 deliveryFrom='2021-01-01', deliveryTo='2021-02-01', paymentSchedule=payment, resetFrequency='monthly', averagingMethod='none', spread='0'))])
@@ -59,9 +60,10 @@ def seed_ppas(c, manifest):
     frame = sorted(execution_frames(c.call('workspace')), key=lambda f: f['at'])[0]
     physical = profile_terms(manifest)
     virtual = deepcopy(physical)
-    virtual['memberships'][0] = dict(role='indexed_payment', ordinal=0, coefficient='1', side=dict(kind='indexed', quantity=deepcopy(physical['memberships'][0]['side']['quantity']),
+    virtual['memberships'][0] = dict(role='indexed_payment', ordinal=0, coefficient='1', side=dict(calendarPolicy=all_dates_policy(observation=True), kind='indexed', quantity=deepcopy(physical['memberships'][0]['side']['quantity']),
         paymentRule=physical['memberships'][0]['side']['paymentRule'], location=None, fixedPrice=None,
         indexPrice=dict(curve=manifest['intervalCurves']['shaped'], quantity='test_power_quantity', multiplier='1', indexMultiplier='1',settlement=None, adder='0'), attribute=None))
+    virtual['memberships'][1]['side']['calendarPolicy'] = all_dates_policy(observation=False)
     virtual['memberships'][1]['side']['quantity'] = deepcopy(physical['memberships'][0]['side']['quantity'])
     alternate = profile_terms(manifest, '45')
     for membership in alternate['memberships']:

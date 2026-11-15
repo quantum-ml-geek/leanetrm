@@ -18,7 +18,7 @@ internal static class CrudeReceiptCashChecks
             quantity, D("60"), "fahrenheit", Q("1000"), new(start, start.AddMonths(1)), due,
             new(new UnitPrice(D("78"), new PriceUnit(R("usd"), quantity.Key, D("1"))), D("-1")),
             new(new UnitPrice(D("0.5"), new PriceUnit(R("usd"), quantity.Key, D("1"))), D("1")),
-            new("currency_minor_units_to_even_v1", 2, CashTieRule.ToEven));
+            new("currency_minor_units_to_even_v1", 2, CashTieRule.ToEven)){HandlingFeePaymentAt=due.AddDays(3)};
         var receipt = new CrudeAcceptedReceipt(Guid.NewGuid(), start.AddDays(2), Q("400"), terms.Grade, location, CrudeReceiptTitle.Transferred);
         var inventory = new CrudeReceiptDisposition(Guid.NewGuid(), receipt.Id, Q("250"), CrudeDispositionKind.OwnedInventory,
             start.AddDays(3), null, location.CustodyPoint, terms.OwnerLegalEntityId);
@@ -36,6 +36,12 @@ internal static class CrudeReceiptCashChecks
         Equal(cash.Amount.Amount, "-31200"); Equal(cash.Paid.Amount, "-10000"); Equal(cash.Open.Amount, "-21200");
         if (cash.State != CrudeInvoiceState.PartPaidOverdue) throw new Exception("Unpaid cash must remain overdue independently of physical receipt.");
         Equal(partial.Invoices.Single(i => i.InvoiceId == feeInvoice.Id).Amount.Amount, "200");
+        var feeBalance=partial.Invoices.Single(i=>i.InvoiceId==feeInvoice.Id);
+        if(cash.DueAt!=due||feeBalance.DueAt!=due.AddDays(3)||feeBalance.State!=CrudeInvoiceState.Open)
+            throw new Exception("Consideration and fee must retain independent payment dates and aging.");
+        foreach(var invalid in new[]{terms with{HandlingFeePaymentAt=null},terms with{HandlingFeePaymentAt=start},
+            terms with{HandlingFee=null}})
+            Reject("crude_receipt_terms",()=>CrudeReceiptCash.Reconcile(invalid,[],[],[],[],[],due));
         var completion = receipt with { Id = Guid.NewGuid(), Quantity = Q("600") };
         var completed = Value([receipt, completion], [], [], []);
         Equal(completed.RemainingQuantity.Amount, "0"); Equal(completed.UndisposedQuantity.Amount, "1000");
@@ -81,7 +87,7 @@ internal static class CrudeReceiptCashChecks
             throw new Exception("Invoice allocation retains exact contributions independently of cumulative rounding residuals.");
         if (first.RoundingEffect.ToExactString() != "0.005" || second.RoundingEffect.ToExactString() != "-0.005")
             throw new Exception("Cumulative allocations must preserve separately auditable rounding effects.");
-        var pennyTerms = terms with { ContractQuantity = Q("1"), Consideration = new(cents, D("-1")), HandlingFee = null };
+        var pennyTerms = terms with { ContractQuantity = Q("1"), Consideration = new(cents, D("-1")), HandlingFee = null, HandlingFeePaymentAt=null };
         var halfReceipt = receipt with { Quantity = Q("0.5") };
         var pennyState = CrudeReceiptCash.Reconcile(pennyTerms, [halfReceipt], [], [], [invoice], [], due);
         var pennyCash = pennyState.Cash.Single();
@@ -127,7 +133,7 @@ internal static class CrudeReceiptCashChecks
         Equal(reissued.Cash.Single(c => c.Component == CrudeCashComponent.Consideration).Invoiced.Amount, "-78000");
         Equal(reissued.Invoices.Single(i => i.InvoiceId == reissue.Id).Amount.Amount, "-46800");
         var pennyTerms = terms with { ContractQuantity = new(ExactDecimal.Parse("1"), terms.Quantity.Key),
-            Consideration = new(new UnitPrice(ExactDecimal.Parse("0.01"), terms.Consideration.Price.Unit), ExactDecimal.Parse("-1")), HandlingFee = null };
+            Consideration = new(new UnitPrice(ExactDecimal.Parse("0.01"), terms.Consideration.Price.Unit), ExactDecimal.Parse("-1")), HandlingFee = null, HandlingFeePaymentAt=null };
         var halves = new[] { receipt with { Quantity = new(ExactDecimal.Parse("0.5"), terms.Quantity.Key) },
             completion with { Quantity = new(ExactDecimal.Parse("0.5"), terms.Quantity.Key) } }.ToImmutableArray();
         var halfState = CrudeReceiptCash.Reconcile(pennyTerms, halves, [], [], [invoice, second, reissue], [], [voidSecond], due.AddDays(2));

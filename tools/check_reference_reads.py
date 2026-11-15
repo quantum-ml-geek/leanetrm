@@ -52,6 +52,7 @@ def run_checks(c, check):
           canonical([r for r in references['locations'] if r['code'] in locations]))
 
     keys = {'unit_conversions': ['from_unit_code', 'to_unit_code'],
+            'clock_captures': ['clock_code'],
             'commodity_units': ['commodity_code', 'unit_code'],
             'calendar_days': ['calendar_code', 'business_date'],
             'commodity_locations': ['commodity_code', 'location_code'],

@@ -58,7 +58,7 @@ public sealed record FuturesOptionInstrument : Instrument
         var binding = Binding(context);
         return new(Id, binding.Policy.Id, [binding.Underlying], UnitQuantity.Specification, Currency) { Time = binding.Calibration is SolvedVolatility?
             ValuationTimeDependency.Between(context.Snapshot.ValuationAt,Series.InstructionCutoffAt is {} cutoff&&cutoff>context.Snapshot.ValuationAt?cutoff:Series.Terms.ExpiryAt):ValuationTimeDependency.Pinned,
-            DiscountInputs=[new(new(Id,0,Series.Terms.ExpiryAt,Currency),binding.Discounting)],
+            DiscountInputs=[new(new(Id,0,Series.Terms.ExpiryAt,Currency){Timing=ValueTimingKind.Instant},binding.Discounting)],
             Volatility=binding.Calibration is SolvedVolatility solved?[new(binding.Id,solved.Volatility.ToString(),VolatilityInput.Annualized)]:[],
             // The tree's value repeats its pattern once per price step of the underlying. A tree centred on the strike has
             // none at a unit discount, and an option valued at intrinsic has no lattice.
@@ -78,7 +78,7 @@ public sealed record FuturesOptionInstrument : Instrument
             throw Error("option_context", $"Option series {Series.Key.Code} was calibrated on another snapshot.");
         context.Market!.Model.RequireFuturesOptionDefinition(Series, binding.Underlying, binding.Settlement);
         var futures = LatticeDecimal.From(inputs.ExactPrice(binding.Underlying).ToUnitPriceExact().Value);
-        var discount=inputs.Discounts([new(Id,0,Series.Terms.ExpiryAt,Currency)]).Single();
+        var discount=inputs.Discounts([new(Id,0,Series.Terms.ExpiryAt,Currency){Timing=ValueTimingKind.Instant}]).Single();
         var volatility=binding.Calibration is SolvedVolatility?LatticeDecimal.Parse(inputs.Volatility(binding.Id).Format(30,MidpointRounding.ToEven)):(LatticeDecimal?)null;
         if(LatticeDecimal.From(discount.ClockRoll?.SourceFactor??discount.DiscountFactor)!=binding.DiscountToExpiry)
             throw Error("option_context","The discount provider must retain the calibration's exact source factor.");
@@ -89,7 +89,7 @@ public sealed record FuturesOptionInstrument : Instrument
     private FuturesOptionMarketBinding Binding(UnitValuationContext context)
     {
         var binding = context.FuturesOption(Id);
-        var payment=new SidePaymentKey(Id,0,Series.Terms.ExpiryAt,Currency);
+        var payment=new SidePaymentKey(Id,0,Series.Terms.ExpiryAt,Currency){Timing=ValueTimingKind.Instant};
         var factors=binding.Discounting?.Resolve([payment],context.Snapshot)??throw Error("option_context","The calibration requires its exact source discount provider.");
         if(factors.IsDefault||factors.Length!=1||factors[0].Payment!=payment||!factors[0].Snapshot.HasSameInputs(context.Snapshot)||
             LatticeDecimal.From(factors[0].DiscountFactor)!=binding.DiscountToExpiry)
@@ -289,7 +289,7 @@ public static class FuturesOptionPricing
 
     private static LatticeDecimal DiscountToExpiry(FuturesOptionInstrument option, ISideDiscounting discounting, MarketSnapshot snapshot, string label)
     {
-        var expiry = new SidePaymentKey(option.Id, 0, option.Series.Terms.ExpiryAt, option.Series.Currency);
+        var expiry = new SidePaymentKey(option.Id, 0, option.Series.Terms.ExpiryAt, option.Series.Currency){Timing=ValueTimingKind.Instant};
         var factors = discounting.Resolve([expiry], snapshot);
         if (factors.IsDefault || factors.Length != 1 || factors[0] is null || factors[0].Payment != expiry)
             throw FuturesOptionInstrument.Error("option_discount", $"{label}: the selected discounting supplies no factor to expiry.");

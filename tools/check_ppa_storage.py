@@ -159,8 +159,10 @@ def run_checks(query, manifest):
     boundary = f"market_data.ppa_day_boundary(at,'{reference}','{ref_revision}','synthetic_eastern')"
     check('operating-day proof accepts valid DST-day endpoints and refuses noon or unsupported years',
           query("SELECT bool_and(" + boundary + "=expected) FROM(VALUES('2031-11-02T04:00:00Z'::timestamptz,true),"
-                "('2031-11-03T05:00:00Z'::timestamptz,true),('2031-11-02T16:00:00Z'::timestamptz,false),"
-                "('1999-12-31T05:00:00Z'::timestamptz,false),('2100-01-02T05:00:00Z'::timestamptz,false))t(at,expected);") == 't')
+                "('2031-11-03T05:00:00Z'::timestamptz,true),('2031-11-02T16:00:00Z'::timestamptz,false))t(at,expected);") == 't')
+    for at in ('1999-12-31T05:00:00Z','2100-01-02T05:00:00Z'):
+        query(f"""DO $$BEGIN BEGIN PERFORM market_data.ppa_day_boundary('{at}','{reference}','{ref_revision}','synthetic_eastern');
+          RAISE EXCEPTION 'uncovered clock accepted';EXCEPTION WHEN raise_exception THEN IF SQLERRM<>'clock_coverage' THEN RAISE;END IF;END;END$$;""")
 
     outside = str(UUID(query('BEGIN;' + runtime(issue(), f"SELECT security.capture_date_context('{catalog}','2019-01-01',NULL);") + 'COMMIT;')))
     for table in tables:

@@ -16,7 +16,7 @@ internal static class GenericScheduleChecks
  {
   var f=new CommodityLookupFixture(31);var quote=f.Quote;var unit=new Quantity(ExactDecimal.Parse("1"),quote.Quantity);
   var from=new DateOnly(2041,1,1);var to=from.AddMonths(1);var payment=new DateTimeOffset(2041,2,10,0,0,0,TimeSpan.Zero);
-  FixedSide Cash(string price)=>new(Guid.NewGuid(),new FlatPrice(new(ExactDecimal.Parse(price),quote)),quote,unit,[new(from,to,payment,new(31,1),null)]);
+  FixedSide Cash(string price)=>new(Guid.NewGuid(),new FlatPrice(new(ExactDecimal.Parse(price),quote)),quote,unit,[new(from,to,payment,new(31,1),null)],SyntheticSideCalendars.FixedPeriods([new(from,to,payment,new(31,1),null)]));
   var receive=Cash("4");var pay=Cash("3");
   // This instrument is deliberately absent from application product switches.
   var instrument=new SchedulePack(Guid.NewGuid(),[new(receive,ExactDecimal.Parse("1")),new(pay,ExactDecimal.Parse("-1"))],quote.Currency,unit);
@@ -31,6 +31,8 @@ internal static class GenericScheduleChecks
   var detail=inspections[0].Calculation(first.Rows[0].Key,0,128);
   if(!detail.Rows.Any(r=>r.Operation=="discount"&&r.Value=="0.9")||!detail.Rows.Any(r=>r.Operation=="amount"&&r.Value=="124"))
    throw new Exception("The common detail must project evaluated cash and discount evidence without repricing.");
+  if(detail.Rows.Any(r=>r.PaymentDate!=new DateOnly(2041,2,10)))
+   throw new Exception("Native cash inspection must expose the contractual date on every calculation cell.");
   var repeated=new SchedulePack(Guid.NewGuid(),[new(receive,ExactDecimal.Parse("1")),new(receive,ExactDecimal.Parse("-1"))],quote.Currency,unit);
   var same=new SideScheduleIdentity(receive.Id,ScheduleDefinitionCompiler.Generate(receive).Manifest);
   var repeatedRows=repeated.PV(context).InspectSchedules([same,same],ExactDecimal.Parse("2"),day=>new(day.ToDateTime(TimeOnly.MinValue),TimeSpan.Zero));

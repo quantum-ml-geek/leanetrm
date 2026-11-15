@@ -2,29 +2,21 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using OpenEtrm.MarketData;
-using OpenEtrm.MarketData.Power;
 
 namespace OpenEtrm.Api;
 
-public sealed record PowerDayCalendarRequest(Guid ReferenceCatalogId,Guid ReferenceRevisionId,DateOnly From,DateOnly Through,ClockRule[] Clocks);
+public sealed record PowerDayCalendarRequest(Guid ReferenceCatalogId,Guid ReferenceRevisionId,DateOnly From,DateOnly Through,string[] ClockCodes);
 public static class PowerDayCalendar
 {
     // Operator-only preparation. Collector credentials cannot write or replace these rows.
     public static string Render(PowerDayCalendarRequest request)
     {
-        if(request.ReferenceCatalogId==Guid.Empty||request.ReferenceRevisionId==Guid.Empty||request.Through<request.From||request.Through.DayNumber-request.From.DayNumber>1461||request.Clocks.Length is <1 or >2||request.Clocks.Select(c=>c.Code).Distinct().Count()!=request.Clocks.Length)
+        if(request.ReferenceCatalogId==Guid.Empty||request.ReferenceRevisionId==Guid.Empty||request.Through<request.From||request.Through.DayNumber-request.From.DayNumber>1461||request.ClockCodes is null||request.ClockCodes.Length is <1 or >2||request.ClockCodes.Distinct(StringComparer.Ordinal).Count()!=request.ClockCodes.Length||request.ClockCodes.Any(string.IsNullOrWhiteSpace))
             throw new MarketDataException("collection_calendar","Supply exact references, distinct market clocks and an explicit window of at most four years.");
         var sql=new StringBuilder("BEGIN;\n");
-        foreach(var rule in request.Clocks)
-        {
-            var clock=PowerClock.FromRule(rule,TimeZoneDatabase.Installed());
-            if(rule.Kind!="iana"||rule.IanaZone is not("America/New_York" or "America/Chicago"))throw new MarketDataException("collection_calendar","Only the qualified PJM and ERCOT market clocks are supported.");
+        foreach(var code in request.ClockCodes)
             for(var day=request.From;day<=request.Through;day=day.AddDays(1))
-            {
-                var hours=PowerHours.Compile(day,day.AddDays(1),clock,TimeOfUse.All(60),[],60);
-                sql.Append(CultureInfo.InvariantCulture,$"INSERT INTO power_data.operating_days VALUES('{request.ReferenceCatalogId}','{request.ReferenceRevisionId}','{rule.Code.Replace("'","''")}','{day:yyyy-MM-dd}','{hours[0].Start:O}','{hours[^1].End:O}','{clock.Fingerprint}');\n");
-            }
-        }
+                sql.Append(CultureInfo.InvariantCulture,$"SELECT power_data.publish_operating_day('{request.ReferenceCatalogId}','{request.ReferenceRevisionId}','{code.Replace("'","''",StringComparison.Ordinal)}','{day:yyyy-MM-dd}');\n");
         return sql.Append("COMMIT;\n").ToString();
     }
     public static void Run(string input,string output)

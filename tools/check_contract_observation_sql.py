@@ -51,6 +51,7 @@ def run(c, context, template, query):
     floating['contractObservations']['selection']['promptOffset'] = 1
     rejected = c.call('swaps/preview', body, expected=422)
     assert rejected['code'] == 'sequence_ineligible', rejected
+    floating['calendarPolicy'] = body['scheduled']['second']['calendarPolicy']
     valuation = '2020-12-18T16:00:00Z'
     compiled = []
     pins = []
@@ -69,7 +70,8 @@ def run(c, context, template, query):
         return "'" + json.dumps(value).replace("'", "''") + "'::jsonb"
     # The exception subtransaction also rolls back any payment-rule interning
     # if the unpatched preparer mistakenly admits this source.
-    query(f"""DO $check$ BEGIN
+    from check_booked_side_programs import runtime_query
+    runtime_query(query,dict(tenantId=TENANT,workspaceId=WORKSPACE),f"""DO $check$ BEGIN
  BEGIN
   PERFORM security.prepare_contract_observation_period('{CAT}','{REV}','{RCAT}','{RREV}','test_gas',
    {sql_json(floating)},'{valuation}',1,'2020-01-01T00:00:00Z',{sql_json(compiled)},
@@ -78,13 +80,14 @@ def run(c, context, template, query):
  EXCEPTION WHEN raise_exception THEN
   IF SQLERRM<>'sequence_ineligible' THEN RAISE;END IF;
  END;
-END $check$;""")
+END $check$;""",prefix='GRANT EXECUTE ON FUNCTION security.prepare_contract_observation_period(uuid,uuid,uuid,uuid,text,jsonb,timestamptz,integer,timestamptz,jsonb,uuid[]) TO openetrm_runtime;',commit=False)
     print('PASS contract observation SQL: offset cannot skip an ineligible prompt prefix')
 
 
 def reject_stale_actual_pin(template, query):
     """Current write admission must not retain a superseded historical fixing."""
     floating = deepcopy(template['scheduled']['second']['periods'][0]['floating'])
+    floating['calendarPolicy'] = template['scheduled']['second']['calendarPolicy']
     stale = identity('7', 8700001)
     assert query(f"SELECT count(*) FROM market_data.observations WHERE catalog_id='{CAT}' AND corrects_id='{stale}';").strip() == '1'
     compiled = []

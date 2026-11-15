@@ -23,8 +23,8 @@ internal static class PpaLimitChecks
             var normalization=new PpaNormalization([..assets],R("mw"),assets.Length==0?PpaNormalizationPolicy.ContractUnit:PpaNormalizationPolicy.SumCapacityInForce);
             PpaSideTerms Terms(PpaQuantity q)=>new(delivery,q,R("usd"),new(one,R("mw")),payment,schedule,R(capacity?"mw_day":"mwh"),normalization,
                 q is SlotQuantity linked?[..linked.Slots.Select(slot=>new ScheduleInputPort(slot,R(capacity?"mw_day":"mwh"),schedule))]:[]);
-            Side physical=capacity?new CapacityDeliverySide(Guid.NewGuid(),Terms(quantity),R("mw_day"),"mw_day_per_operating_day_v1"):new PowerPhysicalSide(Guid.NewGuid(),Terms(quantity),R("node"));
-            var cash=new FixedSide(Guid.NewGuid(),Terms(new SlotQuantity([new(role)])),new FlatPrice(new UnitPrice(one,new PriceUnit(R("usd"),R(capacity?"mw_day":"mwh"),one))));
+            Side physical=capacity?new CapacityDeliverySide(Guid.NewGuid(),Terms(quantity),R("mw_day"),"mw_day_per_operating_day_v1",SyntheticSideCalendars.Interval(Terms(quantity),false)):new PowerPhysicalSide(Guid.NewGuid(),Terms(quantity),R("node"),SyntheticSideCalendars.Interval(Terms(quantity),false));
+            var cash=new FixedSide(Guid.NewGuid(),Terms(new SlotQuantity([new(role)])),new FlatPrice(new UnitPrice(one,new PriceUnit(R("usd"),R(capacity?"mw_day":"mwh"),one))),SyntheticSideCalendars.Interval(Terms(new SlotQuantity([new(role)])),false));
             return new(Guid.NewGuid(),definitions,reference,[new(new(role),physical,one),new(new(capacity?PpaRole.CapacityPayment:PpaRole.StrikePayment),cash,ExactDecimal.Parse("-1"))],false,"ppa_instrument_v2");
         }
         void Work(IEnumerable<(PpaInstrument,DeliveryCoverage)> scopes,ImmutableHashSet<DateOnly>? detail=null)=>PpaCompiler.Work(scopes,detail??[],_=>clock);

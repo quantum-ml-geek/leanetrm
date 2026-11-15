@@ -7,10 +7,10 @@ namespace OpenEtrm.MarketData.Power;
 
 // Captures installed rules once for an unsaved preview. Durable publication and
 // historical rule selection must retain this payload, not resolve its name again.
-public sealed class PowerClock
+public sealed partial class PowerClock
 {
-    internal TimeZoneInfo Zone { get; }
-    public string Id => Zone.Id;
+    private TimeZoneInfo? Zone { get; }
+    public string Id => captured?.Id??Zone!.Id;
     public string Rules { get; }
     public string Fingerprint { get; }
     private PowerClock(TimeZoneInfo zone)
@@ -19,11 +19,17 @@ public sealed class PowerClock
         Fingerprint=Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Rules))).ToLowerInvariant();
     }
     public DateTimeOffset StartOfDay(DateOnly date) => AtLocal(date,TimeOnly.MinValue);
-    public DateOnly OperatingDate(DateTimeOffset instant)=>DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(instant,Zone).DateTime);
+    public DateOnly OperatingDate(DateTimeOffset instant)=>DateOnly.FromDateTime(LocalAt(instant).DateTime);
     public DateTimeOffset AtLocal(DateOnly date,TimeOnly time)
     {
         var local=date.ToDateTime(time,DateTimeKind.Unspecified);
-        if(Zone.IsInvalidTime(local)||Zone.IsAmbiguousTime(local))
+        if(captured is not null)
+        {
+            var candidates=LocalCandidates(local);
+            if(candidates.Length!=1)throw CapturedError();
+            return candidates[0];
+        }
+        if(Zone!.IsInvalidTime(local)||Zone.IsAmbiguousTime(local))
             throw new MarketDataException("clock_rule","The selected local time must exist and be unambiguous in the pinned clock.");
         return new(local,Zone.GetUtcOffset(local));
     }
@@ -75,14 +81,7 @@ public static class PowerHours
             throw new MarketDataException("tou_resolution","The interval must divide each mask cell exactly.");
         if(holidays is null || holidays.Length>366 || holidays.Distinct().Count()!=holidays.Length)
             throw new MarketDataException("power_holidays","Supply an explicit list of distinct holiday dates.");
-        var zone=clock.Zone;
-        DateTimeOffset Midnight(DateOnly day)
-        {
-            var local=day.ToDateTime(TimeOnly.MinValue,DateTimeKind.Unspecified);
-            if(zone.IsAmbiguousTime(local)||zone.IsInvalidTime(local))
-                throw new MarketDataException("power_clock","Ambiguous or missing midnight needs an explicit boundary.");
-            return new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(local,zone),TimeSpan.Zero);
-        }
+        DateTimeOffset Midnight(DateOnly day)=>clock.StartOfDay(day).ToUniversalTime();
         var start=Midnight(from); var end=Midnight(to); var step=TimeSpan.FromMinutes(intervalMinutes);
         if((end-start).Ticks%step.Ticks!=0)
             throw new MarketDataException("power_clock","Clock transitions must align with the selected intervals.");
@@ -93,7 +92,7 @@ public static class PowerHours
         for(int slot=0;slot<grid.Count;slot++)
         {
             var at=grid.Start(slot);
-            var local=TimeZoneInfo.ConvertTime(at,zone);
+            var local=clock.LocalAt(at);
             var day=DateOnly.FromDateTime(local.DateTime);
             var key=(day,local.Hour,local.Minute);
             var occurrence=occurrences.GetValueOrDefault(key)+1;occurrences[key]=occurrence;
@@ -106,11 +105,11 @@ public static class PowerHours
 
     // A cell starts on a whole local minute that is a multiple of its length and lies inside one
     // UTC offset. A clock transition cutting through it makes it no cell: a local label is never stretched.
-    internal static bool IsCell(TimeZoneInfo zone,DateTimeOffset start,TimeSpan step)
+    internal static bool IsCell(PowerClock clock,DateTimeOffset start,TimeSpan step)
     {
-        var local=TimeZoneInfo.ConvertTime(start,zone);
-        var last=TimeZoneInfo.ConvertTime(start+step-TimeSpan.FromTicks(1),zone);
-        return local.Offset==last.Offset && local.Minute%(int)step.TotalMinutes==0 && local.TimeOfDay.Ticks%TimeSpan.TicksPerMinute==0;
+        var local=clock.LocalAt(start);
+        var last=clock.LocalAt(start+step-TimeSpan.FromTicks(1));
+        return clock.ConstantOffset(start,start+step) && local.Offset==last.Offset && local.Minute%(int)step.TotalMinutes==0 && local.TimeOfDay.Ticks%TimeSpan.TicksPerMinute==0;
     }
 
     public static string Label(PowerInterval interval,bool hourEnding) =>

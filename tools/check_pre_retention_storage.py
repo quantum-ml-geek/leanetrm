@@ -23,7 +23,11 @@ def database(query, psql, environment, root, statements, *, before=125):
     try:
         for migration in sorted((root/'db/migrations').glob('[0-9][0-9][0-9][0-9]_*.sql')):
             if int(migration.name[:4])<before:sql(without_roles(migration.read_text()))
-        for statement in statements:sql(without_roles(statement))
+        # Rendered clock publications belong to the new reference contract.
+        # Historical admission fixtures predate that publication operation.
+        for statement in statements:
+            historical='\n'.join(line for line in statement.splitlines() if not line.startswith('SELECT ref_data.publish_clock_capture('))
+            sql(without_roles(historical))
         yield sql,target
     finally:
         query('DROP DATABASE '+name+' WITH(FORCE);')

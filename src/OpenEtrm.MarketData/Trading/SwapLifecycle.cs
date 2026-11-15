@@ -6,7 +6,11 @@ public sealed record SettlementContribution(Guid Id, int MembershipOrdinal, Date
     int Ordinal, DateTimeOffset DueAt, ExactMoney Amount, ExactMoney Applied)
 {
     public ExactMoney Outstanding => Amount.Subtract(Applied);
-    public SidePaymentKey DiscountKey => new(Id, 0, DueAt, Amount.Currency);
+    public SidePaymentKey DiscountKey => new(Id, 0, DueAt, Amount.Currency)
+        {Timing=Ordinal==1?ValueTimingKind.UtcPaymentDay:ValueTimingKind.Instant};
+    // Original consideration follows its contractual payment date. Corrections
+    // retain their separately agreed due instant.
+    public bool Due(DateTimeOffset at)=>Ordinal==1?PaymentDatePolicy.IsDue(DueAt,at):DueAt<=at;
 }
 
 public sealed record SwapLifecyclePayment(int MembershipOrdinal, ScheduleRow Plan, string State,
@@ -48,7 +52,7 @@ public sealed class SwapSettlementInputs
             roundingEffect.Currency != netCash.Currency || completions.IsDefaultOrEmpty ||
             completions.Any(c=>c is null||c.MembershipOrdinal is <0 or >1||c.DeliveryFrom>=c.DeliveryTo||!TradingInstant.IsSupported(c.At)||c.At==default||
                 c.Source=="date_only_utc_v1"&&c.At!=new DateTimeOffset(c.DeliveryTo.ToDateTime(TimeOnly.MinValue,DateTimeKind.Utc))||
-                c.Source is not("date_only_utc_v1" or "retained_quantity_interval_end_v1"))||
+                c.Source is not("date_only_utc_v1" or "retained_quantity_interval_end_v1" or "retained_contract_clock_v1"))||
             completions.Select(c=>(c.MembershipOrdinal,c.DeliveryFrom,c.DeliveryTo)).Distinct().Count()!=completions.Length||
             duePolicy != "swap_due_nominal_v1" || recognitionPolicy != "swap_completed_period_trading_pnl_v1")
             throw Error("settlement_inputs", "Supply complete immutable contributions, quantities, currency and explicit supported lifecycle policies.");
@@ -84,8 +88,8 @@ public sealed class SwapSettlementInputs
             .SelectMany(payment=>payment.Plan.Prices)];
 
     public ImmutableArray<SidePaymentKey> DiscountKeys(SidedInstrument instrument, MarketSnapshot snapshot) =>
-        Plans(instrument).Where(p => !Contributions.Any(c => Covers(c,p.Membership,p.Plan)) && p.Plan.PaymentAt > snapshot.ValuationAt)
-            .Select(p => p.Plan.Key).Concat(Contributions.Where(c => c.DueAt > snapshot.ValuationAt && c.Outstanding.Numerator != "0").Select(c => c.DiscountKey))
+        Plans(instrument).Where(p => !Contributions.Any(c => Covers(c,p.Membership,p.Plan)) && !PaymentDatePolicy.IsDue(p.Plan.PaymentAt,snapshot.ValuationAt))
+            .Select(p => p.Plan.Key).Concat(Contributions.Where(c => !c.Due(snapshot.ValuationAt) && c.Outstanding.Numerator != "0").Select(c => c.DiscountKey))
             .Distinct().ToImmutableArray();
 
     public SwapLifecycleValue Evaluate(SidedInstrument instrument, SideValuationContext context)
@@ -96,7 +100,7 @@ public sealed class SwapSettlementInputs
         var enabled = instrument switch { FinancialSwapInstrument s => s.Discounting, MonthlyFinancialSwap s => s.Discounting,
             ScheduledFinancialSwap s => s.Discounting,CrossCommodityScheduledSwap s=>s.Discounting, _ => throw Error("settlement_capability","Unsupported financial swap.") };
         if (factors.IsDefault || factors.Length != keys.Length || factors.Any(f => f is null ||
-                f.DiscountFactor.CompareTo(default) <= 0 || !Enum.IsDefined(f.Source) ||
+                f.DiscountFactor.CompareTo(default) <= 0 || !Enum.IsDefined(f.Source) || !f.HasValidPaymentDayTerms(context.Snapshot.ValuationAt) ||
                 f.Source == DiscountFactorSource.Undiscounted && f.DiscountFactor != ExactDecimal.Parse("1") ||
                 enabled == (f.Source == DiscountFactorSource.Undiscounted) || !context.Snapshot.HasSameInputs(f.Snapshot)) ||
             !factors.Select(f => f.Payment).ToHashSet().SetEquals(keys) || factors.Select(f => f.Payment).Distinct().Count() != factors.Length)
@@ -109,7 +113,7 @@ public sealed class SwapSettlementInputs
             var balance = contribution.Outstanding;
             determined = determined.Add(balance);
             if (contribution.Ordinal > 1) corrections = corrections.Add(contribution.Amount);
-            if (contribution.DueAt <= context.Snapshot.ValuationAt) { due = due.Add(balance); determinedPv = determinedPv.Add(balance); }
+            if (contribution.Due(context.Snapshot.ValuationAt)) { due = due.Add(balance); determinedPv = determinedPv.Add(balance); }
             else if (balance.Numerator != "0") determinedPv = determinedPv.Add(balance.Scale(discounts[contribution.DiscountKey]));
         }
         var rows = ImmutableArray.CreateBuilder<SwapLifecyclePayment>(); var remaining = zero; var realized = zero; var estimated = zero;
@@ -120,19 +124,19 @@ public sealed class SwapSettlementInputs
             if (covered.Length != 0)
             {
                 amount = covered.Select(c => c.Amount).Aggregate((a,b) => a.Add(b)); final = true;
-                pv = covered.Select(c => c.DueAt <= context.Snapshot.ValuationAt ? c.Outstanding : c.Outstanding.Numerator == "0" ? zero :
+                pv = covered.Select(c => c.Due(context.Snapshot.ValuationAt) ? c.Outstanding : c.Outstanding.Numerator == "0" ? zero :
                     c.Outstanding.Scale(discounts[c.DiscountKey])).Aggregate((a,b) => a.Add(b));
             }
             else
             {
                 var prices = plan.Prices.Select(context.Resolve).ToImmutableArray();
                 final = prices.All(p => p.State is SchedulePriceState.Fixed or SchedulePriceState.Actual);
-                if (plan.PaymentAt <= context.Snapshot.ValuationAt && !final)
+                if (PaymentDatePolicy.IsOverdue(plan.PaymentAt,context.Snapshot.ValuationAt) && !final)
                     throw Error("settlement_not_final", "Undetermined due payments require established final prices.");
                 var m = instrument.Sides[membership];
                 amount = new SidePaymentCash(plan,prices).CashAmount.Scale(m.QuantityRatio ?? OpenEtrm.Shared.Numerics.ExactRatio.One)
                     .Scale(m.Coefficient).Scale(Quantity.Amount);
-                pv = plan.PaymentAt <= context.Snapshot.ValuationAt ? amount : amount.Scale(discounts[plan.Key]);
+                pv = PaymentDatePolicy.IsDue(plan.PaymentAt,context.Snapshot.ValuationAt) ? amount : amount.Scale(discounts[plan.Key]);
                 if (!final) estimated = estimated.Add(pv);
             }
             var completion=Completions.Single(c=>c.MembershipOrdinal==membership&&c.DeliveryFrom==plan.DeliveryFrom&&c.DeliveryTo==plan.DeliveryTo);
@@ -140,7 +144,7 @@ public sealed class SwapSettlementInputs
             var recognized = completed && final;
             remaining = remaining.Add(pv); if (recognized) realized = realized.Add(amount);
             rows.Add(new(membership,plan,covered.Length == 0 ? "Undetermined" : covered.All(c => c.Outstanding.Numerator == "0") ? "Paid" :
-                covered.Any(c => c.DueAt <= context.Snapshot.ValuationAt && c.Outstanding.Numerator != "0") ? "Due" : "Determined",amount,pv,final,recognized,completion.At));
+                covered.Any(c => c.Due(context.Snapshot.ValuationAt) && c.Outstanding.Numerator != "0") ? "Due" : "Determined",amount,pv,final,recognized,completion.At));
         }
         var qualified = rows.Select(p => p with { Realized = p.Realized && rows.Where(other =>
             other.Plan.DeliveryFrom == p.Plan.DeliveryFrom && other.Plan.DeliveryTo == p.Plan.DeliveryTo).All(other => other.Realized) }).ToImmutableArray();

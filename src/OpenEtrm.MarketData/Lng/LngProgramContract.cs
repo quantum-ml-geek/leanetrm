@@ -42,7 +42,7 @@ internal static class LngProgramContract
             !cash.Roots.Any(r => r.Measure == "contribution_pv" && r.Row == 7) || !cash.Roots.Any(r => r.Measure == "pv" && r.Row == 8))
             throw Invalid();
         var payment = cash.Instructions[0].Output.ValueAt;
-        if (payment is null || payment < interval.End) throw Invalid();
+        if (payment is null || PaymentDatePolicy.Date(payment.Value) < PaymentDatePolicy.Date(interval.End)) throw Invalid();
         foreach (var instruction in cash.Instructions)
         {
             var row = instruction.Output;
@@ -65,5 +65,5 @@ internal static class LngProgramContract
             cash.Instructions[5].Output.Parameters["policy"] != "context_required_v1") throw Invalid();
     }
     private static MarketDataException Invalid() => new("lng_membership",
-        "Retained LNG consideration requires one normalized fixed payment in the exact energy/currency/quote basis, with matching cargo dates and payment at or after discharge.");
+        "Retained LNG consideration requires one normalized fixed payment in the exact energy/currency/quote basis, with matching cargo dates and a payment date on or after the UTC discharge date.");
 }

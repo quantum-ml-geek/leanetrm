@@ -1,4 +1,5 @@
 """Side observation authoring through the same real draft and booking operations."""
+from synthetic_side_calendars import all_dates_policy
 from copy import deepcopy
 from fractions import Fraction
 from datetime import date, timedelta
@@ -26,12 +27,13 @@ def run_checks(url, query, manifest, psql=None, environment=None):
     rule = {'frequency': 'monthly', 'rule': 'day_of_following_month', 'days': None, 'dayOfMonth': 18,
             'dayBasis': None, 'shortMonth': 'reject', 'adjustment': 'unadjusted', 'calendar': None,
             'implementation': 'monthly_payment_date_rules_v1'}
-    fixed = {'price': '3', 'currency': source['currencyCode'], 'deliveryFrom': '2021-01-01',
+    fixed = {'calendarPolicy': all_dates_policy(observation=False), 'price': '3', 'currency': source['currencyCode'], 'deliveryFrom': '2021-01-01',
              'deliveryTo': '2021-02-01', 'paymentSchedule': rule}
-    floating = {'spread': '0', 'settlement': {'mode': 'curve_target', 'index': None, 'projectionPolicy': None}, 'curve': source['curve'], 'index': source['index'], 'currency': source['currencyCode'],
+    floating = {'calendarPolicy': all_dates_policy(observation=True), 'spread': '0', 'settlement': {'mode': 'curve_target', 'index': None, 'projectionPolicy': None}, 'curve': source['curve'], 'index': source['index'], 'currency': source['currencyCode'],
                 'deliveryFrom': '2021-01-01', 'deliveryTo': '2021-02-01', 'paymentSchedule': rule,
                 'resetFrequency': 'daily', 'averagingMethod': 'observation_arithmetic',
-                'observationSchedule': {'implementation': 'side_observation_schedule_v1', 'calendar': calendar, 'quantities': None}}
+                'observationSchedule': {'implementation': 'side_observation_schedule_v1', 'calendar': None, 'quantities': None}}
+    floating['calendarPolicy']['observation']['calendar'] = deepcopy(calendar)
     draft = {'context': context, 'definitionRevisionId': source['definitionRevisionId'], 'commodity': source['commodity'],
              'quantity': {'value': '100', 'specification': specification}, 'fixedCoefficient': '-1',
              'discounting': False, 'fixed': fixed, 'floating': floating}
@@ -43,6 +45,8 @@ def run_checks(url, query, manifest, psql=None, environment=None):
                'quantity': '100', 'fixedCoefficient': '-1', 'discounting': False, 'fixed': fixed, 'floating': floating}
     _unknown_reference_fields(client, query, draft, booking)
     receipt = client.call('swaps/book', booking)
+    from check_observation_receipt_authority import run_checks as check_receipt
+    check_receipt(query,manifest,receipt)
     detail = client.call('swaps/editor', {'context': context, 'tradeId': receipt['tradeId'], 'revision': None})
     assert detail['state']['terms']['floating']['observationSchedule'] == floating['observationSchedule']
     assert Fraction(detail['valuation']['presentValue']) == Fraction(33, 2)
@@ -96,8 +100,8 @@ def run_checks(url, query, manifest, psql=None, environment=None):
     before_publications = query('SELECT count(*) FROM trading.publications;')
     invalid = []
     missing = deepcopy(floating); missing.pop('observationSchedule'); invalid.append(missing)
-    missing_calendar = deepcopy(floating); missing_calendar['observationSchedule']['calendar'] = None; invalid.append(missing_calendar)
-    wrong_revision = deepcopy(floating); wrong_revision['observationSchedule']['calendar']['revision']['revisionId'] = manifest['revisionId']; invalid.append(wrong_revision)
+    missing_calendar = deepcopy(floating); missing_calendar['calendarPolicy']['observation']['calendar'] = None; invalid.append(missing_calendar)
+    wrong_revision = deepcopy(floating); wrong_revision['calendarPolicy']['observation']['calendar']['revision']['revisionId'] = manifest['revisionId']; invalid.append(wrong_revision)
     unsupported = deepcopy(floating); unsupported['observationSchedule']['implementation'] = 'unsupported'; invalid.append(unsupported)
     for value in ('0', '-1'):
         bad = deepcopy(weighted); bad['observationSchedule']['quantities'][0]['quantity']['value'] = value; invalid.append(bad)
@@ -136,7 +140,10 @@ def run_checks(url, query, manifest, psql=None, environment=None):
     client.call('swaps/book', conflict, expected=409)
     print('PASS side observations: canonical typed plans share exact unit identity, changed weights append a new Side, and original receipts/revisions replay', flush=True)
     from check_side_observation_storage import run_checks as check_storage
-    check_storage(query, manifest, booking, weighted_booking)
+    composed={**booking,'operationId':str(uuid4()),'swapType':'financial_floating_floating','fixed':None,'fixedCoefficient':None,
+              'firstCoefficient':'1','firstFloating':{**weighted_booking['floating'],'spread':'0'},'floating':{**booking['floating'],'spread':'0'}}
+    client.call('swaps/book',composed)
+    check_storage(query, manifest, booking, weighted_booking, composed)
 def _weighted_actuals_and_risk(client, query, context, draft, floating, booking, original, projected):
     """Pinned final facts replace only due resets; exact scenario PVs price the remaining quotes."""
     def risk(terms, price, first_unfixed, pv):
@@ -210,7 +217,7 @@ def _unknown_reference_fields(client, query, draft, booking):
         malformed = deepcopy(draft)
         if location.startswith('calendar'):
             malformed['floating']['averagingMethod'] = 'calendar_days_previous'
-            selected = malformed['floating']['observationSchedule']['calendar']
+            selected = malformed['floating']['calendarPolicy']['observation']['calendar']
             if location == 'calendar_revision':
                 selected = selected['revision']
         else:

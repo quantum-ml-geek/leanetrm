@@ -246,6 +246,15 @@ def main(checks=run_checks, before_migration=None):
                     from check_fact_anchor_upgrade import run_checks as check_reference_receipt_upgrade
                     check_reference_receipt_upgrade(query,migration,number='0249',guard='reference_receipt_upgrade',
                         signatures=('security.reference_version_visible(uuid,uuid)',))
+                if migration.name=='0270_calendar_publication_certification.sql':
+                    from check_fact_anchor_upgrade import run_checks as check_calendar_certification_upgrade
+                    check_calendar_certification_upgrade(query,migration,number='0270',guard='calendar_certification_upgrade',signatures=('security.capture_market_and_schedule_context(uuid,date,timestamptz)','security.resolve_side_calendar(uuid,uuid,text,jsonb)','security.list_side_calendars()'))
+                if migration.name=='0271_collection_operating_clock.sql':
+                    from check_fact_anchor_upgrade import run_checks as check_operating_clock_upgrade
+                    check_operating_clock_upgrade(query,migration,number='0271',guard='operating_clock_upgrade',signatures=('power_data.begin_attempt(uuid,date,date)','power_data.finish_attempt(uuid,jsonb,text)'))
+                if migration.name=='0269_published_clock_consumers.sql':
+                    from check_fact_anchor_upgrade import run_checks as check_clock_consumer_upgrade
+                    check_clock_consumer_upgrade(query,migration,number='0269',guard='published_clock_consumer_upgrade',signatures=('power_data.source_config(uuid)',))
                 if migration.name=='0224_reference_display_close_validation.sql':
                     from check_reference_display_scale import upgrade_checks
                     upgrade_checks(query,migration)

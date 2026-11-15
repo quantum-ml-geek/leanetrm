@@ -15,12 +15,12 @@ def run_checks(url, query, manifest, *, booked_roll=False):
     # The physical consumer must admit an exact TOU proved by a published graph,
     # even when no sealed native curve_block references that product.
     fresh=client.call('tou-products/save',dict(code='synthetic_graph_peak',name='Synthetic graph weekday peak',
-        clock=product['clock'],peakStartHour=7,peakEndHour=23,peakSaturday=False))
+        clock=product['clock'],peakStartHour=7,peakEndHour=23,peakSaturday=False,calendar=product['calendar'],holidayTreatment=product['holidayTreatment']))
     client.call('profile',{'profile':'approver'})
     product=client.call('tou-products/publish',dict(id=fresh['id'],version=fresh['version'],generation=fresh['generation']))
     client.call('profile',{'profile':'editor'})
     following=client.call('tou-products/save',dict(id=product['id'],version=1,generation=product['generation'],expectedState='published',
-        code=product['code'],name=product['name'],clock=product['clock'],peakStartHour=8,peakEndHour=20,peakSaturday=False))
+        code=product['code'],name=product['name'],clock=product['clock'],peakStartHour=8,peakEndHour=20,peakSaturday=False,calendar=product['calendar'],holidayTreatment=product['holidayTreatment']))
     assert following['state']=='draft' and following['version']==2
     manifest['powerGraphProductDraftVersion']=2
     assert query(f"SELECT count(*) FROM market_data.curve_blocks WHERE tou_product_id='{product['id']}';")=='0'
@@ -35,6 +35,15 @@ def run_checks(url, query, manifest, *, booked_roll=False):
             'profile': 'test_hourly_eastern', 'market': 'DA', 'from': '2031-11-01', 'to': '2031-12-01'},
             {'peak': 'peak', 'offPeak': 'off'}),
         node('result', 'output', inputs={'values': 'hours'})])
+    alternate=client.call('tou-products/save',dict(code='synthetic_other_calendar',name='Synthetic independently bound hours',
+        clock=product['clock'],peakStartHour=7,peakEndHour=23,peakSaturday=False,
+        calendar=dict(revision=product['calendar']['revision'],code='test_utc_every_day'),holidayTreatment=product['holidayTreatment']))
+    client.call('profile',{'profile':'approver'})
+    alternate=client.call('tou-products/publish',dict(id=alternate['id'],version=1,generation=alternate['generation']))
+    client.call('profile',{'profile':'editor'})
+    incompatible=deepcopy(definition);incompatible['nodes'][2]['parameters']['product']=alternate['id']
+    refused=client.call('custom-curves/save',dict(definition=incompatible,snapshotId=frame['id'],requestId=str(uuid4()),layout={}),expected=422)
+    assert refused['code']=='tou_product_override',refused
     proof_definition=deepcopy(definition);proof_definition.update(code='synthetic_graph_product_proof',name='Synthetic graph product proof')
     proof=client.call('custom-curves/save',dict(definition=proof_definition,snapshotId=frame['id'],requestId=str(uuid4()),layout={}))
     from check_power_product_resolution import request as product_request

@@ -5,7 +5,7 @@ from preview_client import PreviewClient, initial_frame
 from preview_fixture import gas_purchase, held_gas_measures
 
 
-def run_checks(url):
+def run_checks(url,query=None,manifest=None):
     """A gas purchase of one physical side, its payment and a usage fee: the trade a single-point booking is, entered as its composition."""
     c = PreviewClient(url); c.bootstrap(); c.call('profile', {'profile': 'trader'})
     workspace=c.call('workspace'); frame = initial_frame(workspace,'2020-12-18')
@@ -54,6 +54,9 @@ def run_checks(url):
     preview(paid(body, '2020-12-31T00:00:00Z'), expected=422)
     booked = c.call('gas/composition/book', body)
     assert c.call('gas/composition/book', body)==booked
+    if query is not None:
+        check_completion_admission(query,manifest,booked)
+
     retained = c.call('gas/composition/editor', {'context':context, 'tradeId':booked['tradeId']})['valuation']
     retained = held_gas_measures(retained, value)
     assert retained=={k:value[k] for k in retained}, (retained, value)
@@ -163,3 +166,35 @@ def run_shape_checks(query, manifest):
 if __name__=='__main__':
     import sys
     run_checks(sys.argv[1])
+
+
+def check_completion_admission(query,manifest,receipt):
+    catalog=manifest['catalogId'];instrument=receipt['instrumentId']
+    cases=[
+        ("jsonb_set(economic_identity::jsonb,'{Periods,0,DeliveryCompletionAt}',to_jsonb('2021-01-31T23:59:00.0000000+00:00'::text))",'gas_schedule_completion'),
+        ("jsonb_set(economic_identity::jsonb,'{GasDeliveryClock,StartMinute}','1'::jsonb)",'gas_schedule_completion'),
+        ("economic_identity::jsonb-'GasDeliveryClock'",'gas_schedule_completion'),
+    ]
+    checks=[]
+    for mutation,expected in cases:
+        checks.append(f"""BEGIN
+          UPDATE trading.sides SET economic_identity=({mutation})::text WHERE(catalog_id,id)=(c,selected_side);
+          PERFORM trading.require_gas_program_shape(c,schedule,1,p.delivery_from,p.delivery_to,m.payment_at,1,m.price,a,d,start_at);
+          RAISE EXCEPTION 'gas_completion_tamper_accepted';
+        EXCEPTION WHEN raise_exception THEN IF SQLERRM<>'{expected}' THEN RAISE;END IF;END;""")
+    query(f"""BEGIN;
+      ALTER TABLE trading.sides DISABLE TRIGGER USER;
+      DO $test$ DECLARE c uuid='{catalog}';schedule uuid;selected_side uuid;m trading.gas_component_terms;p trading.gas_component_terms;
+        a market_data.gas_valuation_assignments;d ref_data.gas_delivery_conventions;clock ref_data.clock_rules;start_at timestamptz;
+      BEGIN
+        SELECT * INTO STRICT m FROM trading.gas_component_terms WHERE(catalog_id,instrument_id,slot)=(c,'{instrument}',1);
+        SELECT * INTO STRICT p FROM trading.gas_component_terms WHERE(catalog_id,instrument_id,slot)=(c,'{instrument}',m.source_slot);
+        SELECT * INTO STRICT a FROM market_data.gas_valuation_assignments WHERE(catalog_id,revision_id,code)=(c,p.definition_revision_id,p.assignment_code);
+        SELECT * INTO STRICT d FROM security.gas_setup_delivery(a);
+        SELECT * INTO STRICT clock FROM ref_data.clock_rules WHERE(catalog_id,revision_id,code)=(a.reference_catalog_id,a.reference_revision_id,d.clock_code);
+        start_at=p.delivery_from::timestamp AT TIME ZONE 'UTC'+make_interval(mins=>d.day_start_minute)-make_interval(secs=>clock.fixed_offset_seconds);
+        SELECT h.id,h.side_id INTO STRICT schedule,selected_side FROM trading.instrument_side_schedules i JOIN trading.side_schedules h ON(h.catalog_id,h.id)=(i.catalog_id,i.schedule_id)
+         WHERE(i.catalog_id,i.instrument_id,i.slot)=(c,'{instrument}',1);
+        {''.join(checks)}
+      END $test$;ROLLBACK;""")
+    print('PASS gas native completion: missing, forged completion and altered clock refuse independently of unchanged executable rows',flush=True)

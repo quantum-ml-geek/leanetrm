@@ -17,6 +17,8 @@ export async function sideCardLayoutChecks() {
  panel('crude-page');setupPhysicalCrude(o);
  const {setupPhysicalLng}=await import('/physical-lng-editor.js');
  panel('lng-page');setupPhysicalLng(o);
+ check('Standard crude and LNG payments accept dates without user-zone time controls',
+  document.getElementById('crude-payment').type==='date'&&document.getElementById('lng-paymentAt').type==='date');
  const swap=source.querySelector('#swap-editing');swap.hidden=false;host.append(swap);
  for(const id of ['swap-fixed-template','swap-floating-template'])host.append(source.getElementById(id));
  const {mountSwapSideEditor,mountFirstFloatingEditor,arrangeSwapSections}=await import('/swap-side-editor.js');
@@ -32,7 +34,7 @@ export async function sideCardLayoutChecks() {
  check('Booking has no numbered step badges',swap.querySelector('.entry-step')===null&&['none','normal','""'].includes(getComputedStyle(document.querySelector('#swap-trade-terms>h3'),'::before').content));
  const ppa=panel('ppa-page'),deck=document.createElement('div');ppa.className='embedded-trade';deck.className='ppa-components entry-side-deck';ppa.append(deck);
  const {componentEditor}=await import('/ppa-components.js');
- const catalog={references:{locations:[],quantityGroups:{contract:[],energy:[],capacity:[],certificate:[]},units:[],calendars:[],priceIndices:[]},priceKinds:['flat','escalated','stepped'],definitionsMetadata:{priceCurves:[],volumeSources:[],generationAssets:[]},authoringPolicies:{escalationBases:[],certificateEligibility:[],certificateHolding:[],certificateDisposition:[],capacityRules:[],quantityStages:[],hourMemberships:[]},paymentOptions:{frequencies:[],rules:[],dayBases:[],shortMonths:[],adjustments:[]},contextTouVersions:[]};
+ const catalog={sideCalendars:[],references:{locations:[],quantityGroups:{contract:[],energy:[],capacity:[],certificate:[]},units:[],calendars:[],priceIndices:[]},priceKinds:['flat','escalated','stepped'],definitionsMetadata:{priceCurves:[],volumeSources:[],generationAssets:[]},authoringPolicies:{escalationBases:[],certificateEligibility:[],certificateHolding:[],certificateDisposition:[],capacityRules:[],quantityStages:[],hourMemberships:[]},paymentOptions:{frequencies:[],rules:[],dayBases:[],shortMonths:[],adjustments:[]},contextTouVersions:[]};
  for(const [index,kind] of ['energy','fixed','indexed'].entries()){
   const card=document.createElement('section');deck.append(card);
   componentEditor(card,catalog,{role:kind,ordinal:1,sideKind:kind,sideKinds:[kind],linkedSlots:[],quantityKinds:['volume'],linkRoles:[]},index,()=>{},undefined,{delivery:()=>({clock:'synthetic',cadence:'60'}),links:()=>[]});
@@ -51,7 +53,7 @@ export async function sideCardLayoutChecks() {
  const quantity={catalogId:'synthetic',revisionId:'synthetic',code:'energy'};
  const swapCatalog={bookingActor:{name:'Synthetic trader'},books:[],legalEntities:[],counterparties:[],commodities:[{code:'gas',name:'Gas'}],context:{},canBook:true,
   indices:[{commodity:'gas',definitionRevisionId:'synthetic',curve:'synthetic',index:'synthetic',quantityChoices:[{specification:quantity,unit:'MMBtu'}],samplings:[],customProjections:[]}],
-  paymentCalendars:[{definitionRevisionId:'synthetic',code:'synthetic_calendar',reference:{revision:{catalogId:'synthetic',revisionId:'synthetic'},code:'synthetic_calendar'}}],paymentOptions:{rules:[],dayBases:[],shortMonths:[],adjustments:[{value:'following',label:'Following'}]},scheduledOptions:{powerQuantities:[],clocks:[]},entryTemplate:{payment:{}},factorOptions:{}};
+  sideCalendars:[],paymentCalendars:[{definitionRevisionId:'synthetic',code:'synthetic_calendar',reference:{revision:{catalogId:'synthetic',revisionId:'synthetic'},code:'synthetic_calendar'}}],paymentOptions:{rules:[],dayBases:[],shortMonths:[],adjustments:[{value:'following',label:'Following'}]},scheduledOptions:{powerQuantities:[],clocks:[]},entryTemplate:{payment:{}},factorOptions:{}};
  let jobs=[];
  const scheduled=setupScheduledSwapEditor({...o,context:()=>({}),act:work=>{const job=work();jobs.push(job);return job;},api:async(path,body)=>{
   if(path==='swaps/catalog')return swapCatalog;
@@ -87,7 +89,7 @@ export async function sideCardLayoutChecks() {
  const labelled=(parent,text)=>[...parent.querySelectorAll('select')].find(field=>field.labels[0].textContent===text);
  for(const payment of payments){const adjustment=labelled(payment,'Date adjustment');adjustment.value='following';adjustment.dispatchEvent(new Event('change',{bubbles:true}));}
  const calendars=scheduledCards.map(card=>card.querySelector('[data-side-calendar]'));await settle();
- check('Each side has one holiday calendar control',scheduledCards.every(card=>card.querySelectorAll('[data-side-calendar]').length===1)&&calendars.every(field=>!field.disabled));
+ check('Each Side exposes its applicable calendar purposes',scheduledCards.every((card,slot)=>[...card.querySelectorAll('[data-side-calendar]')].filter(field=>!field.disabled).length===(slot===0?2:3)));
  check('Side holiday calendar fields align',tops(calendars));
  const firstAmounts=scheduledCards[0].querySelectorAll('[data-role=period-amount]');firstAmounts[1].value='125';
  scheduledCards[1].querySelector('[data-role=delivery-from]').value='2031-12-01';

@@ -227,7 +227,7 @@ export async function run(page){
   const swapDraft=await evaluate('window.__closeOut.drafts.at(-1)');
   await wait(`${form}.contains(document.querySelector('#scheduled-swap-editor'))&&!document.querySelector('#scheduled-swap-editor').hidden&&${idle}`,60000)
     .catch(async error=>{throw Error(error.message+' · observed '+JSON.stringify(await evaluate(`({draft:window.__closeOut.drafts.at(-1),view:document.querySelector('#position-details-view').textContent,error:document.querySelector('#error').textContent,form:${form}.textContent.slice(0,400)})`)));});
-  const legends="[...document.querySelectorAll('#scheduled-swap-editor .scheduled-period > legend')].map(l=>l.textContent)";
+  const legends="[...document.querySelectorAll('#scheduled-swap-editor .scheduled-period > h4')].map(l=>l.textContent)";
   const listed="[...document.querySelectorAll('#scheduled-close-out .close-out-periods tbody tr')].map(r=>[...r.cells].map(c=>c.textContent))";
   await check('a partly settled swap’s form lists only its open periods, the settled ones left untouched',
     `${JSON.stringify(swapDraft.status)}===200&&JSON.stringify(${legends})===${JSON.stringify(JSON.stringify(['2021-03-01 to 2021-04-01 · exclusive end','2021-04-01 to 2021-05-01 · exclusive end','2021-03-01 to 2021-04-01 · exclusive end','2021-04-01 to 2021-05-01 · exclusive end']))}&&

@@ -10,7 +10,7 @@ internal static class DeliveryIndexChecks
   var f=new IndexFixingChecks.FixingFixture(monthly:true,delayedMonthlyPublication:true);
   var p=f.Floating().Periods[0];var day=f.From.AddDays(10);
   var period=p with{DeliveryFrom=day,DeliveryTo=day.AddDays(1),Averaging=FloatingAveraging.CalendarDayArithmetic,Allocation=ExactRatio.One,Spread=new UnitPrice(ExactDecimal.Parse("0"),f.Quote),ObservationImplementation="delivery_index_fixings_v1"};
-  var side=new FloatingSide(Guid.NewGuid(),f.Quote,new(ExactDecimal.Parse("1"),f.Quote.Quantity),[period],"delivery_index_fixings_v1");
+  var side=new FloatingSide(Guid.NewGuid(),f.Quote,new(ExactDecimal.Parse("1"),f.Quote.Quantity),[period],"delivery_index_fixings_v1",SyntheticSideCalendars.FloatingPeriods([period]));
   var row=((SidePaymentSchedule)side.GenerateSchedule()).Payments.Single();
   if(row.DeliveryFrom!=day||row.DeliveryTo!=day.AddDays(1)||row.Prices.Single().Lookup!.Fixing!=f.Fixings[0])throw new Exception("Daily delivery must retain the original monthly fixing.");
   var lookup=row.Prices.Single().Lookup!;
@@ -30,7 +30,7 @@ internal static class DeliveryIndexChecks
   if(value.PresentValue.ToMoney().Amount!=ExactDecimal.Parse("10"))throw new Exception("Monthly publication must price the daily quantity exactly once.");
   void Reject(FloatingSidePeriod invalid)
   {
-   try{_=new FloatingSide(Guid.NewGuid(),f.Quote,side.UnitQuantity,[invalid],"delivery_index_fixings_v1");}
+   try{_=new FloatingSide(Guid.NewGuid(),f.Quote,side.UnitQuantity,[invalid],"delivery_index_fixings_v1",SyntheticSideCalendars.FloatingPeriods([invalid]));}
    catch(MarketDataException e) when(e.Code=="delivery_index_terms"){return;}
    throw new Exception("Invalid delivery index contract was accepted.");
   }
@@ -54,7 +54,7 @@ internal static class DeliveryIndexChecks
   var periods=ImmutableArray.CreateBuilder<FloatingSidePeriod>();
   periods.Add(monthly with{DeliveryFrom=day,DeliveryTo=f.From,FirstFixingAt=fixing.FixingAt,Fixings=[fixing],Projections=[new(new(curve.Key,key),contract)]});
   for(var d=f.From;d<f.To;d=d.AddDays(1))periods.Add(monthly with{DeliveryFrom=d,DeliveryTo=d.AddDays(1)});
-  var side=new FloatingSide(Guid.NewGuid(),quote,new(ExactDecimal.Parse("1"),quote.Quantity),periods.ToImmutable(),FloatingSide.DeliveryIndexImplementation);
+  var side=new FloatingSide(Guid.NewGuid(),quote,new(ExactDecimal.Parse("1"),quote.Quantity),periods.ToImmutable(),FloatingSide.DeliveryIndexImplementation,SyntheticSideCalendars.FloatingPeriods(periods.ToImmutable()));
   if(side.GenerateDatedSchedule().Payments.Length!=32||side.GenerateDatedSchedule().Payments.Select(p=>p.AllocatedQuantity).Aggregate((a,b)=>a.Add(b)).Numerator!="32")throw new Exception("Dated legs must conserve all32 daily quantities.");
   var at=Fixture.Utc("2041-01-04T18:00:00Z");
   SelectedObservation Actual(MarketSeries s,string price,DateTimeOffset issued)=>new(new(s.Key,InputUse.FrozenFact),new(new(f.Base.Revision.CatalogId,Guid.NewGuid()),s.Key,f.Base.R("actual_source"),ObservationRole.IndexFixing,PublicationState.Final,issued,ExactDecimal.Parse(price)));

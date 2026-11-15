@@ -5,6 +5,7 @@ from uuid import uuid4
 from check_lng_cargo_schema import physical_selection
 from preview_client import PreviewClient, initial_frame
 from preview_fixture import trade_booking
+from synthetic_side_calendars import side_calendar_policy
 
 
 def run_checks(url, query, manifest):
@@ -19,10 +20,14 @@ def run_checks(url, query, manifest):
     body = {**context, **trade_booking(), 'operationId':str(uuid4()), 'bookId':references['books'][0]['id'],
             'profile':profile['code'], 'quantityBasis':profile['quantityBasis'], 'tolerance':profile['tolerance'], 'discounting':profile['discounting'],
             'physical':physical_selection(manifest), 'loadFrom':'2021-01-04T00:00:00Z', 'loadTo':'2021-01-05T00:00:00Z',
-            'dischargeFrom':'2021-01-14T00:00:00Z', 'dischargeTo':'2021-01-15T00:00:00Z', 'paymentAt':'2021-01-25T00:00:00Z',
+            'dischargeFrom':'2021-01-14T00:00:00Z', 'dischargeTo':'2021-01-15T18:00:00Z', 'paymentAt':'2021-01-15T00:00:00Z',
             'quantity':'980', 'quantityCode':'synthetic_lng_mass', 'quantityUnit':'metric_tonne', 'conversionCode':'synthetic_lng_factor',
             'incoterms':{'edition':'incoterms_2020', 'rule':'incoterms_2020_cif', 'namedPlace':'synthetic_lng_named_port'},
             'direction':'receive', 'considerationDirection':'pay', 'fixedPrice':'10'}
+    calendar=dict(revision=dict(catalogId=manifest['referenceCatalogId'],revisionId=manifest['referenceRevisionId']),code='test_utc_every_day')
+    body.update(deliveryCalendarPolicy=side_calendar_policy(calendar,delivery=True,observation=False,payment=False),
+                considerationCalendarPolicy=side_calendar_policy(calendar,delivery=True,observation=False,payment=True))
+    assert client.call('lng/preview',{k:v for k,v in body.items() if k!='deliveryCalendarPolicy'},expected=422)['code']=='side_calendar_policy'
     resolve = {**context, 'physical':body['physical'], 'dischargeFrom':body['dischargeFrom'], 'dischargeTo':body['dischargeTo']}
     mapping = client.call('lng/resolve', resolve)
     unit = next(u['symbol'] for u in references['units'] if u['code'] == 'mmbtu_it')
@@ -47,6 +52,7 @@ def run_checks(url, query, manifest):
     assert Decimal(client.call('lng/preview', {**body, 'incoterms':{**body['incoterms'],'rule':'incoterms_2020_fob'}})['presentValue']) == 49000
     booked = client.call('lng/book', body)
     assert client.call('lng/book', body) == booked
+    assert query(f"SELECT to_char(payment_at AT TIME ZONE 'UTC','YYYY-MM-DD') FROM trading.lng_instruments WHERE instrument_id='{booked['instrumentId']}';")=='2021-01-15'
     assert client.call('lng/status', {'operationId':body['operationId']}) == booked
     client.call('lng/book', {**body, 'quantity':'981'}, expected=409)
     assert query(f"SELECT count(*) FROM trading.lng_trade_revisions WHERE catalog_id='{manifest['catalogId']}';") == '1'

@@ -13,7 +13,7 @@ internal static class CrudeInventorySalesChecks
   var start=new DateTimeOffset(2040,1,1,0,0,0,TimeSpan.Zero);var due=start.AddMonths(1).AddDays(5);
   var terms=new CrudePhysicalCashTerms(CrudeSaleCash.Implementation,Guid.NewGuid(),Guid.NewGuid(),location,R("synthetic_grade"),quantity,D("60"),"fahrenheit",Q("600"),new(start,start.AddMonths(1)),due,
    new(new UnitPrice(D("80"),new PriceUnit(R("usd"),quantity.Key,D("1"))),D("1")),
-   new(new UnitPrice(D("0.5"),new PriceUnit(R("usd"),quantity.Key,D("1"))),D("-1")),new(CrudeReceiptCash.RoundingImplementation,2,CashTieRule.ToEven));
+   new(new UnitPrice(D("0.5"),new PriceUnit(R("usd"),quantity.Key,D("1"))),D("-1")),new(CrudeReceiptCash.RoundingImplementation,2,CashTieRule.ToEven)){HandlingFeePaymentAt=due};
   var first=new CrudeSaleDelivery(Guid.NewGuid(),start.AddDays(3),Q("250"),terms.Grade,location,CrudeReceiptTitle.Transferred);
   var second=first with{Id=Guid.NewGuid(),DeliveredAt=start.AddDays(4),Quantity=Q("350")};
   var invoice=new CrudeCashInvoice(Guid.NewGuid(),CrudeCashComponent.Consideration,first.Id,1,null,start.AddDays(5)){EventVersion=1};
@@ -70,7 +70,7 @@ internal static class CrudeInventorySalesChecks
   Equal(reopened.Cash[0].Paid.Amount,"0");Equal(reopened.Cash[0].Outstanding.Amount,"48000");
   Reject("crude_invoice_active_payment",()=>CrudeSaleCash.Reconcile(terms,[first],[invoice],[payment],
    [reversal with{Kind=CrudeCashReversalKind.InvoiceRecord,TargetId=invoice.Id}],due));
-  var penny=terms with{ContractQuantity=Q("1"),Consideration=new(new UnitPrice(D("0.01"),terms.Consideration.Price.Unit),D("1")),HandlingFee=null};
+  var penny=terms with{ContractQuantity=Q("1"),Consideration=new(new UnitPrice(D("0.01"),terms.Consideration.Price.Unit),D("1")),HandlingFee=null,HandlingFeePaymentAt=null};
   var half=first with{Quantity=Q("0.5")};var otherHalf=second with{Quantity=Q("0.5")};
   var cents=CrudeSaleCash.Reconcile(penny,[half,otherHalf],[invoice,next],[],[],due);
   Equal(cents.Invoices[0].Amount.Amount,"0");Equal(cents.Invoices[1].Amount.Amount,"0.01");

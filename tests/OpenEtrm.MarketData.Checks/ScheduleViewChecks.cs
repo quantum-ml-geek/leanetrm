@@ -61,6 +61,9 @@ internal static class ScheduleViewChecks
             !calculation.Rows.Any(r=>r.Operation=="weighted_price")||calculation.Rows.Select(r=>r.Key).Distinct().Count()!=calculation.Total||
             calculation.Rows.SelectMany(r=>r.Inputs).Any(i=>!calculation.Rows.Any(r=>r.Key==i.Key)))
             throw new Exception("Calculation drill-down follows exact native inputs and declares its unit-side values and holding scale.");
+        if(calculation.Rows.Where(r=>r.ValueAt is not null).Any(r=>r.PaymentDate!=new DateOnly(2032,1,26))||
+            SideScheduleInspection.Calculation(daily,Utc,paged.Rows[0].Key,0,128).Rows.Any(r=>r.PaymentDate is not null))
+            throw new Exception("Calculation rows distinguish contractual cash dates from physical value instants.");
         Reject("side_schedule_inspection",()=>SideScheduleInspection.Read(cash,Utc,0,129));
         Reject("side_schedule_inspection",()=>SideScheduleInspection.Calculation(cash,Utc,"-1:0",0,48));
         Pass("calculation inspection exposes averaging and discount operands with an explicit value basis");
@@ -228,9 +231,9 @@ internal static class ScheduleViewChecks
         var assignment=new GasValuationAssignment(G("gas_value"),location,G("gas_product"),from,to,lookup.Settlement,lookup.Quote,
             new(lookup.Market,lookup.Contract),lookup.Fixing,new UnitPrice(default,f.Quote));
         var physical=new PhysicalGasSide(Guid.NewGuid(),location,G("gas_product"),
-            new(clock,from,to,GasQuantityBasis.PerOperatingDay,new(D("1"),f.Quote.Quantity),GasFuelConvention.None,default),[assignment]);
+            new(clock,from,to,GasQuantityBasis.PerOperatingDay,new(D("1"),f.Quote.Quantity),GasFuelConvention.None,default),[assignment],SyntheticSideCalendars.Physical());
         FixedSide Fixed(string price)=>new(Guid.NewGuid(),new FlatPrice(new UnitPrice(D(price),f.Quote)),f.Quote,new(D("1"),f.Quote.Quantity),
-            [new(from,to,clock.Boundary(to).AddDays(2),new(to.DayNumber-from.DayNumber,1),null)]);
+            [new(from,to,clock.Boundary(to).AddDays(2),new(to.DayNumber-from.DayNumber,1),null)],SyntheticSideCalendars.FixedPeriods([new(from,to,clock.Boundary(to).AddDays(2),new(to.DayNumber-from.DayNumber,1),null)]));
         var before=clock.Boundary(from).AddDays(-1);
         SideViewInput Side(string code,Side side,int coefficient)
         {
@@ -270,7 +273,7 @@ internal static class ScheduleViewChecks
     {
         var q=quote??Quote;
         var side=new FixedSide(Guid.NewGuid(),new FlatPrice(new UnitPrice(D(price),q)),q,new(D("1"),q.Quantity),
-            [new(DateOnly.FromDateTime(From.UtcDateTime),DateOnly.FromDateTime(From.AddDays(days).UtcDateTime),From.AddDays(days+25),new(days*10000,1),null)]);
+            [new(DateOnly.FromDateTime(From.UtcDateTime),DateOnly.FromDateTime(From.AddDays(days).UtcDateTime),From.AddDays(days+25),new(days*10000,1),null)],SyntheticSideCalendars.FixedPeriods([new(DateOnly.FromDateTime(From.UtcDateTime),DateOnly.FromDateTime(From.AddDays(days).UtcDateTime),From.AddDays(days+25),new(days*10000,1),null)]));
         var program=Load(ScheduleDefinitionCompiler.Generate(side));var demand=program.Inputs(Context(valuation,known));
         var evaluation=program.Execute(demand,"base","base",Inputs(program,demand,(_,_)=>(N("1"),default)));
         return new(code,evaluation,program,D("1"),S(direction),Columns);

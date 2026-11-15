@@ -200,7 +200,7 @@ internal static class FuturesOptionPortfolio
         var discounting=ImmutableDictionary.CreateBuilder<ReferenceKey,CurrencyDefaultDiscounting>();
         foreach(var currency in live.Select(o=>o.Currency).Concat(coDiscountedPayments.Select(p=>p.Currency)).Distinct())
         {
-            ImmutableArray<SidePaymentKey> keys=[..live.Where(o=>o.Currency==currency).Select(o=>new SidePaymentKey(o.Id,0,o.Series.Terms.ExpiryAt,currency)),
+            ImmutableArray<SidePaymentKey> keys=[..live.Where(o=>o.Currency==currency).Select(o=>new SidePaymentKey(o.Id,0,o.Series.Terms.ExpiryAt,currency){Timing=ValueTimingKind.Instant}),
                 ..coDiscountedPayments.Where(p=>p.Currency==currency)];
             // A payment date the curve does not cover leaves out only the option or payment that owns it.
             discounting.Add(currency,CurrencyDefaultDiscounting.Covering(keys,snapshot,true,await SwapStore.CurrencyDefault(connection,catalog,data,frame,currency,ct),out var uncovered));

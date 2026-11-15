@@ -31,8 +31,8 @@ internal static class SeriesIndexWorkChecks
             var normalization=new PpaNormalization([asset.Key],capacity.Key,PpaNormalizationPolicy.SumCapacityInForce);
             PpaSideTerms Terms(PpaQuantity q)=>new(delivery,q,shaped.Unit.Currency,new(D("1"),capacity.Key),dates,schedule,energy.Key,normalization,
                 q is SlotQuantity linked?[..linked.Slots.Select(slot=>new ScheduleInputPort(slot,energy.Key,schedule))]:[]);
-            var physical=new PowerPhysicalSide(Guid.NewGuid(),Terms(new VolumeQuantity([source.Key],QuantityStage.Generated,energy.Key)),asset.Location);
-            var payment=new FixedSide(Guid.NewGuid(),Terms(new SlotQuantity([new(PpaRole.EnergyDelivery)])),new FlatPrice(new(D(strike),shaped.Unit)));
+            var physical=new PowerPhysicalSide(Guid.NewGuid(),Terms(new VolumeQuantity([source.Key],QuantityStage.Generated,energy.Key)),asset.Location,SyntheticSideCalendars.Interval(Terms(new VolumeQuantity([source.Key],QuantityStage.Generated,energy.Key)),false));
+            var payment=new FixedSide(Guid.NewGuid(),Terms(new SlotQuantity([new(PpaRole.EnergyDelivery)])),new FlatPrice(new(D(strike),shaped.Unit)),SyntheticSideCalendars.Interval(Terms(new SlotQuantity([new(PpaRole.EnergyDelivery)])),false));
             return new(Guid.NewGuid(),f.Revision,f.Reference,[new(new(PpaRole.EnergyDelivery),physical,D("1")),new(new(PpaRole.StrikePayment),payment,D("-1"))],false,PpaInstrument.Implementation);
         }
         var instruments=ImmutableArray.Create(Instrument("40"),Instrument("41"));

@@ -33,7 +33,7 @@ internal static class ScheduleProgramDemandChecks
         var context=new ResolvedCalculationContext(Guid.NewGuid(),"synthetic_dated_inputs_v1",date,date,date,date);
         if(dated.Inputs(context).Sources.Count(input=>dated.Document.Instructions[input.Instruction].Output.Operation=="discount")!=1)
             throw new Exception("A future dated payment requires exactly one context-derived factor.");
-        var payment=fixedSide.Periods[0].PaymentAt;
+        var payment=fixedSide.Periods[0].PaymentAt.AddDays(1);
         try{dated.Inputs(new(Guid.NewGuid(),"synthetic_due_dated_v1",payment,payment,payment,payment));throw new Exception("Due dated payments must refuse before fetching dynamic inputs.");}
         catch(MarketDataException e)when(e.Code=="side_payment_due"){}
         var shared=new ScheduleProgramFixture();var sharedProgram=BookedSideProgram.Compile(shared.Definition());
@@ -96,7 +96,7 @@ internal static class ScheduleProgramDemandChecks
 
         var cash=ScheduleDefinitionCompiler.Generate(cashSide);
         var undue=BookedSideProgram.Compile(cash);var accrued=BookedSideProgram.Compile(Relabel(cash,ScheduleLifecycles.AccruedPayment));
-        var paid=clock.Boundary(from.AddDays(3));
+        var paid=clock.Boundary(from.AddDays(4));
         if(accrued.Document.Instructions.Count(i=>i.Output is{Operation:"output_guard",Grid:null})!=3)
             throw new Exception("The cash fixture must retain three dated payment rows.");
         var dueDemand=accrued.Inputs(At(paid));
@@ -110,7 +110,7 @@ internal static class ScheduleProgramDemandChecks
             throw new Exception("Due accrued cash with a fixed price must remain an overdue balance.");
         var floating=ScheduleDefinitionCompiler.Generate(new CommodityLookupFixture(2,monthly:true).Swap(monthly:true,monthOrdinal:0).Floating);
         var indexed=BookedSideProgram.Compile(Relabel(floating,ScheduleLifecycles.AccruedPayment));
-        var due=indexed.Inputs(At(indexed.Document.Instructions.Single(i=>i.Output.Operation=="output_guard").Output.ValueAt!.Value));
+        var due=indexed.Inputs(At(indexed.Document.Instructions.Single(i=>i.Output.Operation=="output_guard").Output.ValueAt!.Value.AddDays(1)));
         (ScheduleNumber,ScheduleCellState) Projected(ScheduleDefinitionRow row,int cell,string id)=>(ScheduleNumber.Parse("4"),ScheduleCellState.From(null,RowPriceState.Projected));
         Reject("side_due_leg_unresolved",()=>indexed.Execute(due,"base","base",ScheduleProgramExecutionChecks.Sources(indexed,due,"base","base",Projected)));
 
@@ -129,10 +129,10 @@ internal static class ScheduleProgramDemandChecks
         var assignments=lookups.Select(l=>new GasValuationAssignment(R("gas_value_"+l.Contract.DeliveryFrom.Day),location,R("gas_product"),l.Contract.DeliveryFrom,l.Contract.DeliveryTo,
             l.Settlement,l.Quote,new(l.Market,l.Contract),l.Fixing,new UnitPrice(default,f.Quote))).ToImmutableArray();
         var terms=new GasQuantityTerms(clock,from,from.AddDays(3),GasQuantityBasis.PerOperatingDay,new(ExactDecimal.Parse("1"),f.Quote.Quantity),GasFuelConvention.None,default);
-        var gas=new PhysicalGasSide(Guid.NewGuid(),location,R("gas_product"),terms,assignments);
+        var gas=new PhysicalGasSide(Guid.NewGuid(),location,R("gas_product"),terms,assignments,SyntheticSideCalendars.Physical());
         FixedSidePeriod Period(int day)=>new(from.AddDays(day),from.AddDays(day+1),clock.Boundary(from.AddDays(day+1)),new(1,1),null);
         var cash=new FixedSide(Guid.NewGuid(),new FlatPrice(new UnitPrice(ExactDecimal.Parse("3"),f.Quote)),f.Quote,
-            new(ExactDecimal.Parse("1"),f.Quote.Quantity),[Period(0),Period(1),Period(2)]);
+            new(ExactDecimal.Parse("1"),f.Quote.Quantity),[Period(0),Period(1),Period(2)],SyntheticSideCalendars.FixedPeriods([Period(0),Period(1),Period(2)]));
         var crudeFixture=new CommodityLookupFixture(31,monthly:true,volume:true);
         var crudeLookup=crudeFixture.Swap(true,0).Floating.GenerateSchedule().Rows[0].Prices[0].Lookup!;
         ReferenceKey C(string code)=>new(crudeFixture.Quote.Key.Revision,code);
@@ -140,7 +140,7 @@ internal static class ScheduleProgramDemandChecks
         var crudeAssignment=new CrudeValuationAssignment(C("crude_assignment"),crudeQuantity.Commodity,C("test_grade"),new(C("test_terminal"),C("test_custody_point")),
             crudeQuantity,C("utc"),ExactDecimal.Parse("60"),"fahrenheit",crudeLookup.Settlement,crudeFixture.Quote,new(crudeLookup.Market,crudeLookup.Contract),crudeLookup.Fixing!);
         var crudeFrom=new DateTimeOffset(2041,1,10,12,0,0,TimeSpan.Zero);
-        var crude=new PhysicalCrudeSide(Guid.NewGuid(),crudeAssignment,crudeFrom,crudeFrom.AddDays(3),default);
+        var crude=new PhysicalCrudeSide(Guid.NewGuid(),crudeAssignment,crudeFrom,crudeFrom.AddDays(3),default,SyntheticSideCalendars.Physical());
         return (f,clock,from,gas,cash,crude);
     }
 }

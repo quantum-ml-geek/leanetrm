@@ -30,7 +30,7 @@ internal static class GasTicketStartingValues
    var path=Path(catalog,side);var valuation=path.GetProperty("valuation");
    if(valuation.ValueKind!=JsonValueKind.Object)throw Missing("This path has no pricing assignment.");
    var curve=valuation.Text("curve");var members=data.Definitions["curve_members"].Where(m=>m.Text("curve_code")==curve).Select(m=>m.Id("contract_id")).ToHashSet();
-   var clock=new GasDayClock(new(data.ReferenceRevision,path.Text("clock")),PpaQuantitiesStore.Clock(data,path.Text("clock")).Rules,path.GetProperty("dayStartMinute").GetInt32());
+   var clock=new GasDayClock(new(data.ReferenceRevision,path.Text("clock")),PpaQuantitiesStore.FixedClockRules(data,path.Text("clock")),path.GetProperty("dayStartMinute").GetInt32());
    var earliest=DateOnly.FromDateTime(frame.At.UtcDateTime);while(clock.Boundary(earliest)<=frame.At)earliest=earliest.AddDays(1);
    if(kind=="entry_to"&&DateOnly.TryParseExact(side.Values.GetValueOrDefault("delivery_from"),"yyyy-MM-dd",CultureInfo.InvariantCulture,DateTimeStyles.None,out var chosen)&&chosen>earliest)earliest=chosen;
    var periods=data.Contracts.Where(c=>members.Contains(c.Key.Id)&&c.Kind==ContractKind.Forward&&c.DeliveryFrom.Day==1&&c.DeliveryTo==c.DeliveryFrom.AddMonths(1)&&c.DeliveryTo>earliest&&c.Expiry>frame.At).OrderBy(c=>c.DeliveryFrom).ToArray();
@@ -41,8 +41,8 @@ internal static class GasTicketStartingValues
   if(kind=="entry_payment")
   {
    var source=Source(body.Draft,side);if(!DateOnly.TryParseExact(source.Values.GetValueOrDefault("delivery_to"),"yyyy-MM-dd",CultureInfo.InvariantCulture,DateTimeStyles.None,out var to))throw Missing("Choose the source delivery end first.");
-   var path=Path(catalog,source);var clock=new GasDayClock(new(data.ReferenceRevision,path.Text("clock")),PpaQuantitiesStore.Clock(data,path.Text("clock")).Rules,path.GetProperty("dayStartMinute").GetInt32());
-   if(current is not null&&SchedulePreview.ParseAt(current)>=clock.Boundary(to))return Suggest(current,"Retained payment date");
+   var path=Path(catalog,source);var clock=new GasDayClock(new(data.ReferenceRevision,path.Text("clock")),PpaQuantitiesStore.FixedClockRules(data,path.Text("clock")),path.GetProperty("dayStartMinute").GetInt32());
+   if(current is not null&&OpenEtrm.MarketData.Trading.PaymentDatePolicy.Date(SchedulePreview.ParseAt(current))>=OpenEtrm.MarketData.Trading.PaymentDatePolicy.Date(clock.Boundary(to)))return Suggest(current,"Retained payment date");
    var last=to.AddDays(-1);var date=new DateOnly(last.Year,last.Month,1).AddMonths(1).AddDays(9);
    return Suggest(new DateTimeOffset(date.ToDateTime(TimeOnly.MinValue,DateTimeKind.Utc)).ToString("O",CultureInfo.InvariantCulture),"Suggested following-month payment on day 10 UTC");
   }

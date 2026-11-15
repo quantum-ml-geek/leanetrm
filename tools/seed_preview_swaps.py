@@ -1,4 +1,5 @@
 """Create explicit synthetic monthly/daily swaps through owned preview operations."""
+from synthetic_side_calendars import all_dates_policy
 from preview_fixture import trade_booking
 import json
 from pathlib import Path
@@ -45,8 +46,8 @@ def seed_swaps(url, run_id, owned_root, client=None):
             operation = str(uuid5(UUID('e1000000-0000-0000-0000-000000000002'), ':'.join(('swap_schedule_examples_v2', frame['at'][:10], commodity, averaging))))
             commands.append({**context, **trade_booking(), 'operationId': operation, 'definitionRevisionId': revision, 'commodity':commodity, 'bookId': book,
                 'quantity': '1000000' if averaging == 'monthly_index_price' else '100', 'fixedCoefficient': FIXED_COEFFICIENT, 'discounting': discounting,
-                'fixed': {'price': strike, 'currency': index['currencyCode'], 'deliveryFrom': '2021-01-01', 'deliveryTo': '2021-02-01', 'paymentSchedule':{'frequency':'monthly','rule':'day_of_following_month','days':None,'dayOfMonth':18,'dayBasis':None,'shortMonth':'reject','adjustment':'unadjusted','calendar':None,'implementation':'monthly_payment_date_rules_v1'}},
-                'floating': {'spread': '0', 'settlement': {'mode': 'curve_target', 'index': None, 'projectionPolicy': None}, 'curve': index['curve'], 'index': index['index'], 'currency': index['currencyCode'], 'deliveryFrom': '2021-01-01', 'deliveryTo': '2021-02-01', 'paymentSchedule':{'frequency':'monthly','rule':'days_after_period_end','days':46,'dayOfMonth':None,'dayBasis':'calendar_days','shortMonth':None,'adjustment':'unadjusted','calendar':None,'implementation':'monthly_payment_date_rules_v1'}, 'resetFrequency':'monthly' if averaging=='monthly_index_price' else 'daily','averagingMethod':'none' if averaging=='monthly_index_price' else 'arithmetic'}})
+                'fixed': {'calendarPolicy': all_dates_policy(observation=False), 'price': strike, 'currency': index['currencyCode'], 'deliveryFrom': '2021-01-01', 'deliveryTo': '2021-02-01', 'paymentSchedule':{'frequency':'monthly','rule':'day_of_following_month','days':None,'dayOfMonth':18,'dayBasis':None,'shortMonth':'reject','adjustment':'unadjusted','calendar':None,'implementation':'monthly_payment_date_rules_v1'}},
+                'floating': {'calendarPolicy': all_dates_policy(observation=True), 'spread': '0', 'settlement': {'mode': 'curve_target', 'index': None, 'projectionPolicy': None}, 'curve': index['curve'], 'index': index['index'], 'currency': index['currencyCode'], 'deliveryFrom': '2021-01-01', 'deliveryTo': '2021-02-01', 'paymentSchedule':{'frequency':'monthly','rule':'days_after_period_end','days':46,'dayOfMonth':None,'dayBasis':'calendar_days','shortMonth':None,'adjustment':'unadjusted','calendar':None,'implementation':'monthly_payment_date_rules_v1'}, 'resetFrequency':'monthly' if averaging=='monthly_index_price' else 'daily','averagingMethod':'none' if averaging=='monthly_index_price' else 'arithmetic'}})
     # Resolve all commands and their exact schedules before the first mutation.
     for body in commands:
         status = client.call('swaps/status', {'operationId': body['operationId']})

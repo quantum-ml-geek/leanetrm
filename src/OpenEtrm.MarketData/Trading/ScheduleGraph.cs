@@ -280,7 +280,7 @@ public sealed partial class ScheduleGraphBuilder
     public ScheduleDiscountNode DiscountInput(SidePaymentFactor factor)
     {
         Open();
-        if (factor is null || !authority.HasSameInputs(factor.Snapshot) || factor.DiscountFactor.CompareTo(default) <= 0 || !Enum.IsDefined(factor.Source) ||
+        if (factor is null || !authority.HasSameInputs(factor.Snapshot) || factor.DiscountFactor.CompareTo(default) <= 0 || !Enum.IsDefined(factor.Source) || !factor.HasValidPaymentDayTerms(sourceContext.ValuationAt) ||
             factor.Source == DiscountFactorSource.Undiscounted && factor.DiscountFactor != ExactDecimal.Parse("1"))
             throw ScheduleGraph.Error("side_payment_factors", "The factor requires this exact snapshot, value key and explicit supported source.");
         factor.Payment.RequireUndue(authority);

@@ -26,6 +26,26 @@ internal static class SwapLifecycleChecks
         Equal(value.Realized.ToExactString(), "-800"); Equal(value.Unrealized.ToExactString(), "0");
         Equal(value.DeterminedOutstanding.ToExactString(), "-2300");
         Equal(value.NetCash.ToExactString(), "1500"); Equal(value.Corrections.ToExactString(), "200");
+        var eveningOriginals=new SwapSettlementInputs(trade,binding,quantity,
+            [receive with{DueAt=f.Payment.AddHours(18)},adjustment,fixedCash with{DueAt=f.Payment.AddHours(18)}],
+            inputs.NetCash,zero,completions,"swap_due_nominal_v1","swap_completed_period_trading_pnl_v1");
+        var morning=snapshot with{ValuationAt=f.Payment.AddHours(8),MarketCutoff=f.Payment.AddHours(8)};
+        var morningValue=eveningOriginals.Evaluate(swap,new(f.Model.Build(morning,[]),new ExplicitDiscounting(ExactDecimal.Parse("1"),DiscountFactorSource.Undiscounted)));
+        Equal(morningValue.DueBalance.ToExactString(),"-2500");
+        Equal(eveningOriginals.DiscountKeys(swap,morning).Length,1);
+        var discountedSwap=new FinancialSwapInstrument(swap.Id,swap.Sides,FinancialSwapInstrument.Implementation,true);
+        var correctionDue=f.Payment.AddHours(18);
+        var correctionInputs=new SwapSettlementInputs(trade,binding,quantity,
+            [receive with{Applied=receive.Amount},adjustment with{DueAt=correctionDue},fixedCash with{Applied=fixedCash.Amount}],
+            ExactMoney.Parse("-1000",swap.Currency),zero,completions,"swap_due_nominal_v1","swap_completed_period_trading_pnl_v1");
+        var correctionDiscount=new ExplicitDiscounting(ExactDecimal.Parse("0.9"),DiscountFactorSource.Explicit);
+        var correctionMorning=correctionInputs.Evaluate(discountedSwap,new(f.Model.Build(morning,[]),correctionDiscount));
+        Equal(correctionMorning.DeterminedPv.ToExactString(),"180");
+        Equal(correctionMorning.DueBalance.ToExactString(),"0");
+        var correctionBoundary=morning with{ValuationAt=correctionDue,MarketCutoff=correctionDue};
+        var correctionAtDue=correctionInputs.Evaluate(discountedSwap,new(f.Model.Build(correctionBoundary,[]),correctionDiscount));
+        Equal(correctionAtDue.DeterminedPv.ToExactString(),"200");
+        Equal(correctionAtDue.DueBalance.ToExactString(),"200");
         // Later eligible market prices cannot reprice determined balances.
         var revised = snapshot with { Id = Guid.NewGuid(), Selections = snapshot.Selections.Select(s => s.Input.Use == InputUse.FrozenFact
             ? s with { Observation = s.Observation with { Key = new(s.Observation.Key.CatalogId, Guid.NewGuid()), Value = ExactDecimal.Parse("99") } } : s).ToImmutableArray() };

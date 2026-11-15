@@ -35,7 +35,7 @@ internal sealed class QuantitySeriesIndexes(VolumeContext context)
         foreach(var c in series.Values)
         {
             if(c.Start.Offset!=TimeSpan.Zero || c.End.Offset!=TimeSpan.Zero || c.End-c.Start!=TimeSpan.FromMinutes(source.IntervalMinutes) ||
-                !PowerHours.IsCell(asset.OperatingClock.Zone,c.Start,TimeSpan.FromMinutes(source.IntervalMinutes)) ||
+                !PowerHours.IsCell(asset.OperatingClock,c.Start,TimeSpan.FromMinutes(source.IntervalMinutes)) ||
                 c.KnownAt.Offset!=TimeSpan.Zero || c.Revision<=0 || c.ContextId==Guid.Empty || identities is not null && !identities.Add((c.Start,c.Revision)))
                 throw new MarketDataException("volume_grid","Quantity observations need distinct revision/cell identities, native UTC boundaries and certified knowledge lineage.");
             if(revisions.TryGetValue(c.Revision,out var known) && known!=c.KnownAt)

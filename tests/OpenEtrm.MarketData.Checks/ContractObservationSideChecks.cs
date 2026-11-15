@@ -23,7 +23,12 @@ internal static class ContractObservationSideChecks
         var period=new FloatingSidePeriod(from,to,lookups[0].Observation.FixingAt,new DateTimeOffset(2041,2,3,0,0,0,TimeSpan.Zero),
             FloatingAveraging.ObservationArithmetic,[..lookups.Select(l=>new SwapProjection(l.Market,l.Contract))],[],null,null,null,null,ExactRatio.One,FloatingSide.ContractObservationImplementation)
             {ContractObservations=lookups};
-        var side=new FloatingSide(Guid.NewGuid(),quote,new(ExactDecimal.Parse("1"),quote.Quantity),[period]);
+        var side=new FloatingSide(Guid.NewGuid(),quote,new(ExactDecimal.Parse("1"),quote.Quantity),[period],SyntheticSideCalendars.FloatingPeriods([period]));
+        var laterPeriod=period with{DeliveryFrom=to,DeliveryTo=to.AddMonths(1),PaymentAt=new DateTimeOffset(2041,3,3,0,0,0,TimeSpan.Zero)};
+        var observationCalendar=new CalendarDefinition(f.R("synthetic_observation_window"),to,to.AddMonths(2),0,[],CalendarDefinition.Implementation);
+        var broadPolicy=SyntheticSideCalendars.FloatingPeriods([laterPeriod]);
+        var narrowPolicy=new SideCalendarPolicy(broadPolicy.Delivery,CalendarBinding.Owned(observationCalendar),broadPolicy.Payment,SideCalendarPolicy.Implementation);
+        Reject("calendar_coverage",()=>new FloatingSide(Guid.NewGuid(),quote,new(ExactDecimal.Parse("1"),quote.Quantity),[laterPeriod],narrowPolicy));
         var schedule=side.GenerateDatedSchedule();Equal(schedule.Payments.Single().Prices.Length,3);
         Equal(schedule.Payments.Single().DeliveryFrom,from);Equal(schedule.Payments.Single().Prices[0].ContractObservation,lookups[0]);
         var context=new ResolvedCalculationContext(Guid.NewGuid(),"contract-observation-test",at,at,at,at);
@@ -93,7 +98,7 @@ internal static class ContractObservationSideChecks
         Reject("contract_observation_source",()=>changedLookup.Validate());
         var changedPeriod=period with{ContractObservations=lookups.SetItem(0,lookups[0] with{Source=f.R("other_source")})};
         Equal(DefinitionIdentity.For(period).Digest!=DefinitionIdentity.For(changedPeriod).Digest,true);
-        var changedSide=new FloatingSide(Guid.NewGuid(),quote,new(ExactDecimal.Parse("1"),quote.Quantity),[changedPeriod]);
+        var changedSide=new FloatingSide(Guid.NewGuid(),quote,new(ExactDecimal.Parse("1"),quote.Quantity),[changedPeriod],SyntheticSideCalendars.FloatingPeriods([changedPeriod]));
         Equal(DefinitionIdentity.For(side.PricingBinding).Digest!=DefinitionIdentity.For(changedSide.PricingBinding).Digest,true);
         // Cash determination binds the actual retained contract terms, while a
         // published price correction changes evidence only, never the obligation.
@@ -108,7 +113,7 @@ internal static class ContractObservationSideChecks
         var futureCarry=lookups[1] with{Observation=lookups[2].Observation,SelectionAt=lookups[2].SelectionAt};
         var carryLookups=lookups.SetItem(2,futureCarry);
         var carrySide=new FloatingSide(Guid.NewGuid(),quote,new(ExactDecimal.Parse("1"),quote.Quantity),
-            [period with{ContractObservations=carryLookups,Projections=[..carryLookups.Select(l=>new SwapProjection(l.Market,l.Contract))]}]);
+            [period with{ContractObservations=carryLookups,Projections=[..carryLookups.Select(l=>new SwapProjection(l.Market,l.Contract))]}],SyntheticSideCalendars.FloatingPeriods([period with{ContractObservations=carryLookups,Projections=[..carryLookups.Select(l=>new SwapProjection(l.Market,l.Contract))]}]));
         var carrySwap=new FinancialSwapInstrument(Guid.NewGuid(),[new(carrySide,ExactDecimal.Parse("-1")),new(carrySide,ExactDecimal.Parse("1"))],FinancialSwapInstrument.Implementation,false);
         var carrySamples=ContractObservationPricing.Compile([new(lookups[0],model,snapshots[0]),new(lookups[1],model,snapshots[1]),
             new(futureCarry,model,snapshots[1] with{Id=Guid.NewGuid(),ValuationAt=at,MarketCutoff=at})],context,new Bindings());
@@ -148,9 +153,9 @@ internal static class ContractObservationSideChecks
         Equal(State(contributions).RequiredPrices(cashSwap).Length,3);
         Equal(State(contributions.Add(contributions[0] with{Id=Guid.NewGuid(),MembershipOrdinal=0})).RequiredPrices(cashSwap).Length,0);
         var indexedPeriod=period with{ContractObservations=[]};
-        Equal(DefinitionIdentity.For(indexedPeriod).Version,"floating_side_period_v1");
+        Equal(DefinitionIdentity.For(indexedPeriod).Version,"floating_side_period_v3");
         Equal(DefinitionIdentity.For(indexedPeriod).Canonical.Contains("ContractObservations"),false);
-        Equal(DefinitionIdentity.For(period).Version,"floating_side_period_v2");
+        Equal(DefinitionIdentity.For(period).Version,"floating_side_period_v4");
         Reject("connected_curve_source",()=>model.Compile(snapshots[0],[lookups[0].Market],true,context,freezeObservation:true));
         Reject("connected_curve_source",()=>model.Compile(snapshots[2] with{Selections=[snapshots[2].Selections[0] with{Observation=snapshots[2].Selections[0].Observation with{ObservedAt=at.AddTicks(-1)}}]},[lookups[2].Market],false,context,freezeObservation:true));
         Console.WriteLine("PASS contract observation side: independent delivery and observation periods, retained contracts, connected historical/final/live cash and immutable shocks");

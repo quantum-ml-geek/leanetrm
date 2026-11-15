@@ -1,31 +1,37 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {SideCalendarSelection,calendarKey,referenceCalendarChoices,savedCalendarCode} from '../dist/side-calendar.js';
-
-const reference=(revisionId,code='synthetic')=>({revision:{catalogId:'catalog',revisionId},code});
-test('one explicit calendar supplies a side without choosing for another side',()=>{
- const first=new SideCalendarSelection(),second=new SideCalendarSelection();
- first.choose('a');assert.equal(first.read(['a','b']),'a');assert.equal(second.value(),undefined);
- assert.throws(()=>second.read(['a','b']),/Choose/);
+import {SideCalendarPolicySelection,calendarKey} from '../dist/side-calendar.js';
+const ref=(version)=>({revision:{catalogId:'synthetic-catalog',revisionId:version},code:'synthetic'});
+const a=ref('one'),b=ref('two'),choices=[{reference:a,value:calendarKey(a),label:'one'},{reference:b,value:calendarKey(b),label:'two'}];
+const purposes={delivery:true,observation:true,payment:true};
+test('each applicable purpose requires explicit selection, even for a sole calendar',()=>{
+ const value=new SideCalendarPolicySelection();
+ assert.throws(()=>value.read(purposes,choices.slice(0,1)),/Choose/);
+ value.choose('delivery',a);value.choose('payment',b);
+ assert.throws(()=>value.read(purposes,choices),/observation/);
+ value.choose('observation',a);
+ assert.deepEqual(value.read(purposes,choices),{implementation:'side_calendar_policy_v1',delivery:{applicable:true,calendar:a},observation:{applicable:true,calendar:a},payment:{applicable:true,calendar:b}});
 });
-test('matching saved calendars restore, mixed saved calendars require an explicit choice',()=>{
- const selection=new SideCalendarSelection();selection.restore(['a',null,'a']);assert.equal(selection.read(['a','b']),'a');
- selection.restore(['a','b']);assert.equal(selection.value(),undefined);assert.throws(()=>selection.read(['a','b']),/different/);
- selection.choose('b');assert.equal(selection.read(['a','b']),'b');
+test('explicit use-one expands concrete bindings; linked schedules remain inapplicable',()=>{
+ const value=new SideCalendarPolicySelection(),linked={delivery:false,observation:false,payment:true};
+ value.useOne(a,linked,{});
+ assert.deepEqual(value.read(linked,choices),{implementation:'side_calendar_policy_v1',delivery:{applicable:false,calendar:null},observation:{applicable:false,calendar:null},payment:{applicable:true,calendar:a}});
 });
-test('same calendar code at different revisions is a conflict, independent of object property order',()=>{
- const a=reference('one'),b=reference('two'),reordered={code:a.code,revision:{revisionId:'one',catalogId:'catalog'}};
- assert.equal(calendarKey(a),calendarKey(reordered));assert.notEqual(calendarKey(a),calendarKey(b));
- const selection=new SideCalendarSelection();selection.restore([calendarKey(a),calendarKey(b)]);
- assert.throws(()=>selection.read([calendarKey(a),calendarKey(b)]),/different/);
+test('different saved purpose versions are preserved and unavailable versions never substituted',()=>{
+ const value=new SideCalendarPolicySelection();value.useOne(a,purposes,{});value.choose('payment',b);
+ const saved=value.read(purposes,choices),restored=new SideCalendarPolicySelection();restored.restore(saved);
+ assert.deepEqual(restored.read(purposes,choices),saved);
+ assert.throws(()=>restored.read(purposes,choices.slice(0,1)),/unavailable/);
+ assert.deepEqual(restored.read(purposes,choices),saved);
 });
-test('refreshing choices never replaces a missing retained calendar or an explicit clear',()=>{
- const selection=new SideCalendarSelection();selection.restore(['old']);
- assert.throws(()=>selection.read(['new']),/unavailable/);assert.equal(selection.value(),'old');
- selection.choose('');assert.equal(selection.value(),undefined);assert.throws(()=>selection.read(['new']),/Choose/);
+test('product locks reject conflicting shared choices atomically',()=>{
+ const value=new SideCalendarPolicySelection();value.useOne(a,purposes,{});
+ assert.throws(()=>value.useOne(b,purposes,{delivery:a}),/product/);
+ assert.equal(value.read(purposes,choices).payment.calendar.revision.revisionId,'one');
+ value.choose('delivery',b);
+ assert.throws(()=>value.read(purposes,choices,{delivery:a}),/product/);
 });
-test('a saved payment code cannot choose arbitrarily between reference versions',()=>{
- const choices=referenceCalendarChoices(['one','two'].map(revision=>({reference:reference(revision),code:'synthetic'})));
- const selection=new SideCalendarSelection();selection.restore([savedCalendarCode('synthetic',choices)]);
- assert.throws(()=>selection.read(choices.map(c=>c.value)),/unavailable/);
+test('explicit clear survives refresh; another Side has independent state',()=>{
+ const first=new SideCalendarPolicySelection(),second=new SideCalendarPolicySelection();first.useOne(a,purposes,{});first.choose('payment',null);
+ assert.throws(()=>first.read(purposes,choices),/payment/);assert.throws(()=>second.read(purposes,choices),/delivery/);
 });

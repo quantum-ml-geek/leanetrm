@@ -84,7 +84,8 @@ export function setupSwapObservationControls(options:{prefix:string;enabled:()=>
    if(!current.observations)throw Error('Resolve the complete observation plan before pricing.');
    const selected=choice.requiresObservationCalendar?selectedCalendar():undefined;
    if(selected&&!current.observationCalendars.some(c=>calendarKey(c.reference)===calendarKey(selected)))throw Error('The side holiday calendar is unavailable for this observation schedule.');
-   return observationScheduleInput(choice,selected??null,rows,inputs.map(input=>input.value));
+   const schedule=observationScheduleInput(choice,selected??null,rows,inputs.map(input=>input.value));
+   return schedule&&options.sideCalendar?{...schedule,calendar:null}:schedule;
   },
  };
 }

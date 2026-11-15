@@ -1,3 +1,4 @@
+import type {SideCalendarPolicy} from './side-calendar.js';
 import {mountContractObservationTicket,type ContractObservationSource,type ContractObservationTerms} from './contract-observation-ticket.js';
 import type {PaymentInput} from './swap-contract.js';
 import {mountPriceSettlement,type PriceSettlement} from './price-settlement.js';
@@ -10,7 +11,7 @@ import type {ObservationOptions,ObservationSchedule,SamplingChoice,ReferenceKey}
 
 export type ScheduledFloatingTerms={settlement:PriceSettlement|null;curve:string;index:string|null;currency:string;deliveryFrom:string;deliveryTo:string;resetFrequency:string;averagingMethod:string;spread:string;observationSchedule?:ObservationSchedule|null;customProjection?:CustomProjection|null;contractObservations?:ContractObservationTerms|null};
 type EditorOptions={host:HTMLElement;from:string;to:string;initial?:ScheduledFloatingTerms|null;retainedObservations?:unknown[];indices:()=>Index[];
- context:()=>Record<string,unknown>;enabled:()=>boolean;busy:()=>boolean;api:<T>(path:string,body:unknown)=>Promise<T>;run:(work:()=>Promise<void>)=>void;changed:()=>void;quoteChanged:()=>void;contractSources?:()=>ContractObservationSource[];payment?:()=>PaymentInput;sideCalendar?:()=>ReferenceKey|undefined};
+ context:()=>Record<string,unknown>;enabled:()=>boolean;busy:()=>boolean;api:<T>(path:string,body:unknown)=>Promise<T>;run:(work:()=>Promise<void>)=>void;changed:()=>void;quoteChanged:()=>void;contractSources?:()=>ContractObservationSource[];payment?:()=>PaymentInput;calendarPolicy:()=>SideCalendarPolicy;sideCalendar?:()=>ReferenceKey|undefined};
 function mountIndexFloatingEditor(options:EditorOptions){
  const prefix='scheduled-observations-'+crypto.randomUUID();
  const select=(label:string,id?:string)=>{const wrap=document.createElement('div'),caption=document.createElement('label'),field=document.createElement('select');field.id=id??prefix+'-'+crypto.randomUUID();caption.htmlFor=field.id;caption.textContent=label;wrap.append(caption,field);options.host.append(wrap);return field;};

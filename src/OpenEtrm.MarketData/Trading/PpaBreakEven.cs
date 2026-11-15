@@ -29,7 +29,7 @@ public sealed class PpaBreakEvenPlan
     {
         Original=original;SelectedSide=side;Coverage=coverage;Mw=mw;Measure=measure;QuoteDecimalPlaces=places;QuoteRounding=rounding;price=selected;
         PpaInstrument At(ExactDecimal value)=>new(Guid.NewGuid(),original.Definitions,original.Reference,
-            [..original.Memberships.Select(m=>m.Slot==side?m with{Side=new FixedSide(m.Side.Id,m.Side.Terms,new FlatPrice(new(value,selected.Unit)))}:m)],
+            [..original.Memberships.Select(m=>m.Slot==side?m with{Side=new FixedSide(m.Side.Id,m.Side.Terms,new FlatPrice(new(value,selected.Unit)),m.Side.CalendarPolicy)}:m)],
             original.Discounting,PpaInstrument.Implementation);
         Basis=[At(default),At(ExactDecimal.Parse("1"))];
     }

@@ -59,7 +59,7 @@ internal static class TradeContractChecks
             var identities=new InstrumentIdentityMap(Guid.NewGuid());
             if(!ReferenceEquals(identities.Intern(forward),identities.Intern(same)))throw new Exception("Equivalent forwards must intern.");
             var fixedSide=new FixedSide(Guid.NewGuid(),new(ExactDecimal.Parse("16"),source.Quote),swap.UnitQuantity,
-                swap.Fixed.DeliveryFrom,swap.Fixed.DeliveryTo,swap.Fixed.PaymentAt,FixedSide.Implementation,source.Quote);
+                swap.Fixed.DeliveryFrom,swap.Fixed.DeliveryTo,swap.Fixed.PaymentAt,FixedSide.Implementation,source.Quote,SyntheticSideCalendars.Dated(false));
             var other=new ForwardContract(Guid.NewGuid(),fixedSide,swap.Floating,false);
             if(forward.EconomicIdentity==other.EconomicIdentity||!ReferenceEquals(forward.Floating,other.Floating))
                 throw new Exception("Strike changes the complete payoff; floating work stays shareable.");
@@ -76,7 +76,7 @@ internal static class TradeContractChecks
             var offset=RiskEngine.CalculateExact(RiskEngine.Prepare(source.Model,snapshot,[net]),[],RiskEngine.ExactNumericalPolicy);
             if(offset.Work.UniqueInstruments!=1||offset.Work.UnitPricerCalls!=1||offset.Groups.Single().BaseValues.Single().Value.Numerator!="0")
                 throw new Exception("Opposing signed quantities must reuse one canonical forward and cancel exactly.");
-            var delayed=new FixedSide(Guid.NewGuid(),swap.Fixed.Price,source.Quote,swap.UnitQuantity,[swap.Fixed.Periods[0] with{PaymentAt=swap.Fixed.PaymentAt.AddDays(1)}]);
+            var delayed=new FixedSide(Guid.NewGuid(),swap.Fixed.Price,source.Quote,swap.UnitQuantity,[swap.Fixed.Periods[0] with{PaymentAt=swap.Fixed.PaymentAt.AddDays(1)}],SyntheticSideCalendars.FixedPeriods([swap.Fixed.Periods[0] with{PaymentAt=swap.Fixed.PaymentAt.AddDays(1)}]));
             Reject("forward_definition",()=>new ForwardContract(Guid.NewGuid(),delayed,swap.Floating,false));
             var a=new ForwardContract(Guid.NewGuid(),swap.Fixed,swap.Floating,true);
             var b=new ForwardContract(Guid.NewGuid(),fixedSide,swap.Floating,true);

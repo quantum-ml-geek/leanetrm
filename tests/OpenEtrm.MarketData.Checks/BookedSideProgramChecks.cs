@@ -10,8 +10,8 @@ internal static class BookedSideProgramChecks
         StartedLifecycleCompilation();
         var f=new CommodityLookupFixture(2,monthly:true);
         var swap=f.Swap(monthly:true,monthOrdinal:0);var next=f.Swap(monthly:true,monthOrdinal:1);
-        var wholeFixed=new FixedSide(Guid.NewGuid(),swap.Fixed.Price,f.Quote,swap.Fixed.UnitQuantity,[swap.Fixed.Periods[0],next.Fixed.Periods[0]]);
-        var wholeFloating=new FloatingSide(Guid.NewGuid(),swap.Floating.Settlement,f.Quote,swap.Floating.UnitQuantity,[swap.Floating.Periods[0],next.Floating.Periods[0]]);
+        var wholeFixed=new FixedSide(Guid.NewGuid(),swap.Fixed.Price,f.Quote,swap.Fixed.UnitQuantity,[swap.Fixed.Periods[0],next.Fixed.Periods[0]],SyntheticSideCalendars.FixedPeriods([swap.Fixed.Periods[0],next.Fixed.Periods[0]]));
+        var wholeFloating=new FloatingSide(Guid.NewGuid(),swap.Floating.Settlement,f.Quote,swap.Floating.UnitQuantity,[swap.Floating.Periods[0],next.Floating.Periods[0]],SyntheticSideCalendars.FloatingPeriods([swap.Floating.Periods[0],next.Floating.Periods[0]]));
         PublicationFidelity(ScheduleDefinitionCompiler.Generate(swap.Fixed));
         var native=new PpaAcceptanceFixture();
         var sides=new Side[]{swap.Fixed,swap.Floating,wholeFixed,wholeFloating}
@@ -51,6 +51,7 @@ internal static class BookedSideProgramChecks
             try{BookedSideProgram.Read(corrupted,identity);throw new Exception("Changed executable bytes must refuse before interpretation.");}
             catch(MarketDataException e)when(e.Code=="side_schedule_program"){}
             foreach(var (name,change) in new (string,Action<JsonObject>)[] {
+                ("pre-payment-day program",json=>json["version"]="booked_side_program_v1"),
                 ("missing instruction",json=>json["instructions"]![0]=null),
                 ("invalid root address",json=>json["roots"]![0]!["row"]=int.MaxValue),
                 ("missing PV root",json=>json["roots"]!.AsArray().Single(root=>root!["name"]!.GetValue<string>()=="pv")!["name"]="renamed"),
@@ -131,16 +132,16 @@ internal static class BookedSideProgramChecks
         Console.WriteLine("PASS booked Side program: dated/native instructions, operand addresses, sources, roots and scenario adjacency survive storage");
     }
 
-    // The default selection must stay byte-identical to the compilation before
-    // lifecycle selection existed; the digest below was recorded from that code.
+    // The payment-day contract has a new executable version. Old content must
+    // not acquire new timing semantics through a reader update.
     private static void StartedLifecycleCompilation()
     {
         static string[] Lifecycles(ScheduleDefinition d)=>[..d.Rows.Where(r=>r.Operation=="output_guard").Select(r=>r.Parameters["lifecycle"]).Distinct()];
         var (_,_,_,gas,cash,crude)=ScheduleProgramDemandChecks.Sides();
         var future=ScheduleDefinitionCompiler.Generate(gas);
-        if(BookedSideProgram.Digest(BookedSideProgram.Compile(future).Write())!="c6e17d3a3118516b39fd43d5ea94f0e26c6d92cfdda98ba11a16032688722ae6"||
+        if(BookedSideProgram.Compile(future).Document.Version!="booked_side_program_v2"||
             Lifecycles(future).Single()!="future_gas_delivery_v1")
-            throw new Exception("The default lifecycle selection must reproduce the pre-selection gas program byte for byte.");
+            throw new Exception("The canonical program must retain its explicit lifecycle and payment timing version.");
         var started=ScheduleDefinitionCompiler.Generate(gas,lifecycle:ScheduleLifecycleSelection.StartedPhysicalDelivery);
         if(Lifecycles(started).Single()!=ScheduleLifecycles.WholeGasDayDelivery)
             throw new Exception("A started gas side must compile the whole gas-day delivery lifecycle.");

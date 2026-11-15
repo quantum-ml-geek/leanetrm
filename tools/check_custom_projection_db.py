@@ -1,6 +1,7 @@
 """Typed projection retention checks for an owned, disposable preview database."""
 import json
 from uuid import uuid4
+from synthetic_schedule_stage import copy_stage
 
 
 def run_checks(query, manifest):
@@ -52,7 +53,8 @@ def run_booking_checks(query, manifest, trade_id):
     def invoke(request, request_id, setup=''):
         token = query(f"SET SESSION AUTHORIZATION preview_authenticator;SELECT security.issue_context('https://preview.invalid','trader','human_interactive','{tenant}','{workspace}',NULL,'preview_runtime',60);")
         value = "'" + json.dumps(request).replace("'", "''") + "'::jsonb"
-        return query(f"""BEGIN;{setup}SET SESSION AUTHORIZATION preview_runtime;SELECT security.use_context('{token}');
+        stage=copy_stage(catalog,operation,request_id) if operation!=request_id else ''
+        return query(f"""BEGIN;{stage}{setup}SET SESSION AUTHORIZATION preview_runtime;SELECT security.use_context('{token}');
           SELECT security.save_composed_swap('{catalog}','{request_id}',NULL,NULL,
            (p->>'book')::uuid,(p->>'definition')::uuid,(p->>'referenceCatalog')::uuid,(p->>'referenceRevision')::uuid,
            p->>'commodity',NULLIF(p->'fixed','null'::jsonb),NULLIF(p->'firstFloating','null'::jsonb),p->'floating',

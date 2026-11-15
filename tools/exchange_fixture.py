@@ -13,7 +13,7 @@ from datetime import time
 from decimal import ROUND_HALF_EVEN, localcontext
 import importlib.util
 from zoneinfo import ZoneInfo
-from preview_fixture import fixture as baseline, trading_fixture as baseline_trading, installed_tzdb, tou_products
+from preview_fixture import fixture as baseline, trading_fixture as baseline_trading, installed_tzdb, tou_products, clock_capture_request, fixture_clock_publications
 from rate_curve_fixture import dated_curve, discount_default
 
 NAMESPACE=UUID('5a935d8a-8e48-43d6-83fd-4b7b7d4f991d')
@@ -198,7 +198,7 @@ def option_settlement(price,futures,strike,right,years,volatility,increment):
     return value
 
 def fixture(root):
-    reference,old_market,security,manifest=baseline(root)
+    reference,old_market,security,manifest=baseline(root,publish_clocks=False)
     reference=reference.replace("'synthetic', 'Synthetic test catalog'","'exchange_example', 'Exchange futures example'").replace("'other_synthetic', 'Other synthetic catalog'","'exchange_other', 'Other exchange fixture catalog'")
     security=security.replace("'preview'","'exchange_preview'")
     # Reuse units/configuration, excluding the unrelated invented venue/contracts.
@@ -356,8 +356,11 @@ def fixture(root):
     omitted={key(f"{key('price_'+code)}:{frames[0]['at']}") for code in (missing_series,missing_underlying)}
     if not omitted<=set(frames[0]['observationIds']):raise ValueError('The missing-settlement series and underlying must be settled at the first close.')
     frames.insert(1,{'at':missing_at,'observationIds':[o for o in frames[0]['observationIds'] if o not in omitted],'curveContracts':contracts})
+    captures=clock_capture_request(manifest)
+    captures['clocks'].extend(dict(code=code,kind='iana',fixedOffsetSeconds=None,ianaZone=zone,tzdbVersion=tzdb) for code,zone in CLOCKS.items())
+    refs.append(fixture_clock_publications(captures))
     sql='BEGIN;\n'+'\n'.join(ref_statements+refs+[seal]+defs+[f"UPDATE market_data.revisions SET state='sealed' WHERE catalog_id='{catalog}' AND id='{revision}';"]+observations
-        +tou_products(catalog,R,{'eastern':'ept','central':'cpt','pacific':'ppt','fixed_est':'synthetic_fixed_est'},now,lambda n:key(f'tou_product_{n}')))+'\nCOMMIT;'
+        +tou_products(catalog,R,{'eastern':'ept','central':'cpt','pacific':'ppt','fixed_est':'synthetic_fixed_est'},now,lambda n:key(f'tou_product_{n}'),{'eastern':'ept_published_peak','central':'cpt_published_peak','pacific':'ppt_published_peak','fixed_est':'ept_published_peak'}))+'\nCOMMIT;'
     manifest.update(frames=frames,example={'at':max(f['at'] for f in frames),'curve':'nymex_ng'},schedules=[],
        missingSettlement={'at':missing_at,'series':missing_series,'underlying':missing_underlying},
        identityIssuer='https://exchange-preview.invalid',futuresConvention='contract_lot_execution_pnl_v2')

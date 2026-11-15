@@ -3,6 +3,7 @@ import os
 import subprocess
 import time
 from uuid import UUID, uuid4
+from preview_fixture import RCAT, RREV
 
 
 def run_checks(query, psql, environment, manifest):
@@ -68,7 +69,7 @@ def run_checks(query, psql, environment, manifest):
         query(expect(f"UPDATE market_data.date_schedule_versions SET calendar_catalog_id='{hidden_reference}',calendar_revision_id='{hidden_revision}',calendar_code='hidden_calendar',generation=generation+1 WHERE catalog_id='{catalog}' AND schedule_id='{schedule}' AND version=3;", '23514'))
         check('even the bootstrap owner cannot bind a calendar from an unsealed reference revision')
         pjm = 'd0000000-0000-0000-0000-000000000001'
-        query(expect(f"INSERT INTO market_data.tou_product_versions(catalog_id,product_id,version,generation,state,name,clock_catalog_id,clock_revision_id,clock_code,peak_start_hour,peak_end_hour,peak_saturday) VALUES('{catalog}','{pjm}',9,1,'draft','Unsealed clock','{hidden_reference}','{hidden_revision}','hidden_utc',7,23,false);", '23514'))
+        query(expect(f"INSERT INTO market_data.tou_product_versions(catalog_id,product_id,version,generation,state,name,clock_catalog_id,clock_revision_id,clock_code,peak_start_hour,peak_end_hour,peak_saturday,calendar_catalog_id,calendar_revision_id,calendar_code,holiday_treatment) VALUES('{catalog}','{pjm}',9,1,'draft','Unsealed clock','{hidden_reference}','{hidden_revision}','hidden_utc',7,23,false,'{RCAT}','{RREV}','test_utc_every_day','weekly_mask_explicit_closures_v1');", '23514'))
         check('a TOU product cannot bind a clock from an unsealed reference revision')
         query(expect(f"UPDATE market_data.tou_product_versions SET peak_end_hour=22 WHERE catalog_id='{catalog}' AND product_id='{pjm}' AND version=1;", '55000'))
         query(expect(f"DELETE FROM market_data.tou_product_versions WHERE catalog_id='{catalog}' AND product_id='{pjm}' AND version=1;", '55000'))
@@ -90,9 +91,9 @@ def run_checks(query, psql, environment, manifest):
         # Positive control in a rolled-back transaction: later checks rely on the draft's generation.
         rebound = query(f"SET SESSION AUTHORIZATION preview_runtime; BEGIN; SELECT security.use_context('{issue('editor')}'); UPDATE market_data.date_schedule_versions SET calendar_code=calendar_code,generation=generation+1 WHERE catalog_id='{catalog}' AND schedule_id='{schedule}' AND version=3 RETURNING generation; ROLLBACK;")
         check('the same writer can rebind a scoped reference calendar on its draft', rebound.splitlines()[-1] == str(int(before) + 1))
-        query(runtime(issue('editor'), expect(f"INSERT INTO market_data.tou_product_versions(catalog_id,product_id,version,generation,state,name,clock_catalog_id,clock_revision_id,clock_code,peak_start_hour,peak_end_hour,peak_saturday) VALUES('{catalog}','{pjm}',9,1,'draft','Unscoped clock','{hidden_reference}','{hidden_revision}','hidden_utc',7,23,false);", '42501')))
+        query(runtime(issue('editor'), expect(f"INSERT INTO market_data.tou_product_versions(catalog_id,product_id,version,generation,state,name,clock_catalog_id,clock_revision_id,clock_code,peak_start_hour,peak_end_hour,peak_saturday,calendar_catalog_id,calendar_revision_id,calendar_code,holiday_treatment) VALUES('{catalog}','{pjm}',9,1,'draft','Unscoped clock','{hidden_reference}','{hidden_revision}','hidden_utc',7,23,false,'{RCAT}','{RREV}','test_utc_every_day','weekly_mask_explicit_closures_v1');", '42501')))
         check('a TOU product writer cannot bind a clock from an unscoped reference catalog')
-        query(expect(f"INSERT INTO market_data.tou_product_versions(catalog_id,product_id,version,generation,state,name,clock_catalog_id,clock_revision_id,clock_code,peak_start_hour,peak_end_hour,peak_saturday,published_at) SELECT catalog_id,product_id,9,1,'draft','Dated draft',clock_catalog_id,clock_revision_id,clock_code,7,23,false,now() FROM market_data.tou_product_versions WHERE catalog_id='{catalog}' AND product_id='{pjm}' AND version=1;", '23514'))
+        query(expect(f"INSERT INTO market_data.tou_product_versions(catalog_id,product_id,version,generation,state,name,clock_catalog_id,clock_revision_id,clock_code,peak_start_hour,peak_end_hour,peak_saturday,calendar_catalog_id,calendar_revision_id,calendar_code,holiday_treatment,published_at) SELECT catalog_id,product_id,9,1,'draft','Dated draft',clock_catalog_id,clock_revision_id,clock_code,7,23,false,calendar_catalog_id,calendar_revision_id,calendar_code,holiday_treatment,now() FROM market_data.tou_product_versions WHERE catalog_id='{catalog}' AND product_id='{pjm}' AND version=1;", '23514'))
         check('a TOU product draft cannot carry a publication timestamp')
         drafts = "SELECT (SELECT count(*) FROM market_data.tou_product_versions WHERE state='draft')||','||(SELECT count(*) FROM market_data.date_schedule_versions WHERE state='draft');"
         check('readers see no drafts at the database, while authors still do',

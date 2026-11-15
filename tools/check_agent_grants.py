@@ -412,7 +412,7 @@ def run_checks(url, query, psql, manifest, environment, admin, viewer):
      '{revision}','test_hub_a','synthetic_eastern','usd','test_power_quantity');
     INSERT INTO power_data.jobs VALUES('{job}',gen_random_uuid(),'Synthetic grant schedule','{collector}','{catalog}','PJM',true,false,'0 8 * * *','UTC',-7,-1);
     INSERT INTO power_data.job_sources VALUES('{job}','{source}','{catalog}');
-    INSERT INTO power_data.operating_days VALUES('{reference}','{revision}','synthetic_eastern','2026-11-09','2026-11-09T05:00:00Z','2026-11-10T05:00:00Z','{'b' * 64}');""")
+    INSERT INTO power_data.operating_days VALUES('{reference}','{revision}','synthetic_eastern','2026-11-09','2026-11-09T05:00:00Z','2026-11-10T05:00:00Z',(SELECT encode(definition_digest,'hex') FROM ref_data.clock_captures WHERE(catalog_id,revision_id,clock_code)=('{reference}','{revision}','synthetic_eastern')));""")
     worker = subprocess.Popen(psql, env=environment, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     try:
         worker.stdin.write(f"SET SESSION AUTHORIZATION {collector};SELECT power_data.worker_lock();"

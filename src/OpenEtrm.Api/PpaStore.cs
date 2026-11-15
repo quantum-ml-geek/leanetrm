@@ -98,7 +98,7 @@ internal sealed partial class PpaStore(PreviewDatabase database,TouProductStore 
         await using var choices=ScheduleStore.Command(connection,"SELECT security.ppa_authoring_directory($1,$2,$3)::text",Catalog,knowledge,frame.At);
         var directory=JsonSerializer.Deserialize<JsonElement>((string)(await choices.ExecuteScalarAsync(ct))!);
         var touVersions=(await products.Read(connection,ct)).Where(v=>v.State=="published"&&v.Clock.CatalogId==data.ReferenceRevision.CatalogId&&v.Clock.RevisionId==data.ReferenceRevision.RevisionId).ToArray();
-        return new{implementation=PpaCapabilities.Version,definitions=data.DefinitionRevision,reference=data.ReferenceRevision,knownAt,
+        return new{implementation=PpaCapabilities.Version,definitions=data.DefinitionRevision,reference=data.ReferenceRevision,knownAt,sideCalendars=await SideCalendarPolicies.Catalog(connection,ct),
             authoringContext=new{knowledgeContext=knowledge,knownAt,effectiveAt=frame.At},
             references=PpaUiCatalog.References(data,physicalLocations),definitionsMetadata=PpaUiCatalog.Definitions(data),compositionTemplates=PpaUiCatalog.Compositions,authoringPolicies=PpaUiCatalog.Policies,
             unsupportedFeatures=PpaUiCatalog.UnsupportedFeatures,settlementPreview=SettlementPreview.Capabilities,breakEven=PpaBreakEvenStore.Capabilities,
@@ -116,6 +116,7 @@ internal sealed partial class PpaStore(PreviewDatabase database,TouProductStore 
         PpaCompiler.PreflightWork([(request.Terms,request.CoverageFrom,request.CoverageTo,"draft")]);
         var selected=await SelectInputs(connection,frame,request.Terms.DefinitionRevisionId,ct);frame=selected.Frame;var data=selected.Data;
         data=await PhysicalReferences(connection,frame,data,request.Terms,ct);
+        data=await SideCalendarPolicies.Prepare(connection,data,request.Terms.Memberships.Select(m=>m.Side.CalendarPolicy),ct);
         var i=PpaCompiler.Compile(data,request.Terms,await products.Read(connection,ct),await PpaCompiler.ReadQuantityTypes(connection,data,request.Terms,ct));var mw=PpaCompiler.Mw(request.Quantity);await PpaCompiler.ValidateDefinitions(connection,data,i,ct);
         var coverage=PpaCompiler.Coverage(i,PpaQuantitiesStore.Clock(data,i.Delivery.Clock.Code),request.CoverageFrom,request.CoverageTo);
         if(booking is not null)RequireAdmission(frame,booking,action!,i,PpaQuantitiesStore.Clock(data,i.Delivery.Clock.Code),coverage);
@@ -131,6 +132,7 @@ internal sealed partial class PpaStore(PreviewDatabase database,TouProductStore 
             request.CoverageTo??throw PpaCompiler.Error("ppa_coverage","Supply explicit booking coverage."),"booking")]);
         var selected=await SelectInputs(connection,frame,input.DefinitionRevisionId,ct);frame=selected.Frame;var data=selected.Data;
         data=await PhysicalReferences(connection,frame,data,input,ct);
+        data=await SideCalendarPolicies.Prepare(connection,data,input.Memberships.Select(m=>m.Side.CalendarPolicy),ct);
         RetainedScheduleLimits.RequireFullPreparation(input,PpaQuantitiesStore.Clock(data,input.Delivery.Clock));
         var instrument=PpaCompiler.Compile(data,input,await products.Read(connection,ct),await PpaCompiler.ReadQuantityTypes(connection,data,input,ct));
         await PpaCompiler.ValidateDefinitions(connection,data,instrument,ct);
@@ -183,13 +185,14 @@ internal sealed partial class PpaStore(PreviewDatabase database,TouProductStore 
         var ids=envelope.GetProperty("sideIds").EnumerateArray().ToDictionary(
             row=>new SideSlot(PpaCompiler.Role(row.Text("role")),row.GetProperty("ordinal").GetInt32()),row=>row.Id("sideId"));
         var selected=await SelectInputs(connection,frame,input.DefinitionRevisionId,ct);frame=selected.Frame;var data=selected.Data;
-        var actual=PpaCompiler.Compile(data,input,await products.Read(connection,ct),
-            await PpaCompiler.ReadQuantityTypes(connection,data,input,ct),instrument,ids);
         var programs=new List<RetainedPublicationIdentity>();
         await using(var command=ScheduleStore.Command(connection,
             "SELECT * FROM security.read_ppa_publication_identities($1,$2,$3)",Catalog,operation,instrument))
         await using(var reader=await command.ExecuteReaderAsync(ct))
             while(await reader.ReadAsync(ct))programs.Add(new(reader.GetInt32(0),reader.GetGuid(1),reader.GetString(2),reader.GetString(3)));
+        input=SideCalendarPolicies.Retain(input,slot=>programs.Single(p=>p.SideId==ids[slot]).EconomicIdentity);
+        var actual=PpaCompiler.Compile(data,input,await products.Read(connection,ct),
+            await PpaCompiler.ReadQuantityTypes(connection,data,input,ct),instrument,ids);
         RetainedSchedulePublication.Require(actual.Sides.Select(member=>member.Side).ToArray(),programs);
         await Authority(connection,[actual.Reference.CatalogId],ct);
     }
@@ -354,6 +357,7 @@ internal sealed partial class PpaStore(PreviewDatabase database,TouProductStore 
         if(request.Scope=="draft")
         {
             data=await PhysicalReferences(connection,frame,data,request.Terms!,ct);
+            data=await SideCalendarPolicies.Prepare(connection,data,request.Terms!.Memberships.Select(m=>m.Side.CalendarPolicy),ct);
             var i=PpaCompiler.Compile(data,request.Terms!,tou,await PpaCompiler.ReadQuantityTypes(connection,data,request.Terms!,ct));var coverage=PpaCompiler.Coverage(i,PpaQuantitiesStore.Clock(data,i.Delivery.Clock.Code),request.CoverageFrom,request.CoverageTo);
             bindings.Add(new(null,null,Guid.NewGuid(),i,coverage,PpaCompiler.Mw(request.Quantity)));
         }
@@ -367,6 +371,8 @@ internal sealed partial class PpaStore(PreviewDatabase database,TouProductStore 
                 {
                     var envelope=envelopes[id];var input=envelope.GetProperty("terms").Deserialize<PpaTermsInput>(Json)!;
                     var sides=envelope.GetProperty("sideIds").EnumerateArray().ToDictionary(s=>new SideSlot(PpaCompiler.Role(s.Text("role")),s.GetProperty("ordinal").GetInt32()),s=>s.Id("sideId"));
+                    var programs=await retained.LoadPrograms(connection,id,knowledge,frame.At,ct);
+                    input=SideCalendarPolicies.Retain(input,slot=>programs.Single(p=>p.SideId==sides[slot]).Identity.EconomicIdentity);
                     i=PpaCompiler.Compile(data,input,tou,await PpaCompiler.ReadQuantityTypes(connection,data,input,ct),id,sides);
                     i=RetainedSideSchedules.Attach(i,await retained.Load(connection,id,knowledge,frame.At,ct));
                     instruments.Add(id,i);

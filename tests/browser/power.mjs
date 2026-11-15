@@ -11,7 +11,7 @@ export async function run({command,wait,click,set,submit,persona,check,evaluate,
   await set('#power-product','pjm');await check('power intervals wait for a supported hours selection',"document.querySelectorAll('#power-block option:not([value=\"\"])').length>0&&document.querySelectorAll('#power-minutes option:not([value=\"\"])').length===0");await set('#power-block','all');await set('#power-minutes','60');
   await check('index classifications are typed or chosen, never prefilled',"document.querySelector('#power-price-type').value===''&&document.querySelectorAll('#power-price-types option').length===2");
   await set('#power-price-type','Test');await set('#power-timing','End of day');
-  await check('native power page loads both editable weekday grids',"document.querySelectorAll('#power-normal-grid tbody tr').length===7&&document.querySelectorAll('#power-holiday-grid tbody tr').length===7&&!document.querySelector('#power-form').hidden");
+  await check('native power page shows both published weekday grids read-only',"document.querySelectorAll('#power-normal-grid tbody tr').length===7&&document.querySelectorAll('#power-holiday-grid tbody tr').length===7&&[...document.querySelectorAll('.tou-cell')].every(c=>c.disabled)&&!document.querySelector('#power-form').hidden");
   await evaluate("(()=>{const s=document.querySelector('#power-contract');s.value=[...s.options].find(o=>o.textContent.startsWith('2021-03-01')).value;s.dispatchEvent(new Event('change'));})()");
   await basis('flat_power');await submit('#power-form');
   await check('power example uses real curve price and March DST hours',"document.querySelector('#power-summary').textContent.includes('743 hours')&&document.querySelector('#power-summary').textContent.includes('7,430 MWh')&&document.querySelector('#error').hidden");
@@ -25,8 +25,7 @@ export async function run({command,wait,click,set,submit,persona,check,evaluate,
   await check('reference calendar holiday removes a peak weekday and is shown',"document.querySelector('#power-summary').textContent.includes('352 hours')&&document.querySelector('#power-holiday-note').textContent.includes('Mar 15, 2021')");
   await set('#power-labels','HB');await submit('#power-form');
   await check('HB display is available without shifting hours',"document.querySelector('#power-summary').textContent.includes('352 hours')&&document.querySelector('#power-intervals').textContent.includes('HB07')");
-  await click('#power-normal-grid button[aria-pressed="true"]');
-  await check('editing a cell invalidates the prior result',"document.querySelector('#power-result').hidden");
+  await check('published hour cells cannot independently override the selected product',"[...document.querySelectorAll('#power-normal-grid button')].every(b=>b.disabled)&&!document.querySelector('#power-result').hidden");
   await check('power screen contains no GUIDs',"!/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(document.querySelector('#power-page').innerText)");
   await shot('power-tou-standalone');
   await click('#nav-market');await check('original curve management remains available',"!document.querySelector('#market-page').hidden&&document.querySelectorAll('.curve-button').length===11");

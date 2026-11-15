@@ -23,6 +23,14 @@ internal sealed partial class RetainedSideSchedule
             throw Error("A retained schedule can expose only its side PV, obligation cash/PV and native quantity roots.");
         var lifecycle=native?side switch{CertificateDeliverySide=>"certificate_holding_v1",FixedSide or FloatingSide=>"interval_payment_v1",_=>"interval_delivery_v1"}:"undue_payment_v1";
         var nativePaymentRule=native?DefinitionIdentity.CanonicalTerm(side.Terms.DateRule):null;
+        var datedTerms=native?[]:side switch
+        {
+            FixedSide fixedSide=>fixedSide.Periods.Select(p=>(p.DeliveryFrom,p.DeliveryTo,p.PaymentAt,p.PaymentSchedule)).ToArray(),
+            FloatingSide floating=>floating.Periods.Select(p=>(p.DeliveryFrom,p.DeliveryTo,p.PaymentAt,p.PaymentSchedule)).ToArray(),
+            _=>throw Error("A dated schedule requires explicit payment-side terms.")
+        };
+        if(!native&&(ordered.Length!=datedTerms.Length||ordered.Where((root,n)=>Definition.Rows[root].PaymentOrdinal!=n).Any()))
+            throw Error("Every dated period must retain exactly one ordered payment obligation.");
         foreach(var root in ordered)
         {
             var guard=Definition.Rows[root];var ordinal=native?NativeOrdinal(guard):guard.PaymentOrdinal!.Value;
@@ -36,6 +44,16 @@ internal sealed partial class RetainedSideSchedule
             if(native&&(guard.Parameters["averaging"]!="none"||guard.Parameters["firstFixingAt"]!="none"||
                 guard.Parameters["paymentRule"]!=nativePaymentRule||guard.Parameters["unadjustedPayment"]!="none"))
                 throw Error("Native output guards cannot introduce unconsumed dated pricing or payment conventions.");
+            if(!native)
+            {
+                var terms=datedTerms[ordinal];
+                var rule=terms.PaymentSchedule is {} paymentRule?DefinitionIdentity.CanonicalTerm(paymentRule):"explicit_payment_date_v1";
+                var anchor=terms.PaymentSchedule?.Generate(terms.DeliveryFrom,terms.DeliveryTo).Unadjusted
+                    .ToString("yyyy-MM-dd",System.Globalization.CultureInfo.InvariantCulture)??"none";
+                if((guard.DeliveryFrom,guard.DeliveryTo,guard.ValueAt)!=(terms.DeliveryFrom,terms.DeliveryTo,terms.PaymentAt)||
+                    guard.Parameters["paymentRule"]!=rule||guard.Parameters["unadjustedPayment"]!=anchor)
+                    throw Error("A retained obligation must preserve its period's exact payment date, original anchor and convention.");
+            }
             var amount=One(root,"amount");var discounted=Definition.Rows[One(root,"discounted")];Require(discounted,"pv");
             if(One(discounted.Ordinal,"amount")!=amount)
                 throw Error("An obligation's cash and discounted branches must consume the same exact retained amount.");
@@ -114,8 +132,8 @@ internal sealed partial class RetainedSideSchedule
                     terms.Schedule.Cadence==IntervalScheduleCadence.OperatingMonths&&(interval.OperatingDate.Day!=1||
                         interval.Start!=clock.StartOfDay(interval.OperatingDate).ToUniversalTime()||interval.End!=clock.StartOfDay(interval.OperatingDate.AddMonths(1)).ToUniversalTime()))
                     throw Error("Every retained output cell must preserve its explicit whole-term native or operating-month cadence.");
-                var local=TimeZoneInfo.ConvertTime(interval.Start,clock.Zone);
-                var occurrence=clock.Zone.IsAmbiguousTime(local.DateTime)&&local.Offset!=clock.Zone.GetAmbiguousTimeOffsets(local.DateTime).Max()?2:1;
+                var local=clock.LocalAt(interval.Start);
+                var occurrence=clock.Occurrence(interval.Start);
                 if(interval.OperatingDate!=DateOnly.FromDateTime(local.DateTime)||interval.HourBeginning!=local.Hour||interval.Minute!=local.Minute||interval.Occurrence!=occurrence)
                     throw Error("Retained local interval labels must agree with the exact captured reference clock, including repeated hours.");
             }

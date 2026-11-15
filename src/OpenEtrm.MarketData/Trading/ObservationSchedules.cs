@@ -59,7 +59,7 @@ public sealed class FloatingObservationPlan
         if(!calendarRequired)
             return new(days.Select(d=>new FloatingObservation(d,d.AddDays(1),null)).ToImmutableArray(),
                 days.Select((d,n)=>new FloatingObservationApplication(d,d.AddDays(1),n,one,rule)).ToImmutableArray(),rule);
-        if(calendar!.BusinessDays is null||calendar.Key.Revision!=quote.Key.Revision||string.IsNullOrWhiteSpace(calendar.Key.Code)||
+        if(calendar!.BusinessDays is null||calendar.Key.Revision.CatalogId==Guid.Empty||calendar.Key.Revision.RevisionId==Guid.Empty||string.IsNullOrWhiteSpace(calendar.Key.Code)||
             calendar.BusinessDays.From>from||calendar.BusinessDays.To<to)throw Invalid();
         var observed=calendar.BusinessDays;
         int LowerBound(DateOnly date)

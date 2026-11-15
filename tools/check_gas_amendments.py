@@ -5,6 +5,7 @@ import json
 from uuid import uuid4
 from preview_client import PreviewClient,initial_frame
 from preview_fixture import trade_booking
+from synthetic_side_calendars import side_calendar_policy
 
 
 def run_checks(url,query,manifest,run_worker):
@@ -13,11 +14,12 @@ def run_checks(url,query,manifest,run_worker):
     context=dict(snapshotId=frame['id'],convention='physical_gas_fixed_quantity_v4',knowledgeMode='current')
     catalog=c.call('gas/catalog',context)
     path=next(p for p in catalog['locations'] if p['deliveryPoint']=='synthetic_gas_point_a')
+    reference=next(item['reference'] for item in catalog['sideCalendars'] if item['code']=='test_utc_every_day')
     terms={**context,**trade_booking(),'operationId':str(uuid4()),'bookId':catalog['books'][0]['id'],'definitionRevisionId':path['definitionRevisionId'],
         'gasSetupId':catalog['gasSetupId'],'discounting':False,'profile':'fixed_gas_composition_v1',
         'physicalSides':[dict(code='gas',pipeline=path['pipeline'],zone=path['zone'],deliveryPoint=path['deliveryPoint'],product=path['product'],direction='receive',
-            deliveryFrom='2021-01-01',deliveryTo='2021-03-01',quantityBasis='per_operating_day',quantity='100',link=None)],
-        'cashSides':[dict(code='payment',role='consideration',direction='pay',source='gas',stage='delivery',price='3',tariffCode=None,paymentAt='2021-03-02T00:00:00Z')]}
+            deliveryFrom='2021-01-01',deliveryTo='2021-03-01',quantityBasis='per_operating_day',quantity='100',link=None,calendarPolicy=side_calendar_policy(reference,delivery=True,observation=False,payment=False))],
+        'cashSides':[dict(code='payment',role='consideration',direction='pay',source='gas',stage='delivery',price='3',tariffCode=None,paymentAt='2021-03-02T00:00:00Z',calendarPolicy=side_calendar_policy(reference,delivery=True,observation=False,payment=True))]}
     saved=c.call('gas/composition/book',terms)
     trade=saved['tradeId']
     original=query(f"SELECT jsonb_build_array(to_jsonb(t),to_jsonb(f),to_jsonb(r))::text FROM trading.trades t JOIN trading.booking_facts f ON(f.catalog_id,f.trade_id)=(t.catalog_id,t.id) JOIN trading.gas_trade_revisions r ON(r.catalog_id,r.trade_id,r.revision)=(t.catalog_id,t.id,1) WHERE t.id='{trade}';")

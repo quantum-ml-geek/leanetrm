@@ -1,3 +1,4 @@
+import {displayPaymentDate,contractDateEvidence} from './payment-date.js';
 import {renderRegularTable,tableFilterControls} from './regular-table.js';
 import {trackEdits} from './edit-tracking.js';
 import {knownTradeRejection} from './trade-requests.js';
@@ -120,10 +121,10 @@ export function setupSwapSettlement(options:{api:Api;act:(work:()=>Promise<void>
     calculate.onclick=()=>replacing(()=>preview(p));
     const occurrence=node('div');occurrence.className='swap-settlement-stack';
     occurrence.append(node('strong',`Side ${p.membershipOrdinal+1} · ${p.deliveryFrom} to ${p.deliveryTo}, end exclusive`),node('span',`${p.state} · ${p.realized?'P&L realized':'P&L not realized'}`),
-     node('span',`Delivery completes ${displayInstant(p.completionAt,options.zone())} · payment ${displayInstant(p.paymentAt,options.zone())}`),calculate);
+     node('span',`Delivery completes ${displayInstant(p.completionAt,options.zone())} · payment ${displayPaymentDate(p.paymentAt)}`),calculate);
     return[occurrence,p.contractualAmount,p.remainingValue];}),[1,2],[0]);
   table(balances,'swap-settlement-balances',['Contribution','Determined','Outstanding'],result.balances.map(b=>{const contribution=node('div');contribution.className='swap-settlement-stack';
-   contribution.append(node('strong',`Side ${b.membershipOrdinal+1} · ${b.deliveryFrom} · ${b.ordinal===1?'original':'adjustment'}`),node('span',`Due ${displayInstant(b.dueAt,options.zone())} · applied ${b.applied}`));return[contribution,b.amount,b.outstanding];}),[1,2],[0]);
+   contribution.append(node('strong',`Side ${b.membershipOrdinal+1} · ${b.deliveryFrom} · ${b.ordinal===1?'original':'adjustment'}`),node('span',`Due ${b.ordinal===1?displayPaymentDate(b.dueAt):displayInstant(b.dueAt,options.zone())} · applied ${b.applied}`));return[contribution,b.amount,b.outstanding];}),[1,2],[0]);
   // What is chosen or typed in the forms is kept when the view is read again: each candidate's selection and allocation, by its
   // contribution, and a chosen contribution, cash movement or opening that the new read still offers.
   const typed=new Map(netRows.map(r=>[r.id,{selected:r.selected.checked,amount:r.amount.value}]));netRows=[];
@@ -131,7 +132,7 @@ export function setupSwapSettlement(options:{api:Api;act:(work:()=>Promise<void>
    const selected=node('input');selected.type='checkbox';selected.setAttribute('aria-label',`Select side ${b.membershipOrdinal+1} ${b.deliveryFrom} contribution ${b.ordinal}`);
    const allocation=node('input');allocation.type='text';allocation.inputMode='decimal';allocation.setAttribute('aria-label',`Allocation to side ${b.membershipOrdinal+1} ${b.deliveryFrom} contribution ${b.ordinal}`);
    const kept=typed.get(b.determinationId);if(kept){selected.checked=kept.selected;allocation.value=kept.amount;}
-   const contribution=node('div');contribution.className='swap-settlement-stack';contribution.append(node('strong',`Side ${b.membershipOrdinal+1} · ${b.deliveryFrom} · ${b.ordinal}`),node('span',`Due ${displayInstant(b.dueAt,options.zone())}`));
+   const contribution=node('div');contribution.className='swap-settlement-stack';contribution.append(node('strong',`Side ${b.membershipOrdinal+1} · ${b.deliveryFrom} · ${b.ordinal}`),node('span',`Due ${b.ordinal===1?displayPaymentDate(b.dueAt):displayInstant(b.dueAt,options.zone())}`));
    netRows.push({id:b.determinationId,selected,amount:allocation});return[selected,contribution,b.outstanding,allocation];}),[2],[1]);
   offer(target,new Option('Choose a contribution…',''),...result.balances.filter(b=>b.outstanding!=='0').map(b=>new Option(`Side ${b.membershipOrdinal+1} · ${b.deliveryFrom} · ${b.ordinal===1?'original':'adjustment'} · outstanding ${b.outstanding}`,b.determinationId)));
   offer(reversal,new Option('Choose an original cash movement…',''),...result.cashMovements.filter(p=>p.canReverse).map(p=>new Option(`${p.reference} · ${p.amount} · ${displayInstant(p.effectiveAt,options.zone())}`,p.id)));
@@ -157,8 +158,8 @@ export function setupSwapSettlement(options:{api:Api;act:(work:()=>Promise<void>
   determine.onclick=()=>void run(async()=>{current();if(!value.inputsChanged||!report.canAmend||version!==generation||scope!==key()||options.pending())throw Error('The preview changed or has no new final inputs. Recalculate before submitting.');if(correction&&!due.value)throw Error('Enter an explicit correction due instant.');
    await sendCommand({operationId:crypto.randomUUID(),path:'swaps/settlement/determine',label:`Settlement ${correction?'correction':'determination'} of ${report.state.tradeReference}`,body:{preview:request,expectedVersion:report.settlement.version,previewHash:value.previewHash,
     duePolicy,recognitionPolicy,correctionPolicy,correctionDueAt:correction?due.value:null}});},true);
-  const details=node('details'),caption=node('summary','Calculation and final fixing evidence'),raw=node('pre');raw.className='swap-evidence';raw.textContent=JSON.stringify(value.calculation,null,2);details.append(caption,raw);
-  evidence.append(heading,text);if(!value.inputsChanged)evidence.append(node('p','These final fixing inputs are already determined.'));if(correction)label(evidence,'Correction due instant · UTC',due);else evidence.append(node('p',`Contractual payment: ${displayInstant(value.calculation.paymentAt,options.zone())}.`));evidence.append(details,determine);
+  const details=node('details'),caption=node('summary','Calculation and final fixing evidence'),raw=node('pre');raw.className='swap-evidence';raw.textContent=JSON.stringify(contractDateEvidence(value.calculation),null,2);details.append(caption,raw);
+  evidence.append(heading,text);if(!value.inputsChanged)evidence.append(node('p','These final fixing inputs are already determined.'));if(correction)label(evidence,'Correction due instant · UTC',due);else evidence.append(node('p',`Contractual payment: ${displayPaymentDate(value.calculation.paymentAt)}.`));evidence.append(details,determine);
  }
  async function record(reversing:boolean){
   const report=current();if(!report.canAmend||options.pending())throw Error('Refresh an authorized working view before recording cash.');

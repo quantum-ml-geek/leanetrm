@@ -24,12 +24,18 @@ internal static class PhysicalGasSideChecks
                 adjustment ?? new UnitPrice(default, f.Quote));
         var assignment = Assignment(R("delivery_point"), R("gas_product"));
         PhysicalGasSide Side(GasQuantityTerms terms, ImmutableArray<GasValuationAssignment> assignments) =>
-            new(Guid.NewGuid(), Location(R("delivery_point")), R("gas_product"), terms, assignments);
+            new(Guid.NewGuid(), Location(R("delivery_point")), R("gas_product"), terms, assignments,SyntheticSideCalendars.Physical());
         var physical = Side(quantity, [assignment]);
+        var unboundCash=new FixedSide(Guid.NewGuid(),new UnitPrice(ExactDecimal.Parse("3"),f.Quote),physical.UnitQuantity,
+            from,to,clock.Boundary(to).AddDays(2),FixedSide.Implementation,f.Quote,SyntheticSideCalendars.Dated(false));
+        Reject("gas_instrument",()=>new PhysicalGasInstrument(Guid.NewGuid(),physical,unboundCash,[],ExactDecimal.Parse("1"),null));
+        Reject("gas_composition_input",()=>new GasCompositionInstrument(Guid.NewGuid(),
+            [new("delivery",physical,ExactDecimal.Parse("1"),ExactDecimal.Parse("1"),null)],
+            [new("cash",unboundCash,"consideration","delivery",GasQuantityStage.Delivery,ExactDecimal.Parse("-1"))]));
         var selectedCurve=new CustomCurveProjectionBinding(lookup.Market.Curve.Revision.CatalogId,Guid.NewGuid(),1,"output",null,
             CustomCurveProjectionBinding.ContainingDeliverySelection,CustomCurveProjectionBinding.SupportedImplementation);
-        var bound=new PhysicalGasSide(Guid.NewGuid(),physical.Location,physical.Product,quantity,[assignment],selectedCurve);
-        var other=new PhysicalGasSide(Guid.NewGuid(),physical.Location,physical.Product,quantity,[assignment],selectedCurve with{CurveId=Guid.NewGuid()});
+        var bound=new PhysicalGasSide(Guid.NewGuid(),physical.Location,physical.Product,quantity,[assignment],SyntheticSideCalendars.Physical(),selectedCurve);
+        var other=new PhysicalGasSide(Guid.NewGuid(),physical.Location,physical.Product,quantity,[assignment],SyntheticSideCalendars.Physical(),selectedCurve with{CurveId=Guid.NewGuid()});
         if(DefinitionIdentity.For(bound)!=DefinitionIdentity.For(physical)||bound.PricingBindingIdentity==physical.PricingBindingIdentity||bound.PricingBindingIdentity==other.PricingBindingIdentity)
             throw new Exception("Forecast curve choices must retain contractual identity and distinguish pricing/program identity.");
         var boundDefinition=ScheduleDefinitionCompiler.Generate(bound);
@@ -63,15 +69,23 @@ internal static class PhysicalGasSideChecks
             throw new Exception("Booked inspection must scale its evaluated quantity output exactly once.");
 
         FixedSide Cash(string price, string allocation = "1") => new(Guid.NewGuid(), new FlatPrice(new UnitPrice(ExactDecimal.Parse(price), f.Quote)),
-            f.Quote, new(ExactDecimal.Parse("1"), f.Quote.Quantity),
-            [new(from, to, clock.Boundary(to).AddDays(2), new(System.Numerics.BigInteger.Parse(allocation), 1), null)]);
+            f.Quote, physical.UnitQuantity,
+            [new(from, to, clock.Boundary(to).AddDays(2), new(System.Numerics.BigInteger.Parse(allocation), 1), null){DeliveryCompletionAt=clock.Boundary(to)}],
+            SyntheticSideCalendars.Dated(false),gasDeliveryClock:clock);
+        var differentlyNamedClock=GasDayClock.Capture(R("another_clock"),TimeZoneInfo.Utc,0);
+        var differentClockCash=new FixedSide(Guid.NewGuid(),Cash("3").Price,f.Quote,physical.UnitQuantity,Cash("3").Periods,
+            SyntheticSideCalendars.Dated(false),gasDeliveryClock:differentlyNamedClock);
+        Reject("gas_instrument",()=>new PhysicalGasInstrument(Guid.NewGuid(),physical,differentClockCash,[],ExactDecimal.Parse("1"),null));
+        Reject("gas_composition_input",()=>new GasCompositionInstrument(Guid.NewGuid(),
+            [new("delivery",physical,ExactDecimal.Parse("1"),ExactDecimal.Parse("1"),null)],
+            [new("cash",differentClockCash,"consideration","delivery",GasQuantityStage.Delivery,ExactDecimal.Parse("-1"))]));
         var purchase = new PhysicalGasInstrument(Guid.NewGuid(), physical, Cash("3"), [Cash("0.1")], ExactDecimal.Parse("1"), ExactDecimal.Parse("-1"));
         Equal(purchase.PV(context).PresentValue.Scale(ExactDecimal.Parse("1000")), "100");
         RetainedPortfolio(f, purchase, assignment, market);
 
         var pointB=Location(R("delivery_b"));
         var assignmentB=new GasValuationAssignment(R("gas_value_b"),pointB,assignment.Product,from,to,lookup.Settlement,f.Quote,new(lookup.Market,lookup.Contract),lookup.Fixing,new(ExactDecimal.Parse("-0.1"),f.Quote));
-        var physicalB=new PhysicalGasSide(Guid.NewGuid(),pointB,assignment.Product,quantity,[assignmentB]);
+        var physicalB=new PhysicalGasSide(Guid.NewGuid(),pointB,assignment.Product,quantity,[assignmentB],SyntheticSideCalendars.Physical());
         var receipts=new GasPhysicalComponent("receipt",physical,ExactDecimal.Parse("1"),ExactDecimal.Parse("1000"),null);
         var deliveries=new GasPhysicalComponent("delivery",physicalB,ExactDecimal.Parse("-1"),null,new("receipt",GasFuelConvention.NetEqualsGrossTimesOneMinusFuel,ExactDecimal.Parse("0.02")));
         var linkedFee=new GasCashComponent("usage",Cash("0.1"),"fee","delivery",GasQuantityStage.Delivery,ExactDecimal.Parse("-1"));
@@ -81,7 +95,8 @@ internal static class PhysicalGasSideChecks
         Equal(new GasCompositionInstrument(Guid.NewGuid(),[receipts,deliveries],[linkedFee with{Stage=GasQuantityStage.Receipt}]).PV(composedContext).PresentValue.Scale(composition.BaseQuantity),"62");
         var indexedCash=new FloatingSide(Guid.NewGuid(),lookup.Settlement,f.Quote,physical.UnitQuantity,
             [new(from,to,lookup.Fixing!.FixingAt,clock.Boundary(to).AddDays(2),FloatingAveraging.CalendarDayArithmetic,
-                [new(lookup.Market,lookup.Contract)],[lookup.Fixing],null,null,null,null,OpenEtrm.Shared.Numerics.ExactRatio.One,FloatingSide.IndexedImplementation)]);
+                [new(lookup.Market,lookup.Contract)],[lookup.Fixing],null,null,null,null,OpenEtrm.Shared.Numerics.ExactRatio.One,FloatingSide.IndexedImplementation)
+                {DeliveryCompletionAt=clock.Boundary(to)}],SyntheticSideCalendars.Dated(true),gasDeliveryClock:clock);
         var indexedPurchase=new GasCompositionInstrument(Guid.NewGuid(),[receipts],
             [new("index_payment",indexedCash,"indexed_consideration","receipt",GasQuantityStage.Delivery,ExactDecimal.Parse("-1"))]);
         Equal(indexedPurchase.PV(context).PresentValue.Scale(indexedPurchase.BaseQuantity),"0");
@@ -100,7 +115,8 @@ internal static class PhysicalGasSideChecks
             quantity.Receipt, GasFuelConvention.NetEqualsGrossDividedByOnePlusFuel, ExactDecimal.Parse("0.02"));
         Equal(Side(alternateTerms, [assignment]).PV(context).PresentValue, "160/51");
         FixedSide NetCash(string price) => new(Guid.NewGuid(), new FlatPrice(new UnitPrice(ExactDecimal.Parse(price), f.Quote)),
-            f.Quote, physical.UnitQuantity, [new(from, to, clock.Boundary(to).AddDays(2), new(49, 50), null)]);
+            f.Quote, physical.UnitQuantity, [new(from, to, clock.Boundary(to).AddDays(2), new(49, 50), null){DeliveryCompletionAt=clock.Boundary(to)}],
+            SyntheticSideCalendars.Dated(false),gasDeliveryClock:clock);
         var netPurchase = new PhysicalGasInstrument(Guid.NewGuid(), netSide, NetCash("3"), [NetCash("0.1")], ExactDecimal.Parse("1"), ExactDecimal.Parse("-1"));
         Equal(netPurchase.PV(context).PresentValue.Scale(ExactDecimal.Parse("1000")), "98");
         Reject("gas_instrument", () => new PhysicalGasInstrument(Guid.NewGuid(), netSide, Cash("3"), [], ExactDecimal.Parse("1"), null));

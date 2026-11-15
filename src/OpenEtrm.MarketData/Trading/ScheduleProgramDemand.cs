@@ -11,6 +11,10 @@ public enum ScheduleInputLanes:byte { None=0,Base=1,Scenario=2 }
 public static class ScheduleLifecycles
 {
     public const string WholeGasDayDelivery="whole_gas_day_delivery_v1",AccruedPayment="accrued_payment_v1";
+    internal static bool IsPayment(ScheduleDefinitionRow row)=>row.Parameters["lifecycle"] is "undue_payment_v1" or "interval_payment_v1" or AccruedPayment;
+    internal static bool IsFutureValue(ScheduleDefinitionRow row,DateTimeOffset at)=>IsPayment(row)?
+        !PaymentDatePolicy.IsDue(row.ValueAt!.Value,at):row.ValueAt>at;
+    internal static bool IsPaymentDay(ScheduleDefinitionRow row,DateTimeOffset at)=>IsPayment(row)&&PaymentDatePolicy.SameDay(row.ValueAt!.Value,at);
 }
 public sealed record ScheduleQuantityDemand(string Output,ImmutableArray<ScheduleInputLanes> Uses);
 public sealed record ScheduleInputDemand(int Instruction,ImmutableArray<ScheduleInputLanes> Uses);
@@ -96,7 +100,7 @@ public sealed partial class BookedSideProgram
                 if(EndedWholeGasDay(guard,cell,context.ValuationAt))selected[cell]=false;
             contributions.Add(guard.Ordinal,[..selected]);
             if(guard.Parameters["pricePolicy"]!="selected_context_v1")throw Error("The output price policy is unsupported.");
-            if(guard.Parameters["lifecycle"]=="undue_payment_v1"&&context.ValuationAt>=guard.ValueAt)
+            if(guard.Parameters["lifecycle"]=="undue_payment_v1"&&PaymentDatePolicy.IsOverdue(guard.ValueAt!.Value,context.ValuationAt))
                 throw new MarketDataException("side_payment_due","A due dated payment requires its explicit lifecycle treatment.");
             if(guard.Parameters["lifecycle"]=="future_gas_delivery_v1"&&
                 Document.Grids[guard.Grid!.Value].Interval(0).Start<=context.ValuationAt)
@@ -112,10 +116,11 @@ public sealed partial class BookedSideProgram
                 cancellation.ThrowIfCancellationRequested();
                 if(!selected[cell])continue;
                 var holding=guard.Parameters["lifecycle"]=="certificate_holding_v1"&&Document.Grids[guard.Grid!.Value].EndTicks(cell)<=context.ValuationAt.Ticks;
-                var lane=holding||guard.ValueAt>context.ValuationAt?ScheduleInputLanes.Scenario:ScheduleInputLanes.Base;
+                var future=ScheduleLifecycles.IsFutureValue(guard,context.ValuationAt);
+                var lane=holding||future||ScheduleLifecycles.IsPaymentDay(guard,context.ValuationAt)?ScheduleInputLanes.Scenario:ScheduleInputLanes.Base;
                 var amount=instruction.Inputs["amount"][0];var discounted=instruction.Inputs["discounted"][0];
                 Add(amount,needed[amount].Length==1?0:cell,lane);
-                if(!holding&&guard.ValueAt>context.ValuationAt)Add(discounted,needed[discounted].Length==1?0:cell,ScheduleInputLanes.Scenario);
+                if(!holding&&future)Add(discounted,needed[discounted].Length==1?0:cell,ScheduleInputLanes.Scenario);
             }
         }
         // Propagate only eligibility bits through the stored operand addresses.

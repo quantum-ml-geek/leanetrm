@@ -148,17 +148,17 @@ internal static class PpaBenchmark
                 quantity is SlotQuantity linked?[..linked.Slots.Select(slot=>new ScheduleInputPort(slot,
                     slot.Role==PpaRole.CertificateDelivery?certificates.Key:energy.Key,schedule))]:[]);
             var volume=new VolumeQuantity([source.Key],QuantityStage.Generated,energy.Key);var energySlot=new SideSlot(PpaRole.EnergyDelivery);var certificateSlot=new SideSlot(PpaRole.CertificateDelivery);
-            var energySide=new PowerPhysicalSide(Guid.NewGuid(),Terms(volume),location);
-            var strike=new FixedSide(Guid.NewGuid(),Terms(new SlotQuantity([energySlot])),new FlatPrice(new(D("40"),shaped.Unit)));
-            var charge=new FixedSide(Guid.NewGuid(),Terms(new SlotQuantity([energySlot])),new FlatPrice(new(D("2"),shaped.Unit)));
-            var certificate=new CertificateDeliverySide(Guid.NewGuid(),Terms(volume,certificates.Key),certificates.Key,D("1"),"asset_generation_at_stage_v1","held_at_current_vintage_mark_v1","none_recorded_v1");
-            var certificatePayment=new FixedSide(Guid.NewGuid(),Terms(new SlotQuantity([certificateSlot])),new FlatPrice(new(D("1"),certificateUnit)));
+            var energySide=new PowerPhysicalSide(Guid.NewGuid(),Terms(volume),location,SyntheticSideCalendars.Interval(Terms(volume),false));
+            var strike=new FixedSide(Guid.NewGuid(),Terms(new SlotQuantity([energySlot])),new FlatPrice(new(D("40"),shaped.Unit)),SyntheticSideCalendars.Interval(Terms(new SlotQuantity([energySlot])),false));
+            var charge=new FixedSide(Guid.NewGuid(),Terms(new SlotQuantity([energySlot])),new FlatPrice(new(D("2"),shaped.Unit)),SyntheticSideCalendars.Interval(Terms(new SlotQuantity([energySlot])),false));
+            var certificate=new CertificateDeliverySide(Guid.NewGuid(),Terms(volume,certificates.Key),certificates.Key,D("1"),"asset_generation_at_stage_v1","held_at_current_vintage_mark_v1","none_recorded_v1",SyntheticSideCalendars.Interval(Terms(volume,certificates.Key),false));
+            var certificatePayment=new FixedSide(Guid.NewGuid(),Terms(new SlotQuantity([certificateSlot])),new FlatPrice(new(D("1"),certificateUnit)),SyntheticSideCalendars.Interval(Terms(new SlotQuantity([certificateSlot])),false));
             instrument=new(Guid.NewGuid(),f.Revision,f.Reference,[new(energySlot,energySide,D("1")),new(new(PpaRole.StrikePayment),strike,D("-1")),
                 new(new(PpaRole.FixedCharge),charge,D("-1")),new(certificateSlot,certificate,D("1")),new(new(PpaRole.CertificatePayment),certificatePayment,D("-1"))],false,PpaInstrument.Implementation);
             instruments=[instrument];
             if(config.Distinct==2)
             {
-                var differentStrike=new FixedSide(Guid.NewGuid(),strike.Terms,new FlatPrice(new(D("41"),shaped.Unit)));
+                var differentStrike=new FixedSide(Guid.NewGuid(),strike.Terms,new FlatPrice(new(D("41"),shaped.Unit)),SyntheticSideCalendars.Interval(strike.Terms,false));
                 var other=new PpaInstrument(Guid.NewGuid(),instrument.Definitions,instrument.Reference,
                     [..instrument.Memberships.Select(m=>m.Slot.Role==PpaRole.StrikePayment?m with{Side=differentStrike}:m)],instrument.Discounting,PpaInstrument.Implementation);
                 instruments=instruments.Add(other);

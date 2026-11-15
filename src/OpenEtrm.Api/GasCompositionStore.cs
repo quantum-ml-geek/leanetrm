@@ -15,10 +15,18 @@ namespace OpenEtrm.Api;
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record GasQuantityLinkRequest(string Source,string Formula,string Fraction);
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record GasPhysicalRequest(string Code,string Pipeline,string Zone,string DeliveryPoint,string Product,string Direction,string DeliveryFrom,string DeliveryTo,string QuantityBasis,[property:JsonRequired]string? Quantity,[property:JsonRequired]GasQuantityLinkRequest? Link,[property:JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)]CustomCurveProjectionInput? ForecastCurve=null);
+public sealed record GasPhysicalRequest(string Code,string Pipeline,string Zone,string DeliveryPoint,string Product,string Direction,string DeliveryFrom,string DeliveryTo,string QuantityBasis,[property:JsonRequired]string? Quantity,[property:JsonRequired]GasQuantityLinkRequest? Link,[property:JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)]CustomCurveProjectionInput? ForecastCurve=null)
+{
+ [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+ public SideCalendarPolicyInput CalendarPolicy { get; init; }=null!;
+}
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record GasCashRequest(string Code,string Role,string Direction,string Source,string Stage,[property:JsonRequired]string? Price,[property:JsonRequired]string? TariffCode,string? PaymentAt,
- [property:JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)]GasIndexedCashRequest? Indexed=null);
+ [property:JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)]GasIndexedCashRequest? Indexed=null)
+{
+ [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+ public SideCalendarPolicyInput CalendarPolicy { get; init; }=null!;
+}
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record GasCompositionRequest(Guid SnapshotId,string Convention,string KnowledgeMode,string Profile,Guid OperationId,Guid BookId,Guid DefinitionRevisionId,[property:JsonRequired]Guid? GasSetupId,bool? Discounting,Guid? LegalEntityId,int? LegalEntityRevision,Guid? CounterpartyId,int? CounterpartyRevision,ImmutableArray<GasPhysicalRequest> PhysicalSides,ImmutableArray<GasCashRequest> CashSides,
  [property:JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)]Guid? TradeId=null,[property:JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)]int? ExpectedRevision=null,
@@ -109,6 +117,7 @@ public sealed class GasCompositionStore(PreviewDatabase database)
  async Task<GasCompositionDraft> Resolve(NpgsqlConnection c,PreviewData data,GasCompositionRequest body,CancellationToken ct)
  {
   if(body.PhysicalSides.IsDefault||body.CashSides.IsDefault||body.PhysicalSides.Any(s=>s is null)||body.CashSides.Any(s=>s is null))throw Invalid("Supply each physical and cash Side explicitly.");
+  data=await SideCalendarPolicies.Prepare(c,data,body.PhysicalSides.Select(s=>s.CalendarPolicy).Concat(body.CashSides.Select(s=>s.CalendarPolicy)),ct);
   if(body.Profile!=(body.CashSides.Any(s=>s.Indexed is not null)?IndexedProfile:Profile)||body.Discounting!=false||body.KnowledgeMode!="current"||body.PhysicalSides.IsDefault||body.PhysicalSides.Length is <GasCompositionInstrument.MinPhysicalSides or >GasCompositionInstrument.MaxPhysicalSides||body.CashSides.IsDefault||body.CashSides.Length>GasCompositionInstrument.MaxCashSides)
    throw Invalid($"Select the bounded fixed-quantity gas composition profile, explicit no discounting, {GasCompositionInstrument.MinPhysicalSides} to {GasCompositionInstrument.MaxPhysicalSides} physical sides and up to {GasCompositionInstrument.MaxCashSides} cash sides.");
   var physical=ImmutableArray.CreateBuilder<GasPhysicalComponent>();var assignments=new List<ImmutableArray<GasValuationAssignment>>();var clocks=new List<GasDayClock>();var mappings=new List<JsonElement>();
@@ -116,7 +125,7 @@ public sealed class GasCompositionStore(PreviewDatabase database)
   {
    var m=await gas.Metadata(c,data,Selection(body,p),ct);assignments.Add(m.Assignments);clocks.Add(m.Clock);mappings.Add(m.Mapping);
    var basis=p.QuantityBasis switch{"per_operating_day"=>GasQuantityBasis.PerOperatingDay,"period_total_equal_days"=>GasQuantityBasis.PeriodTotalEqualOperatingDays,_=>throw Invalid("Choose each physical quantity basis explicitly.")};
-   var side=new PhysicalGasSide(Guid.NewGuid(),m.Assignments[0].Location,m.Assignments[0].Product,new(m.Clock,DateWorkspace.Date(p.DeliveryFrom),DateWorkspace.Date(p.DeliveryTo),basis,new(Number("1"),m.Assignments[0].Quote.Quantity),GasFuelConvention.None,default),m.Assignments,GasPointPricing.Resolve(database.Manifest.CatalogId,m.Mapping,p.ForecastCurve)?.ToBinding());
+   var side=new PhysicalGasSide(Guid.NewGuid(),m.Assignments[0].Location,m.Assignments[0].Product,new(m.Clock,DateWorkspace.Date(p.DeliveryFrom),DateWorkspace.Date(p.DeliveryTo),basis,new(Number("1"),m.Assignments[0].Quote.Quantity),GasFuelConvention.None,default),m.Assignments,SideCalendarPolicies.Resolve(data,p.CalendarPolicy),GasPointPricing.Resolve(database.Manifest.CatalogId,m.Mapping,p.ForecastCurve)?.ToBinding());
    var link=p.Link is null?null:new GasCompositionLink(p.Link.Source,p.Link.Formula switch{"none"=>GasFuelConvention.None,"gross_less_fraction"=>GasFuelConvention.NetEqualsGrossTimesOneMinusFuel,"gross_divided_by_one_plus_fraction"=>GasFuelConvention.NetEqualsGrossDividedByOnePlusFuel,_=>throw Invalid("Select an installed fuel rule.")},Number(p.Link.Fraction));
    physical.Add(new(p.Code,side,Number(Sign(p.Direction,true).ToString(CultureInfo.InvariantCulture)),p.Quantity is null?null:Number(p.Quantity),link));
   }
@@ -135,9 +144,9 @@ public sealed class GasCompositionStore(PreviewDatabase database)
    if(price is null)throw Invalid("Specify the fixed cash price or an eligible usage tariff.");
    var payment=SchedulePreview.ParseAt(p.PaymentAt??throw Invalid("Specify the fixed cash payment date."));
    if(payment.Ticks%10!=0||Number(price).CompareTo(Number("1000000000000"))>=0||Number(price).CompareTo(Number("-1000000000000"))<=0)throw Invalid("Cash prices must have absolute value below 10^12 and payments need microsecond precision.");
-   if(payment<source.Quantities.Clock.Boundary(source.Quantities.To))throw Invalid("Payment must follow its source delivery term.");
+   PaymentDatePolicy.RequireCompletion(payment,source.Quantities.Clock.Boundary(source.Quantities.To));
    var total=source.GenerateSchedule().Quantities.TotalDelivery;
-   var side=new FixedSide(Guid.NewGuid(),new FlatPrice(new UnitPrice(Number(price),assignments[n][0].Quote)),assignments[n][0].Quote,source.UnitQuantity,[new(source.Quantities.From,source.Quantities.To,payment,new(BigInteger.Parse(total.Numerator),BigInteger.Parse(total.Denominator)),null)]);
+   var side=new FixedSide(Guid.NewGuid(),new FlatPrice(new UnitPrice(Number(price),assignments[n][0].Quote)),assignments[n][0].Quote,source.UnitQuantity,[new(source.Quantities.From,source.Quantities.To,payment,new(BigInteger.Parse(total.Numerator),BigInteger.Parse(total.Denominator)),null){DeliveryCompletionAt=source.Quantities.Clock.Boundary(source.Quantities.To)}],SideCalendarPolicies.Resolve(data,p.CalendarPolicy),gasDeliveryClock:source.Quantities.Clock);
    cash.Add(new(p.Code,side,p.Role,p.Source,Stage(p.Stage),Number(Sign(p.Direction,false).ToString(CultureInfo.InvariantCulture))));
   }
   var instrument=new GasCompositionInstrument(Guid.NewGuid(),physical.ToImmutable(),cash.ToImmutable());var members=ImmutableArray.CreateBuilder<GasCompositionRow>();

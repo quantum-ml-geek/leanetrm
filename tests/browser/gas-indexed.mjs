@@ -1,3 +1,4 @@
+import {chooseCalendars} from './side-calendars.mjs';
 // Ordinary ticket entry for independent physical and indexed payment Sides.
 import {newTrade} from './new-trade.mjs';
 import {blotterAt,decemberClose,gasTicket,q} from './gas-ticket.mjs';
@@ -16,6 +17,7 @@ export async function run(actions){
  await until(`document.querySelector(${q(control('floating-1','floating_index'))})?.value==='test_price'&&document.querySelector(${q(control('floating-1','floating_spread'))})?.value==='0'`);
  await check('the index payment uses the assigned index, explicit zero spread and monthly day 10',
   `document.querySelector(${q(control('floating-1','floating_payment_day'))}).value==='10'&&document.querySelector(${q(control('floating-1','floating_forecast_curve'))}).value==='assigned'`);
+ await chooseCalendars(actions,card('floating-1'),'test_utc_every_day');
  await set(control('physical-1','delivery_to'),'2021-03-01');await until(current());
  await check('extending the term preserves the linked location and eligible indexed forecast',
   `document.querySelector(${q(control('physical-1','delivery_point'))}).value==='synthetic_gas_point_indexed'&&document.querySelector(${q(control('floating-1','floating_index'))}).value==='test_price'&&document.querySelector(${q(control('floating-1','floating_forecast_curve'))}).value==='assigned'`);

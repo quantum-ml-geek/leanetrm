@@ -182,14 +182,16 @@ public sealed partial class IntervalSeriesStore(PreviewDatabase database)
     private static async Task<(PowerClock Clock,int Minutes)> Grid(NpgsqlConnection connection,Guid series,CancellationToken ct)
     {
         await using var command=ScheduleStore.Command(connection,"""
-            SELECT row_to_json(k)::text,s.interval_minutes FROM market_data.interval_series s
+            SELECT row_to_json(k)::text,s.interval_minutes,row_to_json(c)::text FROM market_data.interval_series s
             JOIN ref_data.clock_rules k ON(k.catalog_id,k.revision_id,k.code)=(s.reference_catalog_id,s.reference_revision_id,s.clock_code)
+            LEFT JOIN ref_data.clock_captures c ON(c.catalog_id,c.revision_id,c.clock_code)=(k.catalog_id,k.revision_id,k.code)
             WHERE s.id=$1
             """,series);
         await using var reader=await command.ExecuteReaderAsync(ct);
         if(!await reader.ReadAsync(ct))throw new PreviewDeniedException();
+        if(reader.IsDBNull(2))throw new MarketDataException("clock_reference","The selected series requires its exact published clock capture before generating revisions.");
         var rule=ReferenceClockJson.Read(JsonSerializer.Deserialize<JsonElement>(reader.GetString(0)));
-        return (PowerClock.FromRule(rule,TimeZoneDatabase.Installed()),reader.GetInt32(1));
+        return (PublishedClocks.Resolve([JsonSerializer.Deserialize<JsonElement>(reader.GetString(2))],rule),reader.GetInt32(1));
     }
 
     private static void RequireRequest(Guid request)

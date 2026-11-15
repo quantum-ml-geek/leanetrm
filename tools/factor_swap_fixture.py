@@ -1,7 +1,7 @@
 """Synthetic typed-factor consumer with a separately published unit revision."""
 from datetime import date,datetime,timedelta,timezone
 from decimal import Decimal
-from preview_fixture import CAT,RCAT,RREV,CURRENCY,identity,installed_tzdb
+from preview_fixture import CAT,RCAT,RREV,CURRENCY,identity,installed_tzdb,fixture_clock_publications
 from rate_curve_fixture import dated_curve,discount_default
 
 REFERENCE='20000000-0000-0000-0000-000000000220'
@@ -29,6 +29,8 @@ def prepare(manifest):
       f"INSERT INTO ref_data.measurement_bases VALUES({r},'factor_power_rate_basis','test_power','power');",
       f"INSERT INTO ref_data.quantity_specifications VALUES({r},'factor_gas_bundle','test_gas','test_gas_energy','synthetic_thermal_bundle','energy'),({r},'factor_power_slice','test_power','test_power_energy','synthetic_power_slice','energy'),({r},'factor_power_rate','test_power','factor_power_rate_basis','megawatt','power');",
       f"INSERT INTO ref_data.clock_rules(catalog_id,revision_id,code,kind,iana_zone,tzdb_version) VALUES({r},'synthetic_new_york','iana','America/New_York','{installed_tzdb()}');",
+      fixture_clock_publications(dict(referenceCatalogId=RCAT,referenceRevisionId=REFERENCE,**{'from':'2020-01-01','to':'2053-01-01'},
+          clocks=[dict(code='synthetic_new_york',kind='iana',fixedOffsetSeconds=None,ianaZone='America/New_York',tzdbVersion=installed_tzdb())])),
       f"UPDATE ref_data.revisions SET state='sealed' WHERE(catalog_id,id)=({r});",
       f"INSERT INTO market_data.revisions VALUES({m},{r},'draft',0);",f"INSERT INTO market_data.revision_periods VALUES({m},'2020-01-01','2022-01-01');"]
     members={};series=[]

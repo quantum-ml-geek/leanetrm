@@ -11,7 +11,7 @@ namespace OpenEtrm.Api;
 public sealed record PowerIntervalAmountInput(string Start,string End,string Value,string? Shape);
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record PowerActualSettlementRequest(Guid SnapshotId,string Curve,Guid ContractId,string DeliveryDate,string KnownAt,
-    string Product,int ProductVersion,int Minutes,string NonHolidays,string Holidays,string QuantityBasis,
+    string Product,int ProductVersion,[property:JsonRequired]string Block,int Minutes,string NonHolidays,string Holidays,string QuantityBasis,
     ReferenceKey QuantitySpecification,PowerIntervalAmountInput[] Quantities,string NumericalPolicy);
 
 // An unsaved delivery-value calculation over collected facts, not a declaration
@@ -60,9 +60,11 @@ public static class PowerActualSettlement
         var product=PowerPreview.SelectProduct(products,body.Product,body.ProductVersion);
         if(product.Clock!=metadata.Clock || body.Minutes!=metadata.Minutes)
             throw new MarketDataException("power_source_clock","Use the mapped source's exact market clock and native interval resolution.");
-        var clock=PowerClock.FromRule(metadata.Clock,TimeZoneDatabase.Installed());
-        var next=day.AddDays(1);var holidays=PowerPreview.Holidays(data,terms.Calendar,day,next);
-        var mask=new TimeOfUse(body.Minutes,body.NonHolidays,body.Holidays);
+        var clock=PublishedClocks.Resolve(data,metadata.Clock.Code);
+        data=await SideCalendarPolicies.PrepareReferences(connection,data,[product.Calendar],ct);
+        var calendar=CalendarDefinitions.From(data,product.Calendar);
+        var next=day.AddDays(1);var holidays=calendar.Closures(day,next).ToArray();
+        var mask=PowerPreview.PublishedMask(product,body.Block,body.Minutes,body.NonHolidays,body.Holidays);
         var fullDay=PowerHours.Compile(day,next,clock,TimeOfUse.All(body.Minutes),holidays,body.Minutes);
         var selected=PowerHours.Compile(day,next,clock,mask,holidays,body.Minutes);
         if(selected.Length==0)throw new MarketDataException("settlement_coverage","The selected delivery day has no contracted intervals.");
@@ -97,10 +99,10 @@ public static class PowerActualSettlement
         var settled=PowerSettlement.Calculate(quantities,energy,fixings,index,PowerSettlementPolicy.Preview);
         return new {implementation=Implementation,summary=settled.Summary,energy=settled.Energy,cash=settled.Cash,
             saved=false,publicationStatus="collected",quantityImplementation=PowerIntervalQuantities.Implementation,knownAt=cutoff,historyContextId=history.ContextId,sourceId,source,
-            deliveryDate=body.DeliveryDate,quantityBasis=body.QuantityBasis,product=product.Code,productVersion=product.Version,mask,
+            deliveryDate=body.DeliveryDate,quantityBasis=body.QuantityBasis,product=product.Code,productVersion=product.Version,body.Block,mask,
             clock=new {clock.Id,clock.Fingerprint,rules=clock.Rules},
             pins=new {definitions=data.Definitions["revisions"][0],mapping,curve=terms.Curve,contract=terms.Contract,quote=terms.Quote,
-                energyDefinition=terms.Energy,inputDefinition=input,indexDefinition=terms.Index,clockRule=metadata.Clock,calendar=terms.Calendar,holidays},
+                energyDefinition=terms.Energy,inputDefinition=input,indexDefinition=terms.Index,clockRule=metadata.Clock,calendar,sourceIndexCalendar=terms.Calendar,holidays},
             rows=quantities.Select(q=>new {start=q.Interval.Start,end=q.Interval.End,label=PowerHours.Label(q.Interval,true),
                 q.Interval.OffsetMinutes,q.Interval.Occurrence,energy=q.Energy,price=prices[q.Interval.Start].Price,
                 contribution=q.Energy.Times(prices[q.Interval.Start].Price),

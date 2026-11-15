@@ -24,7 +24,7 @@ public readonly record struct ScheduleDefinitionPort(string Name,SideSlot? Slot,
 
 public sealed class ScheduleDefinition
 {
-    public const string CurrentSchema="side_schedule_blocks_v2",CurrentGenerator="whole_term_side_blocks_v2";
+    public const string CurrentSchema="side_schedule_blocks_v2",CurrentGenerator="whole_term_side_blocks_v3";
     public Guid SideId { get; }
     public string Family { get; }
     public string EconomicIdentity { get; }

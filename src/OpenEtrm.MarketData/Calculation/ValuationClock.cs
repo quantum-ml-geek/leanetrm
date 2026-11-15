@@ -1,6 +1,5 @@
 using OpenEtrm.MarketData.Power;
 using OpenEtrm.MarketData.Trading;
-using OpenEtrm.Shared.Temporal;
 
 namespace OpenEtrm.MarketData.Calculation;
 
@@ -15,7 +14,9 @@ public sealed record ClockChange(DateTimeOffset At,string Policy)
     public static ClockChange NextCalendarDay(DateTimeOffset from,PowerClock clock)
     {
         if(!TradingInstant.IsSupported(from)||clock is null)throw new MarketDataException("scenario_clock","Supply a supported source instant and retained calendar clock.");
-        var local=TimeZoneInfo.ConvertTime(from,clock.Zone);
+        var local=clock.LocalAt(from);
+        var day=DateOnly.FromDateTime(local.DateTime);
+        clock=clock.CaptureForDelivery(day,day.AddDays(2));
         var at=clock.AtLocal(DateOnly.FromDateTime(local.DateTime).AddDays(1),TimeOnly.FromDateTime(local.DateTime)).ToUniversalTime();
         return new(at,FrozenInputs){Calendar=new(from,clock.Id,clock.Rules,clock.Fingerprint,CalendarClockRoll.NextDay)};
     }
@@ -28,11 +29,11 @@ public sealed record ClockChange(DateTimeOffset At,string Policy)
         {
             if(calendar.Rules is null||calendar.Rules.Length>65536||calendar.From!=parent||calendar.Convention!=CalendarClockRoll.NextDay)
                 throw new ArgumentException();
-            var clock=PowerClock.Capture(RetainedTimeZone.Restore(calendar.Rules,calendar.Zone));
+            var clock=PowerClock.Restore(calendar.Rules,calendar.Fingerprint);
             if(clock.Id!=calendar.Zone||clock.Fingerprint!=calendar.Fingerprint||NextCalendarDay(calendar.From,clock).At!=At)
                 throw new ArgumentException();
         }
-        catch(Exception e)when(e is ArgumentException or System.Runtime.Serialization.SerializationException)
+        catch(Exception e)when(e is ArgumentException or System.Runtime.Serialization.SerializationException or MarketDataException)
         {throw new MarketDataException("scenario_clock","The calendar target must match its exact retained clock rules and source instant.",e);}
     }
 }

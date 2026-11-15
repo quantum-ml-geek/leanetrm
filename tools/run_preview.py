@@ -28,6 +28,7 @@ def main():
     from check_standalone import main as check_standalone
     check_standalone()
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--side-calendar-check', action='store_true', help='Qualify explicit Side calendar authoring, retention and replay')
     parser.add_argument('--parametric-risk-check',action='store_true',help='Qualify retained parametric VaR/ES with aligned dated-factor history')
     parser.add_argument('--monte-carlo-risk-check',action='store_true',help='Qualify full-PV Monte Carlo, seeded replay and retained custody')
     parser.add_argument('--historical-risk-check',action='store_true',help='Qualify retained full-PV historical simulation and exact empirical VaR/ES')
@@ -188,7 +189,7 @@ def main():
     if args.context_read_check:
         args.check=True
         if args.example!='standard':parser.error('--context-read-check requires the standard fixture')
-    if args.factor_swap_check or args.scheduled_swap_check or args.side_observation_check or args.ppa_bookings_check or args.ppa_check or args.live_calculation_check or args.connected_portfolio_check or args.risk_jobs_check or args.factor_history_check or args.parametric_risk_check or args.historical_risk_check or args.monte_carlo_risk_check or args.power_actual_check or args.interval_series_check or args.interval_curves_check or args.index_fixing_check or args.swap_risk_holdings_check or args.close_out_drafts_check or args.pilot_close_check or args.regional_closes_check or args.contract_dates_check or args.identity_check or args.unit_check or args.party_check or args.exchange_check or args.cash_pnl_check or args.booking_check or args.draft_check or args.hosted_check or args.jobs_check or args.reference_check or args.execution_check or args.assistant_check or args.provider_adapters_check or args.custom_curves_check or args.contract_observation_curve_check or args.market_dates_check or args.market_read_check or args.reference_demo_check or args.valuation_status_check or args.desk_fields_check:
+    if args.side_calendar_check or args.factor_swap_check or args.scheduled_swap_check or args.side_observation_check or args.ppa_bookings_check or args.ppa_check or args.live_calculation_check or args.connected_portfolio_check or args.risk_jobs_check or args.factor_history_check or args.parametric_risk_check or args.historical_risk_check or args.monte_carlo_risk_check or args.power_actual_check or args.interval_series_check or args.interval_curves_check or args.index_fixing_check or args.swap_risk_holdings_check or args.close_out_drafts_check or args.pilot_close_check or args.regional_closes_check or args.contract_dates_check or args.identity_check or args.unit_check or args.party_check or args.exchange_check or args.cash_pnl_check or args.booking_check or args.draft_check or args.hosted_check or args.jobs_check or args.reference_check or args.execution_check or args.assistant_check or args.provider_adapters_check or args.custom_curves_check or args.contract_observation_curve_check or args.market_dates_check or args.market_read_check or args.reference_demo_check or args.valuation_status_check or args.desk_fields_check:
         args.check = True
         if args.example != 'standard' or args.identity_check and args.browser_check:
             parser.error('--identity-check requires the standard fixture without --browser-check')
@@ -273,7 +274,7 @@ def main():
         else:
             from demo_date_plan import compile_plan
             date_plan=compile_plan(dotnet,dll,temporary) if not args.check and not gas_demo else None
-            reference,market,security,manifest=fixture(ROOT,fixing_frames=fixing_frames,date_plan=date_plan,window_frames=args.contract_dates_check)
+            reference,market,security,manifest=fixture(ROOT,fixing_frames=fixing_frames,date_plan=date_plan,window_frames=args.contract_dates_check,publish_clocks=False)
             if args.curve_eligibility_check:
                 from check_curve_eligibility import prepare as prepare_curve_eligibility
                 reference,market,manifest=prepare_curve_eligibility(reference,market,manifest)
@@ -325,6 +326,15 @@ def main():
                 # The populated qualification runs once, on the base fixture in one transaction; the contract dates mode's window_frames
                 # fixture cannot load that way, because its pinned curve's date admissions arrive only through a rewritten load.
                 if args.contract_observation_curve_check:populated_checks(query,migration,[reference,market,security],manifest)
+            if migration.name=='0270_calendar_publication_certification.sql':
+                from check_fact_anchor_upgrade import run_checks as check_calendar_certification_upgrade
+                check_calendar_certification_upgrade(query,migration,number='0270',guard='calendar_certification_upgrade',signatures=('security.capture_market_and_schedule_context(uuid,date,timestamptz)','security.resolve_side_calendar(uuid,uuid,text,jsonb)','security.list_side_calendars()'))
+            if migration.name=='0271_collection_operating_clock.sql':
+                from check_fact_anchor_upgrade import run_checks as check_operating_clock_upgrade
+                check_operating_clock_upgrade(query,migration,number='0271',guard='operating_clock_upgrade',signatures=('power_data.begin_attempt(uuid,date,date)','power_data.finish_attempt(uuid,jsonb,text)'))
+            if migration.name=='0269_published_clock_consumers.sql':
+                from check_fact_anchor_upgrade import run_checks as check_clock_consumer_upgrade
+                check_clock_consumer_upgrade(query,migration,number='0269',guard='published_clock_consumer_upgrade',signatures=('power_data.source_config(uuid)',))
             if args.lng_cargo_check and migration.name=='0176_lng_cargo_references.sql':
                 from check_lng_upgrade import run_checks as check_lng_upgrade
                 check_lng_upgrade(query,ROOT,manifest,[reference,market,security,trading_fixture(manifest['catalogId'])])
@@ -492,13 +502,13 @@ def main():
         if args.index_fixing_check:
             from check_index_fixings import prepare as prepare_index_fixings
             reference,market,manifest=prepare_index_fixings(reference,market,manifest)
-        if args.power_flat_check or args.interval_curves_check or args.ppa_check or args.ppa_bookings_check or args.with_ppa or args.demo_instruments_check or args.retained_schedule_check or args.blotter_stream_benchmark:
+        if args.side_calendar_check or args.power_flat_check or args.interval_curves_check or args.ppa_check or args.ppa_bookings_check or args.with_ppa or args.demo_instruments_check or args.retained_schedule_check or args.blotter_stream_benchmark:
             from interval_curve_fixture import prepare as prepare_interval_curves
             reference,market,security,manifest=prepare_interval_curves(reference,market,security,manifest)
         if args.power_flat_check:
             from check_power_output_settlement import prepare as prepare_power_output_settlement
             market=prepare_power_output_settlement(market,manifest)
-        if args.ppa_check or args.ppa_bookings_check or args.with_ppa or args.demo_instruments_check or args.retained_schedule_check or args.blotter_stream_benchmark:
+        if args.side_calendar_check or args.ppa_check or args.ppa_bookings_check or args.with_ppa or args.demo_instruments_check or args.retained_schedule_check or args.blotter_stream_benchmark:
             from ppa_fixture import prepare as prepare_ppa
             reference,market,security,manifest=prepare_ppa(reference,market,security,manifest)
             if not args.check:
@@ -506,7 +516,7 @@ def main():
                 demo_instants={day+'T16:00:00' for day,*_ in EXECUTIONS}
                 manifest['frames']=[frame for frame in manifest['frames'] if frame['at'][:19] in demo_instants or args.with_gas_quantity_dates and frame['at'][:10] in ('2021-01-01','2021-01-15','2021-01-31')]
 
-        if args.ppa_bookings_check or args.retained_schedule_check or args.blotter_stream_benchmark:
+        if args.side_calendar_check or args.ppa_bookings_check or args.retained_schedule_check or args.blotter_stream_benchmark:
             from ppa_bookings_fixture import prepare as prepare_ppa_bookings
             reference,market,security,manifest=prepare_ppa_bookings(reference,market,security,manifest)
             if args.close_risk_check:
@@ -525,9 +535,12 @@ def main():
             source_id,job_id=str(uuid4()),str(uuid4())
             collection={'sources':[{'id':source_id,'name':'Synthetic PJM source','provider':'PJM','dataset':'da_hrl_lmps','market':'DA','point':'51288','minutes':60,'unit':'MWh','currency':'USD','timeZone':'America/New_York'}],
                         'jobs':[{'id':job_id,'provider':'PJM','name':'Synthetic paused collection','sourceIds':[source_id],'enabled':True,'scheduleEnabled':False,'cron':'0 8 * * *','scheduleZone':'UTC','fromDay':-7,'throughDay':-1}], 'requestsPerMinute':{'PJM':4}}
-            prepared_ids=prepare_hosted('https://pilot.synthetic.invalid',str(uuid4()),installed_tzdb(),prepared,collection)
+            def render_hosted_clocks(request,target):
+                subprocess.run([str(dotnet),str(dll),'--render-clock-captures',str(request),str(target)],cwd=ROOT,env=env,check=True,timeout=60)
+            prepared_ids=prepare_hosted('https://pilot.synthetic.invalid',str(uuid4()),installed_tzdb(),prepared,collection,
+                clock_publication=('2026-03-08','2026-11-03',render_hosted_clocks))
             calendar_request=prepared/'calendar.json';calendar_sql=prepared/'calendar.sql'
-            calendar_request.write_text(json.dumps({'referenceCatalogId':prepared_ids['reference'],'referenceRevisionId':prepared_ids['referenceRevision'],'from':'2026-03-08','through':'2026-11-02','clocks':[{'code':'pjm','kind':'iana','fixedOffsetSeconds':None,'ianaZone':'America/New_York','tzdbVersion':installed_tzdb()}]}))
+            calendar_request.write_text(json.dumps({'referenceCatalogId':prepared_ids['reference'],'referenceRevisionId':prepared_ids['referenceRevision'],'from':'2026-03-08','through':'2026-11-02','clockCodes':['pjm']}))
             subprocess.run([str(dotnet),str(dll),'--render-power-days',str(calendar_request),str(calendar_sql)],cwd=ROOT,env=env,check=True,timeout=30)
             # The owner holds the six human roles by name, never the agent reader role.
             human_roles=f"DO $$BEGIN IF(SELECT string_agg(r.code,',' ORDER BY r.code) FROM security.role_grants g JOIN security.roles r ON r.id=g.role_id WHERE g.principal_id='{prepared_ids['owner']}' AND NOT g.revoked)<>'access_administrator,market_data_approver,market_data_editor,risk_analyst,trader,viewer' THEN RAISE EXCEPTION 'The hosted owner must hold exactly the human roles';END IF;END$$;"
@@ -558,6 +571,18 @@ def main():
             market=prepare_publication_market(market,manifest)
             from check_publication_release_pricing import prepare_market as prepare_release_market
             market=prepare_release_market(market,manifest)
+        if args.example=='standard':
+            from preview_fixture import clock_capture_request, installed_tzdb
+            clock_request=temporary/'clock-captures.json';clock_sql=temporary/'clock-captures.sql'
+            capture_terms=clock_capture_request(manifest)
+            if args.scheduled_swap_check:
+                capture_terms['clocks'].extend(dict(code=code,kind='iana',fixedOffsetSeconds=None,ianaZone=zone,tzdbVersion=installed_tzdb())
+                    for code,zone in [('synthetic_london','Europe/London'),('synthetic_new_york','America/New_York')])
+            clock_request.write_text(json.dumps(capture_terms))
+            subprocess.run([str(dotnet),str(dll),'--render-clock-captures',str(clock_request),str(clock_sql)],cwd=ROOT,env=env,check=True,timeout=60)
+            marker='UPDATE ref_data.revisions SET state='
+            if marker not in market: raise RuntimeError('Synthetic reference sealing point is missing')
+            market=market.replace(marker,clock_sql.read_text()+marker,1)
         if args.contract_dates_check:
             from contract_curve_fixture import prepare_market as prepare_contract_admissions
             query(prepare_contract_admissions(market,security,manifest))
@@ -568,8 +593,8 @@ def main():
         if args.example=='standard':
             from swap_fixture import fixture as swap_fixture
             # The valuation-status check reads the last custom-curve close, at which the daily bundle publishes.
-            swap_market,swap_manifest=swap_fixture(fixing_frames=fixing_frames,observation_guards=args.side_observation_check or args.scheduled_swap_check,
-                scheduled_periods=args.scheduled_swap_check,closes=['2020-12-31T16:00:00Z'] if args.valuation_status_check else (),
+            swap_market,swap_manifest=swap_fixture(fixing_frames=fixing_frames,observation_guards=args.side_calendar_check or args.side_observation_check or args.scheduled_swap_check,
+                scheduled_periods=args.side_calendar_check or args.scheduled_swap_check,closes=['2020-12-31T16:00:00Z'] if args.valuation_status_check else (),
                 effective_from='2020-12-16' if args.retained_schedule_check else '2020-01-01')
             if args.index_fixing_check:
                 from check_swap_settlement_selection import prepare_daily
@@ -617,7 +642,7 @@ def main():
         query(trading_fixture(manifest['catalogId'],swap_defaults=args.example=='standard'))
         curve_sources = [m['revisionId'] for m in manifest['inputMarkets']] if args.swap_risk_holdings_check else []
         query(catalogue_fixture(manifest,'https://preview.invalid',curve_sources=curve_sources,role_revisions=catalogue_roles))
-        if args.ppa_bookings_check or args.blotter_stream_benchmark:
+        if args.side_calendar_check or args.ppa_bookings_check or args.blotter_stream_benchmark:
             from ppa_bookings_fixture import trading as ppa_benchmark_books
             query(ppa_benchmark_books(manifest['catalogId']))
         if args.ppa_bookings_check:
@@ -820,7 +845,10 @@ def main():
         print(f'PREVIEW_URL={url}',flush=True)
         print('Private synthetic database. Ctrl+C stops the app and removes its owned database.',flush=True)
         if args.check:
-            if args.context_read_check:
+            if args.side_calendar_check:
+                from check_side_calendar_http import run_checks as check_side_calendars
+                check_side_calendars(url,query,manifest)
+            elif args.context_read_check:
                 from check_context_read_demand import run_checks as check_context_read_demand
                 check_context_read_demand(url,query,manifest)
                 if args.browser_check:
@@ -882,7 +910,6 @@ def main():
                 check_crude_shapes(query,manifest,crude_receipt)
                 from check_crude_portfolio import run_checks as check_crude_portfolio
                 crude_risk_worker=risk_worker_runner()
-                check_crude_portfolio(url,crude_receipt,run_worker=crude_risk_worker)
                 if args.crude_setup_check:
                     from check_crude_setup_editor import run_booking_checks
                     run_booking_checks(url,query,manifest,run_worker=crude_risk_worker)
@@ -893,6 +920,7 @@ def main():
                     check_crude_reversals(url,query,manifest,crude_receipt)
                     from check_crude_inventory_sales import run_checks as check_crude_inventory_sales
                     check_crude_inventory_sales(url,query,manifest,crude_receipt)
+                check_crude_portfolio(url,crude_receipt,run_worker=crude_risk_worker)
                 if args.browser_check:
                     target=temporary/'browser-target.json'
                     target.write_text(json.dumps({'suite':'business_browser_v1','url':url,'runId':run_id}))
@@ -941,7 +969,7 @@ def main():
                     subprocess.run(['node',str(ROOT/'tests/browser/run.mjs'),str(target),str(args.browser.resolve()),'--gas-indexed'],cwd=ROOT,env=env,check=True,timeout=180)
             elif args.physical_gas_check:
                 from check_physical_gas_preview import run_checks,run_shape_checks
-                run_checks(url)
+                run_checks(url,query,manifest)
                 run_shape_checks(query,manifest)
                 if args.facility_quantity_check:
                     from check_facility_quantity_ledger import run_checks as check_facility_quantities

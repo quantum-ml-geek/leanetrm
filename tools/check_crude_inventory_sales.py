@@ -12,7 +12,7 @@ def run_checks(url, query, manifest, booked):
     context={**before,'snapshotId':next(f['id'] for f in workspace['frames'] if f['at'].startswith('2021-01-15T08:'))}
     terms=c.call('crude/editor',dict(context=before,tradeId=booked['tradeId']))['terms']
     purchase=c.call('crude/book',{**terms,'operationId':str(uuid4())})['tradeId']
-    sale=c.call('crude/book',{**terms,'operationId':str(uuid4()),'direction':'deliver','considerationDirection':'receive','quantity':'600','fixedPrice':'80','handlingFee':None,'handlingFeeDirection':None})['tradeId']
+    sale=c.call('crude/book',{**terms,'operationId':str(uuid4()),'direction':'deliver','considerationDirection':'receive','quantity':'600','fixedPrice':'80','handlingFee':None,'handlingFeeDirection':None,'feeCalendarPolicy':None,'handlingFeePaymentAt':None})['tradeId']
     def read(trade=purchase,ctx=context):return c.call('crude/operations/read',dict(context=ctx,tradeId=trade))
     def command(key,trade=purchase,**extra):
         return dict(context=context,tradeId=trade,expectedRevision=1,expectedVersion=read(trade)['version'],operationId=str(uuid4()),businessKey=key,
@@ -37,10 +37,10 @@ def run_checks(url, query, manifest, booked):
     extra_receipt=c.call('crude/operations/receipt',command('other-owned-lot',trade=companion,quantity='1',titleTransferred=True,disposition='owned_inventory',saleTradeId=None,saleRevision=None))
     c.call('crude/operations/allocation',command('cross-purchase-capacity',trade=companion,receiptId=extra_receipt['eventId'],quantity='1',saleTradeId=sale,saleRevision=1),expected=422)
     c.call('crude/operations/receipt',command('legacy-reservation-capacity',trade=companion,quantity='1',titleTransferred=True,disposition='onward_delivery',saleTradeId=sale,saleRevision=1),expected=422)
-    other_sale=c.call('crude/book',{**terms,'operationId':str(uuid4()),'direction':'deliver','considerationDirection':'receive','fixedPrice':'81','handlingFee':None,'handlingFeeDirection':None})['tradeId']
+    other_sale=c.call('crude/book',{**terms,'operationId':str(uuid4()),'direction':'deliver','considerationDirection':'receive','fixedPrice':'81','handlingFee':None,'handlingFeeDirection':None,'feeCalendarPolicy':None,'handlingFeePaymentAt':None})['tradeId']
     c.call('crude/operations/allocation',command('owned-lot-capacity',receiptId=receipt['eventId'],quantity='401',saleTradeId=other_sale,saleRevision=1),expected=422)
     for price,direction in [('0','receive'),('-1','receive'),('80','pay')]:
-        invalid_sale=c.call('crude/book',{**terms,'operationId':str(uuid4()),'direction':'deliver','considerationDirection':direction,'fixedPrice':price,'handlingFee':None,'handlingFeeDirection':None})['tradeId']
+        invalid_sale=c.call('crude/book',{**terms,'operationId':str(uuid4()),'direction':'deliver','considerationDirection':direction,'fixedPrice':price,'handlingFee':None,'handlingFeeDirection':None,'feeCalendarPolicy':None,'handlingFeePaymentAt':None})['tradeId']
         c.call('crude/operations/allocation',command('unsupported-sale-profile',receiptId=receipt['eventId'],quantity='1',saleTradeId=invalid_sale,saleRevision=1),expected=422)
 
     reserved=read(); retained={**context,'knowledgeMode':'retained','contextId':reserved['context']['contextId']}
@@ -103,7 +103,7 @@ def run_checks(url, query, manifest, booked):
     assert read()['balances']['ownedQuantity']=='400'
     # Separate purchases and sales retain independent signed fee cash. Exact
     # half-cent invoices must sum to the final contractual cent, including reissue.
-    small_purchase=c.call('crude/book',{**terms,'operationId':str(uuid4()),'quantity':'1','fixedPrice':'0.01','handlingFee':None,'handlingFeeDirection':None})['tradeId']
+    small_purchase=c.call('crude/book',{**terms,'operationId':str(uuid4()),'quantity':'1','fixedPrice':'0.01','handlingFee':None,'handlingFeeDirection':None,'feeCalendarPolicy':None,'handlingFeePaymentAt':None})['tradeId']
     small_sale=c.call('crude/book',{**terms,'operationId':str(uuid4()),'quantity':'1','direction':'deliver','considerationDirection':'receive','fixedPrice':'0.01','handlingFee':'0.02','handlingFeeDirection':'pay'})['tradeId']
     def small_command(key,trade,**extra):
         body=command(key,trade=trade,**extra)
@@ -138,8 +138,8 @@ def run_checks(url, query, manifest, booked):
     print('PASS crude sales corrections: immutable payment reversal, tail void/reissue, historical paid state, half-cent cumulative amounts and independently payable fee',flush=True)
     # One sale draws from two independently owned purchase lots. A stale source
     # context has room numerically but must not consume another purchase's new reservation.
-    multi_sale=c.call('crude/book',{**terms,'operationId':str(uuid4()),'quantity':'1000','direction':'deliver','considerationDirection':'receive','fixedPrice':'80','handlingFee':None,'handlingFeeDirection':None})['tradeId']
-    purchases=[c.call('crude/book',{**terms,'operationId':str(uuid4()),'handlingFee':None,'handlingFeeDirection':None})['tradeId'] for _ in range(2)]
+    multi_sale=c.call('crude/book',{**terms,'operationId':str(uuid4()),'quantity':'1000','direction':'deliver','considerationDirection':'receive','fixedPrice':'80','handlingFee':None,'handlingFeeDirection':None,'feeCalendarPolicy':None,'handlingFeePaymentAt':None})['tradeId']
+    purchases=[c.call('crude/book',{**terms,'operationId':str(uuid4()),'handlingFee':None,'handlingFeeDirection':None,'feeCalendarPolicy':None,'handlingFeePaymentAt':None})['tradeId'] for _ in range(2)]
     def multi_command(key,trade,**extra):
         body=command(key,trade=trade,**extra)
         body['profile']='physical_crude_sale_cash_v1' if trade==multi_sale else 'physical_crude_receipt_cash_v1'
@@ -191,7 +191,7 @@ def run_checks(url, query, manifest, booked):
     # Competing purchases cannot reserve more than one sale's remaining capacity.
     from concurrent.futures import ThreadPoolExecutor
     from threading import Barrier
-    race_sale=c.call('crude/book',{**terms,'operationId':str(uuid4()),'quantity':'1000','direction':'deliver','considerationDirection':'receive','fixedPrice':'80','handlingFee':None,'handlingFeeDirection':None})['tradeId']
+    race_sale=c.call('crude/book',{**terms,'operationId':str(uuid4()),'quantity':'1000','direction':'deliver','considerationDirection':'receive','fixedPrice':'80','handlingFee':None,'handlingFeeDirection':None,'feeCalendarPolicy':None,'handlingFeePaymentAt':None})['tradeId']
     race_purchases=[c.call('crude/book',{**terms,'operationId':str(uuid4())})['tradeId'] for _ in range(2)]
     race_receipts=[c.call('crude/operations/receipt',command('race-lot',trade=p,quantity='600',titleTransferred=True,disposition='owned_inventory',saleTradeId=None,saleRevision=None))['eventId'] for p in race_purchases]
     race_commands=[command('race-reserve',trade=p,receiptId=r,quantity='600',saleTradeId=race_sale,saleRevision=1) for p,r in zip(race_purchases,race_receipts)]
@@ -213,7 +213,7 @@ def run_checks(url, query, manifest, booked):
     assert query(f"SELECT sum(quantity)::text FROM trading.crude_inventory_allocations WHERE sale_trade_id='{race_sale}';")=='600'
     # Rollback-only generated dispatch evidence proves the aggregate sale limit
     # at its exact boundary without 10,000 HTTP operations or retained test rows.
-    bound_sale=c.call('crude/book',{**terms,'operationId':str(uuid4()),'quantity':'1000','direction':'deliver','considerationDirection':'receive','fixedPrice':'80','handlingFee':None,'handlingFeeDirection':None})['tradeId']
+    bound_sale=c.call('crude/book',{**terms,'operationId':str(uuid4()),'quantity':'1000','direction':'deliver','considerationDirection':'receive','fixedPrice':'80','handlingFee':None,'handlingFeeDirection':None,'feeCalendarPolicy':None,'handlingFeePaymentAt':None})['tradeId']
     bound_purchases=[c.call('crude/book',{**terms,'operationId':str(uuid4())})['tradeId'] for _ in range(3)]
     bound_receipts=[c.call('crude/operations/receipt',command('bound-lot',trade=p,quantity='1',titleTransferred=True,disposition='onward_delivery',saleTradeId=bound_sale,saleRevision=1))['eventId'] for p in bound_purchases]
     bound_body=command('bound-dispatch',trade=bound_purchases[2],receiptId=bound_receipts[2],quantity='0.1',titleTransferred=True)

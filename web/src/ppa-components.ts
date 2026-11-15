@@ -1,4 +1,4 @@
-import {sideCalendar} from './side-calendar.js';
+import {sideCalendar,referenceCalendarChoices,type CalendarLocks} from './side-calendar.js';
 import {ppaQuantityEditor} from './ppa-quantity-editor.js';
 import {componentQuantity} from './ppa-view.js';
 import {friendly} from './market-view.js';
@@ -73,15 +73,17 @@ export function componentEditor(host:HTMLElement,catalog:Catalog,template:Templa
  for(const [name,values] of [['basis',policies.escalationBases],['eligibility',policies.certificateEligibility],['holding',policies.certificateHolding],['disposition',policies.certificateDisposition],['capacity-rule',policies.capacityRules]] as const)enums(name,values);
  const pay=catalog.paymentOptions;
  for(const [name,rows] of [['frequency',pay.frequencies],['payment-rule',pay.rules],['day-basis',pay.dayBases],['short-month',pay.shortMonths],['adjustment',pay.adjustments]] as const)pick(name,rows);
- const calendar=sideCalendar({id:prefix+'-holiday-calendar',choices:()=>choices(catalog.references.calendars),changed});
- calendar.restore([initial?.side.paymentRule.calendar,initial?.side.quantity.kind==='profile'?initial.side.quantity.hours?.calendar:null]);
- const sideQuantity=composition?ppaQuantityEditor(host,catalog,template,prefix,composition.delivery,composition.links,initial?.side.quantity,calendar.code):undefined;
+ const sideQuantity=composition?ppaQuantityEditor(host,catalog,template,prefix,composition.delivery,composition.links,initial?.side.quantity):undefined;
+ const calendar=sideCalendar({id:prefix+'-holiday-calendar',choices:()=>referenceCalendarChoices(catalog.sideCalendars),
+  purposes:()=>({delivery:(sideQuantity?.kind()??(template.linkedSlots.length?'slots':initial?.side.quantity.kind))!=='slots',observation:field('side-kind').value==='indexed',payment:true}),
+  locked:()=>{const product=sideQuantity?.product();return product?.calendar?{delivery:product.calendar} as unknown as CalendarLocks:{};},changed});
+ calendar.restore(initial?.side.calendarPolicy);
  const [terms,payment]=host.querySelectorAll<HTMLElement>(':scope>.schedule-fields');
  const row=(name:string)=>field(name).closest('label')!;
  alignSideCard(host,{direction:[row('coefficient')],product:[row('side-kind'),row('location'),calendar.element],
   quantity:[...host.querySelectorAll<HTMLElement>('.ppa-side-quantity'),row('quantity-choice'),host.querySelector<HTMLElement>('.ppa-retained-quantity')!],
   price:[terms],payment:[host.querySelector<HTMLElement>('h4')!,payment]});
- function sync(busy=false){calendar.sync(busy);sideQuantity?.sync(busy);
+ function sync(busy=false){sideQuantity?.sync(busy);calendar.sync(busy);
   const kind=field('side-kind').value,price=field('price-kind').value,rule=field('payment-rule').value;
   const active:Record<string,boolean>={'quantity-choice':!composition&&!!initial&&!template.linkedSlots.length,location:kind==='energy',fixed:kind==='fixed',priced:kind==='fixed'||kind==='indexed',flat:kind==='fixed'&&price==='flat',escalated:kind==='fixed'&&price==='escalated',stepped:kind==='fixed'&&price==='stepped',indexed:kind==='indexed',attribute:kind==='certificate'||kind==='capacity',certificate:kind==='certificate',capacity:kind==='capacity',lag:rule==='days_after_period_end',next:rule==='day_of_following_month'};
   active['period-settlement']=kind==='indexed'&&selectedCurve()?.kind==='period';
@@ -91,9 +93,9 @@ export function componentEditor(host:HTMLElement,catalog:Catalog,template:Templa
  function read(quantity:Quantity):Member{
   calendar.check();
   const rule=value('payment-rule'),lag=rule==='days_after_period_end',adjustment=value('adjustment'),dayBasis=lag?value('day-basis'):null;
-  const payment={frequency:value('frequency'),rule,days:lag?Number(value('payment-number')):null,dayOfMonth:lag?null:Number(value('payment-number')),dayBasis,shortMonth:lag?null:value('short-month'),adjustment,calendar:adjustment!=='unadjusted'||dayBasis==='business_days'?calendar.code():null,implementation:pay.implementation} as PaymentInput;
-  const kind=value('side-kind'),side:Side={kind,quantity:sideQuantity?sideQuantity.read():componentQuantity<Quantity>(template.linkedSlots.length?{kind:'slots',slots:template.linkedSlots,sources:[],assets:[],stage:null,capacity:null,energy:null,hours:null}:quantity,initial?.side.quantity,initial?value('quantity-choice'):'selected'),paymentRule:payment,location:kind==='energy'?value('location'):null,fixedPrice:null,indexPrice:null,attribute:null};
-  if(side.quantity.kind==='profile'){if(!side.quantity.hours)throw Error('Choose the profile hours for this side.');side.quantity={...side.quantity,hours:{...side.quantity.hours,calendar:calendar.code()}};}
+  const payment={frequency:value('frequency'),rule,days:lag?Number(value('payment-number')):null,dayOfMonth:lag?null:Number(value('payment-number')),dayBasis,shortMonth:lag?null:value('short-month'),adjustment,calendar:null,implementation:pay.implementation} as PaymentInput;
+  const kind=value('side-kind'),side:Side={calendarPolicy:calendar.read(),kind,quantity:sideQuantity?sideQuantity.read():componentQuantity<Quantity>(template.linkedSlots.length?{kind:'slots',slots:template.linkedSlots,sources:[],assets:[],stage:null,capacity:null,energy:null,hours:null}:quantity,initial?.side.quantity,initial?value('quantity-choice'):'selected'),paymentRule:payment,location:kind==='energy'?value('location'):null,fixedPrice:null,indexPrice:null,attribute:null};
+  if(side.quantity.kind==='profile'){if(!side.quantity.hours)throw Error('Choose the profile hours for this side.');side.quantity={...side.quantity,hours:{...side.quantity.hours,calendar:null}};}
   if(kind==='fixed'){
    const mode=value('price-kind');side.fixedPrice={kind:mode,quantity:value('price-quantity'),multiplier:value('multiplier'),price:mode==='stepped'?null:value(mode==='escalated'?'initial-price':'price'),rate:mode==='escalated'?value('rate'):null,baseDate:mode==='escalated'?value('base-date'):null,basis:mode==='escalated'?value('basis'):null,steps:mode==='stepped'?value('steps').split('\n').filter(Boolean).map(line=>{const parts=line.split(',');if(parts.length!==2)throw Error('Write each price step as operating date,price.');return{from:parts[0].trim(),price:parts[1].trim()};}):[]};
   }

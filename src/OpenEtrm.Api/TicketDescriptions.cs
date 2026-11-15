@@ -13,11 +13,14 @@ public sealed record TicketField(string Id,string Label,string Meaning,string Ty
 // Soon, on a field, side kind, column or tab, is the hover text of an item drawn as coming soon: it holds no value, is never sent and reads nothing.
 public sealed record TicketColumn(string Id,string Label,string? Unit,string Measure,ImmutableArray<string> Input,string? Soon=null);
 // A new ticket opens with Initial sides of the kind, between Min and Max; a coming-soon kind is offered greyed and none can be added.
-public sealed record TicketSideKind(string Kind,string Pill,string Colour,int Min,int Initial,int Max,ImmutableArray<TicketField> Fields,ImmutableArray<TicketColumn> Columns,string? Soon=null);
+public sealed record TicketCalendarPurposes(bool Delivery,bool Observation,bool Payment);
+public sealed record TicketSideKind(string Kind,string Pill,string Colour,int Min,int Initial,int Max,ImmutableArray<TicketField> Fields,ImmutableArray<TicketColumn> Columns,string? Soon=null)
+{public TicketCalendarPurposes? CalendarPurposes{get;init;}}
 // At most Max sides of the named kinds together; each kind keeps its own Min and Max.
 public sealed record TicketSideLimit(ImmutableArray<string> Kinds,int Max);
 public sealed record TicketTab(string Id,string Label,string? Soon=null);
-public sealed record TicketDescription(string Product,int Version,string RowShape,ImmutableArray<TicketField> TradeFields,ImmutableArray<TicketSideKind> Sides,ImmutableArray<TicketSideLimit> SideLimits,ImmutableArray<TicketColumn> TradeColumns,ImmutableArray<string> Levels,ImmutableArray<TicketTab> Tabs,ImmutableArray<string> Modes);
+public sealed record TicketDescription(string Product,int Version,string RowShape,ImmutableArray<TicketField> TradeFields,ImmutableArray<TicketSideKind> Sides,ImmutableArray<TicketSideLimit> SideLimits,ImmutableArray<TicketColumn> TradeColumns,ImmutableArray<string> Levels,ImmutableArray<TicketTab> Tabs,ImmutableArray<string> Modes)
+{public ImmutableArray<SideCalendarChoice> SideCalendars{get;init;}=[];}
 // A refusal of one draft value, naming its side (null for a trade field) and field, so the ticket shows the reason on that field.
 public sealed class TicketFieldException(string code,string message,string? side,string field):MarketDataException(code,message)
 {

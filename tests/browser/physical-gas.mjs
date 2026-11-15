@@ -3,6 +3,7 @@
 // and a usage tariff proposed for a fee. The gas setup editor follows.
 import {closeNewTrade,newTrade} from './new-trade.mjs';
 import {blotterAt,decemberClose,gasTicket,q} from './gas-ticket.mjs';
+import {chooseCalendars} from './side-calendars.mjs';
 import {run as gasSetup} from './gas-setup.mjs';
 
 export async function runReferenceOnly(actions){
@@ -52,6 +53,7 @@ export async function run(actions){
  await addSide('Fee','fee-1');
  for(const [id,value] of [['fee_direction','pay'],['fee_source','physical-1'],['fee_stage','delivery']])await choose('fee-1',id,value);
  await setInstant('fee-1','fee_payment_at','2021-02-05T00:00:00Z');
+ await chooseCalendars(actions,card('fee-1'),'test_utc_every_day');
  await until(`!!document.querySelector(${q(field('fee-1','fee_tariff')+' .ticket-chip')})&&`+current());
  await check('a delivery-stage fee is offered its usage tariff by name, and the schedule prices it',
   `document.querySelector(${q(field('fee-1','fee_tariff')+' .ticket-chip')}).textContent.includes('synthetic_gas_usage_a')&&!!document.querySelector(${q(card('fee-1')+' .ticket-summary')})`,

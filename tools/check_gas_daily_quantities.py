@@ -3,6 +3,7 @@ from copy import deepcopy
 from uuid import uuid4
 from preview_client import PreviewClient,initial_frame
 from preview_fixture import trade_booking
+from synthetic_side_calendars import side_calendar_policy
 
 
 def assert_batch_equivalence(query,manifest,trade,context,at,include_history=True):
@@ -33,9 +34,10 @@ def run_checks(url,query=None,manifest=None):
     before={'snapshotId':initial_frame(workspace,'2020-12-18')['id'],'convention':'physical_gas_fixed_quantity_v4','knowledgeMode':'current'}
     after={**before,'snapshotId':next(f['id'] for f in workspace['frames'] if f['at'].startswith('2021-01-15T08:'))}
     cat=c.call('gas/catalog',before);point=next(p for p in cat['locations'] if p['deliveryPoint']=='synthetic_gas_point_a')
+    reference=next(item['reference'] for item in cat['sideCalendars'] if item['code']=='test_utc_every_day')
     terms={**before,**trade_booking(),'operationId':str(uuid4()),'bookId':cat['books'][0]['id'],'definitionRevisionId':point['definitionRevisionId'],'gasSetupId':cat['gasSetupId'],'discounting':False,'profile':'fixed_gas_composition_v1',
-      'physicalSides':[{'code':'receipt','pipeline':point['pipeline'],'zone':point['zone'],'deliveryPoint':point['deliveryPoint'],'product':point['product'],'direction':'receive','deliveryFrom':'2021-01-01','deliveryTo':'2021-01-02','quantityBasis':'period_total_equal_days','quantity':'1000','link':None}],
-      'cashSides':[{'code':'payment','role':'consideration','direction':'pay','source':'receipt','stage':'delivery','price':'3','tariffCode':None,'paymentAt':'2021-02-02T00:00:00Z'}]}
+      'physicalSides':[{'code':'receipt','pipeline':point['pipeline'],'zone':point['zone'],'deliveryPoint':point['deliveryPoint'],'product':point['product'],'direction':'receive','deliveryFrom':'2021-01-01','deliveryTo':'2021-01-02','quantityBasis':'period_total_equal_days','quantity':'1000','link':None,'calendarPolicy':side_calendar_policy(reference,delivery=True,observation=False,payment=False)}],
+      'cashSides':[{'code':'payment','role':'consideration','direction':'pay','source':'receipt','stage':'delivery','price':'3','tariffCode':None,'paymentAt':'2021-02-02T00:00:00Z','calendarPolicy':side_calendar_policy(reference,delivery=True,observation=False,payment=True)}]}
     prebooking=c.call('gas/catalog',after)['context']['contextId']
     booked=c.call('gas/composition/book',terms)
     def read(context=after,policy='operational_projection_v1'):

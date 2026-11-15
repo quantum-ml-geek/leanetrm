@@ -3,6 +3,8 @@ using System.Collections.Immutable;
 using System.Globalization;
 using OpenEtrm.Api;
 using OpenEtrm.MarketData;
+if(args is ["--calendar-authoring"]){CalendarAuthoringSchemaChecks.Run();return;}
+if(args is ["--published-clock"]){PublishedClockChecks.Run();return;}
 if(args is ["--curve-display"]){CurveDisplayChecks.Run();return;}
 if(args is ["--pnl-persistence",var pnlFixture]){await PnlPersistenceChecks.Run(pnlFixture);return;}
 if(args is ["--pnl-artifacts"]){PnlArtifactChecks.Run();return;}
@@ -143,6 +145,8 @@ if (args is ["--schedules"])
     PowerImportChecks.Run();
     SwapChangeReviewChecks.Run();
     WholeTermSwapAssemblyChecks.Run();
+    CalendarPolicyReplayChecks.Run();
+    PublishedClockChecks.Run();
     RetainedScheduleLimitChecks.Run();
     TradingReadSelectionChecks.Run();
     await BookedScheduleReaderChecks.Run();

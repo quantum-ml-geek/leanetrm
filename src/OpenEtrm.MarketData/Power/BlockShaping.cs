@@ -86,8 +86,8 @@ public static class BlockShaping
         if(grid.Holidays.IsDefault||blocks.IsDefaultOrEmpty)
             throw new MarketDataException("interval_block_partition","Supply an exact delivery grid and source blocks.");
         IntervalPrices.RequireWindow(grid.Clock,grid.IntervalMinutes,from,to);
-        var first=DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(from,grid.Clock.Zone).DateTime);
-        var last=DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(to.AddTicks(-1),grid.Clock.Zone).DateTime).AddDays(1);
+        var first=DateOnly.FromDateTime(grid.Clock.LocalAt(from).DateTime);
+        var last=DateOnly.FromDateTime(grid.Clock.LocalAt(to.AddTicks(-1)).DateTime).AddDays(1);
         var intervals=ImmutableArray.CreateBuilder<PowerInterval>();
         for(var day=first;day<last;)
         {

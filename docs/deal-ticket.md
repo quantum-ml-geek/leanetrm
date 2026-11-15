@@ -733,23 +733,32 @@ Wide panels place sides alongside each other; panels narrower than 600 pixels
 stack native cards, preserving their controls and entries. Additional sides can
 scroll horizontally without compressing their fields.
 
-### One holiday calendar per side (D397)
+### Explicit schedule calendars (D400)
 
-Swap and PPA entry has one holiday-calendar selector on each side. It supplies
-every owned observation, delivery-quantity and payment rule that consumes a
-calendar, across all periods. Sides retain independent selections. All-days
-observations, all-hours swap delivery and unadjusted calendar-day payments keep
-their existing rules and omit unused calendar inputs. Explicit physical payment
-instants and fixed unadjusted gas payment rules gain no inferred adjustment.
+Each Side has one versioned calendar policy with separate delivery,
+observation/reset and payment bindings. Applicable purposes require an exact
+published calendar even for all-days observations or unadjusted payments.
+Inapplicable purposes are recorded explicitly. All periods of a purpose share
+that binding; independent Sides keep their own policies.
 
-The editor restores a common saved calendar only when all consumed calendars
-agree. Mixed or unavailable saved calendars remain visible and require an
-explicit choice before preview. Exact reference revisions distinguish calendars
-with the same code. Calendar changes invalidate observation qualification;
-copying period terms cannot replace the side selection. PPA profile inputs are
-copied per owning side, while linked quantities continue to follow their source
-side. The backend retains its existing explicit schedule inputs and validation;
-historical mixed-calendar contracts remain readable without migration.
+“Use one calendar for all applicable schedules” copies an explicitly selected
+calendar into the applicable bindings. There is no automatic first selection.
+The controls show differing versions and expose coverage, weekend rules and dated
+open/closed exceptions. Selecting a published product locks its contractual
+calendar and clock. Linked quantity schedules and published fixing events retain
+their source terms; a consuming Side cannot override them.
+
+Changing a calendar, product, clock, rule or payment term invalidates dependent
+qualification and preview evidence. An unavailable version remains visible and
+requires repair under the selected context. Missing or conflicting bindings are
+refused by the same managed operations used by agents and the browser.
+
+Standard payments display the contractual UTC date without converting it to the
+user's zone. Actual invoices, payments and publication events still display their
+instants in that zone. Same-day unpaid cash remains valued; it becomes overdue
+on the next UTC date. Stored incompatible contracts require reviewed migration
+of their terms, exact relationships, identities and retained programs before
+execution under the single supported contract.
 
 Booking is an open form. All supported instrument types are discoverable before
 ownership or counterparties are entered. Instrument terms precede ownership and

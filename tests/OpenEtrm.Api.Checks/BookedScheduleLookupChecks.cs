@@ -68,12 +68,21 @@ internal static class BookedScheduleLookupChecks
             new DateTimeOffset(2040,2,3,0,0,0,TimeSpan.Zero),FloatingAveraging.ObservationArithmetic,
             [..sources.Select(value=>new SwapProjection(value.Market,value.Contract))],[],null,null,null,null,new ExactRatio(1,1),
             FloatingSide.ContractObservationImplementation){ContractObservations=sources};
-        var sourceSide=new FloatingSide(Guid.NewGuid(),quote,new(ExactDecimal.Parse("1"),quote.Quantity),[sourcePeriod]);
+        var sourceSide=new FloatingSide(Guid.NewGuid(),quote,new(ExactDecimal.Parse("1"),quote.Quantity),[sourcePeriod],SyntheticSideCalendars.FloatingPeriods([sourcePeriod]));
         var sourceSwap=new FinancialSwapInstrument(Guid.NewGuid(),
             [new(sourceSide,ExactDecimal.Parse("-1")),new(sourceSide,ExactDecimal.Parse("1"))],FinancialSwapInstrument.Implementation,false);
         foreach(var (at,eligible) in new[]{(sources[0].FixingAt.AddTicks(-1),true),(sources[0].FixingAt,false),(sources[0].FixingAt.AddTicks(1),false)})
             if(SwapStore.ScheduledAmendmentEligible(sourceSwap,at)!=eligible)
                 throw new Exception("Scheduled source amendments must retain their explicit first-observation boundary after schedule-marker retirement.");
+        var noon=new DateTimeOffset(2040,2,1,12,0,0,TimeSpan.Zero);
+        var dueSources=sources.Select((o,n)=>o with{Contract=o.Contract with{Expiry=noon.AddYears(1)},
+            Observation=o.Observation with{FixingAt=noon.AddMinutes(n)},SelectionAt=noon.AddMinutes(n)}).ToImmutableArray();
+        var duePeriod=sourcePeriod with{FirstFixingAt=noon,PaymentAt=noon.AddHours(-12),ContractObservations=dueSources,
+            Projections=[..dueSources.Select(o=>new SwapProjection(o.Market,o.Contract))]};
+        var dueSide=new FloatingSide(Guid.NewGuid(),quote,new(ExactDecimal.Parse("1"),quote.Quantity),[duePeriod],SyntheticSideCalendars.FloatingPeriods([duePeriod]));
+        var dueSwap=new FinancialSwapInstrument(Guid.NewGuid(),[new(dueSide,ExactDecimal.Parse("-1")),new(dueSide,ExactDecimal.Parse("1"))],FinancialSwapInstrument.Implementation,false);
+        if(!SwapStore.ScheduledAmendmentEligible(dueSwap,noon.AddHours(-2))||SwapStore.ScheduledAmendmentEligible(dueSwap,noon))
+            throw new Exception("A midnight payment coordinate cannot block an amendment at 10:00 before the same-day noon fixing.");
         var sourceDefinition=ScheduleDefinitionCompiler.Generate(sourceSide);
         var sourceProgram=Reload(sourceDefinition);
         var decoded=BookedScheduleLookups.Contracts(fixture.Data,sourceProgram);
@@ -123,8 +132,8 @@ internal static class BookedScheduleLookupChecks
                 new DateTimeOffset(2040,2+n,2,16,0,0,TimeSpan.Zero),new(definitions,Guid.NewGuid()),R("publication"),IndexFixing.SupportedImplementation))];
             var periods=Contracts.Select((contract,n)=>new FloatingSide(Guid.NewGuid(),Selection,quote,new(ExactDecimal.Parse("1"),quote.Quantity),
                 contract.DeliveryFrom,contract.DeliveryTo,[Fixings[n]],new DateTimeOffset(contract.DeliveryTo.AddDays(3).ToDateTime(TimeOnly.MinValue,DateTimeKind.Utc)),
-                FloatingAveraging.MonthlyIndexPrice,[new(new(new(definitions,"projection"),contract.Key),contract)],FloatingSide.IndexedImplementation).Periods[0]).ToImmutableArray();
-            Side=new(Guid.NewGuid(),Selection,quote,new(ExactDecimal.Parse("1"),quote.Quantity),periods);
+                FloatingAveraging.MonthlyIndexPrice,[new(new(new(definitions,"projection"),contract.Key),contract)],FloatingSide.IndexedImplementation,SyntheticSideCalendars.Dated(true,null,null)).Periods[0]).ToImmutableArray();
+            Side=new(Guid.NewGuid(),Selection,quote,new(ExactDecimal.Parse("1"),quote.Quantity),periods,SyntheticSideCalendars.FloatingPeriods(periods));
             JsonElement Row(object value)=>JsonSerializer.SerializeToElement(value);
             Dictionary<string,ImmutableArray<JsonElement>> rows=new()
             {

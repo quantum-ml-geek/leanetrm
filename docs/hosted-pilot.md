@@ -17,7 +17,12 @@ collector uses a separate outbound network. No Swarm scheduling state is require
 
 Prepare a fresh installation with `tools/provision_hosted.py`, supplying the exact
 HTTPS origin, installation UUID, qualified container tzdb release and a new private
-output directory. An optional private collection contract supplies exact source
+output directory. To publish the supplied UTC, PJM and ERCOT clocks, also supply
+`--clock-from` and exclusive `--clock-to` dates, the qualified `--dotnet` runtime
+and `--api` assembly. The managed renderer verifies the named source release and
+captures that explicit coverage before the reference revision is sealed. Without
+that selection, the initial units-only revision contains no clocks. A collection
+installation requires clock publication. An optional private collection contract supplies exact source
 memberships, units, clocks, request rates and explicit job switches. No sources,
 credentials or real prices are included in the public repository. The prepared
 SQL refuses an existing tenant/catalog and creates no trades or observations.
@@ -200,8 +205,12 @@ the entire job batch from succeeding. Secrets and response bodies are not logged
 The collector cannot author its market calendar. Prepare its exact-version UTC
 operating-day boundaries using the managed API executable's
 `--render-power-days REQUEST.json OUTPUT.sql` mode, with an explicit supported date
-range, retained clock rules and the matching installed tzdb. Apply the reviewed SQL
-as operator. Missing day coverage blocks collection; it never invents 24 hours.
+range and exact `clockCodes` in the selected reference revision. The generated
+SQL calls the operator-only idempotent publisher; boundaries and fingerprints
+come from that revision's published clock capture. Prepare the capture with
+`--render-clock-captures` under its explicitly named source release and coverage
+before sealing the reference. Apply reviewed SQL as operator. Missing coverage
+or a mismatched retained day blocks collection; it never invents 24 hours.
 A changed clock contract requires a new reference revision and calendar publication.
 
 The managed `--collect-power scheduled` command takes private configuration through

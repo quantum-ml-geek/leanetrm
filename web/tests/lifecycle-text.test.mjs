@@ -11,7 +11,7 @@ test('measures are separate figures with their labelled sum, their discounting b
  const lines=measureLines({...measures,unrealized:'1445'},'USD',instant);
  assert.deepEqual(lines.slice(0,3).map(l=>[l.label,l.value]),[['Unrealized (remaining delivery)','1,445 USD'],['Realized, unsettled (delivered, not paid)','-10,855 USD'],['Unrealized + realized unsettled','-9,410 USD']]);
  assert.deepEqual(lines[3],{label:'Discounting',value:'undiscounted'});
- assert.deepEqual(lines.slice(4).map(l=>[l.label,l.value]),[['Expected cash by due date · not added to the total',''],['Due @2026-11-10','-9,300 USD'],['Due @2026-12-10','-9,648 USD']]);
+ assert.deepEqual(lines.slice(4).map(l=>[l.label,l.value]),[['Expected cash by due date · not added to the total',''],['Due Nov 10, 2026','-9,300 USD'],['Due Dec 10, 2026','-9,648 USD']]);
 });
 
 test('a measure that is not a decimal is refused, never shown as a guess',()=>{
@@ -26,13 +26,13 @@ test('the quantity basis reads as an estimate with its allocation pending; other
 
 test('an unpaid cash row shows its due date and never a payment date; a paid row shows only its recorded payment date',()=>{
  const unpaid=lifecycleLines(row({lifecycle:{cash:'AccruedUnpaid',coverage:'RealizedUnsettled'},accrued:'-300',outstanding:'-300'}),instant);
- assert.ok(unpaid.includes('Due date: @2026-11-10')&&unpaid.includes('Cash: Accrued unpaid')&&unpaid.includes('Realized, unsettled (delivered, not paid)')&&!unpaid.some(l=>l.startsWith('Paid on')),unpaid);
+ assert.ok(unpaid.includes('Due date: Nov 10, 2026')&&unpaid.includes('Cash: Accrued unpaid')&&unpaid.includes('Realized, unsettled (delivered, not paid)')&&!unpaid.some(l=>l.startsWith('Paid on')),unpaid);
  const paid=lifecycleLines(row({lifecycle:{cash:'Paid'},paid:'-290',outstanding:'0',paidAt:'2026-10-10T00:00:00Z'}),instant);
  assert.ok(paid.includes('Paid on @2026-10-10')&&!paid.some(l=>l.startsWith('Due date')),paid);
  const part=lifecycleLines(row({lifecycle:{cash:'PartPaid'},paid:'-100',outstanding:'-190',paidAt:'2026-10-10T00:00:00Z'}),instant);
- assert.ok(part.includes('Paid on @2026-10-10')&&part.includes('Due date: @2026-11-10')&&part.includes('Cash: Part paid'),part);
+ assert.ok(part.includes('Paid on @2026-10-10')&&part.includes('Due date: Nov 10, 2026')&&part.includes('Cash: Part paid'),part);
  const remaining=lifecycleLines(row({lifecycle:{delivery:'NotStarted',cash:'Remaining',coverage:'Unrealized'},paidAt:'2026-10-10T00:00:00Z'}),instant);
- assert.ok(remaining.includes('Due date: @2026-11-10')&&remaining.includes('Unrealized (remaining delivery)')&&!remaining.some(l=>l.startsWith('Paid on')),remaining);
+ assert.ok(remaining.includes('Due date: Nov 10, 2026')&&remaining.includes('Unrealized (remaining delivery)')&&!remaining.some(l=>l.startsWith('Paid on')),remaining);
 });
 
 test('a physical in-term row is not cash: settlement is not applicable, never Paid',()=>{

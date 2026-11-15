@@ -17,12 +17,17 @@ def run_checks(url, query, manifest):
           'profile':profile['code'],'quantityBasis':profile['quantityBasis'],'tolerance':profile['tolerance'],'discounting':profile['discounting'],
           'deliveryFrom':'2021-01-01T00:00:00Z','deliveryTo':'2021-02-01T00:00:00Z','paymentAt':'2021-02-01T00:00:00Z',
           'quantity':'1000','direction':'receive','considerationDirection':'pay','fixedPrice':'70','handlingFee':'0.1','handlingFeeDirection':'receive'}
+    from synthetic_side_calendars import side_calendar_policy
+    reference=dict(revision=dict(catalogId=manifest['referenceCatalogId'],revisionId=manifest['referenceRevisionId']),code='test_utc_every_day')
+    body.update(deliveryCalendarPolicy=side_calendar_policy(reference,delivery=True,observation=False,payment=False),
+                considerationCalendarPolicy=side_calendar_policy(reference,delivery=True,observation=False,payment=True),
+                feeCalendarPolicy=side_calendar_policy(reference,delivery=True,observation=False,payment=True),handlingFeePaymentAt='2021-02-05T00:00:00Z')
     c.call('crude/preview',{**body,'unmodeledTerm':'x'},expected=400)
     c.call('crude/preview',{k:v for k,v in body.items() if k!='handlingFee'},expected=400)
     for change in [{'profile':None},{'quantityBasis':'observed_volume'},{'tolerance':'0.1'},{'discounting':True},
                    {'direction':None},{'considerationDirection':None},{'handlingFeeDirection':None},{'assignmentCode':'unknown'},
                    {'deliveryFrom':'2021-01-01T01:00:00+01:00'},{'deliveryTo':'2021-02-02T00:00:00Z'},
-                   {'paymentAt':'2021-01-31T00:00:00Z'},{'quantity':'0'},
+                   {'paymentAt':'2021-01-31T00:00:00Z'},{'handlingFeePaymentAt':None},{'handlingFeePaymentAt':'2021-01-31T00:00:00Z'},{'quantity':'0'},
                    {'deliveryFrom':'2021-01-01T00:00:00.0000001Z'},{'paymentAt':'2021-02-01T00:00:00.0000001Z'}]:
         c.call('crude/preview',{**body,**change},expected=422)
     value=c.call('crude/preview',body)
@@ -30,7 +35,7 @@ def run_checks(url, query, manifest):
     assert [Decimal(side['presentValue']) for side in value['sides']]==[80000,-70000,100]
     assert Decimal(c.call('crude/preview',{**body,'deliveryFrom':'2021-01-12T06:30:00Z','deliveryTo':'2021-01-12T08:30:00Z'})['presentValue'])==10100
     assert Decimal(c.call('crude/preview',{**body,'direction':'deliver','considerationDirection':'receive'})['presentValue'])==-9900
-    assert Decimal(c.call('crude/preview',{**body,'handlingFee':None,'handlingFeeDirection':None})['presentValue'])==10000
+    assert Decimal(c.call('crude/preview',{**body,'handlingFee':None,'handlingFeeDirection':None,'feeCalendarPolicy':None,'handlingFeePaymentAt':None})['presentValue'])==10000
     before=query(f"SELECT count(*) FROM trading.crude_trade_revisions WHERE catalog_id='{manifest['catalogId']}';")
     booked=c.call('crude/book',body)
     assert c.call('crude/book',body)==booked
@@ -40,6 +45,8 @@ def run_checks(url, query, manifest):
     loaded=c.call('crude/editor',{'context':context,'tradeId':booked['tradeId']})
     assert loaded['valuation']=={key:value[key] for key in loaded['valuation']}
     assert loaded['terms']['considerationDirection']=='pay' and loaded['terms']['handlingFeeDirection']=='receive'
+    assert loaded['terms']['handlingFeePaymentAt']=='2021-02-05T00:00:00Z'
+    assert query(f"SELECT (payment_at AT TIME ZONE 'UTC')::date||'/'||(handling_fee_payment_at AT TIME ZONE 'UTC')::date FROM trading.crude_instruments WHERE instrument_id='{booked['instrumentId']}';")== '2021-02-01/2021-02-05'
     listed=next(row for row in c.call('crude/directory',context)['trades'] if row['tradeId']==booked['tradeId'])
     assert listed['tradeReference'].startswith('TR-'), listed
     prior={**context,'knowledgeMode':'retained','contextId':value['context']['contextId']}
@@ -105,7 +112,7 @@ def run_checks(url, query, manifest):
         query("DROP POLICY crude_test_hidden_grade ON ref_data.crude_grades;")
     c.call('profile',{'profile':'trader'})
     check_publication_expiry(c,query,manifest,positions,principal,grants)
-    equal_cash={**body,'operationId':str(uuid4()),'bookId':other,'handlingFee':'70','handlingFeeDirection':'receive'}
+    equal_cash={**body,'operationId':str(uuid4()),'bookId':other,'handlingFee':'70','handlingFeeDirection':'receive','handlingFeePaymentAt':body['paymentAt']}
     equal_booked=c.call('crude/book',equal_cash)
     equal_value=c.call('trading/position',{**exact,'tradeId':equal_booked['tradeId'],'bindingId':equal_booked['instrumentId']})
     assert Decimal(equal_value['holding']['presentValue'])==80000, 'Oppositely signed identical cash sides must cancel without erasing physical delivery'
@@ -121,6 +128,7 @@ def run_shape_checks(query, manifest, receipt):
     catalog=manifest['catalogId']; instrument=receipt['instrumentId']; trade=receipt['tradeId']
     operation=query(f"SELECT operation_id FROM trading.crude_trade_revisions WHERE(catalog_id,trade_id)=('{catalog}','{trade}');")
     cases=[
+        (0,"UPDATE ref_data.calendars SET coverage_to='2021-01-02' WHERE(catalog_id,revision_id,code) IN(SELECT b.reference_catalog_id,b.reference_revision_id,b.calendar_code FROM trading.side_calendar_bindings b JOIN trading.side_schedules h ON(h.catalog_id,h.side_id)=(b.catalog_id,b.side_id) WHERE(h.catalog_id,h.id,b.purpose)=(c,schedule,'Delivery'))",'calendar_coverage'),
         (0,"UPDATE trading.side_schedule_rows SET parameters=jsonb_build_object('numerator','2','denominator','1') WHERE(catalog_id,schedule_id,operation)=(c,schedule,'quantity_literal')",'crude_schedule_quantity'),
         (0,"UPDATE trading.side_schedule_grids SET origin=origin+interval '1 hour' WHERE(catalog_id,schedule_id)=(c,schedule)",'crude_schedule_grid'),
         (0,"UPDATE trading.side_schedule_bindings SET coordinate=jsonb_set(coordinate::jsonb,'{StandardTemperature}','\"15\"')::text WHERE(catalog_id,schedule_id,kind)=(c,schedule,'crude_assignment')",'crude_schedule_sources'),
@@ -141,6 +149,7 @@ def run_shape_checks(query, manifest, receipt):
         EXCEPTION WHEN raise_exception THEN IF SQLERRM<>'{expected}' THEN RAISE;END IF;END;
         """)
     query("""BEGIN;
+     ALTER TABLE ref_data.calendars DISABLE TRIGGER USER;
      ALTER TABLE trading.side_schedule_rows DISABLE TRIGGER USER;
      ALTER TABLE trading.side_schedule_edges DISABLE TRIGGER USER;
      ALTER TABLE trading.side_schedule_grids DISABLE TRIGGER USER;

@@ -76,36 +76,36 @@ internal static class PpaAcceptanceChecks
             Reject("ppa_segment_boundary",()=>DeliveryCoverage.ValidateForwardBoundary(boundary,boundary.AddMinutes(30),clock,60));
         });
         Check("asset-free fixed physical composition has explicit opposing memberships",()=>{
-            var physical=new PowerPhysicalSide(Guid.NewGuid(),f.Terms(f.Profile),f.R("synthetic_node"));
-            var strike=new FixedSide(Guid.NewGuid(),f.Terms(new SlotQuantity([new(PpaRole.EnergyDelivery)])),new FlatPrice(new(D("40"),f.EnergyPrice)));
+            var physical=new PowerPhysicalSide(Guid.NewGuid(),f.Terms(f.Profile),f.R("synthetic_node"),SyntheticSideCalendars.Interval(f.Terms(f.Profile),false));
+            var strike=new FixedSide(Guid.NewGuid(),f.Terms(new SlotQuantity([new(PpaRole.EnergyDelivery)])),new FlatPrice(new(D("40"),f.EnergyPrice)),SyntheticSideCalendars.Interval(f.Terms(new SlotQuantity([new(PpaRole.EnergyDelivery)])),false));
             var instrument=new PpaInstrument(Guid.NewGuid(),f.Definitions,f.Reference,
                 [new(new(PpaRole.EnergyDelivery),physical,D("1")),new(new(PpaRole.StrikePayment),strike,D("-1"))],false,"ppa_instrument_v2");
             Equal(instrument.Currency,f.Currency);Equal(instrument.UnitQuantity,f.UnitMw);
         });
         Check("two strike payments cannot silently consume one delivery twice",()=>{
-            var physical=new PowerPhysicalSide(Guid.NewGuid(),f.Terms(f.Profile),f.R("synthetic_node"));
-            FixedSide Strike(string price)=>new(Guid.NewGuid(),f.Terms(new SlotQuantity([new(PpaRole.EnergyDelivery)])),new FlatPrice(new(D(price),f.EnergyPrice)));
+            var physical=new PowerPhysicalSide(Guid.NewGuid(),f.Terms(f.Profile),f.R("synthetic_node"),SyntheticSideCalendars.Interval(f.Terms(f.Profile),false));
+            FixedSide Strike(string price)=>new(Guid.NewGuid(),f.Terms(new SlotQuantity([new(PpaRole.EnergyDelivery)])),new FlatPrice(new(D(price),f.EnergyPrice)),SyntheticSideCalendars.Interval(f.Terms(new SlotQuantity([new(PpaRole.EnergyDelivery)])),false));
             Reject("ppa_composition",()=>new PpaInstrument(Guid.NewGuid(),f.Definitions,f.Reference,
                 [new(new(PpaRole.EnergyDelivery),physical,D("1")),new(new(PpaRole.StrikePayment),Strike("40"),D("-1")),new(new(PpaRole.StrikePayment,1),Strike("50"),D("-1"))],false,"ppa_instrument_v2"));
         });
         Check("an explicit fixed charge may retain identical terms to a distinct strike side",()=>{
-            var physical=new PowerPhysicalSide(Guid.NewGuid(),f.Terms(f.Profile),f.R("synthetic_node"));
-            FixedSide Cash()=>new(Guid.NewGuid(),f.Terms(new SlotQuantity([new(PpaRole.EnergyDelivery)])),new FlatPrice(new(D("40"),f.EnergyPrice)));
+            var physical=new PowerPhysicalSide(Guid.NewGuid(),f.Terms(f.Profile),f.R("synthetic_node"),SyntheticSideCalendars.Interval(f.Terms(f.Profile),false));
+            FixedSide Cash()=>new(Guid.NewGuid(),f.Terms(new SlotQuantity([new(PpaRole.EnergyDelivery)])),new FlatPrice(new(D("40"),f.EnergyPrice)),SyntheticSideCalendars.Interval(f.Terms(new SlotQuantity([new(PpaRole.EnergyDelivery)])),false));
             var instrument=new PpaInstrument(Guid.NewGuid(),f.Definitions,f.Reference,
                 [new(new(PpaRole.EnergyDelivery),physical,D("1")),new(new(PpaRole.StrikePayment),Cash(),D("-1")),new(new(PpaRole.FixedCharge),Cash(),D("1"))],false,"ppa_instrument_v2");
             Equal(instrument.Memberships.Length,3);
         });
         Check("a reusable payment slot cannot become its own quantity source",()=>{
-            var physical=new PowerPhysicalSide(Guid.NewGuid(),f.Terms(f.Profile),f.R("synthetic_node"));
+            var physical=new PowerPhysicalSide(Guid.NewGuid(),f.Terms(f.Profile),f.R("synthetic_node"),SyntheticSideCalendars.Interval(f.Terms(f.Profile),false));
             Reject("ppa_quantity_reference",()=>{
-                var strike=new FixedSide(Guid.NewGuid(),f.Terms(new SlotQuantity([new(PpaRole.StrikePayment)])),new FlatPrice(new(D("40"),f.EnergyPrice)));
+                var strike=new FixedSide(Guid.NewGuid(),f.Terms(new SlotQuantity([new(PpaRole.StrikePayment)])),new FlatPrice(new(D("40"),f.EnergyPrice)),SyntheticSideCalendars.Interval(f.Terms(new SlotQuantity([new(PpaRole.StrikePayment)])),false));
                 _=new PpaInstrument(Guid.NewGuid(),f.Definitions,f.Reference,
                     [new(new(PpaRole.EnergyDelivery),physical,D("1")),new(new(PpaRole.StrikePayment),strike,D("-1"))],false,"ppa_instrument_v2");
             });
         });
         Check("fixed physical strike must bind its energy delivery rather than silently select another source",()=>{
-            var physical=new PowerPhysicalSide(Guid.NewGuid(),f.Terms(f.Profile),f.R("synthetic_node"));
-            var strike=new FixedSide(Guid.NewGuid(),f.Terms(f.Profile),new FlatPrice(new(D("40"),f.EnergyPrice)));
+            var physical=new PowerPhysicalSide(Guid.NewGuid(),f.Terms(f.Profile),f.R("synthetic_node"),SyntheticSideCalendars.Interval(f.Terms(f.Profile),false));
+            var strike=new FixedSide(Guid.NewGuid(),f.Terms(f.Profile),new FlatPrice(new(D("40"),f.EnergyPrice)),SyntheticSideCalendars.Interval(f.Terms(f.Profile),false));
             Reject("ppa_composition",()=>new PpaInstrument(Guid.NewGuid(),f.Definitions,f.Reference,
                 [new(new(PpaRole.EnergyDelivery),physical,D("1")),new(new(PpaRole.StrikePayment),strike,D("-1"))],false,"ppa_instrument_v2"));
         });
@@ -184,7 +184,7 @@ internal static class PpaAcceptanceChecks
             var energy=f.Physical(volume:true).Memberships[0];
             var rec=f.WithCertificate(cash:false).Memberships.Single(m=>m.Slot.Role==PpaRole.CertificateDelivery);
             var capacity=f.CapacityAgreement().Memberships[0];
-            var fee=new FixedSide(Guid.NewGuid(),energy.Side.Terms with {Quantity=new SlotQuantity([energy.Slot]),InputPorts=[new(energy.Slot,f.Energy.Key,energy.Side.Terms.Schedule)]},new FlatPrice(new(D("2"),f.EnergyPrice)));
+            var fee=new FixedSide(Guid.NewGuid(),energy.Side.Terms with {Quantity=new SlotQuantity([energy.Slot]),InputPorts=[new(energy.Slot,f.Energy.Key,energy.Side.Terms.Schedule)]},new FlatPrice(new(D("2"),f.EnergyPrice)),SyntheticSideCalendars.Interval(energy.Side.Terms with {Quantity=new SlotQuantity([energy.Slot]),InputPorts=[new(energy.Slot,f.Energy.Key,energy.Side.Terms.Schedule)]},false));
             var members=ImmutableArray.Create(energy,rec,capacity,new PpaMembership(new(PpaRole.FixedCharge),fee,D("-1")));
             Reject("ppa_composition",()=>new PpaInstrument(Guid.NewGuid(),f.Definitions,f.Reference,members,false,"ppa_instrument_v2"));
             var instrument=new PpaInstrument(Guid.NewGuid(),f.Definitions,f.Reference,members,false,"ppa_composed_instrument_v1");
@@ -234,7 +234,7 @@ internal static class PpaAcceptanceChecks
             {
                 OracleValues[$"08_capacity_components/{label}_quote"]=Reject("ppa_quantity_unit",()=>
                 {
-                    var original=f.CapacityAgreement();var cash=new FixedSide(Guid.NewGuid(),original.Memberships[1].Side.Terms,new FlatPrice(new(D("4"),unit)));
+                    var original=f.CapacityAgreement();var cash=new FixedSide(Guid.NewGuid(),original.Memberships[1].Side.Terms,new FlatPrice(new(D("4"),unit)),SyntheticSideCalendars.Interval(original.Memberships[1].Side.Terms,false));
                     var invalid=new PpaInstrument(Guid.NewGuid(),f.Definitions,f.Reference,[original.Memberships[0],new(new(PpaRole.CapacityPayment),cash,D("-1"))],false,"ppa_instrument_v2");
                     f.Prepare(market,[invalid]);
                 });
@@ -248,8 +248,8 @@ internal static class PpaAcceptanceChecks
         Check("capacity assets retain their own normalized monthly components and location prices",()=>{
             var first=f.Asset with {Versions=[new(f.From,f.To,D("200"),D("60"))]};
             var second=new GenerationAsset(new(f.Definitions,"synthetic_second_generator"),f.R("synthetic_second_node"),f.Capacity,f.R("synthetic_clock"),f.Clock,[new(f.From,f.To,D("100"),D("40"))]);
-            var physical=new CapacityDeliverySide(Guid.NewGuid(),f.Terms(new AccreditedQuantity([first.Key,second.Key])),f.CapacityDays.Key,"mw_day_per_operating_day_v1");
-            var cash=new FixedSide(Guid.NewGuid(),f.Terms(new SlotQuantity([new(PpaRole.CapacityDelivery)]),normalization:f.Normalization([first.Key,second.Key])),new FlatPrice(new(D("0"),f.CapacityPrice)));
+            var physical=new CapacityDeliverySide(Guid.NewGuid(),f.Terms(new AccreditedQuantity([first.Key,second.Key])),f.CapacityDays.Key,"mw_day_per_operating_day_v1",SyntheticSideCalendars.Interval(f.Terms(new AccreditedQuantity([first.Key,second.Key])),false));
+            var cash=new FixedSide(Guid.NewGuid(),f.Terms(new SlotQuantity([new(PpaRole.CapacityDelivery)]),normalization:f.Normalization([first.Key,second.Key])),new FlatPrice(new(D("0"),f.CapacityPrice)),SyntheticSideCalendars.Interval(f.Terms(new SlotQuantity([new(PpaRole.CapacityDelivery)]),normalization:f.Normalization([first.Key,second.Key])),false));
             var instrument=new PpaInstrument(Guid.NewGuid(),f.Definitions,f.Reference,[new(new(PpaRole.CapacityDelivery),physical,D("1")),new(new(PpaRole.CapacityPayment),cash,D("-1"))],false,"ppa_instrument_v2");
             var assignments=f.Assignments.Add(new("synthetic_other_capacity",second.Location,ValuedAttribute.Capacity,f.From,f.To,f.C("synthetic_capacity_other"),f.CapacityPrice,D("0")));
             var inputs=f.Prepare(market,[instrument],asset:first,extraAssets:[second],assignments:assignments);
@@ -314,7 +314,7 @@ internal static class PpaAcceptanceChecks
             OracleValues["02_coverage_partition/invalid_boundary"]=Reject("ppa_segment_boundary",()=>session.Value(instrument,new(from,from.AddMinutes(90)),discount));
         });
         Check("known generated certificates survive their delivery coverage as current vintage holdings",()=>{
-            var instrument=f.WithCertificate();var valueAt=PpaAcceptanceFixture.At("2031-12-10T00:00:00Z");
+            var instrument=f.WithCertificate();var valueAt=PpaAcceptanceFixture.At("2031-12-11T00:00:00Z");
             var observed=f.Market(valueAt,actuals:_=>"40");
             var meter=f.Meter(h=>h.Start==f.From?"50":"0");var inputs=f.Prepare(observed,[instrument],meter);
             var session=inputs.Session(observed.Build);
@@ -384,8 +384,8 @@ internal static class PpaAcceptanceChecks
         });
         Check("independent physical and cash dates discount gross amounts before summing and reverse once",()=>{
             var source=f.Market(at,energy:"1");
-            var physical=new PowerPhysicalSide(Guid.NewGuid(),f.Terms(f.Profile,10),f.Asset.Location);
-            var cash=new FixedSide(Guid.NewGuid(),f.Terms(new SlotQuantity([new(PpaRole.EnergyDelivery)]),20),new FlatPrice(new(D("1"),f.EnergyPrice)));
+            var physical=new PowerPhysicalSide(Guid.NewGuid(),f.Terms(f.Profile,10),f.Asset.Location,SyntheticSideCalendars.Interval(f.Terms(f.Profile,10),false));
+            var cash=new FixedSide(Guid.NewGuid(),f.Terms(new SlotQuantity([new(PpaRole.EnergyDelivery)]),20),new FlatPrice(new(D("1"),f.EnergyPrice)),SyntheticSideCalendars.Interval(f.Terms(new SlotQuantity([new(PpaRole.EnergyDelivery)]),20),false));
             var members=ImmutableArray.Create(new PpaMembership(new(PpaRole.EnergyDelivery),physical,D("1")),new(new(PpaRole.StrikePayment),cash,D("-1")));
             var instrument=new PpaInstrument(Guid.NewGuid(),f.Definitions,f.Reference,members,true,"ppa_instrument_v2");
             var reverse=new PpaInstrument(Guid.NewGuid(),f.Definitions,f.Reference,[..members.Select(m=>m with {Coefficient=D("-1")*m.Coefficient})],true,"ppa_instrument_v2");
@@ -425,16 +425,16 @@ internal static class PpaAcceptanceChecks
     {
         var count=0;
         void Check(string label,Action action){action();count++;Console.WriteLine("PASS PPA independent acceptance: "+label);}
-        var f=new PpaAcceptanceFixture();var at=PpaAcceptanceFixture.At("2031-12-10T00:00:00Z");
+        var f=new PpaAcceptanceFixture();var at=PpaAcceptanceFixture.At("2031-12-11T00:00:00Z");
         var certificateSource=f.Source with {Key=new(f.Definitions,"synthetic_certificate_generation"),ForecastSeries=Guid.NewGuid(),MeteredSeries=Guid.NewGuid()};
         var certificateForecast=f.Forecast() with {Id=certificateSource.ForecastSeries};
         var certificateMeter=f.Meter(h=>h.Start==f.From?"250":"0") with {Id=certificateSource.MeteredSeries};
         var forecast=f.Forecast() with {Cells=[..f.Forecast().Cells.Select(c=>c.Start==f.From.AddHours(1)?c with {Value=D("0.125")}:c)]};
         var meter=f.Meter(h=>h.Start==f.From?"50":h.Start==f.From.AddHours(1)?null:"0");
-        var indexed=new FloatingSide(Guid.NewGuid(),f.Terms(f.Volume),new(f.C("synthetic_energy"),D("1"),new(D("0"),f.EnergyPrice),null));
-        var future=new FixedSide(Guid.NewGuid(),f.Terms(f.Profile,20,normalization:f.Normalization([f.Asset.Key])),new FlatPrice(new(D("0.625"),f.EnergyPrice)));
+        var indexed=new FloatingSide(Guid.NewGuid(),f.Terms(f.Volume),new(f.C("synthetic_energy"),D("1"),new(D("0"),f.EnergyPrice),null),SyntheticSideCalendars.Interval(f.Terms(f.Volume),true));
+        var future=new FixedSide(Guid.NewGuid(),f.Terms(f.Profile,20,normalization:f.Normalization([f.Asset.Key])),new FlatPrice(new(D("0.625"),f.EnergyPrice)),SyntheticSideCalendars.Interval(f.Terms(f.Profile,20,normalization:f.Normalization([f.Asset.Key])),false));
         var certificate=new CertificateDeliverySide(Guid.NewGuid(),f.Terms(new VolumeQuantity([certificateSource.Key],QuantityStage.Generated,f.Energy.Key),scheduleQuantity:f.Certificates.Key),f.Certificates.Key,D("1"),
-            "asset_generation_at_stage_v1","held_at_current_vintage_mark_v1","none_recorded_v1");
+            "asset_generation_at_stage_v1","held_at_current_vintage_mark_v1","none_recorded_v1",SyntheticSideCalendars.Interval(f.Terms(new VolumeQuantity([certificateSource.Key],QuantityStage.Generated,f.Energy.Key),scheduleQuantity:f.Certificates.Key),false));
         var members=ImmutableArray.Create(new PpaMembership(new(PpaRole.IndexedPayment),indexed,D("1")),new(new(PpaRole.StrikePayment),future,D("1")),new(new(PpaRole.CertificateDelivery),certificate,D("1")));
         PpaInstrument Instrument(bool discounting)=>new(Guid.NewGuid(),f.Definitions,f.Reference,members,discounting,"ppa_instrument_v2");
         var instrument=Instrument(true);var coverage=new DeliveryCoverage(f.From,f.From.AddHours(2));
@@ -445,11 +445,11 @@ internal static class PpaAcceptanceChecks
         ValueMeasureSet Value(IntervalValuationInputs prepared,PpaAcceptanceFixture.MarketInputs market,PpaInstrument selected,ISideDiscounting df)=>
             ValueMeasures.From(prepared.Session(market.Build).Value(selected,coverage,df)).Scale(D("80"));
         var value=Value(inputs,source,instrument,discount);
-        Check("due equality preserves mixed knowledge on one payment side and excludes both balances from primary",()=>{
+        Check("overdue dates preserve mixed knowledge on one payment side and exclude both balances from primary",()=>{
             Money(value.OverdueKnownBalance,"800");Money(value.OverdueEstimated,"400");Money(value.ValueExcludingOverdue,"590");
             Equal(value.CompletePv,null);Equal(value.UnavailableReason,"due_cash_policy_required");
             var cash=value.Rows.Where(r=>r.SideId==indexed.Id).ToArray();Equal(cash.Length,2);
-            Equal(cash.Select(r=>r.ValueAt).Distinct().Count(),1);Equal(cash[0].ValueAt,at);
+            Equal(cash.Select(r=>r.ValueAt).Distinct().Count(),1);Equal(cash[0].ValueAt,at.AddDays(-1));
             Equal(cash[0].Coverage,ValueCoverage.OverdueBalance);Equal(cash[1].Coverage,ValueCoverage.OverdueEstimate);
             Equal(cash[0].PresentValue,null);Equal(cash[1].PresentValue,null);
             var undiscounted=Instrument(false);var disabled=Value(Inputs(source,undiscounted,meter,at),source,undiscounted,new ExplicitDiscounting(D("1"),DiscountFactorSource.Undiscounted));
@@ -480,7 +480,7 @@ internal static class PpaAcceptanceChecks
             }
         });
         Check("complete PV is available only with no overdue rows while permitted estimates stay labelled",()=>{
-            var zero=new FloatingSide(Guid.NewGuid(),f.Terms(f.Volume,20),new(f.C("synthetic_energy"),D("1"),new(D("-40"),f.EnergyPrice),null));
+            var zero=new FloatingSide(Guid.NewGuid(),f.Terms(f.Volume,20),new(f.C("synthetic_energy"),D("1"),new(D("-40"),f.EnergyPrice),null),SyntheticSideCalendars.Interval(f.Terms(f.Volume,20),true));
             var noDue=new PpaInstrument(Guid.NewGuid(),f.Definitions,f.Reference,
                 [new(new(PpaRole.IndexedPayment),zero,D("1")),new(new(PpaRole.StrikePayment),future,D("1")),new(new(PpaRole.CertificateDelivery),certificate,D("1"))],true,"ppa_instrument_v2");
             var available=Value(Inputs(source,noDue,meter,at),source,noDue,discount);
@@ -491,17 +491,17 @@ internal static class PpaAcceptanceChecks
         Check("canceling known overdue balances still leave complete PV unavailable",()=>{
             var physical=f.Physical("40");var prices=f.Market(at,energy:"40",actuals:_=>"40");
             var energySide=(PowerPhysicalSide)physical.Memberships[0].Side;
-            var opposite=new FixedSide(Guid.NewGuid(),f.Terms(new SlotQuantity([new(PpaRole.EnergyDelivery)])),new FlatPrice(new(D("40"),f.EnergyPrice)));
+            var opposite=new FixedSide(Guid.NewGuid(),f.Terms(new SlotQuantity([new(PpaRole.EnergyDelivery)])),new FlatPrice(new(D("40"),f.EnergyPrice)),SyntheticSideCalendars.Interval(f.Terms(new SlotQuantity([new(PpaRole.EnergyDelivery)])),false));
             var canceled=new PpaInstrument(Guid.NewGuid(),f.Definitions,f.Reference,
                 [new(new(PpaRole.EnergyDelivery),energySide,D("1")),new(new(PpaRole.StrikePayment),physical.Memberships[1].Side,D("-1")),new(new(PpaRole.FixedCharge),opposite,D("1"))],false,"ppa_instrument_v2");
             var prepared=f.Prepare(prices,[canceled]);var result=ValueMeasures.From(prepared.Session(prices.Build).Value(canceled,new(f.From,f.From.AddHours(1)),new ExplicitDiscounting(D("1"),DiscountFactorSource.Undiscounted)));
             Money(result.OverdueKnownBalance,"0");Equal(result.HasOverdue,true);Equal(result.CompletePv,null);
             OracleValues["05_mixed_overdue/canceling_overdue_complete_pv"]=result.CompletePv;
         });
-        Check("delivered physical value at exact value-date equality remains outside primary and axes reconcile",()=>{
+        Check("delivered physical value after its value date remains outside primary and axes reconcile",()=>{
             var physical=f.Physical("0");var physicalInputs=f.Prepare(source,[physical]);
             var delivered=ValueMeasures.From(physicalInputs.Session(source.Build).Value(physical,new(f.From,f.From.AddHours(1)),new ExplicitDiscounting(D("1"),DiscountFactorSource.Undiscounted))).Scale(D("10"));
-            var row=delivered.Rows.Single(r=>r.Kind==ComponentKind.Delivery);Money(row.Amount,"400");Equal(row.ValueAt,at);
+            var row=delivered.Rows.Single(r=>r.Kind==ComponentKind.Delivery);Money(row.Amount,"400");Equal(row.ValueAt,at.AddDays(-1));
             Equal(row.Coverage,ValueCoverage.DeliveredValue);Equal(row.Class,EconomicClass.Realised);Equal(row.Lifecycle,null);Money(delivered.ValueExcludingOverdue,"0");
             var combined=value.ValueExcludingOverdue.Add(delivered.ValueExcludingOverdue);Money(combined,"590");
             var rows=value.Rows.AddRange(delivered.Rows);
@@ -558,10 +558,10 @@ internal static class PpaAcceptanceChecks
         void Check(string label,Action action){action();count++;Console.WriteLine("PASS PPA independent acceptance: "+label);}
         var f=new PpaAcceptanceFixture();var at=PpaAcceptanceFixture.At("2031-10-30T00:00:00Z");
         var discount=new ExplicitDiscounting(D("1"),DiscountFactorSource.Undiscounted);var hour=new DeliveryCoverage(f.From,f.From.AddHours(1));
-        FloatingSide Floating(string curve,string multiplier="1",string adder="0")=>new(Guid.NewGuid(),f.Terms(f.Profile),new(f.C(curve),D(multiplier),new(D(adder),f.EnergyPrice),null));
+        FloatingSide Floating(string curve,string multiplier="1",string adder="0")=>new(Guid.NewGuid(),f.Terms(f.Profile),new(f.C(curve),D(multiplier),new(D(adder),f.EnergyPrice),null),SyntheticSideCalendars.Interval(f.Terms(f.Profile),true));
         PpaInstrument Instrument(params PpaMembership[] members)=>new(Guid.NewGuid(),f.Definitions,f.Reference,[..members],false,"ppa_instrument_v2");
         Check("virtual fixed for floating has only gross cash rows and exact negative spread",()=>{
-            var receive=Floating("synthetic_hub");var pay=new FixedSide(Guid.NewGuid(),f.Terms(f.Profile),new FlatPrice(new(D("40"),f.EnergyPrice)));
+            var receive=Floating("synthetic_hub");var pay=new FixedSide(Guid.NewGuid(),f.Terms(f.Profile),new FlatPrice(new(D("40"),f.EnergyPrice)),SyntheticSideCalendars.Interval(f.Terms(f.Profile),false));
             var instrument=Instrument(new(new(PpaRole.IndexedPayment),receive,D("1")),new(new(PpaRole.StrikePayment),pay,D("-1")));
             var market=f.Market(at);var inputs=f.Prepare(market,[instrument]);
             var value=ValueMeasures.From(inputs.Session(market.Build).Value(instrument,hour,discount)).Scale(D("100"));
@@ -572,9 +572,9 @@ internal static class PpaAcceptanceChecks
             foreach(var multiplier in new[]{false,true})
             {
                 var market=f.Market(at,energy:multiplier?"40":"32");
-                var physical=new PowerPhysicalSide(Guid.NewGuid(),f.Terms(f.Profile),f.Asset.Location);
+                var physical=new PowerPhysicalSide(Guid.NewGuid(),f.Terms(f.Profile),f.Asset.Location,SyntheticSideCalendars.Interval(f.Terms(f.Profile),false));
                 var pay=new FloatingSide(Guid.NewGuid(),f.Terms(new SlotQuantity([new(PpaRole.EnergyDelivery)])),
-                    new(f.C("synthetic_energy"),D(multiplier?"0.95":"1"),new(D(multiplier?"2":"1"),f.EnergyPrice),null));
+                    new(f.C("synthetic_energy"),D(multiplier?"0.95":"1"),new(D(multiplier?"2":"1"),f.EnergyPrice),null),SyntheticSideCalendars.Interval(f.Terms(new SlotQuantity([new(PpaRole.EnergyDelivery)])),true));
                 var instrument=Instrument(new(new(PpaRole.EnergyDelivery),physical,D("1")),new(new(PpaRole.IndexedPayment),pay,D("-1")));
                 var inputs=f.Prepare(market,[instrument]);var session=inputs.Session(market.Build);
                 var value=ValueMeasures.From(session.Value(instrument,hour,discount)).Scale(D("100"));
@@ -599,9 +599,9 @@ internal static class PpaAcceptanceChecks
             Export("plan_basis/pay",value.Rows.Single(r=>r.Slot.Ordinal==1).Amount);
         });
         Check("shared physical work does not collapse differing strike side values",()=>{
-            var physical=new PowerPhysicalSide(Guid.NewGuid(),f.Terms(f.Volume),f.Asset.Location);
+            var physical=new PowerPhysicalSide(Guid.NewGuid(),f.Terms(f.Volume),f.Asset.Location,SyntheticSideCalendars.Interval(f.Terms(f.Volume),false));
             PpaInstrument WithStrike(string strike)=>new(Guid.NewGuid(),f.Definitions,f.Reference,
-                [new(new(PpaRole.EnergyDelivery),physical,D("1")),new(new(PpaRole.StrikePayment),new FixedSide(Guid.NewGuid(),f.Terms(new SlotQuantity([new(PpaRole.EnergyDelivery)]),normalization:physical.Terms.Normalization),new FlatPrice(new(D(strike),f.EnergyPrice))),D("-1"))],false,"ppa_instrument_v2");
+                [new(new(PpaRole.EnergyDelivery),physical,D("1")),new(new(PpaRole.StrikePayment),new FixedSide(Guid.NewGuid(),f.Terms(new SlotQuantity([new(PpaRole.EnergyDelivery)]),normalization:physical.Terms.Normalization),new FlatPrice(new(D(strike),f.EnergyPrice)),SyntheticSideCalendars.Interval(f.Terms(new SlotQuantity([new(PpaRole.EnergyDelivery)]),normalization:physical.Terms.Normalization),false)),D("-1"))],false,"ppa_instrument_v2");
             var first=WithStrike("40");var second=WithStrike("50");var market=f.Market(at);var inputs=f.Prepare(market,[first,second]);var session=inputs.Session(market.Build);
             var a=ValueMeasures.From(session.Value(first,hour,discount)).Scale(D("80"));var b=ValueMeasures.From(session.Value(second,hour,discount)).Scale(D("80"));
             Money(a.ValueExcludingOverdue,"40");Money(b.ValueExcludingOverdue,"-160");
@@ -617,9 +617,9 @@ internal static class PpaAcceptanceChecks
         });
         Check("one reusable strike resolves its own instrument sibling quantities",()=>{
             var other=f.Source with {Key=new(f.Definitions,"synthetic_second_volume"),ForecastSeries=Guid.NewGuid(),MeteredSeries=Guid.NewGuid()};
-            var sharedStrike=new FixedSide(Guid.NewGuid(),f.Terms(new SlotQuantity([new(PpaRole.EnergyDelivery)]),normalization:f.Normalization([f.Asset.Key])),new FlatPrice(new(D("40"),f.EnergyPrice)));
+            var sharedStrike=new FixedSide(Guid.NewGuid(),f.Terms(new SlotQuantity([new(PpaRole.EnergyDelivery)]),normalization:f.Normalization([f.Asset.Key])),new FlatPrice(new(D("40"),f.EnergyPrice)),SyntheticSideCalendars.Interval(f.Terms(new SlotQuantity([new(PpaRole.EnergyDelivery)]),normalization:f.Normalization([f.Asset.Key])),false));
             PpaInstrument WithSource(VolumeSourceKey source)=>new(Guid.NewGuid(),f.Definitions,f.Reference,
-                [new(new(PpaRole.EnergyDelivery),new PowerPhysicalSide(Guid.NewGuid(),f.Terms(new VolumeQuantity([source],QuantityStage.Generated,f.Energy.Key)),f.Asset.Location),D("1")),new(new(PpaRole.StrikePayment),sharedStrike,D("-1"))],false,"ppa_instrument_v2");
+                [new(new(PpaRole.EnergyDelivery),new PowerPhysicalSide(Guid.NewGuid(),f.Terms(new VolumeQuantity([source],QuantityStage.Generated,f.Energy.Key)),f.Asset.Location,SyntheticSideCalendars.Interval(f.Terms(new VolumeQuantity([source],QuantityStage.Generated,f.Energy.Key)),false)),D("1")),new(new(PpaRole.StrikePayment),sharedStrike,D("-1"))],false,"ppa_instrument_v2");
             var first=WithSource(f.Source.Key);var second=WithSource(other.Key);var market=f.Market(at);
             var inputs=f.Prepare(market,[first,second],extraSources:[other],extraSeries:[f.Forecast("0.5") with {Id=other.ForecastSeries},f.Meter() with {Id=other.MeteredSeries}]);
             var session=inputs.Session(market.Build);var a=ValueMeasures.From(session.Value(first,hour,discount)).Scale(D("80"));var b=ValueMeasures.From(session.Value(second,hour,discount)).Scale(D("80"));
@@ -629,7 +629,7 @@ internal static class PpaAcceptanceChecks
             Export("10_shared_work/cash_quantity_1_strike_0",b.Rows.Single(r=>r.Kind==ComponentKind.Payment).Amount);
             Export("10_shared_work/combined_quantity_1_strike_0",b.ValueExcludingOverdue);
             var higher=new PpaInstrument(Guid.NewGuid(),f.Definitions,f.Reference,
-                [second.Memberships[0],new(new(PpaRole.StrikePayment),new FixedSide(Guid.NewGuid(),sharedStrike.Terms,new FlatPrice(new(D("50"),f.EnergyPrice))),D("-1"))],false,"ppa_instrument_v2");
+                [second.Memberships[0],new(new(PpaRole.StrikePayment),new FixedSide(Guid.NewGuid(),sharedStrike.Terms,new FlatPrice(new(D("50"),f.EnergyPrice)),SyntheticSideCalendars.Interval(sharedStrike.Terms,false)),D("-1"))],false,"ppa_instrument_v2");
             var different=f.Prepare(market,[higher],extraSources:[other],extraSeries:[f.Forecast("0.5") with {Id=other.ForecastSeries},f.Meter() with {Id=other.MeteredSeries}]);
             var c=ValueMeasures.From(different.Session(market.Build).Value(higher,hour,discount)).Scale(D("80"));
             Money(c.ValueExcludingOverdue,"-320");Export("10_shared_work/cash_quantity_1_strike_1",c.Rows.Single(r=>r.Kind==ComponentKind.Payment).Amount);
@@ -688,10 +688,10 @@ internal static class PpaAcceptanceChecks
                 (BlockMembership.All,"34920",304,417),(BlockMembership.Peak,"18240",304,0),(BlockMembership.OffPeak,"16680",0,417)})
             {
                 var profile=f.Profile with{Hours=new(membership,membership==BlockMembership.All?null:peak,holidays)};
-                var physical=new PowerPhysicalSide(Guid.NewGuid(),f.Terms(profile),f.Asset.Location);
+                var physical=new PowerPhysicalSide(Guid.NewGuid(),f.Terms(profile),f.Asset.Location,SyntheticSideCalendars.Interval(f.Terms(profile),false));
                 var cashTerms=f.Terms(new SlotQuantity([new(PpaRole.EnergyDelivery)])) with{Schedule=physical.Terms.Schedule,
                     InputPorts=[new(new(PpaRole.EnergyDelivery),f.Energy.Key,physical.Terms.Schedule)]};
-                var cash=new FixedSide(Guid.NewGuid(),cashTerms,new FlatPrice(new(D("0"),f.EnergyPrice)));
+                var cash=new FixedSide(Guid.NewGuid(),cashTerms,new FlatPrice(new(D("0"),f.EnergyPrice)),SyntheticSideCalendars.Interval(cashTerms,false));
                 var instrument=new PpaInstrument(Guid.NewGuid(),f.Definitions,f.Reference,
                     [new(new(PpaRole.EnergyDelivery),physical,D("1")),new(new(PpaRole.StrikePayment),cash,D("-1"))],false,"ppa_instrument_v2");
                 var inputs=f.Prepare(observed,[instrument]);var baseline=inputs.Session(scenarios.Base);
@@ -722,7 +722,7 @@ internal static class PpaAcceptanceChecks
             Money(retainedValue.PresentValue,"11904");
             var retainedRows=ValueMeasures.From(retainedValue).Rows;
             Equal(retainedRows.Length,1488);
-            foreach(var row in retainedRows)Quantity(row.Quantity,TimeZoneInfo.ConvertTime(row.Interval.Start,december.Clock.Zone).Hour is >=7 and <15?"2":"1");
+            foreach(var row in retainedRows)Quantity(row.Quantity,december.Clock.LocalAt(row.Interval.Start).Hour is >=7 and <15?"2":"1");
             var profile=instrument.Memberships.Single(m=>m.Side is PowerPhysicalSide).Side.Terms.Quantity;
             Equal(DefinitionIdentity.For(december.Profile).Version,"ppa_profile_quantity_v1");
             if(DefinitionIdentity.For(december.Profile).Canonical.Contains("HourlyFactors",StringComparison.Ordinal))throw new Exception("Legacy profile identity changed.");
@@ -774,8 +774,8 @@ internal static class PpaAcceptanceChecks
             var instrument=f.Physical();var market=f.Market(at);var inputs=f.Prepare(market,[instrument]);
             var oldPhysical=(PowerPhysicalSide)instrument.Memberships[0].Side;var oldCash=(FixedSide)instrument.Memberships[1].Side;
             var clone=new PpaInstrument(instrument.Id,f.Definitions,f.Reference,
-                [new(new(PpaRole.EnergyDelivery),new PowerPhysicalSide(Guid.NewGuid(),oldPhysical.Terms,oldPhysical.Location),D("1")),
-                 new(new(PpaRole.StrikePayment),new FixedSide(Guid.NewGuid(),oldCash.Terms,oldCash.Price),D("-1"))],false,"ppa_instrument_v2");
+                [new(new(PpaRole.EnergyDelivery),new PowerPhysicalSide(Guid.NewGuid(),oldPhysical.Terms,oldPhysical.Location,SyntheticSideCalendars.Interval(oldPhysical.Terms,false)),D("1")),
+                 new(new(PpaRole.StrikePayment),new FixedSide(Guid.NewGuid(),oldCash.Terms,oldCash.Price,SyntheticSideCalendars.Interval(oldCash.Terms,false)),D("-1"))],false,"ppa_instrument_v2");
             Equal(instrument.EconomicIdentity,clone.EconomicIdentity);
             Reject("ppa_context",()=>inputs.Session(market.Build).Value(clone,hour,discount));
             var populated=inputs.Session(market.Build);_=populated.Value(instrument,hour,discount);

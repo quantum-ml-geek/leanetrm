@@ -87,6 +87,9 @@ def run(c, context, template, query, run_worker=None):
     saved = c.call('swaps/book', body)
     assert c.call('swaps/book', body) == saved
     if query is not None:
+        from check_sampled_calendar_admission import run_checks as check_sampled_admission
+        check_sampled_admission(query,body)
+    if query is not None:
         from check_contract_observation_integrity import run as check_integrity
         check_integrity(query)
     original = c.call('swaps/editor', dict(context=context, tradeId=saved['tradeId'], revision=None))

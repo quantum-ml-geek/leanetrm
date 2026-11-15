@@ -1,4 +1,4 @@
-import {sideCalendar,calendarKey,referenceCalendarChoices,savedCalendarCode,type SideCalendar} from './side-calendar.js';
+import {sideCalendar,referenceCalendarChoices,type SideCalendar,type SideCalendarPolicy,type SideCalendarCatalogRow} from './side-calendar.js';
 import {sideOffers,sideStructure,type SideStructure} from './swap-side-composer.js';
 import {sideAddButton,sideCardHeader} from './side-card.js';
 import {mountPriceSettlement,type PriceSettlement,type SettlementIndex} from './price-settlement.js';
@@ -33,10 +33,10 @@ import type {SamplingChoice,ObservationInspection,ObservationOptions,Observation
 import type {ContractObservationSource} from './contract-observation-ticket.js';
 type Api=<T>(path:string,body?:unknown)=>Promise<T>;
 export type Index={settlementIndices:SettlementIndex[];primitiveEntrySupported:boolean;definitionRevisionId:string;curve:string;index:string;commodity:string;currencyCode:string;currency:string;unit:string;quoteMultiplier:string;quantityCode:string;powerQuantitySupported:boolean;quantityChoices:{specification:{code:string};unit:string}[];defaultDiscountCurve:string|null;fixingConvention:'published_index_observations_v1'|null;fixingUnavailableReason:string|null;customProjections:ProjectionChoice[];averaging:string[];samplings:SamplingChoice[];contracts:{deliveryFrom:string;deliveryTo:string}[]};
-export type Catalog=PartyCatalog&{bookingActor:Trader;books:{id:string;name:string;portfolio:string}[];indices:Index[];contractObservationSources?:ContractObservationSource[];priceSourceUnavailable:{code:string;message:string}|null;referenceChoices?:ReferenceChoices[];commodities:{code:string;name:string}[];paymentCalendars:{code:string;definitionRevisionId:string;reference:import('./swap-observations.js').ReferenceKey}[];paymentOptions:PaymentOptions;sideStructures:SideStructure[];entryTemplate:{version:string;firstCoefficient:string;spread:string;description:string;payment:PaymentInput};parRateOptions:{implementation:string;initialDecimalPlaces:number;tieRule:string};asOf:string;context:Context;canBook?:boolean;bookingUnavailableReason?:string|null};
+export type Catalog=PartyCatalog&{sideCalendars:SideCalendarCatalogRow[];bookingActor:Trader;books:{id:string;name:string;portfolio:string}[];indices:Index[];contractObservationSources?:ContractObservationSource[];priceSourceUnavailable:{code:string;message:string}|null;referenceChoices?:ReferenceChoices[];commodities:{code:string;name:string}[];paymentCalendars:{code:string;definitionRevisionId:string;reference:import('./swap-observations.js').ReferenceKey}[];paymentOptions:PaymentOptions;sideStructures:SideStructure[];entryTemplate:{version:string;firstCoefficient:string;spread:string;description:string;payment:PaymentInput};parRateOptions:{implementation:string;initialDecimalPlaces:number;tieRule:string};asOf:string;context:Context;canBook?:boolean;bookingUnavailableReason?:string|null};
 export type ReferenceChoices={definitionRevisionId:string;commodities:{code:string;name:string}[];paymentCalendars:{code:string;reference:import('./swap-observations.js').ReferenceKey;from:string;to:string}[];powerQuantities:{specification:import('./swap-observations.js').ReferenceKey;unit:string;commodity:string}[];clocks:{reference:import('./swap-observations.js').ReferenceKey;label:string}[]};
-type FloatingTerms={settlement:PriceSettlement;curve:string;index:string;currency:string;deliveryFrom:string;deliveryTo:string;paymentAt:string|null;paymentSchedule:PaymentInput|null;customProjection?:CustomProjection|null;observationSchedule?:ObservationSchedule;resetFrequency:string;averagingMethod:string;spread:string};
-type Terms={scheduled?:Scheduled|null;swapType:string;firstCoefficient:string|null;firstFloating:FloatingTerms|null;commodity:string;definitionRevisionId:string;bookId:string;executedAt:string;quantity:string;fixedCoefficient:string;discounting:boolean;fixed:{price:string;currency:string;deliveryFrom:string;deliveryTo:string;paymentAt:string|null;paymentSchedule:PaymentInput|null}|null;floating:FloatingTerms};
+type FloatingTerms={calendarPolicy:SideCalendarPolicy;settlement:PriceSettlement;curve:string;index:string;currency:string;deliveryFrom:string;deliveryTo:string;paymentAt:string|null;paymentSchedule:PaymentInput|null;customProjection?:CustomProjection|null;observationSchedule?:ObservationSchedule;resetFrequency:string;averagingMethod:string;spread:string};
+type Terms={scheduled?:Scheduled|null;swapType:string;firstCoefficient:string|null;firstFloating:FloatingTerms|null;commodity:string;definitionRevisionId:string;bookId:string;executedAt:string;quantity:string;fixedCoefficient:string;discounting:boolean;fixed:{calendarPolicy:SideCalendarPolicy;price:string;currency:string;deliveryFrom:string;deliveryTo:string;paymentAt:string|null;paymentSchedule:PaymentInput|null}|null;floating:FloatingTerms};
 type State=Annotation&{tradeId:string;tradeReference:string;instrumentId:string;instrumentReference:string;revision:number;quantity:string;kind:string;reason:string;effectiveAt:string;recordedAt:string;terms:Terms};
 export type Valuation={presentValue:string;instrumentPresentValue:string;quantity:string;sides:{slot:number;kind:string;coefficient:string;presentValue:string;contribution:string;payments:{deliveryFrom:string;deliveryTo:string;paymentDate:string;resolvedQuantity:string;tradeCashAmount:string;tradePresentValue:string;cashAmount:string;discountFactor:string;presentValue:string;discountMappingId:string|null;discountCurve:unknown;discountPolicy:string;pillars:unknown;observationSchedule:ObservationInspection|null;resets:{currency:{code:string};quantity:{code:string};multiplier:string;spread:string|null;lookup:unknown;lineage:unknown;from:string;to:string;price:string;weight:string;cashContribution:string;fixingState:string;fixing?:unknown}[]}[]}[]};
 type Detail={state:State;history:State[];catalog:Catalog&{scheduledOptions?:{powerQuantities:{specification:{code:string};unit:string}[];clocks:{reference:{code:string};label:string}[]}};
@@ -363,10 +363,10 @@ export function setupSwapEditor(options:{api:Api;act:(work:()=>Promise<void>)=>P
  const samplingRows=(side:string)=>observationOptions[side]?.samplings??selectedIndex(side)?.samplings??sources(side).flatMap(index=>index.samplings);
  // Selected-mode metadata keeps repair controls visible; observations.read independently requires backend admission.
  const selectedSampling=(side:string)=>[...(selectedRequirements[side]?[selectedRequirements[side]!]:[]),...(observationOptions[side]?.samplings??[]),...(selectedIndex(side)?.samplings??sources(side).flatMap(i=>i.samplings))].find(choice=>choice.resetFrequency===field(observationId(side,'reset-frequency')).value&&choice.averagingMethod===field(observationId(side,'averaging')).value);
- const calendarChoices=(side:string)=>{const index=selectedIndex(side==='first'?'first':'floating');return referenceCalendarChoices(index?(marketReferenceChoices(catalog?.referenceChoices,index.definitionRevisionId)?.paymentCalendars??catalog?.paymentCalendars.filter(c=>c.definitionRevisionId===index.definitionRevisionId)??[]):[]);};
+ const calendarChoices=(side:string)=>referenceCalendarChoices(selectedIndex(side==='first'?'first':'floating')?catalog!.sideCalendars:[]);
  const sideCalendars:Record<string,SideCalendar>={};
  for(const side of ['fixed','first','floating']){
-  const calendar=sideCalendar({id:`swap-${side}-holiday-calendar`,choices:()=>calendarChoices(side),changed:()=>{edits.mark();invalidate();if(side!=='fixed')void options.act(()=>safe(refreshObservations));}});
+  const calendar=sideCalendar({id:`swap-${side}-holiday-calendar`,choices:()=>calendarChoices(side),purposes:()=>({delivery:true,observation:side!=='fixed',payment:true}),changed:()=>{edits.mark();invalidate();if(side!=='fixed')void options.act(()=>safe(refreshObservations));}});
   sideCalendars[side]=calendar;
   const card=get(`swap-${side}-editor`).querySelector<HTMLElement>('.aligned-side-card')!;
   let row=card.querySelector<HTMLElement>('[data-side-row=product]');
@@ -374,7 +374,7 @@ export function setupSwapEditor(options:{api:Api;act:(work:()=>Promise<void>)=>P
   row.append(calendar.element);
  }
  const observations:Record<string,ReturnType<typeof setupSwapObservationControls>>={};
- for(const side of ['floating','first'])observations[side]=setupSwapObservationControls({prefix:side==='first'?'swap-first':'swap',sideCalendar:sideCalendars[side].reference,enabled:()=>!!field('swap-type').value&&(side==='floating'||floatingPair()),api:options.api,busy:options.busy,choice:()=>selectedSampling(side),unit:()=>selectedIndex(side)?.unit??'',
+ for(const side of ['floating','first'])observations[side]=setupSwapObservationControls({prefix:side==='first'?'swap-first':'swap',sideCalendar:()=>sideCalendars[side].reference('observation'),enabled:()=>!!field('swap-type').value&&(side==='floating'||floatingPair()),api:options.api,busy:options.busy,choice:()=>selectedSampling(side),unit:()=>selectedIndex(side)?.unit??'',
   request:()=>{const i=selectedIndex(side),definition=side==='first'?selectedIndex()??i:i,custom=retainedProjectionChoices(side).find(choice=>JSON.stringify(choice.reference)===field(observationId(side,'price-source')).value);return {context:{...context(),knowledgeMode:'retained',contextId:catalog?.context.contextId},
    ...(definition?{definitionRevisionId:definition.definitionRevisionId}:{}),...(i?{curve:i.curve,settlement:selections[side].selected()}:{}),commodity:field(observationId(side,'commodity')).value||undefined,index:field(observationId(side,'index')).value||undefined,
    resetFrequency:field(observationId(side,'reset-frequency')).value||undefined,averagingMethod:field(observationId(side,'averaging')).value||undefined,
@@ -439,7 +439,7 @@ export function setupSwapEditor(options:{api:Api;act:(work:()=>Promise<void>)=>P
   const i=selectedIndex(side);if(!i)throw Error('Choose each exact floating index and projection curve.');
   const customProjection=projectionReference(field(observationId(side,'price-source')).value,retainedProjectionChoices(side));
   const observationSchedule=observations[side].read();
-  return{curve:i.curve,index:i.index,settlement:selections[side].read(),currency:field(`swap-${side}-currency`).value,deliveryFrom:field(`swap-${side}-from`).value,deliveryTo:field(`swap-${side}-to`).value,paymentSchedule:paymentInput(side),...(customProjection?{customProjection}:{}),...(observationSchedule?{observationSchedule}:{}),resetFrequency:field(observationId(side,'reset-frequency')).value,averagingMethod:field(observationId(side,'averaging')).value,spread:field(observationId(side,'spread')).value};
+  return{calendarPolicy:sideCalendars[side].read(),curve:i.curve,index:i.index,settlement:selections[side].read(),currency:field(`swap-${side}-currency`).value,deliveryFrom:field(`swap-${side}-from`).value,deliveryTo:field(`swap-${side}-to`).value,paymentSchedule:paymentInput(side),...(customProjection?{customProjection}:{}),...(observationSchedule?{observationSchedule}:{}),resetFrequency:field(observationId(side,'reset-frequency')).value,averagingMethod:field(observationId(side,'averaging')).value,spread:field(observationId(side,'spread')).value};
  }
  async function instrumentDraft(){
   const i=selectedIndex();if(!i)throw Error('Choose the exact index and projection curve.');
@@ -454,7 +454,7 @@ export function setupSwapEditor(options:{api:Api;act:(work:()=>Promise<void>)=>P
   if(floatingPair()&&selectedIndex('first')?.definitionRevisionId!==i.definitionRevisionId)throw Error('Both floating sides must use the same exact market definition revision.');
   return{context:context(),definitionRevisionId:i.definitionRevisionId,commodity:field('swap-commodity').value,swapType:field('swap-type').value,
    quantity:{value:field('swap-quantity').value,specification:JSON.parse(field('swap-quantity-unit').value)},fixedCoefficient:floatingPair()?null:field('swap-direction').value,firstCoefficient:floatingPair()?field('swap-first-direction').value:null,discounting:field('swap-discounting').value===Discounting.CurrencyDefault,
-   fixed:floatingPair()?null:{price:field('swap-price-mode').value==='par'?'':field('swap-price').value,currency:field('swap-fixed-currency').value,deliveryFrom:field('swap-fixed-from').value,deliveryTo:field('swap-fixed-to').value,paymentSchedule:paymentInput('fixed')},
+   fixed:floatingPair()?null:{calendarPolicy:sideCalendars.fixed.read(),price:field('swap-price-mode').value==='par'?'':field('swap-price').value,currency:field('swap-fixed-currency').value,deliveryFrom:field('swap-fixed-from').value,deliveryTo:field('swap-fixed-to').value,paymentSchedule:paymentInput('fixed')},
    firstFloating:floatingPair()?await floatingDraft('first'):null,floating:await floatingDraft(),
    parRatePolicy:!floatingPair()&&field('swap-price-mode').value==='par'?{implementation:catalog!.parRateOptions.implementation,decimalPlaces:Number(field('swap-par-places').value),tieRule:catalog!.parRateOptions.tieRule}:null};
  }
@@ -557,13 +557,9 @@ export function setupSwapEditor(options:{api:Api;act:(work:()=>Promise<void>)=>P
   const number=get<HTMLInputElement>(`swap-${side}-payment-number`);number.disabled=!lag&&!next;number.min=lag?'0':'1';number.max=lag?'366':'31';
   for(const [key,on] of [['day-basis',lag],['short-month',next]] as const){get(`swap-${side}-${key}-field`).hidden=!on;field(`swap-${side}-${key}`).disabled=!on;get<HTMLSelectElement>(`swap-${side}-${key}`).required=on;}
  }
- function usesPaymentCalendar(side:string){
-  const adjustment=field(`swap-${side}-payment-adjustment`).value;
-  return field(`swap-${side}-payment-rule`).value===PaymentDateRule.DaysAfterPeriodEnd&&field(`swap-${side}-day-basis`).value===PaymentDayBasis.BusinessDays||!!adjustment&&adjustment!==DateAdjustment.Unadjusted;
- }
  function paymentInput(side:string):PaymentInput{
   const rule=field(`swap-${side}-payment-rule`).value,lag=rule===PaymentDateRule.DaysAfterPeriodEnd;
-  const adjustment=field(`swap-${side}-payment-adjustment`).value,calendar=usesPaymentCalendar(side)?sideCalendars[side].code():null;
+  const adjustment=field(`swap-${side}-payment-adjustment`).value,calendar=null;
   return{frequency:field(`swap-${side}-payment-frequency`).value,rule,days:lag?Number(field(`swap-${side}-payment-number`).value):null,dayOfMonth:lag?null:Number(field(`swap-${side}-payment-number`).value),dayBasis:lag?field(`swap-${side}-day-basis`).value:null,shortMonth:lag?null:field(`swap-${side}-short-month`).value,adjustment,calendar,implementation:catalog!.paymentOptions.implementation} as PaymentInput;
  }
  function setPayment(side:string,value:PaymentInput|null){
@@ -596,7 +592,7 @@ export function setupSwapEditor(options:{api:Api;act:(work:()=>Promise<void>)=>P
   }
   if(t.fixed){field('swap-price').value=t.fixed.price;field('swap-price-mode').value='agreed';}
   for(const side of activeSides()){const terms=side==='first'?t.firstFloating!:side==='fixed'?t.fixed!:t.floating;field(`swap-${side}-currency`).value=terms.currency;field(`swap-${side}-from`).value=terms.deliveryFrom;field(`swap-${side}-to`).value=terms.deliveryTo;setPayment(side,terms.paymentSchedule);}
-  for(const side of activeSides()){const terms=side==='first'?t.firstFloating!:side==='fixed'?t.fixed!:t.floating;const observation=side==='fixed'?null:(side==='first'?t.firstFloating:t.floating)?.observationSchedule?.calendar;sideCalendars[side].restore([savedCalendarCode(terms.paymentSchedule?.calendar,calendarChoices(side)),observation?calendarKey(observation):null]);}
+  for(const side of activeSides()){const terms=side==='first'?t.firstFloating!:side==='fixed'?t.fixed!:t.floating;sideCalendars[side].restore(terms.calendarPolicy);}
   field('swap-discounting').value=t.discounting?Discounting.CurrencyDefault:Discounting.None;direction();
  }
  /**

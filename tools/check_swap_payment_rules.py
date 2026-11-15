@@ -1,4 +1,5 @@
 """Generated date rules, commodity restrictions and retained schedule identities."""
+from synthetic_side_calendars import all_dates_policy
 from preview_fixture import trade_booking
 from uuid import uuid4
 from preview_client import PreviewClient
@@ -19,8 +20,8 @@ def run_checks(url,client=None):
     following={**lag,'rule':'day_of_following_month','days':None,'dayOfMonth':18,'dayBasis':None,'shortMonth':'reject'}
     body={**context,'operationId':str(uuid4()),**trade_booking(), 'bookId':catalog['books'][0]['id'],'commodity':index['commodity'],
           'definitionRevisionId':index['definitionRevisionId'],'quantity':'100','fixedCoefficient':'-1','discounting':False,
-          'fixed':{'price':'3','currency':index['currencyCode'],'deliveryFrom':'2021-01-01','deliveryTo':'2021-02-01','paymentSchedule':lag},
-          'floating':{'spread': '0', 'settlement': {'mode': 'curve_target', 'index': None, 'projectionPolicy': None}, 'curve':index['curve'],'index':index['index'],'currency':index['currencyCode'],'deliveryFrom':'2021-01-01','deliveryTo':'2021-02-01',
+          'fixed':{'calendarPolicy': all_dates_policy(observation=False), 'price':'3','currency':index['currencyCode'],'deliveryFrom':'2021-01-01','deliveryTo':'2021-02-01','paymentSchedule':lag},
+          'floating':{'calendarPolicy': all_dates_policy(observation=True), 'spread': '0', 'settlement': {'mode': 'curve_target', 'index': None, 'projectionPolicy': None}, 'curve':index['curve'],'index':index['index'],'currency':index['currencyCode'],'deliveryFrom':'2021-01-01','deliveryTo':'2021-02-01',
                       'paymentSchedule':following,'resetFrequency':'daily','averagingMethod':'arithmetic'}}
     passed=0
     def check(name,ok=True):
@@ -52,9 +53,10 @@ def run_checks(url,client=None):
     c.call('swaps/preview',{**body,'floating':{**body['floating'],'paymentSchedule':{**following,'dayOfMonth':31}}},expected=422)
     clamped=c.call('swaps/preview',{**body,'floating':{**body['floating'],'paymentSchedule':{**following,'dayOfMonth':31,'shortMonth':'clamp'}}})['valuation']
     check('short-month policy is applied by the backend',clamped['sides'][1]['payments'][0]['paymentDate']=='2021-02-28')
-    calendars=catalog['paymentCalendars'];assert calendars
-    calendar=calendars[0]['code']
-    adjusted=c.call('swaps/preview',{**body,'floating':{**body['floating'],'paymentSchedule':{**following,'dayOfMonth':28,'shortMonth':'reject','adjustment':'following','calendar':calendar}}})['valuation']
+    calendar=next(item['reference'] for item in catalog['sideCalendars'] if item['code']=='test_business')
+    payment_policy=all_dates_policy(observation=True)
+    payment_policy['payment']['calendar']=calendar
+    adjusted=c.call('swaps/preview',{**body,'floating':{**body['floating'],'calendarPolicy':payment_policy,'paymentSchedule':{**following,'dayOfMonth':28,'shortMonth':'reject','adjustment':'following','calendar':None}}})['valuation']
     check('business-day adjustment uses the pinned reference calendar',adjusted['sides'][1]['payments'][0]['paymentDate']=='2021-03-01')
     # Distinct rules that happen to produce the same date retain distinct side identity.
     other={**body,'operationId':str(uuid4()),'fixed':{**body['fixed'],'paymentSchedule':following}}

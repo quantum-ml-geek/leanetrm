@@ -1,3 +1,4 @@
+using OpenEtrm.MarketData.Trading;
 using System.Collections.Immutable;
 using static OpenEtrm.MarketData.Crude.CrudePhysicalCashRules;
 using static OpenEtrm.MarketData.Crude.CrudeReceiptCash;
@@ -71,10 +72,10 @@ internal static class CrudeCashLedger
                 if (Magnitude(paid).CompareTo(Magnitude(allocation.Amount.Amount)) > 0) throw Error("crude_payment_amount", "Payment cannot exceed the selected invoice amount.");
                 var open = allocation.Amount.Amount - paid;
                 var state = allocation.Amount.Amount == zero ? CrudeInvoiceState.NoPaymentDue : open == zero ? CrudeInvoiceState.Paid :
-                    asOf > terms.PaymentAt ? paid == zero ? CrudeInvoiceState.Overdue : CrudeInvoiceState.PartPaidOverdue :
+                    PaymentDatePolicy.IsOverdue(terms.PaymentFor(component),asOf) ? paid == zero ? CrudeInvoiceState.Overdue : CrudeInvoiceState.PartPaidOverdue :
                     paid == zero ? CrudeInvoiceState.Open : CrudeInvoiceState.PartPaid;
                 invoiceBalances.Add(new(invoice.Id, component, allocation.ExactAmount, allocation.Amount,
-                    new(paid, allocation.Amount.Currency), new(open, allocation.Amount.Currency), terms.PaymentAt, state));
+                    new(paid, allocation.Amount.Currency), new(open, allocation.Amount.Currency), terms.PaymentFor(component), state));
                 totalInvoiced += allocation.Amount.Amount; totalPaid += paid;
             }
             var exactOriginal = rate.Price.ExactTimes(terms.ContractQuantity).Scale(rate.Direction);

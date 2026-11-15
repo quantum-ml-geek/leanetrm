@@ -56,7 +56,7 @@ internal static class LngCargoChecks
             lookup with { AveragingQuantity = new(ExactDecimal.Parse("1"), energy.Key) }));
         var start = new DateTimeOffset(2041, 1, 4, 0, 0, 0, TimeSpan.Zero);
         var side = new PhysicalLngCargoSide(Guid.NewGuid(), assignment, R("test_load_terminal"), R("test_load_custody"),
-            start, start.AddDays(1), start.AddDays(10), start.AddDays(11));
+            start, start.AddDays(1), start.AddDays(10), start.AddDays(11),SyntheticSideCalendars.Physical());
         PhysicalDeliveryChecks.Contract(side.GenerateSchedule().Program, new(49000, 1), 1, "49000", start, start.AddDays(11));
         var snapshot = (fixture.Snapshot with { Selections = [..fixture.Snapshot.Selections.Select((s, n) => s with {
             Observation = s.Observation with { Value = ExactDecimal.Parse(n % 2 == 0 ? "11" : "0") } })] })
@@ -65,12 +65,18 @@ internal static class LngCargoChecks
         var discount = new ExplicitDiscounting(ExactDecimal.Parse("1"), DiscountFactorSource.Undiscounted);
         SideValuationContext Context(CurveBuild scenario) => SideValuationContext.ForPhysicalLng(market, scenario, discount, [assignment]);
         var cash = new FixedSide(Guid.NewGuid(), new FlatPrice(new UnitPrice(ExactDecimal.Parse("10"), fixture.Quote)),
-            fixture.Quote, side.UnitQuantity, [new(side.DateFrom, side.DateTo, start.AddDays(20), new(1, 1), null)]);
+            fixture.Quote, side.UnitQuantity, [new(side.DateFrom, side.DateTo, start.AddDays(20), new(1, 1), null){DeliveryCompletionAt=side.DischargeTo}],SyntheticSideCalendars.Dated(false));
         var terms = new LngIncoterms(R("edition_2020"), new(R("cif_2020"), R("edition_2020")), R("test_named_port"));
         var instrument = new PhysicalLngInstrument(Guid.NewGuid(), side, cash, terms, ExactDecimal.Parse("1"), ExactDecimal.Parse("-1"));
+        foreach(var completion in new DateTimeOffset?[]{null,side.DischargeTo.AddHours(-1)})
+        {
+            var inconsistent=new FixedSide(Guid.NewGuid(),cash.Price,fixture.Quote,side.UnitQuantity,
+                [cash.Periods[0] with{DeliveryCompletionAt=completion}],cash.CalendarPolicy);
+            Reject("lng_instrument",()=>new PhysicalLngInstrument(Guid.NewGuid(),side,inconsistent,terms,ExactDecimal.Parse("1"),ExactDecimal.Parse("-1")));
+        }
         var otherScale = fixture.Quote with { Multiplier = ExactDecimal.Parse(multiplier == "1" ? "0.001" : "1") };
         var scaledCash = new FixedSide(Guid.NewGuid(), new FlatPrice(new UnitPrice(ExactDecimal.Parse("10"), otherScale)),
-            otherScale, side.UnitQuantity, [new(side.DateFrom, side.DateTo, start.AddDays(20), new(1, 1), null)]);
+            otherScale, side.UnitQuantity, [new(side.DateFrom, side.DateTo, start.AddDays(20), new(1, 1), null)],SyntheticSideCalendars.FixedPeriods([new(side.DateFrom, side.DateTo, start.AddDays(20), new(1, 1), null)]));
         Reject("lng_instrument", () => new PhysicalLngInstrument(Guid.NewGuid(), side, scaledCash, terms, ExactDecimal.Parse("1"), ExactDecimal.Parse("-1")));
         var mass = new QuantitySpecification(R("discharge_mass"), energy.Commodity, R("discharge_mass"), R("tonne"), R("mass"));
         var converted = new LngCargoQuantity(new(ExactDecimal.Parse("980"), mass.Key), energy,
@@ -100,13 +106,13 @@ internal static class LngCargoChecks
         var started = new OpenEtrm.MarketData.Calculation.ResolvedCalculationContext(Guid.NewGuid(), "lng_started", start, start, start, start);
         Reject("lng_delivery_lifecycle", () => retained.Inputs(started));
         Reject("lng_delivery_window", () => new PhysicalLngCargoSide(Guid.NewGuid(), assignment, R("load"), R("custody"), start,
-            start.AddDays(12), start.AddDays(10), start.AddDays(11)));
+            start.AddDays(12), start.AddDays(10), start.AddDays(11),SyntheticSideCalendars.Physical()));
         var monthEnd = new DateTimeOffset(2041, 2, 1, 0, 0, 0, TimeSpan.Zero);
         var crossMonth = new PhysicalLngCargoSide(Guid.NewGuid(), assignment, R("load"), R("custody"),
-            start.AddMonths(-1), start.AddMonths(-1).AddDays(1), monthEnd.AddDays(-1), monthEnd);
+            start.AddMonths(-1), start.AddMonths(-1).AddDays(1), monthEnd.AddDays(-1), monthEnd,SyntheticSideCalendars.Physical());
         Equal(crossMonth.PV(Context(market)).PresentValue.Scale(converted.Energy.Amount).ToExactString(), multiplier == "1" ? "539000" : "539");
         Reject("lng_delivery_window", () => new PhysicalLngCargoSide(Guid.NewGuid(), assignment, R("load"), R("custody"),
-            start.AddMonths(-1), start.AddMonths(-1).AddDays(1), monthEnd.AddDays(-1), monthEnd.AddTicks(10)));
+            start.AddMonths(-1), start.AddMonths(-1).AddDays(1), monthEnd.AddDays(-1), monthEnd.AddTicks(10),SyntheticSideCalendars.Physical()));
         Reject("side_market_sources", () => ScheduleMarketSources.ForPhysicalLng(market, [assignment with { } , assignment]));
         var other = new LngValuationAssignment(assignment.Key, R("another_product"), energy,
             assignment.DischargeFacility, assignment.DischargeCustody, assignment.Clock, lookup);
@@ -120,7 +126,7 @@ internal static class LngCargoChecks
         var retainedInstrument = new RetainedLngInstrument(instrument.Id, assignment, terms, members);
         FixedSide OtherCash(QuoteSpecification quote, int allocation, DateTimeOffset payment, DateOnly? end = null) =>
             new(Guid.NewGuid(), new FlatPrice(new UnitPrice(ExactDecimal.Parse("10"), quote)), quote,
-                new(ExactDecimal.Parse("1"), quote.Quantity), [new(side.DateFrom, end ?? side.DateTo, payment, new(allocation, 1), null)]);
+                new(ExactDecimal.Parse("1"), quote.Quantity), [new(side.DateFrom, end ?? side.DateTo, payment, new(allocation, 1), null)],SyntheticSideCalendars.FixedPeriods([new(side.DateFrom, end ?? side.DateTo, payment, new(allocation, 1), null)]));
         foreach (var incompatible in new[] {
             OtherCash(fixture.Quote with { Key = R("another_quote"), Quantity = R("another_quantity") }, 1, start.AddDays(20)),
             OtherCash(fixture.Quote, 2, start.AddDays(20)),

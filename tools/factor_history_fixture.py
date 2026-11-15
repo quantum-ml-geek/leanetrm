@@ -5,10 +5,11 @@ def calendar(reference, manifest):
     """Weekday UTC history and calendar-day New York windows; no exchange holiday claim."""
     catalog, revision = (manifest[k] for k in ('referenceCatalogId', 'referenceRevisionId'))
     sql = f"INSERT INTO ref_data.calendars(catalog_id,revision_id,code,clock_code,weekend_mask,coverage_from,coverage_to) VALUES('{catalog}','{revision}','weekdays_utc','test_utc',96,'2020-01-01','2022-01-01');"
-    from preview_fixture import installed_tzdb
+    from preview_fixture import installed_tzdb,fixture_clock_publications
     tzdb = installed_tzdb()
     sql += f"INSERT INTO ref_data.clock_rules(catalog_id,revision_id,code,kind,iana_zone,tzdb_version) VALUES('{catalog}','{revision}','new_york','iana','America/New_York','{tzdb}');"
     sql += f"INSERT INTO ref_data.calendars(catalog_id,revision_id,code,clock_code,weekend_mask,coverage_from,coverage_to) VALUES('{catalog}','{revision}','calendar_days_new_york','new_york',0,'2020-01-01','2022-01-01');"
+    sql += fixture_clock_publications(dict(referenceCatalogId=catalog,referenceRevisionId=revision,clocks=[dict(code='new_york',kind='iana',fixedOffsetSeconds=None,ianaZone='America/New_York',tzdbVersion=tzdb)],**{'from':'2020-01-01','to':'2022-01-01'}))
     before, separator, after = reference.rpartition('COMMIT;')
     if not separator:
         raise ValueError('The owned reference fixture must have an explicit commit boundary')

@@ -15,14 +15,14 @@ internal static class WholeTermSideFixtures
             throw new MarketDataException("swap_side_periods","Fixture periods must retain their common exact quote.");
         FixedPriceTerm price=periods.All(p=>p.Price==periods[0].Price)?periods[0].Price:
             new SteppedPrice([..periods.Select(p=>new PriceStep(p.DeliveryFrom,((FlatPrice)p.Price).Price))]);
-        return new(Guid.NewGuid(),price,quote,periods[0].UnitQuantity,[..periods.Select((p,n)=>p.Periods.Single() with{Allocation=quantities[n]})]);
+        return new(Guid.NewGuid(),price,quote,periods[0].UnitQuantity,[..periods.Select((p,n)=>p.Periods.Single() with{Allocation=quantities[n]})],periods[0].CalendarPolicy);
     }
     internal static FloatingSide Floating(ImmutableArray<FloatingSide> periods,ImmutableArray<ExactRatio> quantities)
     {
         if(periods.IsDefaultOrEmpty || quantities.IsDefault || quantities.Length!=periods.Length ||
             periods.Any(p=>p.Index!=periods[0].Index || p.Quote!=periods[0].Quote || p.UnitQuantity!=periods[0].UnitQuantity))
             throw new MarketDataException("swap_side_periods","Supply coherent fixture periods and explicit quantities.");
-        return new(Guid.NewGuid(),periods[0].Settlement,periods[0].Quote,periods[0].UnitQuantity,[..periods.Select((p,n)=>p.Periods.Single() with{Allocation=quantities[n]})]);
+        return new(Guid.NewGuid(),periods[0].Settlement,periods[0].Quote,periods[0].UnitQuantity,[..periods.Select((p,n)=>p.Periods.Single() with{Allocation=quantities[n]})],periods[0].CalendarPolicy);
     }
     internal static Side Monthly(ImmutableArray<Side> periods,QuoteSpecification quote,MonthlyQuantityBasis basis)
     {

@@ -60,7 +60,7 @@ internal static class MarketPreparationReuseChecks
         var fixing=new IndexFixing(index,quote.Key,contract.DeliveryFrom,contract.DeliveryTo,frame.At,
             new(data.DefinitionRevision,Guid.NewGuid()),new(data.ReferenceRevision,"synthetic_source"),IndexFixing.SupportedImplementation);
         var side=new FloatingSide(Guid.NewGuid(),PriceSettlementSelection.CurveTarget(index),quote,new(ExactDecimal.Parse("1"),quote.Quantity),
-            contract.DeliveryFrom,contract.DeliveryTo,[fixing],frame.At.AddMonths(3),FloatingAveraging.MonthlyIndexPrice,[new(dependencies[0],contract)],FloatingSide.IndexedImplementation);
+            contract.DeliveryFrom,contract.DeliveryTo,[fixing],frame.At.AddMonths(3),FloatingAveraging.MonthlyIndexPrice,[new(dependencies[0],contract)],FloatingSide.IndexedImplementation,SyntheticSideCalendars.Dated(true,null,null));
         var price=((SidePaymentSchedule)side.GenerateSchedule()).Payments.Single().Prices.Single();
         var expectedFixing=Refusal(()=>IndexFixingPricing.Resolve(first.Authority,price.Lookup!));
         Require(Refusal(()=>Prepare(prices:[price]))==expectedFixing,"A cached market must still validate this instrument's active fixing.");

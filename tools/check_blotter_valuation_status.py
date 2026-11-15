@@ -9,6 +9,7 @@ future on the custom monthly NG curve, observed at every close, is booked here t
 Curve shapes state per contract what a curve at that close cannot price, where reading the curve fails.
 A scheduled swap (D214) on the standard monthly curve is booked last, so the counts above stay the seeded example's.
 """
+from synthetic_side_calendars import all_dates_policy
 from collections import defaultdict
 from fractions import Fraction
 import json
@@ -346,7 +347,7 @@ def run_scheduled_checks(session):
                 'shortMonth': None, 'adjustment': 'unadjusted', 'calendar': None, 'implementation': 'monthly_payment_date_rules_v1'}
 
     def side(amounts, terms):
-        return {'basis': 'period_total', 'quantity': index['quantityChoices'][0]['specification'], 'amount': None, 'allocation': None,
+        return {'calendarPolicy': all_dates_policy(observation=terms is floating), 'basis': 'period_total', 'quantity': index['quantityChoices'][0]['specification'], 'amount': None, 'allocation': None,
                 'priceApplication': 'period_average_times_quantity_v1', 'power': None,
                 'periods': [{'amount': amount, **terms(start, end)} for (start, end), amount in zip((('2021-01-01', '2021-02-01'), ('2021-02-01', '2021-03-01')), amounts)]}
 

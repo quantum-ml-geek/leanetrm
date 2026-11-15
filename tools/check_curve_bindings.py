@@ -3,7 +3,8 @@ import json
 from copy import deepcopy
 from fractions import Fraction
 from uuid import uuid4
-from preview_fixture import held_gas_measures, trade_booking
+from preview_fixture import held_gas_measures, trade_booking, RCAT, RREV
+from synthetic_side_calendars import side_calendar_policy
 from check_portfolio_risk import financial
 
 
@@ -20,7 +21,7 @@ def run_checks(client, manifest, query, run_worker, frame, mixed, daily_graph, p
         selection='containing_delivery_interval_v1',implementation='published_custom_curve_projection_v1')
     def physical(code,start,end):
         return dict(code=code,pipeline=path['pipeline'],zone=path['zone'],deliveryPoint=path['deliveryPoint'],product=path['product'],direction='receive',
-            deliveryFrom=start,deliveryTo=end,quantityBasis='per_operating_day',quantity='1',link=None,forecastCurve=reference(mixed))
+            deliveryFrom=start,deliveryTo=end,quantityBasis='per_operating_day',quantity='1',link=None,forecastCurve=reference(mixed),calendarPolicy=side_calendar_policy(dict(revision=dict(catalogId=RCAT,revisionId=RREV),code='test_utc_every_day'),delivery=True,observation=False,payment=False))
     book=str(uuid4())
     query(f"INSERT INTO trading.books SELECT catalog_id,'{book}',portfolio_id,'Synthetic mixed curve gas',publication_order,effective_at FROM trading.books LIMIT 1;")
     terms={**context,**trade_booking(), 'operationId':str(uuid4()),'bookId':book,'definitionRevisionId':path['definitionRevisionId'],
@@ -73,15 +74,16 @@ def run_checks(client, manifest, query, run_worker, frame, mixed, daily_graph, p
         encoded='NULL' if source is None else "'"+json.dumps(source).replace("'","''")+"'::jsonb"
         runtime_query(query,manifest,f"""SELECT security.use_market_context('{manifest['catalogId']}','{facts['context']['contextId']}');
           SELECT security.use_trading_context('{manifest['catalogId']}','2020-12-18T16:00:00Z');
-          DO $reject$ DECLARE a market_data.gas_valuation_assignments;BEGIN
+          DO $reject$ DECLARE a market_data.gas_valuation_assignments;d ref_data.gas_delivery_conventions;BEGIN
           SELECT x.* INTO STRICT a FROM market_data.gas_valuation_assignments x JOIN trading.gas_component_terms m
            ON(m.catalog_id,m.definition_revision_id,m.assignment_code)=(x.catalog_id,x.revision_id,x.code)
            WHERE m.instrument_id='{booked['instrumentId']}' AND m.slot=0;
+          d=security.gas_setup_delivery(a);
           BEGIN
-           PERFORM trading.require_gas_program_shape('{manifest['catalogId']}','{schedule}',0,'2021-01-01','2021-02-01','2021-02-01',31,NULL,a,NULL,'2021-01-01',{encoded});
+           PERFORM trading.require_gas_program_shape('{manifest['catalogId']}','{schedule}',0,'2021-01-01','2021-02-01','2021-02-01',31,NULL,a,d,'2021-01-01',{encoded});
            RAISE EXCEPTION 'wrong_source_or_query_accepted';
           EXCEPTION WHEN raise_exception THEN IF SQLERRM<>'gas_schedule_curve_source' THEN RAISE;END IF;END;
-        END$reject$;""",prefix=f"GRANT EXECUTE ON FUNCTION {signature} TO openetrm_runtime;"+mutation,commit=False)
+        END$reject$;""",prefix=f"GRANT EXECUTE ON FUNCTION {signature},security.gas_setup_delivery(market_data.gas_valuation_assignments) TO openetrm_runtime;"+mutation,commit=False)
     assert query(f"SELECT has_function_privilege('openetrm_runtime','{signature}','EXECUTE');")=='f'
     client.call('profile',{'profile':'risk'})
     scope={'context':shared,'bookIds':[book],'portfolioIds':[]}

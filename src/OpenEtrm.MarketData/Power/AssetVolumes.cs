@@ -159,7 +159,7 @@ internal static class AssetDefinitions
         var ordered=asset.Versions.OrderBy(v=>v.From).ToArray();
         foreach(var version in ordered)
         {
-            bool DayStart(DateTimeOffset instant)=>instant.Offset==TimeSpan.Zero && asset.OperatingClock.StartOfDay(DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(instant,asset.OperatingClock.Zone).DateTime)).ToUniversalTime()==instant;
+            bool DayStart(DateTimeOffset instant)=>instant.Offset==TimeSpan.Zero && asset.OperatingClock.StartOfDay(DateOnly.FromDateTime(asset.OperatingClock.LocalAt(instant).DateTime)).ToUniversalTime()==instant;
             if(version.From>=version.To || !DayStart(version.From) || !DayStart(version.To) || version.CapacityBasis.CompareTo(default)<=0 || version.AccreditedCapacity is {} accredited && accredited.CompareTo(default)<0)
                 throw new MarketDataException("asset_version","Capacity versions need native operating-day boundaries, positive bases and nonnegative explicit accreditation.");
         }

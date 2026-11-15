@@ -264,13 +264,15 @@
   </section>
   <section id="power-page" hidden>
     <p id="power-historical" class="profile-note" role="status" hidden>Power TOUs requires working data. Choose Working data above to view TOU products and check hours.</p>
-    <div id="power-products-card" class="card"><div class="card-heading"><div><h2>TOU products</h2><p>Peak definitions used by the hours check. The seeded ISO products follow common conventions; verify them against the product specification before any settlement use. Off-peak is always the exact complement; holidays come from each curve's settlement index calendar.</p></div></div>
+    <div id="power-products-card" class="card"><div class="card-heading"><div><h2>TOU products</h2><p>Peak definitions used by the hours check. The seeded ISO products follow common conventions; verify them against the product specification before any settlement use. Off-peak is always the exact complement; each published version fixes its calendar, clock, weekly hours and holiday treatment.</p></div></div>
       <div id="tou-list" class="table-wrap"></div>
       <section id="tou-editor" hidden><div class="card-heading"><div><h3>Edit a TOU product</h3><p id="tou-version">New product</p></div><button id="tou-new" type="button" class="secondary">New product</button></div>
         <form id="tou-form">
           <div class="schedule-fields"><div><label for="tou-code">Code · stable identity</label><input id="tou-code" required maxlength="32" pattern="[a-z][a-z0-9_]{0,31}" autocomplete="off"></div><div><label for="tou-name">Name</label><input id="tou-name" required maxlength="80" autocomplete="off"></div></div>
           <div class="schedule-fields three"><div><label for="tou-clock">Market clock</label><select id="tou-clock" required></select></div><div><label for="tou-start">Peak starts</label><select id="tou-start" required></select></div><div><label for="tou-end">Peak ends · last hour</label><select id="tou-end" required></select></div></div>
           <div class="schedule-fields three"><div><label for="tou-saturday">Peak days</label><select id="tou-saturday" required><option value="">Choose…</option><option value="false">Monday–Friday</option><option value="true">Monday–Saturday</option></select></div></div>
+          <div class="schedule-fields"><div><label for="tou-calendar">Product calendar · exact version</label><select id="tou-calendar" required></select></div><div><label for="tou-holidays">Holiday treatment</label><select id="tou-holidays" required><option value="">Choose…</option><option value="weekly_mask_explicit_closures_v1">Weekly hours with explicit holiday closures</option></select></div></div>
+          <div id="tou-calendar-details" class="field-help"></div>
           <div class="schedule-actions"><button id="tou-save" type="submit">Save draft</button><button id="tou-publish" type="button">Publish draft</button></div>
           <p class="field-help">Published versions never change; saving an edit to one creates the next draft. Calculations use published versions only.</p>
         </form></section>

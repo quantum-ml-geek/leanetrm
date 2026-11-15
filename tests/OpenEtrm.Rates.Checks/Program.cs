@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using System.Globalization;
 using OpenEtrm.Rates;
 using OpenEtrm.MarketData;
+using OpenEtrm.MarketData.Trading;
 
 if(args is ["--monthly-swap-benchmark"]){MonthlySwapRateChecks.Benchmark();return;}
 
@@ -100,6 +101,36 @@ Check("undiscounted helper still requires structurally exact currency context an
     Reject("discount_context",()=>PaymentDiscount.Resolve(false,R("currency"),new(2022,1,1),snapshot with {Id=Guid.Empty},null));
     Reject("discount_context",()=>PaymentDiscount.Resolve(false,R("currency"),new(2022,1,1),snapshot with {ValuationAt=snapshot.ValuationAt.ToOffset(TimeSpan.FromHours(1))},null));
     Reject("discount_context",()=>PaymentDiscount.Resolve(false,R("currency"),new(2020,1,1),snapshot,null));
+});
+Check("payment-day value is nominal without rate observations or a rate mapping",()=>{
+    var selected=snapshot with{ValuationAt=snapshot.ValuationAt.AddHours(12),Selections=[]};
+    var today=DateOnly.FromDateTime(selected.ValuationAt.UtcDateTime);
+    var value=PaymentDiscount.Resolve(true,R("currency"),today,selected,null);
+    if(value.Factor!=ExactDecimal.Parse("1")||!value.Pillars.IsEmpty||value.Curve is not null)
+        throw new Exception("Same-day cash acquired a discount factor or rate dependency.");
+    var key=new OpenEtrm.MarketData.Trading.SidePaymentKey(Guid.NewGuid(),0,snapshot.ValuationAt,R("currency"));
+    var provider=new CurrencyDefaultDiscounting([key],snapshot,true,null);
+    var rolled=provider.ResolveForValuation([key],snapshot,snapshot.ValuationAt.AddHours(8),OpenEtrm.MarketData.Calculation.ClockChange.FrozenInputs).Single();
+    if(rolled.DiscountFactor!=ExactDecimal.Parse("1")||rolled.RateDefinition is not null||rolled.Source!=OpenEtrm.MarketData.Trading.DiscountFactorSource.PaymentDay)
+        throw new Exception("An intraday payment-day clock roll acquired a curve or changed nominal cash.");
+});
+Check("same-date instant values retain their rate contract independently of standard cash",()=>{
+    var mapping=new CurrencyDiscountCurve(Guid.NewGuid(),R("currency"),definition);
+    var at=snapshot.ValuationAt.AddHours(8);
+    var selected=snapshot with{ValuationAt=at};
+    var cash=new SidePaymentKey(Guid.NewGuid(),0,snapshot.ValuationAt,R("currency"));
+    var instant=new SidePaymentKey(Guid.NewGuid(),1,snapshot.ValuationAt.AddHours(18),R("currency")){Timing=ValueTimingKind.Instant};
+    Reject("discount_curve_missing",()=>new CurrencyDefaultDiscounting([cash,instant],selected,true,null));
+    foreach(var keys in new[]{ImmutableArray.Create(cash,instant),ImmutableArray.Create(instant,cash)})
+    {
+        var discounting=new CurrencyDefaultDiscounting(keys,selected,true,mapping);
+        var factors=discounting.Resolve(keys,selected);
+        if(factors.Single(f=>f.Payment==cash).Source!=DiscountFactorSource.PaymentDay||
+            factors.Single(f=>f.Payment==instant).Source!=DiscountFactorSource.CurrencyDefault||
+            discounting.Inputs[instant].Timing!=ValueTimingKind.Instant||discounting.Inputs[instant].Curve!=definition.Key)
+            throw new Exception("A date-only cache or nominal shortcut erased an instant's selected rate contract.");
+        Reject("valuation_time_event",()=>discounting.ResolveForValuation([instant],selected,instant.PaymentAt,OpenEtrm.MarketData.Calculation.ClockChange.FrozenInputs));
+    }
 });
 passed += SwapValuationChecks.Run();
 passed += MonthlySwapRateChecks.Run();

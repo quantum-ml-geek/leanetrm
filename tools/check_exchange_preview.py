@@ -90,7 +90,7 @@ def run_checks(url,query=None,manifest=None):
         'quantity':{'value':'1','specification':energy['specification']},'quantityBasis':'total_energy','allocation':'flat_rate',
         'display':power_catalog['display'],'priceType':'Synthetic','timing':'Illustrative flat futures price',
         'nonHolidays':peak['nonHolidays'],'holidays':peak['holidays'],'numericalPolicy':power_catalog['numericalPolicy']})
-    assert example['summary']['hours']=='320' and example['summary']['energy']=='1' and example['holidays']==['2026-11-26'] and example['holidayCalendar']=='ept_published_peak'
+    assert example['summary']['hours']=='320' and example['summary']['energy']=='1' and example['holidays']==['2026-11-26'] and example['holidayCalendar']['code']=='ept_published_peak'
     assert Decimal(example['summary']['amount'])==Decimal(power_contract['mark']).quantize(Decimal('0.01'))
     print('PASS power example: exact indexed futures reference feeds a typed one-MWh peak allocation without inferring official hourly prices.',flush=True)
     risk_context={**context,'convention':'trading_workspace_v1'}

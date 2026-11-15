@@ -107,11 +107,8 @@ public static class PpaCapabilities
             if(t.Currency!=first.Currency)throw PpaErrors.Error("ppa_currency",slot,"All sides use the same exact currency.");
             if(t.Currency.Revision!=instrument.Reference || t.UnitQuantity.Specification.Revision!=instrument.Reference || t.Delivery.Clock.Revision!=instrument.Reference)
                 throw PpaErrors.Error("ppa_reference_revision",slot,"Side references must retain the instrument revision.");
-            if(t.DateRule.Calendar is {} calendar && calendar.Key.Revision!=instrument.Reference)
-                throw PpaErrors.Error("ppa_reference_revision",slot,"The value-date calendar must retain the instrument reference revision.");
-            if(t.Quantity is ProfileQuantity profile && (t.Schedule.Cadence!=IntervalScheduleCadence.NativeIntervals ||
-                t.Schedule.Hours is not {} hours || hours.Membership!=profile.Hours.Membership || hours.Peak!=profile.Hours.Peak || !hours.Holidays.SequenceEqual(profile.Hours.Holidays)) ||
-                t.Quantity is VolumeQuantity && (t.Schedule.Cadence!=IntervalScheduleCadence.NativeIntervals || t.Schedule.Hours?.Membership!=BlockMembership.All) ||
+            m.Side.CalendarPolicy.RequireInterval(t,m.Side is FloatingSide);
+            if(t.Quantity is VolumeQuantity && (t.Schedule.Cadence!=IntervalScheduleCadence.NativeIntervals || t.Schedule.Hours?.Membership!=BlockMembership.All) ||
                 t.Quantity is AccreditedQuantity && t.Schedule.Cadence!=IntervalScheduleCadence.OperatingMonths)
                 throw PpaErrors.Error("ppa_cadence",slot,"The generated schedule must retain its quantity rule's exact delivery cadence and mask.");
             Money.RequireKey(t.Currency);Money.RequireKey(t.UnitQuantity.Specification);Money.RequireKey(t.Delivery.Clock);Money.RequireKey(t.ScheduleQuantity);

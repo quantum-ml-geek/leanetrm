@@ -63,7 +63,7 @@ internal static class VolSurfaceFitChecks
         {
             var (underlying,settlement)=FuturesOptionPricing.Requests(settled.Data.Model,option.Series,FuturesOptionPricing.DailySettlement);
             var basis=settled.Data.Model.Build(settled.Snapshot,[underlying,settlement],ct);
-            var expiry=new SidePaymentKey(option.Id,0,option.Series.Terms.ExpiryAt,option.Currency);
+            var expiry=new SidePaymentKey(option.Id,0,option.Series.Terms.ExpiryAt,option.Currency){Timing=ValueTimingKind.Instant};
             var discounting=new CurrencyDefaultDiscounting([expiry],settled.Snapshot,true,curves[option.Currency]);
             // A solve the calibration refuses has still touched its settlements and discount factor.
             FuturesOptionCalibrationReceipt? receipt;

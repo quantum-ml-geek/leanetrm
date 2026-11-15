@@ -1,3 +1,4 @@
+import {displayPaymentDate} from './payment-date.js';
 import type {Catalog} from './ppa-contract.js';
 import {displayInstant,timeLabels} from './market-view.js';
 import {amountText} from './amount-display.js';
@@ -25,10 +26,11 @@ export function quantityLabel(reference:Reference,catalog:Pick<Catalog,'referenc
  return String(unit.symbol);
 }
 export type InspectionRow={interval:{start:string;end:string};quantity:Exact;quantitySpecification?:Reference;currency?:{code:string};amount:Exact;presentValue?:Exact|null;kind:string;quantityState:string;economicClass:string;coverage:string;valueAt:string;priceComponents?:{price:Exact&{unit?:{currency:{code:string};quantity:Reference;multiplier:string}};state:string}[]};
+export function scheduleValueDate(row:{kind:string;valueAt:string},zone:string){return row.kind==='Payment'?displayPaymentDate(row.valueAt):displayInstant(row.valueAt,zone);}
 export function inspectionRows(rows:InspectionRow[],zone:string,label:(reference:Reference)=>string=r=>r.code):string[][]{
  const labels=timeLabels(rows.flatMap(r=>[r.interval.start,r.interval.end]),zone);
  const unitOf=(u:{currency:{code:string};quantity:Reference;multiplier:string})=>`${u.multiplier==='1'?'':u.multiplier+' '}${u.currency.code.toUpperCase()} / ${label(u.quantity)}`;
- return rows.map((r,i)=>[labels[i*2],labels[i*2+1],r.kind,shownExact(r.quantity,'quantity')+(r.quantitySpecification?' '+label(r.quantitySpecification):''),r.quantityState,(r.priceComponents??[]).map(p=>`${shownExact(p.price,'price')}${p.price.unit?' '+unitOf(p.price.unit):''} · ${p.state}`).join('; '),shownExact(r.amount,'money')+(r.currency?' '+r.currency.code.toUpperCase():''),shownExact(r.presentValue,'money')+(r.currency?' '+r.currency.code.toUpperCase():''),r.economicClass,r.coverage,displayInstant(r.valueAt,zone)]);
+ return rows.map((r,i)=>[labels[i*2],labels[i*2+1],r.kind,shownExact(r.quantity,'quantity')+(r.quantitySpecification?' '+label(r.quantitySpecification):''),r.quantityState,(r.priceComponents??[]).map(p=>`${shownExact(p.price,'price')}${p.price.unit?' '+unitOf(p.price.unit):''} · ${p.state}`).join('; '),shownExact(r.amount,'money')+(r.currency?' '+r.currency.code.toUpperCase():''),shownExact(r.presentValue,'money')+(r.currency?' '+r.currency.code.toUpperCase():''),r.economicClass,r.coverage,scheduleValueDate(r,zone)]);
 }
 export function refusalText(error:{code?:string;message?:string;scope?:unknown;selectedBundle?:unknown;affectedBindings?:unknown}):string{
  return [error.code,error.message,error.scope===undefined?'':`Requested scope: ${JSON.stringify(error.scope)}`,error.selectedBundle===undefined?'':`Selected revisions: ${JSON.stringify(error.selectedBundle)}`,error.affectedBindings===undefined?'':`Affected bindings: ${JSON.stringify(error.affectedBindings)}`].filter(Boolean).join('\n');

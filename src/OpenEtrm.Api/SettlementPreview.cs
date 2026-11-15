@@ -73,6 +73,7 @@ internal sealed class SettlementPreview(PreviewDatabase database,PpaStore trades
             throw Error("incompatible","The entire trade must retain the selected exact definition and reference pins.");
         await PpaReads.RequireMarket(connection,Catalog,bundle.RevisionId,bundle.ReferenceCatalogId,bundle.ReferenceRevisionId,frame,context,ct);
         var envelopes=new Dictionary<Guid,JsonElement>();var compiled=new Dictionary<Guid,PpaInstrument>();
+        var clocks=new Dictionary<Guid,PowerClock>();var retained=new RetainedScheduleStore(Catalog);var retainedSides=new RetainedSideSchedules.ReadScope();
         var originalRow=record.GetProperty("originalBinding");
         foreach(var id in rows.Select(r=>r.Id("instrument_id")).Append(originalRow.Id("instrument_id")).Distinct())
         {
@@ -81,7 +82,11 @@ internal sealed class SettlementPreview(PreviewDatabase database,PpaStore trades
             // This contract has metered quantities and consumes no TOU/profile fallback.
             if(terms.NormalizationAssets.Length is <1 or >MonthlyGrossPreview.MaximumAssets)throw Error("incompatible","Declare one through four normalization assets explicitly.");
             var sideIds=envelope.GetProperty("sideIds").EnumerateArray().ToDictionary(s=>new SideSlot(PpaCompiler.Role(s.Text("role")),s.GetProperty("ordinal").GetInt32()),s=>s.Id("sideId"));
+            var programs=await retained.LoadPrograms(connection,id,context,frame.At,ct);
+            terms=SideCalendarPolicies.Retain(terms,slot=>programs.Single(p=>p.SideId==sideIds[slot]).Identity.EconomicIdentity);
+            var schedules=await retained.Load(connection,id,context,frame.At,ct);
             var instrument=PpaCompiler.Compile(data,terms,[],await PpaCompiler.ReadQuantityTypes(connection,data,terms,ct),id,sideIds);
+            instrument=retainedSides.Attach(instrument,schedules);clocks.Add(id,terms.RetainedClock!);
             await PpaCompiler.ValidateDefinitions(connection,data,instrument,ct);compiled.Add(id,instrument);
         }
         GrossPaymentBinding Binding(JsonElement row,Guid side,int origin,string role,int ordinal)=>new(row.Id("binding_id"),origin,compiled[row.Id("instrument_id")],new(PpaCompiler.Role(role),ordinal),side,
@@ -94,7 +99,7 @@ internal sealed class SettlementPreview(PreviewDatabase database,PpaStore trades
             if(matches.Length!=1 || matches[0].Id("instrument_id")!=row.Id("instrument_id"))throw Error("manifest","Every selected binding requires exactly one explicit lineage mapping.");
             var mapping=matches[0];bindings.Add(Binding(row,mapping.Id("side_id"),mapping.GetProperty("origin_revision").GetInt32(),mapping.Text("role"),mapping.GetProperty("ordinal").GetInt32()));
         }
-        var clock=PpaQuantitiesStore.Clock(data,original.Instrument.Delivery.Clock.Code);
+        var clock=clocks[original.Instrument.Id];
         var terminated=head.Text("event_kind")=="terminated";
         var plan=MonthlyGrossPreview.Plan(new(Catalog,trade,request.LineageId,month),original,bindings.ToImmutable(),terminated,terminated?head.Instant("boundary_at"):null,frame.At,clock);
         var sources=plan.Contributions.SelectMany(r=>MonthlyGrossPreview.Volume(r.Binding).Sources).Distinct().Select(s=>PpaQuantitiesStore.Source(data,s.Code)).ToImmutableArray();
@@ -146,7 +151,7 @@ internal sealed class SettlementPreview(PreviewDatabase database,PpaStore trades
         ct.ThrowIfCancellationRequested();await Recheck(connection,trade,ct);
         return (new{implementation=lineage.Text("contract"),cashState="unaccepted_preview",occurrence=plan.Identity,
             quantity=value.Quantity,exactCash=value.ExactCash,roundedCash=value.RoundedCash,roundingDifference=value.RoundingDifference,
-            due=new{at=plan.DueAt,status=frame.At>=plan.DueAt?"overdue_candidate":"not_due_candidate",paymentRuleId=lineage.Id("payment_rule_id"),adjustmentPolicy=lineage.Text("adjustment_due")},
+            due=new{at=plan.DueAt,date=PaymentDatePolicy.Date(plan.DueAt),status=PaymentDatePolicy.IsOverdue(plan.DueAt,frame.At)?"overdue_candidate":PaymentDatePolicy.IsDue(plan.DueAt,frame.At)?"due_candidate":"not_due_candidate",paymentRuleId=lineage.Id("payment_rule_id"),adjustmentPolicy=lineage.Text("adjustment_due")},
             components=value.Components.Select(c=>new{key=c.Origin.Key,bindingId=c.Origin.Binding.BindingId,originRevision=c.Origin.Binding.OriginRevision,instrumentId=c.Origin.Binding.Instrument.Id,
                 sideId=c.Origin.Binding.SideId,originalMw=c.Origin.Binding.Mw.ToString(),c.Origin.Interval,c.Origin.Strike,paymentPrice=c.Index is null?null:new{c.PaymentPrice!.Numerator,c.PaymentPrice.Denominator},
                 index=c.Index is {} p?new{curve=((FloatingSide)MonthlyGrossPreview.Member(c.Origin.Binding).Side).Price.Curve.Code,state=p.State.ToString(),p.Publication,contractuallyFinal=false,

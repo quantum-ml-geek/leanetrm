@@ -32,7 +32,7 @@ public static partial class SideScheduleInspection
    var geometry=Geometry(program,guard.Output,0,boundary);var one=new SignedRatio(1,1);var cash=row.Settlement is not null;
    var prices=price.Column.Presence[price.Cell]!=ScheduleCellPresence.Resolved?[]:
     Enum.GetValues<SchedulePriceFacts>().Where(f=>f!=SchedulePriceFacts.None&&(price.Column.States[price.Cell].Prices&f)!=0).Select(f=>f.ToString()).ToImmutableArray();
-   var due=state.Kind==ComponentKind.Payment?guard.Output.ValueAt<=evaluation.Context.ValuationAt?"Due":"NotDue":null;
+   var due=state.Kind==ComponentKind.Payment?PaymentDatePolicy.IsDue(guard.Output.ValueAt!.Value,evaluation.Context.ValuationAt)?"Due":"NotDue":null;
    var measures=row.Measures.IsEmpty?null:string.Join(",",row.Measures);
    rows.Add(new($"{guard.Output.Ordinal}:0",guard.Output.Operation,state.Kind.ToString(),geometry.From,geometry.To,geometry.Start,geometry.End,
     guard.Output.ObservationFrom,guard.Output.ObservationTo,guard.Output.ValueAt,Value(quantity.Column,quantity.Cell,scale),Value(price.Column,price.Cell,one),

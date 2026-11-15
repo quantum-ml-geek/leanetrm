@@ -30,7 +30,7 @@ internal static class PowerIntervalQuantityChecks
     var rows=source.Rows(month);if(rows.Length!=count)throw new Exception("The captured native delivery grid changed.");
     Equal(rows.Aggregate(new ExactQuantity(0,1,energy.Key),(sum,row)=>sum.Add(row.PerUnit)).ToQuantity().Amount.ToString(),total);
     foreach(var row in rows){
-     var hour=TimeZoneInfo.ConvertTime(row.Interval.Start,clock.Zone).Hour;
+     var hour=clock.LocalAt(row.Interval.Start).Hour;
      Equal(row.PerUnit.ToQuantity().Amount.ToString(),hour is >=7 and <15?"2":"1");
      if(row.State!=VolumeState.Contractual)throw new Exception("Firm shaping became forecast or measured generation.");
     }

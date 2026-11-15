@@ -3,6 +3,7 @@ from check_physical_operations import january_delivery_frame
 from uuid import uuid4
 from preview_client import PreviewClient, initial_frame
 from preview_fixture import trade_booking
+from synthetic_side_calendars import side_calendar_policy
 
 
 def run_checks(url, query, manifest):
@@ -14,9 +15,10 @@ def run_checks(url, query, manifest):
     before={'snapshotId':initial_frame(workspace,'2020-12-18')['id'],'convention':'physical_gas_fixed_quantity_v4','knowledgeMode':'current'}
     after={**before,'snapshotId':january_delivery_frame(workspace)}
     catalog=c.call('gas/catalog',before);point=next(p for p in catalog['locations'] if p['deliveryPoint']=='synthetic_gas_point_a')
+    reference=next(item['reference'] for item in catalog['sideCalendars'] if item['code']=='test_utc_every_day')
     terms={**before,**trade_booking(),'operationId':str(uuid4()),'bookId':catalog['books'][0]['id'],'definitionRevisionId':point['definitionRevisionId'],'gasSetupId':catalog['gasSetupId'],'discounting':False,'profile':'fixed_gas_composition_v1',
-      'physicalSides':[{'code':'receipt','pipeline':point['pipeline'],'zone':point['zone'],'deliveryPoint':point['deliveryPoint'],'product':point['product'],'direction':'receive','deliveryFrom':'2021-01-01','deliveryTo':'2021-01-03','quantityBasis':'per_operating_day','quantity':'100','link':None}],
-      'cashSides':[{'code':'payment','role':'consideration','direction':'pay','source':'receipt','stage':'delivery','price':'3','tariffCode':None,'paymentAt':'2021-02-02T00:00:00Z'}]}
+      'physicalSides':[{'code':'receipt','pipeline':point['pipeline'],'zone':point['zone'],'deliveryPoint':point['deliveryPoint'],'product':point['product'],'direction':'receive','deliveryFrom':'2021-01-01','deliveryTo':'2021-01-03','quantityBasis':'per_operating_day','quantity':'100','link':None,'calendarPolicy':side_calendar_policy(reference,delivery=True,observation=False,payment=False)}],
+      'cashSides':[{'code':'payment','role':'consideration','direction':'pay','source':'receipt','stage':'delivery','price':'3','tariffCode':None,'paymentAt':'2021-02-02T00:00:00Z','calendarPolicy':side_calendar_policy(reference,delivery=True,observation=False,payment=True)}]}
     booked=[c.call('gas/composition/book',{**terms,'operationId':str(uuid4())}) for _ in range(2)]
     trades=[b['tradeId'] for b in booked];day='2021-01-01'
     obligations=[c.call('gas/quantities/read',dict(context=after,tradeId=t,selectionPolicy='operational_projection_v1'))['rows'][0]['obligationId'] for t in trades]

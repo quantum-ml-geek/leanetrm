@@ -243,7 +243,7 @@ test('a started-delivery trade draws its measures as separate figures with expec
  const measures={unrealized:'1445',realizedUnsettled:'-10855',total:'-9410',label:'Unrealized + realized unsettled',discounting:'undiscounted',expectedCash:[{dueAt:'2026-11-10T00:00:00Z',amount:'-9300'}]};
  const shown=one(draw({mode:'booked',presentation:'schedules',measures,currency:'USD'}),'ticket-measures');
  assert.deepEqual(byClass(shown,'ticket-summary-line').map(n=>n.textContent),['Unrealized (remaining delivery)1,445 USD','Realized, unsettled (delivered, not paid)-10,855 USD','Unrealized + realized unsettled-9,410 USD',
-  'Discountingundiscounted','Expected cash by due date · not added to the total','Due 2026-11-10T00:00:00Z-9,300 USD']);
+  'Discountingundiscounted','Expected cash by due date · not added to the total','Due Nov 10, 2026-9,300 USD']);
  assert.equal(byClass(draw({mode:'booked',presentation:'schedules',measures:null,currency:'USD'}),'ticket-measures').length,0);
  assert.equal(byClass(draw(),'ticket-measures').length,0);
 });

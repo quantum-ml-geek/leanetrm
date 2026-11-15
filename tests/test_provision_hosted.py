@@ -1,5 +1,6 @@
 """The page assistant's credential key files that hosted provisioning writes (docs/ai-assistant.md §5.2, §11)."""
 import os
+import json
 from pathlib import Path
 import stat
 import sys
@@ -27,6 +28,27 @@ class CredentialKeyChecks(unittest.TestCase):
             output = Path(root) / 'pilot'
             prepare('https://pilot.synthetic.invalid', str(uuid4()), '2026c', output)
             self.assert_private_keys(output)
+            self.assertNotIn('INSERT INTO ref_data.clock_rules', (output / 'seed.sql').read_text())
+
+    def test_explicit_clock_coverage_is_rendered_before_sealing(self):
+        with tempfile.TemporaryDirectory() as root:
+            output = Path(root) / 'pilot'
+            def render(request, target):
+                body=json.loads(request.read_text())
+                self.assertEqual((body['from'],body['to']),('2026-01-01','2028-01-01'))
+                self.assertEqual({clock['code'] for clock in body['clocks']},{'utc','pjm','ercot'})
+                self.assertEqual({clock['tzdbVersion'] for clock in body['clocks'] if clock['kind']=='iana'},{'2026c'})
+                target.write_text('SELECT synthetic_capture_publication();\n')
+            prepare('https://pilot.synthetic.invalid',str(uuid4()),'2026c',output,
+                    clock_publication=('2026-01-01','2028-01-01',render))
+            sql=(output/'seed.sql').read_text()
+            self.assertLess(sql.index('INSERT INTO ref_data.clock_rules'),sql.index('SELECT synthetic_capture_publication'))
+            self.assertLess(sql.index('SELECT synthetic_capture_publication'),sql.index('UPDATE ref_data.revisions'))
+
+    def test_collection_requires_explicit_captured_clock_coverage(self):
+        with tempfile.TemporaryDirectory() as root:
+            with self.assertRaisesRegex(ValueError,'clock coverage'):
+                prepare('https://pilot.synthetic.invalid',str(uuid4()),'2026c',Path(root)/'pilot',collection={})
 
     def test_an_existing_installation_gets_just_the_two_files_for_the_api_account(self):
         with tempfile.TemporaryDirectory() as root:

@@ -159,3 +159,13 @@ test('a draft opens as a ticket holding its sides and values, each the person\'s
  assert.throws(()=>ticketOf(description,{...draft,version:2}),/version/);
  assert.throws(()=>ticketOf(description,{...draft,sides:[{kind:'swap',code:'S',values:{}}]}),/swap/);
 });
+
+
+test('per-Side calendar terms survive reopening and draft serialization without implicit selection',()=>{
+ const reference={revision:{catalogId:'synthetic-catalog',revisionId:'synthetic-version'},code:'synthetic-calendar'};
+ const policy={implementation:'side_calendar_policy_v1',delivery:{applicable:true,calendar:reference},observation:{applicable:false,calendar:null},payment:{applicable:true,calendar:reference}};
+ const draft=draftOf(newTicket(description));
+ assert.equal(draft.sides[0].calendarPolicy,undefined);
+ draft.sides[0].calendarPolicy=policy;
+ assert.deepEqual(draftOf(ticketOf(description,draft)).sides[0].calendarPolicy,policy);
+});

@@ -10,10 +10,15 @@ ROOT = Path(__file__).resolve().parents[1]
 CHECK_PROJECTS = (
     ('tests/OpenEtrm.MarketData.Checks/OpenEtrm.MarketData.Checks.csproj', ()),
     ('tests/OpenEtrm.MarketData.Checks/OpenEtrm.MarketData.Checks.csproj', ('--futures-options',)),
+    ('tests/OpenEtrm.MarketData.Checks/OpenEtrm.MarketData.Checks.csproj', ('--calendar-policy',)),
+    ('tests/OpenEtrm.MarketData.Checks/OpenEtrm.MarketData.Checks.csproj', ('--payment-date-policy',)),
     ('tests/OpenEtrm.Rates.Checks/OpenEtrm.Rates.Checks.csproj', ()),
     ('tests/OpenEtrm.Shared.Checks/OpenEtrm.Shared.Checks.csproj', ()),
     ('tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj', ('--context-resolution',)),
     ('tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj', ('--schedules',)),
+    ('tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj', ('--published-clock',)),
+    ('tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj', ('--calendar-authoring',)),
+    ('tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj', ('--gas-ticket',)),
     ('tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj', ('--historical-risk',)),
     ('tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj', ('--monte-carlo-risk',)),
     ('tests/OpenEtrm.MarketData.Checks/OpenEtrm.MarketData.Checks.csproj', ('--hybrid-monte-carlo-risk',)),
@@ -68,6 +73,9 @@ def run_checks(pg_bin, dotnet, browser, *, group='all', run=subprocess.run):
     check('owned operating settings database',[sys.executable,'tools/check_operating_settings.py','--pg-bin',str(pg_bin)])
     check('native volatility-fit admission expiry',[sys.executable,'tools/check_vol_surface_admission_expiry.py','--pg-bin',str(pg_bin)])
     check('owned reference metadata database',[sys.executable,'tools/check_reference_editing.py','--pg-bin',str(pg_bin)])
+    check('populated payment-day program upgrade',[sys.executable,'tools/check_payment_day_upgrade.py','--pg-bin',str(pg_bin)])
+    check('calendar migration helper contracts',[sys.executable,'tools/check_calendar_upgrade.py','--pg-bin',str(pg_bin)])
+    check('native Side calendar bindings',[sys.executable,'tools/check_side_calendar_policies.py','--pg-bin',str(pg_bin)])
     check('recorded cash upgrade over existing option bookings',[sys.executable,'tools/check_recorded_cash_upgrade.py','--pg-bin',str(pg_bin)])
     check('exact temporal sources, retained close upgrade and claimed worker replay',
           [sys.executable,'tools/check_context_resolution.py','--upgrade-existing-close','--pg-bin',str(pg_bin),'--dotnet',str(dotnet)])
@@ -92,6 +100,7 @@ def run_checks(pg_bin, dotnet, browser, *, group='all', run=subprocess.run):
     preview_check('assistant page operations, approvals and guidance', [*preview, '--assistant-workspace-check', '--browser-check', '--browser', str(browser)], suite='assistant')
     preview_check('isolated units and deal precision browser', [*preview, '--unit-check', '--browser-check', '--browser', str(browser)])
     preview_check('independent swap sides, spreads and reviewed par pricing', [*preview, '--draft-check', '--browser-check', '--browser', str(browser)], suite='trading')
+    preview_check('explicit Side calendars, native booking and retained replay',[*preview,'--side-calendar-check'],suite='trading')
     preview_check('shared booking workflow and mixed gas portfolio', [*preview, '--unified-trading-check', '--browser-check', '--browser', str(browser)], suite='trading')
     preview_check('physical crude booking, portfolio risk, delivery cash and record corrections', [*preview, '--crude-lifecycle-check', '--browser-check', '--browser', str(browser)], suite='trading')
     preview_check('maintained crude setup, original pricing bindings and recovery', [*preview, '--crude-setup-check', '--browser-check', '--browser', str(browser)], suite='trading')

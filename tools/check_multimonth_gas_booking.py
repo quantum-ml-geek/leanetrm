@@ -5,6 +5,7 @@ from fractions import Fraction
 from uuid import uuid4
 from preview_client import PreviewClient, initial_frame
 from preview_fixture import trade_booking
+from synthetic_side_calendars import side_calendar_policy
 
 
 def run_checks(url, query, manifest, run_worker):
@@ -12,6 +13,7 @@ def run_checks(url, query, manifest, run_worker):
     frame=initial_frame(c.call('workspace'),'2020-12-18')
     context=dict(snapshotId=frame['id'],convention='physical_gas_fixed_quantity_v4',knowledgeMode='current')
     catalog=c.call('gas/catalog',context)
+    calendar=next(row['reference'] for row in catalog['sideCalendars'] if row['code']=='test_utc_every_day')
     path=next(p for p in catalog['locations'] if p['deliveryPoint']=='synthetic_gas_point_a')
     first=None
     for start,end in [('2021-01-01','2021-03-01'),('2021-01-15','2021-03-01'),('2021-01-25','2021-02-10'),('2021-01-31','2021-02-02')]:
@@ -23,8 +25,8 @@ def run_checks(url, query, manifest, run_worker):
                 terms={**context,**trade_booking(),'operationId':str(uuid4()),'bookId':catalog['books'][0]['id'],'definitionRevisionId':path['definitionRevisionId'],
                     'gasSetupId':catalog['gasSetupId'],'discounting':False,'profile':'fixed_gas_composition_v1',
                     'physicalSides':[dict(code='gas',pipeline=path['pipeline'],zone=path['zone'],deliveryPoint=path['deliveryPoint'],product=path['product'],direction=direction,
-                        deliveryFrom=start,deliveryTo=end,quantityBasis=basis,quantity=quantity,link=None)],
-                    'cashSides':[dict(code='payment',role='consideration',direction=cash_direction,source='gas',stage='delivery',price='3',tariffCode=None,paymentAt='2021-03-02T00:00:00Z')]}
+                        deliveryFrom=start,deliveryTo=end,quantityBasis=basis,quantity=quantity,link=None,calendarPolicy=side_calendar_policy(calendar,delivery=True,observation=False,payment=False))],
+                    'cashSides':[dict(code='payment',role='consideration',direction=cash_direction,source='gas',stage='delivery',price='3',tariffCode=None,paymentAt='2021-03-02T00:00:00Z',calendarPolicy=side_calendar_policy(calendar,delivery=True,observation=False,payment=True))]}
                 expected=sign*daily*(jan*Fraction('0.2')+feb*Fraction('0.265'))
                 value=c.call('gas/composition/preview',terms)
                 assert Fraction(value['presentValue'])==expected,(start,end,basis,direction,value)

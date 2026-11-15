@@ -25,7 +25,7 @@ public sealed record BookedSideProgramIdentity(string ContentDigest,string Sched
 
 public sealed partial class BookedSideProgram
 {
-    public const string CurrentVersion="booked_side_program_v1";
+    public const string CurrentVersion="booked_side_program_v2";
     private static readonly JsonSerializerOptions Json=CreateJson();
     private static JsonSerializerOptions CreateJson()
     {

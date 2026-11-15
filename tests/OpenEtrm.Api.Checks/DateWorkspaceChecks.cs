@@ -34,7 +34,7 @@ internal static class DateWorkspaceChecks
             Reject("contract_dates",()=>DateWorkspace.Contract(new("Bad","oe.ng[0]","oe.ng[1]","oe.ng[0]",null),Resolve));
         });
         Check("reference calendars decode ISO weekend bits, closures and explicit openings",()=>{
-            var reference=new CalendarReference(Guid.Empty,Guid.Empty,"synthetic_business");
+            var reference=new CalendarReference(Guid.Parse("20000000-0000-0000-0000-000000000001"),Guid.Parse("20000000-0000-0000-0000-000000000002"),"synthetic_business");
             ReferenceCalendar Make(int mask,params (DateOnly,bool)[] days)=>new(reference,new(2021,1,1),new(2021,2,1),mask,[..days]);
             // 96 = bits 5 and 6 = Saturday and Sunday when bit 0 is Monday.
             var weekdays=DateWorkspace.Calendar(Make(96,(new(2021,1,1),false),(new(2021,1,9),true)));
@@ -56,7 +56,7 @@ internal static class DateWorkspaceChecks
                 throw new Exception("A literal last-trading instant was clipped to the delivery period.");
         });
         Check("a referenced calendar replaces, and never mixes with, an inline calendar",()=>{
-            var reference=new ReferenceCalendar(new(Guid.Empty,Guid.Empty,"synthetic_business"),new(2020,12,1),new(2021,6,1),96,[(new DateOnly(2021,1,1),false)]);
+            var reference=new ReferenceCalendar(new(Guid.Parse("20000000-0000-0000-0000-000000000001"),Guid.Parse("20000000-0000-0000-0000-000000000002"),"synthetic_business"),new(2020,12,1),new(2021,6,1),96,[(new DateOnly(2021,1,1),false)]);
             var bound=DateWorkspace.Compile(request with{Calendar=null},reference);
             if(!bound.Dates.Select(d=>d.Date).SequenceEqual(saved.Dates.Select(d=>d.Date)))throw new Exception("Reference calendar changed equal dates");
             Reject("calendar_binding",()=>DateWorkspace.Compile(request,reference));
@@ -84,7 +84,7 @@ internal static class DateWorkspaceChecks
             Reject("schedule_example",()=>ScheduleExamples.Contracts(new("daily_power","oe.ng",context),[],context));
         });
         // Daily schedules (engine v4): generated in memory, always selected from the first date on or after the context.
-        var business=new ReferenceCalendar(new(Guid.Empty,Guid.Empty,"synthetic_business"),new(2026,1,1),new(2027,1,1),96,[(new DateOnly(2026,11,26),false)]);
+        var business=new ReferenceCalendar(new(Guid.Parse("20000000-0000-0000-0000-000000000001"),Guid.Parse("20000000-0000-0000-0000-000000000002"),"synthetic_business"),new(2026,1,1),new(2027,1,1),96,[(new DateOnly(2026,11,26),false)]);
         ScheduleVersion Daily(string symbol,string days,string first,string last,ReferenceCalendar? calendar)=>
             new(Guid.NewGuid(),1,1,"published",new("Synthetic days",symbol,null,null,null,null,null,null,null,Daily:new(days,first,last)),"on_or_after",
                 new(2020,1,1),new(2040,1,1),1,new DateTimeOffset(2020,1,1,0,0,0,TimeSpan.Zero),"date_schedule_v4",Calendar:calendar?.Reference,ResolvedCalendar:calendar);

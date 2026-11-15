@@ -1,3 +1,4 @@
+import {displayPaymentDate,paymentDateValue} from './payment-date.js';
 import {exactNumber} from './exact-number.js';
 import type {ScheduleView,ScheduleViewCell,TicketColumn,TicketDescription} from './ticket-types.js';
 
@@ -35,7 +36,7 @@ export function numberText(value:string){
 }
 // What the page shows a schedule with: the quantity unit its preview resolved and the page's instant formatter.
 export type ScheduleDisplay={quantityUnit:string;instant:(at:string)=>string};
-const displayText=(column:TicketColumn,value:string,display:ScheduleDisplay)=>value===''?'':column.measure==='time'?display.instant(value):numberText(value);
+const displayText=(column:TicketColumn,value:string,display:ScheduleDisplay)=>value===''?'':column.measure==='time'?display.instant(value):column.measure==='payment_date'?displayPaymentDate(value):numberText(value);
 
 export function scheduleGridData(view:ScheduleView,d:TicketDescription,sides:ScheduleSide[],tab:string,level:string,display:ScheduleDisplay,previous?:ScheduleView){
  const depth=view.levels.indexOf(level);
@@ -59,7 +60,9 @@ export function scheduleGridData(view:ScheduleView,d:TicketDescription,sides:Sch
  const rows:string[][]=[],displayRows:string[][]=[],decorations:(CellDecoration|null)[][]=[];
  for(const r of shown){
   const found=columns.map(({key})=>valueOf(r.cells,key)),prior=before.get(r.key);
-  const values=found.map(c=>c.value??'');
+  // The grid's raw presentation strings also feed filters and hover text.
+  // Keep standard payments date-only there without changing the source view.
+  const values=found.map((c,i)=>c.value&&columns[i].column.measure==='payment_date'?paymentDateValue(c.value):c.value??'');
   rows.push([r.key,...values]);
   displayRows.push([r.level==='term'?'Whole term':r.key,...values.map((v,i)=>displayText(columns[i].column,v,display))]);
   decorations.push([null,...found.map((c,i)=>({sources:c.sources.map(s=>sourceLabels[s]),changed:previous!==undefined&&(prior?.[columns[i].key]?.value??null)!==c.value,delivered:r.delivered}))]);

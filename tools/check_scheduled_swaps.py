@@ -1,4 +1,5 @@
 """Synthetic end-to-end scheduled swap contracts; independent cash oracles."""
+from synthetic_side_calendars import all_dates_policy
 from copy import deepcopy
 from decimal import Decimal
 from uuid import uuid4
@@ -105,7 +106,7 @@ def run_checks(url,query=None,manifest=None,*,run_worker):
         return dict(price='3',currency=index['currencyCode'],deliveryFrom=start,deliveryTo=end,paymentSchedule=payment)
     periods=[('2021-01-01','2021-02-01'),('2021-02-01','2021-03-01')]
     def side(fixed_side,amounts):
-        return dict(basis='period_total',quantity=index['quantityChoices'][0]['specification'],amount=None,allocation=None,priceApplication='period_average_times_quantity_v1',power=None,
+        return dict(calendarPolicy=all_dates_policy(observation=not fixed_side), basis='period_total',quantity=index['quantityChoices'][0]['specification'],amount=None,allocation=None,priceApplication='period_average_times_quantity_v1',power=None,
             periods=[dict(amount=amount,fixed=fixed(*period) if fixed_side else None,floating=None if fixed_side else floating(*period)) for period,amount in zip(periods,amounts)])
     body={**context,'operationId':str(uuid4()),'bookId':catalog['books'][0]['id'],'executedAt':None,'quantity':None,'fixedCoefficient':None,'discounting':False,'fixed':None,'floating':None,
           'definitionRevisionId':index['definitionRevisionId'],'commodity':index['commodity'],'swapType':'scheduled_financial_swap','firstCoefficient':'-1',
@@ -219,9 +220,11 @@ def run_checks(url,query=None,manifest=None,*,run_worker):
     reported=next(r for r in report['holdings'] if r['tradeId']==mixed_saved['tradeId'])
     assert reported['quantity'] is None and reported['fixedPrice'] is None and reported['mark'] is None
     assert reported['deliveryTo']=='2021-03-01' and set(reported['projectionCurves'])=={'base_forward','local_gas'}
-    legacy={k:v for k,v in body.items() if k!='scheduled'};legacy.update(operationId=str(uuid4()),quantity='100',fixedCoefficient='-1',firstCoefficient=None,swapType='financial_fixed_floating',fixed=deepcopy(body['scheduled']['first']['periods'][0]['fixed']),floating=deepcopy(body['scheduled']['second']['periods'][0]['floating']))
-    legacy_saved=c.call('swaps/book',legacy)
-    assert c.call('swaps/editor',dict(context=context,tradeId=legacy_saved['tradeId'],revision=None))['valuation']['presentValue']=='10'
+    ordinary={k:v for k,v in body.items() if k!='scheduled'};ordinary.update(operationId=str(uuid4()),quantity='100',fixedCoefficient='-1',firstCoefficient=None,swapType='financial_fixed_floating',fixed=deepcopy(body['scheduled']['first']['periods'][0]['fixed']),floating=deepcopy(body['scheduled']['second']['periods'][0]['floating']))
+    ordinary['fixed']['calendarPolicy']=deepcopy(body['scheduled']['first']['calendarPolicy'])
+    ordinary['floating']['calendarPolicy']=deepcopy(body['scheduled']['second']['calendarPolicy'])
+    ordinary_saved=c.call('swaps/book',ordinary)
+    assert c.call('swaps/editor',dict(context=context,tradeId=ordinary_saved['tradeId'],revision=None))['valuation']['presentValue']=='10'
     negative=deepcopy(body);negative['scheduled']['first']['periods'][0]['fixed']['price']='-3';negative['scheduled']['first']['periods'][1]['fixed']['price']='-4'
     assert Decimal(preview(negative)['presentValue'])==expected+2000
     shifted=deepcopy(body)
@@ -294,7 +297,7 @@ def run_checks(url,query=None,manifest=None,*,run_worker):
         currency=clocked_value['currency'],decimalPlaces=2,roundingPolicy='currency_minor_units_to_even_v1')
     clocked_preview=c.call('swaps/settlement/preview',clocked_request)
     assert clocked_preview['calculation']['completion']['at'].startswith('2021-11-01T04:00:00')
-    assert clocked_preview['calculation']['completion']['source']=='retained_quantity_interval_end_v1'
+    assert clocked_preview['calculation']['completion']['source']=='retained_contract_clock_v1'
     c.call('swaps/settlement/determine',dict(preview=clocked_request,operationId=str(uuid4()),expectedVersion=0,previewHash=clocked_preview['previewHash'],
         duePolicy='swap_due_nominal_v1',recognitionPolicy='swap_completed_period_trading_pnl_v1',correctionPolicy='swap_explicit_correction_due_v1',correctionDueAt=None))
     if query:
@@ -392,14 +395,14 @@ def run_checks(url,query=None,manifest=None,*,run_worker):
     assert F(bridge['economicPnl'])==F('-1/300') and F(bridge['roundingEffectMovement'])==F('-1/300')
     check_unvalued_lifecycle(c,w,thirds_saved['tradeId'],run_worker)
     from check_swap_netting import run as run_netting
-    net_fixture=run_netting(c,w,context,legacy,value['currency'],url)
+    net_fixture=run_netting(c,w,context,ordinary,value['currency'],url)
     from check_swap_settlement import run_lifecycle,run_foundation,run_late_cash,run_cross_market_bridge,run_newtrade_basis_refusal
-    run_cross_market_bridge(c,legacy,context)
+    run_cross_market_bridge(c,ordinary,context)
     run_newtrade_basis_refusal(c,body,context)
-    run_lifecycle(c,w,context,legacy_saved['tradeId'],value['currency'])
+    run_lifecycle(c,w,context,ordinary_saved['tradeId'],value['currency'])
     run_foundation(c,query,url,body,context,settlement_context,f['at'],value['currency'])
     february_context={**context,'snapshotId':next(frame['id'] for frame in w['frames'] if frame['at'].startswith('2021-02-01T08:00:00'))}
-    run_late_cash(c,legacy,settlement_context,february_context,value['currency'],partial['at'])
+    run_late_cash(c,ordinary,settlement_context,february_context,value['currency'],partial['at'])
     from check_swap_settlement import run_future_boundary
     run_future_boundary(c,body,context,february_context)
     gross=dict(context=settlement_context,tradeId=offset['tradeId'],expectedRevision=1,membershipOrdinal=0,paymentOrdinal=0,

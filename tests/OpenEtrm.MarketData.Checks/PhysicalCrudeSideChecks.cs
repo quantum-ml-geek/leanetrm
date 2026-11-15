@@ -21,7 +21,7 @@ internal static class PhysicalCrudeSideChecks
         var from = new DateTimeOffset(2041, 1, 10, 12, 0, 0, TimeSpan.Zero);
         var to = from.AddDays(3);
         PhysicalCrudeSide Delivery(DateTimeOffset starts, DateTimeOffset ends, ExactDecimal tolerance = default) =>
-            new(Guid.NewGuid(), assignment, starts, ends, tolerance);
+            new(Guid.NewGuid(), assignment, starts, ends, tolerance,SyntheticSideCalendars.Physical());
         var physical = Delivery(from, to);
         var snapshot = fixture.Snapshot with { Selections = [..fixture.Snapshot.Selections.Select((s,n) => s with {
             Observation = s.Observation with { Value = ExactDecimal.Parse(n % 2 == 0 ? "80" : "0") } })] };
@@ -33,7 +33,19 @@ internal static class PhysicalCrudeSideChecks
         var context = Context(market, assignment);
         var one = ExactDecimal.Parse("1"); var negative = ExactDecimal.Parse("-1"); var thousand = ExactDecimal.Parse("1000");
         FixedSide Cash(string price) => new(Guid.NewGuid(), new FlatPrice(new UnitPrice(ExactDecimal.Parse(price), fixture.Quote)),
-            fixture.Quote, physical.UnitQuantity, [new(physical.DeliveryDateFrom, physical.DeliveryDateTo, to.AddDays(5), new(1,1), null)]);
+            fixture.Quote, physical.UnitQuantity, [new(physical.DeliveryDateFrom, physical.DeliveryDateTo, to.AddDays(5), new(1,1), null){DeliveryCompletionAt=to}],SyntheticSideCalendars.FixedPeriods([new(physical.DeliveryDateFrom, physical.DeliveryDateTo, to.AddDays(5), new(1,1), null){DeliveryCompletionAt=to}]));
+        var partialDelivery=new PhysicalCrudeSide(Guid.NewGuid(),assignment,from,from.AddDays(1).AddHours(8.5),default,SyntheticSideCalendars.Physical());
+        FixedSide PartialCash(DateTimeOffset? completion)
+        {
+            var period=new FixedSidePeriod(partialDelivery.DeliveryDateFrom,partialDelivery.DeliveryDateTo,to.AddDays(5),new(1,1),null){DeliveryCompletionAt=completion};
+            return new(Guid.NewGuid(),new FlatPrice(new UnitPrice(one,fixture.Quote)),fixture.Quote,physical.UnitQuantity,[period],SyntheticSideCalendars.FixedPeriods([period]));
+        }
+        var correctCash=PartialCash(partialDelivery.DeliveryTo);
+        foreach(var completion in new DateTimeOffset?[]{null,partialDelivery.DeliveryTo.AddHours(1),partialDelivery.DeliveryTo.AddHours(-1)})
+        {
+            Reject("crude_instrument",()=>new PhysicalCrudeInstrument(Guid.NewGuid(),partialDelivery,PartialCash(completion),null,one,negative,null));
+            Reject("crude_instrument",()=>new PhysicalCrudeInstrument(Guid.NewGuid(),partialDelivery,correctCash,PartialCash(completion),one,negative,one));
+        }
         var purchase = new PhysicalCrudeInstrument(Guid.NewGuid(), physical, Cash("78"), Cash("0.5"), one, negative, negative);
         Equal(physical.PV(context).PresentValue.Scale(thousand), "80000");
         Equal(purchase.PV(context).PresentValue.Scale(thousand), "1500");
@@ -112,16 +124,16 @@ internal static class PhysicalCrudeSideChecks
         var assignment = new CrudeValuationAssignment(pricing.Key, deliveryQuantity.Commodity, D("delivery_grade"),
             new(D("delivery_facility"), D("delivery_custody")), pricing.Quantity, D("utc"), ExactDecimal.Parse("60"), "fahrenheit",
             pricing.Settlement, pricing.Quote, pricing.Projection, pricing.Fixing, proof);
-        var side = new PhysicalCrudeSide(Guid.NewGuid(), assignment, from, to, default);
+        var side = new PhysicalCrudeSide(Guid.NewGuid(), assignment, from, to, default,SyntheticSideCalendars.Physical());
         var definition = ScheduleDefinitionCompiler.Generate(side);
         if (DefinitionIdentity.For(assignment).Version != "crude_valuation_assignment_v2" ||
-            DefinitionIdentity.For(side).Version != "physical_crude_side_v2" || DefinitionIdentity.For(pricing) != before ||
+            DefinitionIdentity.For(side).Version != "physical_crude_side_v3" || DefinitionIdentity.For(pricing) != before ||
             side.UnitQuantity.Specification != pricing.Quantity.Key || assignment.Lookup != pricing.Lookup ||
             side.Dependencies.Single() != pricing.Projection.Market ||
             definition.Bindings.Single(b => b.Port == "grade").Reference != D("delivery_grade"))
             throw new Exception("Delivery master revisions must preserve the original pricing identities and exact units.");
         FixedSide Cash(string price) => new(Guid.NewGuid(),new FlatPrice(new UnitPrice(ExactDecimal.Parse(price),pricing.Quote)),
-            pricing.Quote,side.UnitQuantity,[new(side.DeliveryDateFrom,side.DeliveryDateTo,to.AddDays(5),new(1,1),null)]);
+            pricing.Quote,side.UnitQuantity,[new(side.DeliveryDateFrom,side.DeliveryDateTo,to.AddDays(5),new(1,1),null){DeliveryCompletionAt=to}],SyntheticSideCalendars.FixedPeriods([new(side.DeliveryDateFrom,side.DeliveryDateTo,to.AddDays(5),new(1,1),null){DeliveryCompletionAt=to}]));
         PortfolioRisk(fixture,new PhysicalCrudeInstrument(Guid.NewGuid(),side,Cash("78"),Cash("0.5"),
             ExactDecimal.Parse("1"),ExactDecimal.Parse("-1"),ExactDecimal.Parse("-1")),market);
         var bytes = BookedSideProgram.Compile(definition).Write();
@@ -153,7 +165,7 @@ internal static class PhysicalCrudeSideChecks
             new UnitConverter([new(pricing.Unit,pricing.Dimension,"bbl")],[],[pricing]));
         var assignment=new CrudeValuationAssignment(P("thousand_barrel_quote"),delivery.Commodity,D("grade"),new(D("facility"),D("custody")),
             pricing,D("utc"),ExactDecimal.Parse("60"),"fahrenheit",lookup.Settlement,fixture.Quote,new(lookup.Market,lookup.Contract),lookup.Fixing!,proof);
-        var side=new PhysicalCrudeSide(Guid.NewGuid(),assignment,new(2041,1,10,0,0,0,TimeSpan.Zero),new(2041,1,11,0,0,0,TimeSpan.Zero),default);
+        var side=new PhysicalCrudeSide(Guid.NewGuid(),assignment,new(2041,1,10,0,0,0,TimeSpan.Zero),new(2041,1,11,0,0,0,TimeSpan.Zero),default,SyntheticSideCalendars.Physical());
         var snapshot=(fixture.Snapshot with{Selections=[..fixture.Snapshot.Selections.Select((s,n)=>s with{
             Observation=s.Observation with{Value=ExactDecimal.Parse(n%2==0?"2":"0")}})]}).WithKnowledge(Guid.NewGuid(),fixture.Snapshot.ValuationAt);
         var market=fixture.Model.Build(snapshot,side.DependenciesAt(snapshot));
@@ -274,7 +286,7 @@ internal static class PhysicalCrudeSideChecks
         var assignments=contracts.Select((c,n)=>new CrudeValuationAssignment(R("assignment_"+n),template.Commodity,R("grade_"+n),template.Location,
             template.Quantity,template.Clock,template.StandardTemperature,template.TemperatureScale,PriceSettlementSelection.CurveTarget(indices[n]),template.Quote,
             new(new(curves[n].Key,c.Key),c),new(indices[n],template.Quote.Key,c.DeliveryFrom,c.DeliveryTo,c.Expiry,series[n].Key,R("authored_source"),IndexFixing.SupportedImplementation))).ToImmutableArray();
-        var sides=assignments.Select(a=>new PhysicalCrudeSide(Guid.NewGuid(),a,from,to,default)).ToArray();
+        var sides=assignments.Select(a=>new PhysicalCrudeSide(Guid.NewGuid(),a,from,to,default,SyntheticSideCalendars.Physical())).ToArray();
         var basis=model.Build(snapshot,[..sides.SelectMany(s=>s.Dependencies)]);
         var discount=new ExplicitDiscounting(ExactDecimal.Parse("1"),DiscountFactorSource.Undiscounted);
         var factor=model.QuoteFactors(snapshot).Single(f=>f.Input.Series==series[0].Key);

@@ -2800,3 +2800,9 @@ header>div:first-child{flex:1 1 160px}
 @media(max-width:750px){.pnl-view{padding:18px}.pnl-controls label{max-width:none}.pnl-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.pnl-hero{align-items:start;flex-direction:column}.pnl-period{text-align:left}.pnl-save{flex-wrap:wrap}.pnl-save>span,.pnl-save>p{width:100%}}
 
 .contract-display-control{display:flex;align-items:center;gap:.5rem;margin:.5rem 0}.contract-display-control input{width:auto}.contract-status-rows{color:var(--text-3);margin-top:.75rem}
+
+/* Calendar versions and exception evidence stay readable inside any Side host. */
+.side-calendar{min-width:0;max-width:100%}
+.side-calendar select{min-width:0;width:100%;max-width:100%}
+.side-calendar pre{white-space:pre-wrap;overflow-wrap:anywhere}
+.side-calendar button{max-width:100%;white-space:normal}

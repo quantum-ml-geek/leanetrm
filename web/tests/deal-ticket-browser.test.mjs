@@ -475,7 +475,7 @@ test('unfinished features start collapsed and expanding them performs no ticket 
   assert.equal(await evaluate("document.querySelector('.ticket-upcoming').open"),false);
   assert.equal(await evaluate("document.querySelector('[data-field=force_majeure]').getBoundingClientRect().height"),0);
   assert.equal(await evaluate("document.querySelectorAll('.ticket-strip .ticket-soon,.ticket-deck .ticket-soon,.ticket-tabs .ticket-soon').length"),0);
-  assert.equal(await evaluate("new Set([...document.querySelectorAll('.ticket-trade-fields>.ticket-field')].map(n=>n.getBoundingClientRect().top)).size"),1,'trade terms use one row in a wide ticket');
+  assert.equal(await evaluate("[...document.querySelectorAll('.ticket-trade-fields')].every(group=>new Set([...group.querySelectorAll(':scope>.ticket-field')].map(n=>n.getBoundingClientRect().top)).size<=1)"),true,'each instrument or ownership group uses one row in a wide ticket');
   await evaluate("document.querySelector('.ticket-upcoming>summary').click()");
   assert.equal(await evaluate("document.querySelector('[data-field=force_majeure]').getBoundingClientRect().height>0"),true);
   assert.equal(await evaluate("[...document.querySelectorAll('.ticket-upcoming input,.ticket-upcoming button')].every(n=>n.disabled)"),true);
