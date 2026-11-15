@@ -860,14 +860,14 @@ Each side may have its own commodity, location, unit, currency, index, delivery
 shape, observation convention, payment convention and calendar. An instrument
 does not impose a shared location or schedule on all its sides.
 
-D400 supersedes D399: one versioned Side policy binds each applicable schedule
+D402 supersedes D401: one versioned Side policy binds each applicable schedule
 purpose explicitly. Different purposes may use different exact calendars, while
 every period of a purpose uses the same binding. Product-owned and linked source
 schedules retain their original terms. Standard payment coordinates remain
 internal; users see their UTC contractual date. The unified contract requires
 explicit review of incompatible stored terms, without automatic rewrites or a
 second execution path. Supported product families have passed the mandatory
-synthetic gate; see the [implementation record](implementation.md#explicit-side-calendars-and-payment-days-d400).
+synthetic gate; see the [implementation record](implementation.md#explicit-side-calendars-and-payment-days-d402).
 
 Physical activity and its financial payments remain distinguishable. Reusing a
 physical quantity as a payment basis must not count that quantity or cashflow

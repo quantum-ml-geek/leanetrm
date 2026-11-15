@@ -733,7 +733,7 @@ Wide panels place sides alongside each other; panels narrower than 600 pixels
 stack native cards, preserving their controls and entries. Additional sides can
 scroll horizontally without compressing their fields.
 
-### Explicit schedule calendars (D400)
+### Explicit schedule calendars (D402)
 
 Each Side has one versioned calendar policy with separate delivery,
 observation/reset and payment bindings. Applicable purposes require an exact

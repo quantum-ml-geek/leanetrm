@@ -1,6 +1,6 @@
 # Delivery plan and acceptance criteria
 
-D400 replaces the absolute single-calendar restriction with an explicit
+D402 replaces the absolute single-calendar restriction with an explicit
 per-purpose Side calendar policy and one UTC payment-day execution contract.
 Local managed and native checks cover exact published calendar capture, immutable
 typed bindings, retained scheduled-power generation, published TOU terms, payment
@@ -47,6 +47,11 @@ new-write refusal and accepted retries, including schema upgrade. The web checks
 cover secondary-source inspection and inconsistent selection refusal. Activation
 requires a separately approved application/schema release; deployment data and
 private maintenance programs are outside this repository.
+
+D399 lists a publication's indexes with it and selects them from the reference
+catalogue. Authoring a new reference index from its publication is not
+implemented: it needs a reference-catalogue write operation with its own
+authorization, revision and knowledge-time contract.
 
 The initial [valuation context and scenario layers](valuation-context-layers.md)
 are implemented locally: complete time/discount/IV declarations, immutable
@@ -819,7 +824,7 @@ weekday dates have synthetic monthly/daily gas and power examples.
 Each side now selects either a period-end day lag or a day of the following
 month, with explicit day basis, short-month behavior, date adjustment and exact
 calendar where consumed. Generated date-only rows retain the rule evidence.
-D400's per-purpose calendar controls require explicit published selections.
+D402's per-purpose calendar controls require explicit published selections.
 The shared-selection action expands concrete bindings; product-owned bindings
 remain locked through validation and refresh.
 New entry has commodity-filtered indices/units and separate reset-frequency and

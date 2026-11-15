@@ -1,6 +1,6 @@
 # Current implementation record
 
-## Explicit Side calendars and payment days (D400)
+## Explicit Side calendars and payment days (D402)
 
 Supported swaps, scheduled power, PPAs, physical gas, crude and LNG now require
 one immutable Side calendar policy with exact per-purpose bindings. Managed
@@ -29,7 +29,7 @@ command outcomes. There is one supported execution contract: incompatible stored
 trades need reviewed migration of their terms, exact relationships, identities
 and retained programs. Existing application databases were not modified. Merge,
 contract migration and deployment remain separate steps. See
-[the decision](decisions.md#d400--explicit-schedule-purpose-calendars-and-utc-payment-days)
+[the decision](decisions.md#d402--explicit-schedule-purpose-calendars-and-utc-payment-days)
 and [the time contract](time-and-schedules.md).
 
 D391 adds [contract observation terms](custom-curves.md#contract-observation-terms-d391)
@@ -229,7 +229,7 @@ blocks and classifications, rate convention labels) from the validating backend,
 refused unless its declared tzdb release equals the installed release. Economic
 power choices (curve, period, product, hours, interval) start unselected.
 
-D400 adds exact published calendar and clock capture for Side-owned schedules
+D402 adds exact published calendar and clock capture for Side-owned schedules
 and published TOUs. Their readers preserve captured coverage, overrides and
 clock transitions, and authorize calendar sources independently of the pricing
 reference revision. This does not extend the older general date-schedule reader
@@ -1330,7 +1330,7 @@ screenshots were inspected. These results are not throughput or production claim
 
 ## Independent schedules, publication and contract dates
 
-**Reference Data → Schedules & date mappings** creates date schedules independently of curves. Canonical
+**Reference Data → Calendars → Date schedules** creates date schedules independently of curves. Canonical
 references use `oe.name`; configurable namespace aliases remain future authoring
 convenience. A schedule generates monthly anchors with explicit first/last months,
 day-of-month or month-end intent, short-month handling, business-day adjustment
@@ -1365,7 +1365,7 @@ permission is checked again after lock waits. The displayed publication timestam
 is audit metadata. Timestamp-based certification now exists for the schedule path described above;
 broader market/reference temporal context remains unfinished.
 
-**Reference Data → Price setup** uses already published
+**Reference Data → Calendars → Date rules** uses already published
 schedules in `start`, `end` and last-trading fields. `date` is used for a single
 resolved date. No existing curve specification is required. The example explicitly
 binds consecutive months and a last-trading offset of three business days before
@@ -2029,7 +2029,7 @@ rolling kernel; database admission independently validates the generated result.
 
 Actual valued plans retain their rule/calendar evidence and generated
 unadjusted/final dates. Payment dates display as dates and never shift with user
-time zone. Under D400's explicit `utc_payment_day_v1` policy, standard cash is
+time zone. Under D402's explicit `utc_payment_day_v1` policy, standard cash is
 due on its UTC payment date, becomes overdue on a later UTC date and remains
 valued while unpaid on that date. A later same-day fixing retains projection and
 risk until its qualified publication is available. Correction due instants and
