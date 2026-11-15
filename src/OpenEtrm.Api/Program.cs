@@ -20,6 +20,7 @@ if(args.Length>0&&args[0]=="--capture-reference"){Environment.ExitCode=await Ref
 
 if(args is ["--compile-date-seed",var dateSeedInput,var dateSeedOutput]){DateSeedCommand.Run(dateSeedInput,dateSeedOutput);return;}
 
+if(args is ["--render-clock-captures",var captureInput,var captureOutput]){ClockCapturePublication.Run(captureInput,captureOutput);return;}
 if(args is ["--render-power-days",var calendarInput,var calendarOutput]){PowerDayCalendar.Run(calendarInput,calendarOutput);return;}
 
 if(args.Length>0 && args[0]=="--collect-power"){Environment.ExitCode=await PowerCollection.Run(args[1..]);return;}
@@ -210,6 +211,8 @@ const string malformed="The request is incomplete or malformed.";
         => (422,p.MessageText,"Name an option product of this market, the context's business date and a supported vol model."),
     PostgresException p when p.SqlState=="P0001" && p.MessageText.StartsWith("risk_",StringComparison.Ordinal) => (422,p.MessageText,"The risk job does not meet its retained context, input or execution contract."),
     PostgresException p when p.SqlState=="P0001" && p.MessageText is "swap_conflict" or "swap_revision_conflict" or "trade_operation_conflict" => (409,p.MessageText,"This trade or operation changed. Reconcile the original request or reload the latest revision."),
+    PostgresException p when p.SqlState=="P0001" && (p.MessageText.StartsWith("clock_",StringComparison.Ordinal)||p.MessageText.StartsWith("calendar_",StringComparison.Ordinal)||p.MessageText.StartsWith("side_calendar_",StringComparison.Ordinal)||p.MessageText=="delivery_completion")
+        => (422,p.MessageText,"Schedules require exact published calendars and clocks, covered dates and matching contractual completion terms."),
     PostgresException p when p.SqlState=="P0001" && p.MessageText.StartsWith("scheduled_",StringComparison.Ordinal) => (422,p.MessageText,"The scheduled swap requires complete, compatible quantity, delivery, observation and payment terms."),
     PostgresException p when p.SqlState=="P0001" && (p.MessageText.StartsWith("payment_",StringComparison.Ordinal)||p.MessageText=="short_month") => (422,p.MessageText,"The generated payment date does not meet its explicit rule and calendar coverage."),
     PostgresException p when p.SqlState=="P0001" && p.MessageText.StartsWith("swap_",StringComparison.Ordinal) => (422,p.MessageText,"The trade request does not meet its explicit side, reference, date or lifecycle terms."),
@@ -623,7 +626,13 @@ api.MapGet("/curve-names",(Func<HttpContext,Task<IResult>>)(c=>Locked(c,session=
 api.MapPost("/power/catalog",(HttpContext c,PowerCatalogRequest body)=>PowerOperation(c,"ReadMarketData",async(session,connection,ct)=>
     Results.Ok(await scheduleReads.PowerCatalog(connection,Pin(session,body.SnapshotId),ct))));
 api.MapPost("/power/preview",(HttpContext c,PowerPreviewRequest body)=>PowerOperation(c,"ReadMarketData",async(session,connection,ct)=>
-    Results.Ok(PowerPreview.Calculate(await database.Read(connection,ct,observationIds:Frame(session,body.SnapshotId).ObservationIds),Frame(session,body.SnapshotId),body,await scheduleReads.PublishedProducts(connection,Pin(session),ct)))));
+{
+    var products=await scheduleReads.PublishedProducts(connection,Pin(session),ct);
+    var product=PowerPreview.SelectProduct(products,body.Product,body.ProductVersion);
+    var data=await database.Read(connection,ct,observationIds:Frame(session,body.SnapshotId).ObservationIds);
+    data=await SideCalendarPolicies.PrepareReferences(connection,data,[product.Calendar],ct);
+    return Results.Ok(PowerPreview.Calculate(data,Frame(session,body.SnapshotId),body,products));
+}));
 api.MapPost("/power/settlement",(HttpContext c,PowerActualSettlementRequest body)=>PowerOperation(c,"ReadMarketData",async(session,connection,ct)=>
     Results.Ok(await PowerActualSettlement.Calculate(connection,await PowerActualSettlement.ReadData(database,connection,ct),Frame(session,body.SnapshotId),body,await scheduleReads.PublishedProducts(connection,Pin(session),ct),ct))));
 api.MapGet("/tou-products",(Func<HttpContext,Task<IResult>>)(c=>PowerOperation(c,"ReadMarketData",async(session,connection,ct)=>
@@ -1728,7 +1737,7 @@ FuturesReadRequest TicketContext(FuturesReadRequest? context)=>context??throw ne
 GasCompositionRequest TicketRequest(TicketDraft draft,FuturesReadRequest context,Guid operation,Guid definition)=>
  GasTicket.Request(draft,context.SnapshotId,context.KnowledgeMode??throw new MarketDataException("ticket_input","Supply the ticket's knowledge mode."),operation,definition);
 api.MapPost("/tickets/description",(HttpContext c,TicketDescriptionRequest body)=>FuturesRead(c,TicketContext(body.Context),
- (connection,data,frame,ct)=>Task.FromResult<object>(GasTicketStore.Description(body.Product)),expectedConvention:PhysicalGasStore.Convention,gasReferenceChoices:true));
+ async (connection,data,frame,ct)=>GasTicketStore.Description(body.Product) with{SideCalendars=await SideCalendarPolicies.Catalog(connection,ct)},expectedConvention:PhysicalGasStore.Convention,gasReferenceChoices:true));
 api.MapPost("/tickets/choices",(HttpContext c,TicketFieldRequest body)=>FuturesRead(c,TicketContext(body.Context),
  (connection,data,frame,ct)=>gasTicket.Choices(connection,data,frame,body,ct),expectedConvention:PhysicalGasStore.Convention,gasReferenceChoices:true));
 api.MapPost("/tickets/lookup",(HttpContext c,TicketFieldRequest body)=>FuturesRead(c,TicketContext(body.Context),

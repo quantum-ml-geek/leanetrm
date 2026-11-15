@@ -5,6 +5,7 @@ from uuid import uuid4
 from exact_values import fraction
 from preview_client import PreviewClient, initial_frame
 from check_ppa_bookings_http import profile_terms
+from synthetic_side_calendars import side_calendar_policy
 
 
 def run_checks(url, query, manifest):
@@ -41,6 +42,9 @@ def run_checks(url, query, manifest):
     virtual['memberships'][0].update(role='indexed_payment')
     virtual['memberships'][0]['side'].update(kind='indexed',location=None,indexPrice=dict(curve=manifest['intervalCurves']['shaped'],quantity='test_power_quantity',multiplier='1',indexMultiplier='1',settlement=None,adder='1'))
     virtual['memberships'][1]['side']['quantity']=profile
+    calendar=terms['memberships'][0]['side']['calendarPolicy']['delivery']['calendar']
+    virtual['memberships'][0]['side']['calendarPolicy']=side_calendar_policy(calendar,delivery=True,observation=True,payment=True)
+    virtual['memberships'][1]['side']['calendarPolicy']=side_calendar_policy(calendar,delivery=True,observation=False,payment=True)
     v=solve(terms=virtual);check('virtual fixed-for-floating independent root',fraction(v['price'])==41 and fraction(v['inputValue'])==2000)
     inverse=deepcopy(virtual)
     for m in inverse['memberships']:m['coefficient']=str(-int(m['coefficient']))

@@ -12,7 +12,16 @@ public sealed record CrudeCashRounding(string Implementation, int DecimalPlaces,
 public sealed record CrudePhysicalCashTerms(string Implementation, Guid TradeId, Guid OwnerLegalEntityId,
     CrudeDeliveryLocation Location, ReferenceKey Grade, QuantitySpecification Quantity, ExactDecimal StandardTemperature,
     string TemperatureScale, Quantity ContractQuantity, CrudeDeliveryWindow Delivery, DateTimeOffset PaymentAt,
-    CrudeCashRate Consideration, CrudeCashRate? HandlingFee, CrudeCashRounding Rounding);
+    CrudeCashRate Consideration, CrudeCashRate? HandlingFee, CrudeCashRounding Rounding)
+{
+    public DateTimeOffset? HandlingFeePaymentAt { get; init; }
+    public DateTimeOffset PaymentFor(CrudeCashComponent component)=>component switch
+    {
+        CrudeCashComponent.Consideration=>PaymentAt,
+        CrudeCashComponent.HandlingFee when HandlingFee is not null&&HandlingFeePaymentAt is {} at=>at,
+        _=>throw Error("crude_receipt_terms","The cash component requires its own contractual payment date.")
+    };
+}
 public sealed record CrudeAcceptedReceipt(Guid Id, DateTimeOffset AcceptedAt, Quantity Quantity,
     ReferenceKey Grade, CrudeDeliveryLocation Location, CrudeReceiptTitle Title);
 public sealed record CrudeOnwardSale(Guid TradeId, int Revision, Guid SellerLegalEntityId, ReferenceKey Grade,

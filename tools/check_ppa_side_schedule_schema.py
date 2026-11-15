@@ -24,7 +24,7 @@ def run_checks(query):
     """) == '3', 'Schedule clocks, calendars and masks require exact-version relationships'
     assert query("SELECT relrowsecurity AND relforcerowsecurity FROM pg_class WHERE oid='trading.ppa_side_schedules'::regclass;") == 't'
     source = {'kind': 'energy', 'quantity': {'kind': 'profile', 'hours': {'membership': 'peak',
-              'touProduct': '10000000-0000-0000-0000-000000000001', 'touVersion': 1, 'calendar': 'synthetic_holidays'}}}
+              'touProduct': '10000000-0000-0000-0000-000000000001', 'touVersion': 1, 'calendar': None}}}
     payment = {'kind': 'fixed', 'quantity': {'kind': 'slots', 'slots': [{'role': 'energy_delivery', 'ordinal': 0}]}}
     spec = {'definitionRevisionId': '20000000-0000-0000-0000-000000000001',
             'referenceCatalogId': '30000000-0000-0000-0000-000000000001',
@@ -36,9 +36,9 @@ def run_checks(query):
         return json.loads(query(f'SELECT security.ppa_schedule_document({encoded(document)},{encoded(side)});'))
 
     selected = shape(spec, payment)
-    assert selected['membership'] == 'peak' and selected['calendar'] == 'synthetic_holidays'
+    assert selected['membership'] == 'peak' and selected['calendar'] is None
     changed = deepcopy(spec)
-    changed['memberships'][0]['side']['quantity']['hours'] = {'membership': 'all', 'touProduct': None, 'touVersion': None, 'calendar': 'synthetic_holidays'}
+    changed['memberships'][0]['side']['quantity']['hours'] = {'membership': 'all', 'touProduct': None, 'touVersion': None, 'calendar': None}
     assert shape(changed, payment) != selected, 'A payment slot bound to another mask must have another schedule definition'
     capacity = deepcopy(spec)
     capacity['memberships'][0]['side'] = {'kind': 'capacity', 'quantity': {'kind': 'accredited'}}
@@ -55,6 +55,9 @@ def run_checks(query):
         else:
             raise AssertionError('Missing or ambiguous slot schedule was accepted')
 
+    conflicting=deepcopy(spec)
+    conflicting['memberships'][0]['side']['quantity']['hours']['calendar']='synthetic_holidays'
+    reject(conflicting, payment)
     reject({**spec, 'memberships': []}, payment)
     reject({**spec, 'memberships': spec['memberships'] * 2}, payment)
     cyclic = deepcopy(spec)

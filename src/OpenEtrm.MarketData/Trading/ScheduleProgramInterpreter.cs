@@ -77,12 +77,14 @@ public sealed partial class BookedSideProgram
                     }
                     cashPresence.Add(ScheduleCellPresence.Resolved);
                     var holding=row.Parameters["lifecycle"]=="certificate_holding_v1"&&Document.Grids[row.Grid!.Value].EndTicks(cell)<=context.ValuationAt.Ticks;
-                    var future=row.ValueAt>context.ValuationAt;var lane=holding||future?ScheduleInputLanes.Scenario:ScheduleInputLanes.Base;
+                    var future=ScheduleLifecycles.IsFutureValue(row,context.ValuationAt);
+                    var paymentDay=ScheduleLifecycles.IsPaymentDay(row,context.ValuationAt);
+                    var lane=holding||future||paymentDay?ScheduleInputLanes.Scenario:ScheduleInputLanes.Base;
                     var amount=Arg("amount",lane);var index=Index(amount,cell);
                     if(amount.Presence[index]!=ScheduleCellPresence.Resolved)throw Error("A contribution is missing its demanded cash amount.");
                     var state=amount.States[index];cash.Add(amount.Values[index]);states.Add(state);
                     classifications.Add(Classify(row,cell,state,context.ValuationAt,holding));
-                    if(holding){pv.Add(amount.Values[index]);presence.Add(ScheduleCellPresence.Resolved);}
+                    if(holding||paymentDay){pv.Add(amount.Values[index]);presence.Add(ScheduleCellPresence.Resolved);}
                     else if(future)
                     {
                         var discounted=Arg("discounted",ScheduleInputLanes.Scenario);var n=Index(discounted,cell);
@@ -190,7 +192,7 @@ public sealed partial class BookedSideProgram
     private ScheduleContributionState Classify(ScheduleDefinitionRow row,int cell,ScheduleCellState state,DateTimeOffset valuation,bool holding)
     {
         var modeled=(state.Prices&SchedulePriceFacts.Modeled)!=0;
-        if(row.Parameters["lifecycle"]==ScheduleLifecycles.AccruedPayment&&row.ValueAt<=valuation)
+        if(row.Parameters["lifecycle"]==ScheduleLifecycles.AccruedPayment&&PaymentDatePolicy.IsOverdue(row.ValueAt!.Value,valuation))
         {
             if((state.Prices&~(SchedulePriceFacts.Fixed|SchedulePriceFacts.Actual|SchedulePriceFacts.PublishedFixing))!=0)
                 throw new MarketDataException("side_due_leg_unresolved","Due accrued cash requires its fixed, actual or published price.");
@@ -204,7 +206,7 @@ public sealed partial class BookedSideProgram
         var classification=holding&&knownQuantity?EconomicClass.Held:!delivered?EconomicClass.Unrealised:known?EconomicClass.Realised:EconomicClass.Estimated;
         ValueCoverage coverage;string? unavailable=null;
         if(holding)coverage=ValueCoverage.HoldingValue;
-        else if(row.ValueAt>valuation)coverage=ValueCoverage.Discounted;
+        else if(ScheduleLifecycles.IsFutureValue(row,valuation)||ScheduleLifecycles.IsPaymentDay(row,valuation))coverage=ValueCoverage.Discounted;
         else if(payment)
         {
             if((state.Prices&(SchedulePriceFacts.Projected|SchedulePriceFacts.Modeled))!=0)

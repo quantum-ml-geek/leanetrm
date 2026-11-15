@@ -15,6 +15,7 @@ def request(manifest, snapshot, known, membership, product, start, end):
     hours = terms['memberships'][0]['side']['quantity']['hours']
     hours.update(membership=membership, touProduct=product['id'] if membership != 'all' else None,
                  touVersion=product['version'] if membership != 'all' else None)
+    if membership!='all':terms['memberships'][0]['side']['calendarPolicy']['delivery']['calendar']=deepcopy(product['calendar'])
     return dict(snapshotId=snapshot, definitionRevisionId=manifest['revisionId'],
         referenceCatalogId=manifest['referenceCatalogId'], referenceRevisionId=manifest['referenceRevisionId'],
         scope='draft', selectedIds=[], explicitSubset=False, terms=terms, quantity='1', coverageFrom=start,
@@ -197,6 +198,7 @@ def actual_products(client, query, manifest, frame, product):
     body['terms']['delivery'].update({'from':'2020-12-01','to':'2021-01-01'});body['detailMonths']=['2020-12-01'];body['terms']['memberships'][0]['side']['location']=LOCATION
     for membership,count,total in [('all',744,9300),('peak',352,5456),('off',392,3844)]:
         h=body['terms']['memberships'][0]['side']['quantity']['hours'];h.update(membership=membership,touProduct=product['id'] if membership!='all' else None,touVersion=product['version'] if membership!='all' else None)
+        body['terms']['memberships'][0]['side']['calendarPolicy']['delivery']['calendar']=product['calendar'] if membership!='all' else dict(revision=dict(catalogId=manifest['referenceCatalogId'],revisionId=manifest['referenceRevisionId']),code='test_utc_every_day')
         result=client.call('ppa/preview',deepcopy(body));rows=delivery(result)['rows']
         assert len(rows)==count and sum(fraction(r['amount']) for r in rows)==total
         assert all(fraction(r['amount'])==instant(r['interval']['start']).astimezone(ZONE).hour+1 for r in rows)

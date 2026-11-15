@@ -147,7 +147,7 @@ internal static class GasOwnedHoldingsChecks
         public ImmutableArray<SidePaymentFactor> Resolve(ImmutableArray<SidePaymentKey> payments,MarketSnapshot snapshot)=>
             [..payments.Select(p=>new SidePaymentFactor(p,Factor(p.PaymentAt),snapshot,DiscountFactorSource.Explicit))];
         public ImmutableArray<SidePaymentFactor> ResolveForValuation(ImmutableArray<SidePaymentKey> payments,MarketSnapshot snapshot,DateTimeOffset at,string? policy)=>
-            [..payments.Select(p=>new SidePaymentFactor(p,Factor(p.PaymentAt).DivideExact(Factor(at)),snapshot,DiscountFactorSource.Explicit))];
+            [..payments.Select(p=>new SidePaymentFactor(p,Factor(p.PaymentAt).DivideExact(Factor(at)),snapshot,DiscountFactorSource.Explicit){ClockRoll=new(policy!,at,Factor(p.PaymentAt),Factor(at),[])})];
     }
     private sealed class Held(AccountingPositionKey owner,MarketSnapshot source,CurveRequest mark,ValuationPortfolio portfolio):ILifecycleProjection
     {

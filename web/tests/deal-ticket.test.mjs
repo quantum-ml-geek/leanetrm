@@ -47,6 +47,21 @@ const draw=(over={})=>{
  return host;
 };
 
+test('instrument setup stays above the sides while ownership follows them in an open entry form',()=>{
+ const state=newTicket({...description,tradeFields:[f('book','Book'),f('gas_setup','Gas setup')]});
+ const nodes=all(draw({state}));
+ assert.ok(nodes.findIndex(n=>n.dataset.field==='gas_setup')<nodes.findIndex(n=>n.className==='ticket-deck'));
+ assert.ok(nodes.findIndex(n=>n.className==='ticket-deck')<nodes.findIndex(n=>n.dataset.field==='book'));
+ assert.equal(controls(nodes.find(n=>n.dataset.field==='book'))[0].disabled,false);
+});
+
+test('side details show declared prerequisites before their dependent selector',()=>{
+ const state=newTicket({...description,sides:[{...description.sides[0],fields:[
+  f('forecast','Forecast',{dependsOn:['point']}),f('point','Point',{dependsOn:['zone']}),f('zone','Zone',{dependsOn:['pipeline']}),f('pipeline','Pipeline')]}]});
+ const own=one(draw({state}),'ticket-own');
+ assert.deepEqual(all(own).filter(n=>n.dataset.field).map(n=>n.dataset.field),['pipeline','zone','point','forecast']);
+});
+
 test('a quantity field shows the unit the preview resolved, and none before',()=>{
  const unit=host=>byClass(all(host).find(n=>n.dataset.field==='quantity'&&n.dataset.band),'ticket-unit').map(n=>n.textContent);
  assert.deepEqual(unit(draw()),[]);
@@ -228,7 +243,7 @@ test('a started-delivery trade draws its measures as separate figures with expec
  const measures={unrealized:'1445',realizedUnsettled:'-10855',total:'-9410',label:'Unrealized + realized unsettled',discounting:'undiscounted',expectedCash:[{dueAt:'2026-11-10T00:00:00Z',amount:'-9300'}]};
  const shown=one(draw({mode:'booked',presentation:'schedules',measures,currency:'USD'}),'ticket-measures');
  assert.deepEqual(byClass(shown,'ticket-summary-line').map(n=>n.textContent),['Unrealized (remaining delivery)1,445 USD','Realized, unsettled (delivered, not paid)-10,855 USD','Unrealized + realized unsettled-9,410 USD',
-  'Discountingundiscounted','Expected cash by due date · not added to the total','Due 2026-11-10T00:00:00Z-9,300 USD']);
+  'Discountingundiscounted','Expected cash by due date · not added to the total','Due Nov 10, 2026-9,300 USD']);
  assert.equal(byClass(draw({mode:'booked',presentation:'schedules',measures:null,currency:'USD'}),'ticket-measures').length,0);
  assert.equal(byClass(draw(),'ticket-measures').length,0);
 });

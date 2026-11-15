@@ -22,6 +22,11 @@ internal static class ScheduleGraphChecks
         var payment = new SidePaymentKey(Guid.Parse("b0000000-0000-0000-0000-000000000001"), 0,
             Fixture.Utc("2041-03-18T00:00:00Z"), f.R("currency"));
         var factor = new SidePaymentFactor(payment, ExactDecimal.Parse("0.9"), market.Snapshot, DiscountFactorSource.Explicit);
+        var sameDay=factor with {Payment=payment with {PaymentAt=market.Snapshot.ValuationAt},Source=DiscountFactorSource.PaymentDay};
+        Reject("side_payment_factors",()=>new ScheduleGraphBuilder(market.Graph,market.Snapshot,Limits).DiscountInput(sameDay));
+        Reject("side_payment_factors",()=>new ScheduleGraphBuilder(market.Graph,market.Snapshot,Limits).DiscountInput(factor with {Source=DiscountFactorSource.PaymentDay,DiscountFactor=ExactDecimal.Parse("1")}));
+        Reject("side_payment_factors",()=>new ScheduleGraphBuilder(market.Graph,market.Snapshot,Limits).DiscountInput(sameDay with {Source=DiscountFactorSource.Explicit,
+            ClockRoll=new(OpenEtrm.MarketData.Calculation.ClockChange.FrozenInputs,market.Snapshot.ValuationAt.AddDays(-1),ExactDecimal.Parse("0.9"),ExactDecimal.Parse("1"),[])}));
         Reject("discount_curve", () => new ScheduleGraphBuilder(market.Graph, market.Snapshot, Limits)
             .DiscountInput(factor with { Source = DiscountFactorSource.CurrencyDefault }));
         var builder = new ScheduleGraphBuilder(market.Graph, market.Snapshot, Limits);
@@ -142,7 +147,7 @@ internal static class ScheduleGraphChecks
         _ = checks.QuantityInput(Source(61), Q("1"), ScheduleInputUse.Frozen);
         Reject("schedule_graph_input", () => checks.QuantityInput(Source(61), Q("2"), ScheduleInputUse.Frozen));
         Reject("schedule_graph_input", () => checks.QuantityInput(Source(62) with { KnownAt = market.Graph.Plan.Context.KnownAt.AddTicks(1) }, Q("1"), ScheduleInputUse.Frozen));
-        Reject("side_payment_due", () => checks.DiscountInput(factor with { Payment = payment with { PaymentAt = market.Snapshot.ValuationAt } }));
+        Reject("side_payment_due", () => checks.DiscountInput(factor with { Payment = payment with { PaymentAt = market.Snapshot.ValuationAt.AddDays(-1) } }));
         Reject("side_payment_factors", () => checks.DiscountInput(factor with { Snapshot = f.Snapshot() }));
         _ = checks.DiscountInput(factor);
         Reject("side_payment_factors", () => checks.DiscountInput(factor with { DiscountFactor = ExactDecimal.Parse("0.8") }));

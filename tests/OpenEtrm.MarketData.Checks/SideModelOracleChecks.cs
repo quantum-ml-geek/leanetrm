@@ -140,7 +140,7 @@ internal static class SideModelOracleChecks
             [new(index,quote.Key,new(2041,1,1),new(2041,2,1),Fixture.Utc("2040-12-31T00:00:00Z"),
                 key==f.K(5)?f.S(7):key==f.K(2)?f.S(8):throw new InvalidOperationException("No fixing series declared for this oracle contract."),f.R("source"),IndexFixing.SupportedImplementation)],
             Fixture.Utc("2041-02-18T00:00:00Z"), FloatingAveraging.MonthlyIndexPrice,
-            [new(new(curve, key), f.Contracts.Single(c => c.Key == key))], FloatingSide.IndexedImplementation);
+            [new(new(curve, key), f.Contracts.Single(c => c.Key == key))], FloatingSide.IndexedImplementation,SyntheticSideCalendars.Dated(true,null,null));
         var power = WholeTermSideFixtures.Floating([Floating(powerQuote,powerCurve.Key,f.K(5),f.R("power_index"))],[new(1,1)]);
         var gas = WholeTermSideFixtures.Floating([Floating(gasQuote,f.C("base_forward"),f.K(2),f.R("index"))],[new(1,1)]);
         var converter = new UnitConverter([..f.Quantities.Select(q => new UnitDefinition(q.Unit, q.Dimension, q.Unit.Code))], [], f.Quantities);
@@ -156,14 +156,14 @@ internal static class SideModelOracleChecks
         var from = new DateOnly(2048, 4, 3);
         var f = new ObservationScheduleChecks.ObservationFixture(from, ["17", "29", "23", "11", "31", "19", "37"]);
         var calendar = new SwapObservationCalendar(f.Base.R("observation_calendar"), DateSet.Create(from.AddDays(-2), f.To.AddDays(2), [from, from.AddDays(4), from.AddDays(6)]));
-        var fixedSide = new FixedSide(Guid.NewGuid(), new(D("20"), f.Quote), f.Unit, from, f.To, f.Payment, FixedSide.Implementation, f.Quote);
+        var fixedSide = new FixedSide(Guid.NewGuid(), new(D("20"), f.Quote), f.Unit, from, f.To, f.Payment, FixedSide.Implementation, f.Quote,SyntheticSideCalendars.Dated(false));
         foreach (var mode in new[] { FloatingAveraging.CalendarDayArithmetic, FloatingAveraging.ObservationArithmetic, FloatingAveraging.CalendarDaysPrevious, FloatingAveraging.CalendarDaysNext, FloatingAveraging.QuantityWeighted })
         {
             var dates = mode is FloatingAveraging.ObservationArithmetic or FloatingAveraging.CalendarDaysPrevious or FloatingAveraging.CalendarDaysNext;
             var projections = dates ? ImmutableArray.Create(f.Projections[0], f.Projections[4], f.Projections[6]) :
                 mode == FloatingAveraging.QuantityWeighted ? [..f.Projections.Select((p, n) => p with { AveragingQuantity = new(D((n + 1).ToString(CultureInfo.InvariantCulture)), f.Quote.Quantity) })] : f.Projections;
             var floating = new FloatingSide(Guid.NewGuid(), PriceSettlementSelection.CurveTarget(f.Base.R("index")), f.Quote, f.Unit, from, f.To, f.Fixings(projections), f.Payment,
-                mode, projections, FloatingSide.IndexedImplementation, dates ? calendar : null, new(D("0.125"), f.Quote));
+                mode, projections, FloatingSide.IndexedImplementation, SyntheticSideCalendars.Dated(true,null,dates ? calendar : null),dates ? calendar : null, new(D("0.125"), f.Quote));
             var swap = new FinancialSwapInstrument(Guid.NewGuid(), [new(fixedSide, D("-1")), new(floating, D("1"))], FinancialSwapInstrument.Implementation, false);
             foreach (var (scenario, build) in Scenarios(f.Model, f.Model.Build(f.Snapshot, swap.DependenciesAt(f.Snapshot))))
                 record("observations-with-spread-" + mode, scenario, swap.PV(new SideValuationContext(build, new ExplicitDiscounting(D("1"), DiscountFactorSource.Undiscounted))));
@@ -208,13 +208,13 @@ internal static class SideModelOracleChecks
     {
         var f = new PpaAcceptanceFixture();
         PpaInstrument Instrument(params PpaMembership[] members) => new(Guid.NewGuid(), f.Definitions, f.Reference, [..members], false, "ppa_instrument_v2");
-        FloatingSide Floating(string curve, string multiplier = "1", string adder = "0") => new(Guid.NewGuid(), f.Terms(f.Profile), new(f.C(curve), D(multiplier), new(D(adder), f.EnergyPrice),null));
+        FloatingSide Floating(string curve, string multiplier = "1", string adder = "0") => new(Guid.NewGuid(), f.Terms(f.Profile), new(f.C(curve), D(multiplier), new(D(adder), f.EnergyPrice),null),SyntheticSideCalendars.Interval(f.Terms(f.Profile),true));
         var physical = f.Physical();
         var cases = new List<(string Name, PpaInstrument Instrument)>
         {
             ("ppa-profile-dst", physical), ("ppa-volume", f.Physical(volume: true)),
             ("ppa-certificate", f.WithCertificate()), ("ppa-capacity", f.CapacityAgreement("2")),
-            ("ppa-virtual", Instrument(new(new(PpaRole.IndexedPayment), Floating("synthetic_hub", "0.95", "2"), D("1")), new(new(PpaRole.StrikePayment), new FixedSide(Guid.NewGuid(), f.Terms(f.Profile), new FlatPrice(new(D("40"), f.EnergyPrice))), D("-1")))),
+            ("ppa-virtual", Instrument(new(new(PpaRole.IndexedPayment), Floating("synthetic_hub", "0.95", "2"), D("1")), new(new(PpaRole.StrikePayment), new FixedSide(Guid.NewGuid(), f.Terms(f.Profile), new FlatPrice(new(D("40"), f.EnergyPrice)),SyntheticSideCalendars.Interval(f.Terms(f.Profile),false)), D("-1")))),
             ("ppa-basis", Instrument(new(new(PpaRole.IndexedPayment, 0), Floating("synthetic_hub"), D("1")), new(new(PpaRole.IndexedPayment, 1), Floating("synthetic_energy"), D("-1"))))
         };
         foreach (var membership in new[] { BlockMembership.Peak, BlockMembership.OffPeak })
@@ -222,20 +222,21 @@ internal static class SideModelOracleChecks
             var source = (PowerPhysicalSide)physical.Memberships[0].Side;
             var profile = f.Profile with { Hours = new(membership, new(7, 23, false), [new(2031, 11, 11)]) };
             var schedule=f.Schedule(profile);
-            var masked = new PowerPhysicalSide(Guid.NewGuid(), source.Terms with { Quantity = profile,Schedule=schedule }, source.Location);
+            var masked = new PowerPhysicalSide(Guid.NewGuid(), source.Terms with { Quantity = profile,Schedule=schedule }, source.Location,SyntheticSideCalendars.Interval(source.Terms with { Quantity = profile,Schedule=schedule },false));
             var cash=(FixedSide)physical.Memberships[1].Side;
             cases.Add(("ppa-slot-" + membership, Instrument(physical.Memberships[0] with { Side = masked },
                 physical.Memberships[1] with {Side=new FixedSide(Guid.NewGuid(),cash.Terms with {Schedule=schedule,
-                    InputPorts=[..cash.Terms.InputPorts.Select(p=>p with{Schedule=schedule})]},cash.Price)})));
+                    InputPorts=[..cash.Terms.InputPorts.Select(p=>p with{Schedule=schedule})]},cash.Price,SyntheticSideCalendars.Interval(cash.Terms with {Schedule=schedule,
+                    InputPorts=[..cash.Terms.InputPorts.Select(p=>p with{Schedule=schedule})]},false))})));
         }
-        var datedCash = new FixedSide(Guid.NewGuid(), f.Terms(new SlotQuantity([new(PpaRole.EnergyDelivery)]), 20), new FlatPrice(new(D("40"), f.EnergyPrice)));
+        var datedCash = new FixedSide(Guid.NewGuid(), f.Terms(new SlotQuantity([new(PpaRole.EnergyDelivery)]), 20), new FlatPrice(new(D("40"), f.EnergyPrice)),SyntheticSideCalendars.Interval(f.Terms(new SlotQuantity([new(PpaRole.EnergyDelivery)]), 20),false));
         var dated = new PpaInstrument(Guid.NewGuid(), f.Definitions, f.Reference, [physical.Memberships[0], new(new(PpaRole.StrikePayment), datedCash, D("-1"))], true, PpaInstrument.Implementation);
         cases.Add(("ppa-independent-payment-dates", dated));
         foreach (var (name, price) in new (string, FixedPriceTerm)[]
         {
             ("escalated", new EscalatedPrice(new(D("40"), f.EnergyPrice), D("0.025"), new(2030, 3, 15), ContractYearBasis.AnniversaryStep)),
             ("stepped", new SteppedPrice([new(f.Month, new(D("40"), f.EnergyPrice)), new(f.Month.AddDays(14), new(D("50"), f.EnergyPrice))]))
-        }) cases.Add(("ppa-" + name, Instrument(physical.Memberships[0], physical.Memberships[1] with { Side = new FixedSide(Guid.NewGuid(), physical.Memberships[1].Side.Terms, price) })));
+        }) cases.Add(("ppa-" + name, Instrument(physical.Memberships[0], physical.Memberships[1] with { Side = new FixedSide(Guid.NewGuid(), physical.Memberships[1].Side.Terms, price,SyntheticSideCalendars.Interval(physical.Memberships[1].Side.Terms,false)) })));
         var market = f.Market(f.From.AddDays(-1));
         var inputs = f.Prepare(market, cases.Select(c => c.Instrument));
         var discount = new ExplicitDiscounting(D("1"), DiscountFactorSource.Undiscounted);
@@ -244,7 +245,8 @@ internal static class SideModelOracleChecks
             var session = inputs.Session(build);
             foreach (var (name, instrument) in cases) record(name, scenario, session.Value(instrument, inputs.FullCoverage(instrument), instrument.Discounting ? new DatedDiscounting() : discount));
         }
-        var at = PpaAcceptanceFixture.At("2031-12-10T00:00:00Z");
+        // Overdue means the UTC date after the contractual payment day.
+        var at = PpaAcceptanceFixture.At("2031-12-11T00:00:00Z");
         var held = f.WithCertificate();
         var deliveredMarket = f.Market(at, actuals: _ => "40");
         var delivered = f.Prepare(deliveredMarket, [held], meter: f.Meter(_ => "50"));
@@ -261,8 +263,8 @@ internal static class SideModelOracleChecks
 
         var first = f.Asset with { Versions = [new(f.From, f.To, D("200"), D("60"))] };
         var second = new GenerationAsset(new(f.Definitions, "synthetic_second_generator"), f.R("synthetic_second_node"), f.Capacity, f.R("synthetic_clock"), f.Clock, [new(f.From, f.To, D("100"), D("40"))]);
-        var capacity = new CapacityDeliverySide(Guid.NewGuid(), f.Terms(new AccreditedQuantity([first.Key, second.Key])), f.CapacityDays.Key, "mw_day_per_operating_day_v1");
-        var capacityCash = new FixedSide(Guid.NewGuid(), f.Terms(new SlotQuantity([new(PpaRole.CapacityDelivery)]),normalization:f.Normalization([first.Key,second.Key])), new FlatPrice(new(D("2"), f.CapacityPrice)));
+        var capacity = new CapacityDeliverySide(Guid.NewGuid(), f.Terms(new AccreditedQuantity([first.Key, second.Key])), f.CapacityDays.Key, "mw_day_per_operating_day_v1",SyntheticSideCalendars.Interval(f.Terms(new AccreditedQuantity([first.Key, second.Key])),false));
+        var capacityCash = new FixedSide(Guid.NewGuid(), f.Terms(new SlotQuantity([new(PpaRole.CapacityDelivery)]),normalization:f.Normalization([first.Key,second.Key])), new FlatPrice(new(D("2"), f.CapacityPrice)),SyntheticSideCalendars.Interval(f.Terms(new SlotQuantity([new(PpaRole.CapacityDelivery)]),normalization:f.Normalization([first.Key,second.Key])),false));
         var multi = new PpaInstrument(Guid.NewGuid(), f.Definitions, f.Reference, [new(new(PpaRole.CapacityDelivery), capacity, D("1")), new(new(PpaRole.CapacityPayment), capacityCash, D("-1"))], false, PpaInstrument.Implementation);
         var assignments = f.Assignments.Add(new("synthetic_other_capacity", second.Location, ValuedAttribute.Capacity, f.From, f.To, f.C("synthetic_capacity_other"), f.CapacityPrice, D("0")));
         var multiInputs = f.Prepare(market, [multi], asset: first, extraAssets: [second], assignments: assignments);
@@ -291,10 +293,10 @@ internal static class SideModelOracleChecks
         var contract = new MarketContract(factor.Contract, ContractKind.Forward, f.Month, f.Month.AddMonths(1), f.To.AddYears(2), null);
         var paymentAt = PpaAcceptanceFixture.At("2031-12-10T00:00:00Z");
         var unit = new Quantity(D("1"), f.Energy.Key);
-        var fixedSide = new FixedSide(Guid.NewGuid(), new(D("40"), quote), unit, f.Month, f.Month.AddMonths(1), paymentAt, FixedSide.Implementation, quote);
+        var fixedSide = new FixedSide(Guid.NewGuid(), new(D("40"), quote), unit, f.Month, f.Month.AddMonths(1), paymentAt, FixedSide.Implementation, quote,SyntheticSideCalendars.Dated(false));
         var floating = new FloatingSide(Guid.NewGuid(), PriceSettlementSelection.CurveTarget(f.R("synthetic_energy_index")), quote, unit, f.Month, f.Month.AddMonths(1),
             [new(f.R("synthetic_energy_index"),quote.Key,f.Month,f.Month.AddMonths(1),f.From,factor.Input.Series,factor.Source,IndexFixing.SupportedImplementation)],paymentAt,
-            FloatingAveraging.MonthlyIndexPrice, [new(new(f.C("synthetic_energy"), contract.Key), contract)], FloatingSide.IndexedImplementation);
+            FloatingAveraging.MonthlyIndexPrice, [new(new(f.C("synthetic_energy"), contract.Key), contract)], FloatingSide.IndexedImplementation,SyntheticSideCalendars.Dated(true,null,null));
         var swap = new FinancialSwapInstrument(Guid.NewGuid(), [new(fixedSide, D("-1")), new(floating, D("1"))], FinancialSwapInstrument.Implementation, false);
         var book = Guid.NewGuid();
         var trades = new[]

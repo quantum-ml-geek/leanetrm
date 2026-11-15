@@ -23,7 +23,8 @@ internal static class PpaContractChecks
             var cash=(FixedSide)original.Memberships[1].Side;
             var members=original.Memberships.SetItem(0,original.Memberships[0] with {Slot=deliverySlot})
                 .SetItem(1,original.Memberships[1] with {Side=new FixedSide(Guid.NewGuid(),cash.Terms with {Quantity=new SlotQuantity([deliverySlot]),
-                    InputPorts=[new(deliverySlot,cash.Price.Unit.Quantity,cash.Terms.Schedule)]},cash.Price)});
+                    InputPorts=[new(deliverySlot,cash.Price.Unit.Quantity,cash.Terms.Schedule)]},cash.Price,SyntheticSideCalendars.Interval(cash.Terms with {Quantity=new SlotQuantity([deliverySlot]),
+                    InputPorts=[new(deliverySlot,cash.Price.Unit.Quantity,cash.Terms.Schedule)]},false))});
             return new(Guid.NewGuid(),original.Definitions,original.Reference,members,false,PpaInstrument.Implementation);
         }
         if(WithOrdinal(7).Capability!="fixed_physical")throw new Exception("The highest stored slot ordinal must remain supported.");

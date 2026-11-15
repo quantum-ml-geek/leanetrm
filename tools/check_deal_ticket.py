@@ -7,7 +7,8 @@ from datetime import datetime
 from fractions import Fraction
 from uuid import uuid4
 from preview_client import PreviewClient, initial_frame
-from preview_fixture import gas_purchase, held_gas_measures, trade_booking
+from preview_fixture import gas_purchase, held_gas_measures, trade_booking, RCAT, RREV
+from synthetic_side_calendars import side_calendar_policy
 
 
 # The side kind each booked composition role is drawn as (GasTicket's role map).
@@ -72,11 +73,12 @@ def run_checks(url,query,manifest):
     assert description['product']=='physical_gas' and description['version']==1,description['product']
     c.call('tickets/description',{'context':context,'product':'power'},expected=422)
     p=next(p for p in cat['locations'] if p['deliveryPoint']=='synthetic_gas_point_a')
-    cash=lambda code,role,direction,price:{'code':code,'role':role,'direction':direction,'source':'physical','stage':'delivery','price':price,'tariffCode':None,'paymentAt':'2021-02-05T00:00:00Z'}
+    reference=dict(revision=dict(catalogId=RCAT,revisionId=RREV),code='test_utc_every_day')
+    cash=lambda code,role,direction,price:{'code':code,'role':role,'direction':direction,'source':'physical','stage':'delivery','price':price,'tariffCode':None,'paymentAt':'2021-02-05T00:00:00Z','calendarPolicy':side_calendar_policy(reference,delivery=True,observation=False,payment=True)}
     body={**context,**trade_booking(),'operationId':str(uuid4()),'bookId':cat['books'][0]['id'],'definitionRevisionId':p['definitionRevisionId'],
           'gasSetupId':cat['gasSetupId'],'discounting':False,'profile':'fixed_gas_composition_v1',
           'physicalSides':[{'code':'physical','pipeline':p['pipeline'],'zone':p['zone'],'deliveryPoint':p['deliveryPoint'],'product':p['product'],'direction':'deliver',
-                            'deliveryFrom':'2021-01-01','deliveryTo':'2021-02-01','quantityBasis':'per_operating_day','quantity':'10000','link':None}],
+                            'deliveryFrom':'2021-01-01','deliveryTo':'2021-02-01','quantityBasis':'per_operating_day','quantity':'10000','link':None,'calendarPolicy':side_calendar_policy(reference,delivery=True,observation=False,payment=False)}],
           'cashSides':[cash('cash','consideration','receive','3.412'),cash('fee','fee','pay','0.045')]}
     value=c.call('gas/composition/preview',body)
     view=value['schedule'];assert value['scheduleRefusal'] is None
@@ -168,8 +170,8 @@ def check_ticket_operations(c,context,cat,description,body,view,query,manifest):
               'pipeline':p['pipeline'],'zone':p['zone'],'delivery_point':p['deliveryPoint']}
     def charge(kind,direction,price):
         return {f'{kind}_direction':direction,f'{kind}_source':'physical',f'{kind}_stage':'delivery',f'{kind}_price':price,f'{kind}_payment_at':'2021-02-05T00:00:00Z'}
-    draft={'product':'physical_gas','version':1,'trade':trade,'sides':[{'kind':'physical','code':'physical','values':physical},
-           {'kind':'cash','code':'cash','values':charge('cash','receive','3.412')},{'kind':'fee','code':'fee','values':charge('fee','pay','0.045')}]}
+    draft={'product':'physical_gas','version':1,'trade':trade,'sides':[{'kind':'physical','code':'physical','values':physical,'calendarPolicy':body['physicalSides'][0]['calendarPolicy']},
+           {'kind':'cash','code':'cash','values':charge('cash','receive','3.412'),'calendarPolicy':body['cashSides'][0]['calendarPolicy']},{'kind':'fee','code':'fee','values':charge('fee','pay','0.045'),'calendarPolicy':body['cashSides'][1]['calendarPolicy']}]}
 
     # Physical choices follow only the exact selected reference relationships, including unpriced points.
     paths=cat['physicalReferences']
@@ -269,15 +271,15 @@ def check_ticket_operations(c,context,cat,description,body,view,query,manifest):
     single={**{k:purchase[k] for k in ['snapshotId','convention','knowledgeMode','legalEntityId','legalEntityRevision','counterpartyId','counterpartyRevision','bookId','definitionRevisionId','gasSetupId']},
             'operationId':str(uuid4()),'pipeline':p['pipeline'],'zone':p['zone'],'deliveryPoint':p['deliveryPoint'],'product':p['product'],'deliveryFrom':'2021-01-01','deliveryTo':'2021-02-01',
             'quantity':'1000','quantityBasis':'period_total_equal_days','direction':'receive','fixedPrice':'3','usageFee':'0.045','usageTariffCode':None,'usageFeeDirection':'pay',
-            'paymentAt':'2021-02-02T00:00:00Z','discounting':False}
+            'paymentAt':'2021-02-02T00:00:00Z','discounting':False,'deliveryCalendarPolicy':purchase['physicalSides'][0]['calendarPolicy'],'considerationCalendarPolicy':purchase['cashSides'][0]['calendarPolicy'],'feeCalendarPolicy':purchase['cashSides'][1]['calendarPolicy']}
     single_fact=fact_for(stored_single_point(query,manifest['catalogId'],c.call('gas/composition/book',purchase)['tradeId'],single))
     point=c.call('tickets/trade',{'context':context,'tradeId':single_fact['tradeId'],'bindingId':single_fact['bindingId'],'revision':single_fact['revision']})
     sides=point['draft']['sides'];paid=sides[1]['values']['cash_payment_at']
     assert datetime.fromisoformat(paid)==datetime.fromisoformat('2021-02-02T00:00:00+00:00') and sides[2]['values']['fee_payment_at']==paid,sides
     charged=lambda kind,direction,price:{f'{kind}_direction':direction,f'{kind}_source':'physical-1',f'{kind}_stage':'delivery',f'{kind}_price':price,f'{kind}_payment_at':paid}
     assert point['draft']=={'product':'physical_gas','version':1,'trade':trade,'sides':[
-        {'kind':'physical','code':'physical-1','values':{**physical,'direction':'receive','quantity':'1000','quantity_basis':'period_total_equal_days'}},
-        {'kind':'cash','code':'cash-1','values':charged('cash','pay','3')},{'kind':'fee','code':'fee-1','values':charged('fee','pay','0.045')}]},point['draft']
+        {'kind':'physical','code':'physical-1','values':{**physical,'direction':'receive','quantity':'1000','quantity_basis':'period_total_equal_days'},'calendarPolicy':single['deliveryCalendarPolicy']},
+        {'kind':'cash','code':'cash-1','values':charged('cash','pay','3'),'calendarPolicy':single['considerationCalendarPolicy']},{'kind':'fee','code':'fee-1','values':charged('fee','pay','0.045'),'calendarPolicy':single['feeCalendarPolicy']}]},point['draft']
     as_composed=c.call('tickets/preview',{'context':context,'draft':point['draft']})
     exact=lambda value:json.dumps(value,sort_keys=True)
     assert point['schedule'] is not None and exact(point['schedule'])==exact(as_composed['schedule']),(point['schedule'],as_composed['schedule'])

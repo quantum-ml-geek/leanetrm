@@ -21,6 +21,7 @@ public static class TradingInstant
 public abstract record Side
 {
     public Guid Id { get; }
+    [IdentityField] public SideCalendarPolicy CalendarPolicy { get; }
     [System.Text.Json.Serialization.JsonIgnore]
     public ScheduleDefinition? RetainedSchedule { get; internal init; }
     internal RetainedSideSchedule? RetainedPlan { get; init; }
@@ -32,11 +33,12 @@ public abstract record Side
     public abstract SideSchedule GenerateSchedule();
     public abstract SideValuation PV(SideValuationContext context);
 
-    protected Side(Guid id)
+    protected Side(Guid id,SideCalendarPolicy calendarPolicy)
     {
         if (id == Guid.Empty)
             throw new MarketDataException("side_definition", "A side requires an exact identity.");
         Id = id;
+        CalendarPolicy=calendarPolicy??throw new MarketDataException("side_calendar_policy","Supply the Side's explicit versioned calendar bindings.");
     }
 }
 

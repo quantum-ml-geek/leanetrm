@@ -60,7 +60,7 @@ public sealed partial record FuturesOptionInstrument : Instrument
         if(context.CashOptionValue() is {} cash)return DeclareCash(context,binding,cash);
         return new(Id, binding.Policy.Id, [binding.Underlying], UnitQuantity.Specification, Currency) { Time = binding.Calibration is SolvedVolatility?
             ValuationTimeDependency.Between(context.CalculationAt,Series.InstructionCutoffAt is {} cutoff&&cutoff>context.CalculationAt?cutoff:Series.Terms.ExpiryAt):ValuationTimeDependency.Pinned,
-            DiscountInputs=[new(new(Id,0,Series.Terms.ExpiryAt,Currency),binding.Discounting)],
+            DiscountInputs=[new(new(Id,0,Series.Terms.ExpiryAt,Currency){Timing=ValueTimingKind.Instant},binding.Discounting)],
             Volatility=binding.Calibration is SolvedVolatility solved?[new(binding.Id,solved.Volatility.ToString(),VolatilityInput.Annualized)]:[],
             // The tree's value repeats its pattern once per price step of the underlying. A tree centred on the strike has
             // none at a unit discount, and an option valued at intrinsic has no lattice.
@@ -95,7 +95,7 @@ public sealed partial record FuturesOptionInstrument : Instrument
         var unit = binding.UnitPrice(futures, inputs.ValuationAt, context.Cancellation,LatticeDecimal.From(discount.DiscountFactor),volatility).ToExact();
         return new(context, ExactMoney.FromMoney(new Money(unit, Currency)).Scale(Series.Multiplier), UnitQuantity.Specification);
     }
-    private SidePaymentKey MarginPayment(FuturesMarginOccurrence occurrence)=>new(occurrence.Id,0,occurrence.DueAt,Currency);
+    private SidePaymentKey MarginPayment(FuturesMarginOccurrence occurrence)=>new(occurrence.Id,0,occurrence.DueAt,Currency){Timing=ValueTimingKind.Instant};
     private ImmutableArray<PhysicalOptionMarginDiscount> MarginFactors(UnitValuationContext context,ImmutableArray<FuturesMarginOccurrence> margins)
     {
         var factors=context.Inputs.Discounts([..margins.Where(o=>o.DueAt>context.CalculationAt).Select(MarginPayment)]).ToDictionary(f=>f.Payment);
@@ -104,7 +104,7 @@ public sealed partial record FuturesOptionInstrument : Instrument
     }
     private SidePaymentFactor Discount(UnitValuationContext context,FuturesOptionMarketBinding binding)
     {
-        var discount=context.Inputs.Discounts([new(Id,0,Series.Terms.ExpiryAt,Currency)]).Single();
+        var discount=context.Inputs.Discounts([new(Id,0,Series.Terms.ExpiryAt,Currency){Timing=ValueTimingKind.Instant}]).Single();
         // Binding already verifies the original provider factor against the
         // calibration. Lifecycle redeclaration consumes separately verified
         // exact-instant evidence at its event clock, without a generic roll.
@@ -119,7 +119,7 @@ public sealed partial record FuturesOptionInstrument : Instrument
     private FuturesOptionMarketBinding Binding(UnitValuationContext context)
     {
         var binding = context.FuturesOption(Id);
-        var payment=new SidePaymentKey(Id,0,Series.Terms.ExpiryAt,Currency);
+        var payment=new SidePaymentKey(Id,0,Series.Terms.ExpiryAt,Currency){Timing=ValueTimingKind.Instant};
         var factors=binding.Discounting?.Resolve([payment],context.Snapshot)??throw Error("option_context","The calibration requires its exact source discount provider.");
         if(factors.IsDefault||factors.Length!=1||factors[0].Payment!=payment||!factors[0].Snapshot.HasSameInputs(context.Snapshot)||
             LatticeDecimal.From(factors[0].DiscountFactor)!=binding.DiscountToExpiry)
@@ -320,7 +320,7 @@ public static class FuturesOptionPricing
 
     private static LatticeDecimal DiscountToExpiry(FuturesOptionInstrument option, ISideDiscounting discounting, MarketSnapshot snapshot, string label)
     {
-        var expiry = new SidePaymentKey(option.Id, 0, option.Series.Terms.ExpiryAt, option.Series.Currency);
+        var expiry = new SidePaymentKey(option.Id, 0, option.Series.Terms.ExpiryAt, option.Series.Currency){Timing=ValueTimingKind.Instant};
         var factors = discounting.Resolve([expiry], snapshot);
         if (factors.IsDefault || factors.Length != 1 || factors[0] is null || factors[0].Payment != expiry)
             throw FuturesOptionInstrument.Error("option_discount", $"{label}: the selected discounting supplies no factor to expiry.");

@@ -67,7 +67,7 @@ public static class PowerCollection
                     var rule=ReferenceClockJson.Read(clock);
                     var reference=new ReferenceRevision(source.GetProperty("reference_catalog_id").GetGuid(),source.GetProperty("reference_revision_id").GetGuid());
                     var unit=new PriceUnit(new(reference,source.GetProperty("currency_code").GetString()!),new(reference,source.GetProperty("quantity_code").GetString()!),ExactDecimal.Parse("1"));
-                    var rows=await client.Fetch(source.GetProperty("dataset").GetString()!,source.GetProperty("market").GetString()!,source.GetProperty("point").GetString()!,source.GetProperty("minutes").GetInt32(),first,last,PowerClock.FromRule(rule,TimeZoneDatabase.Installed()),unit,ct);
+                    var rows=await client.Fetch(source.GetProperty("dataset").GetString()!,source.GetProperty("market").GetString()!,source.GetProperty("point").GetString()!,source.GetProperty("minutes").GetInt32(),first,last,PublishedClocks.Resolve([source.GetProperty("clockCapture")],rule),unit,ct);
                     payload.Add(new {sourceId=source.GetProperty("id").GetGuid(),rows=rows.Select(p=>new {start=p.Start,end=p.End,price=p.Price.Value.ToString(),revision=p.Revision}).ToArray()});
                 }
                 await using var finish=ScheduleStore.Command(connection,"SELECT power_data.finish_attempt($1,$2::jsonb,NULL)",attempt,JsonSerializer.Serialize(payload));

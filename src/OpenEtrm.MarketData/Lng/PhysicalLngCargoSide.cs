@@ -46,7 +46,7 @@ public sealed record LngValuationAssignment
         "Select an exact LNG product/discharge custody mapping to one outright monthly energy mark and its explicit fixing.");
 }
 
-[EconomicDefinition("physical_lng_cargo_side_v1")]
+[EconomicDefinition("physical_lng_cargo_side_v2")]
 public sealed record PhysicalLngCargoSide : Side
 {
     [IdentityField] public LngValuationAssignment Assignment { get; }
@@ -67,9 +67,11 @@ public sealed record PhysicalLngCargoSide : Side
     private readonly Lazy<PhysicalLngCargoSchedule> schedule;
 
     public PhysicalLngCargoSide(Guid id, LngValuationAssignment assignment, ReferenceKey loadFacility, ReferenceKey loadCustody,
-        DateTimeOffset loadFrom, DateTimeOffset loadTo, DateTimeOffset dischargeFrom, DateTimeOffset dischargeTo) : base(id)
+        DateTimeOffset loadFrom, DateTimeOffset loadTo, DateTimeOffset dischargeFrom, DateTimeOffset dischargeTo,SideCalendarPolicy calendarPolicy) : base(id,calendarPolicy)
     {
         if (assignment is null) throw new MarketDataException("lng_valuation_assignment", "Select an exact LNG discharge valuation mapping.");
+        CalendarPolicy.RequirePurposes(true,false,false);
+        CalendarPolicy.For(CalendarPurpose.Delivery).RequireCoverage(PaymentDatePolicy.Date(loadFrom),PaymentDatePolicy.Date(dischargeTo).AddDays(dischargeTo.TimeOfDay==TimeSpan.Zero?0:1));
         Money.RequireKey(loadFacility); Money.RequireKey(loadCustody);
         if (loadFacility.Revision != assignment.Key.Revision || loadCustody.Revision != assignment.Key.Revision || loadFacility == loadCustody)
             throw new MarketDataException("lng_load_location", "Select separate exact loading facility and custody-point references.");
@@ -151,7 +153,8 @@ public sealed record PhysicalLngInstrument : SidedInstrument
             cash.GenerateSchedule() is not SidePaymentSchedule schedule || schedule.Rows.Count != 1 ||
             schedule.Currency != cargo.Currency || schedule.UnitQuantity != cargo.UnitQuantity || cash.Price.Unit.Multiplier != cargo.Assignment.Quote.Multiplier ||
             schedule.Rows[0].DeliveryFrom != cargo.DateFrom || schedule.Rows[0].DeliveryTo != cargo.DateTo ||
-            schedule.Rows[0].PaymentAt < cargo.DischargeTo || schedule.Rows[0].AllocatedQuantity != new ExactQuantity(1, 1, cargo.Assignment.Energy.Key))
+            cash.Periods[0].DeliveryCompletionAt != cargo.DischargeTo ||
+            PaymentDatePolicy.Date(schedule.Rows[0].PaymentAt) < PaymentDatePolicy.Date(cargo.DischargeTo) || schedule.Rows[0].AllocatedQuantity != new ExactQuantity(1, 1, cargo.Assignment.Energy.Key))
             throw new MarketDataException("lng_instrument", "Compose one normalized LNG cargo value and independently directed fixed consideration with an explicit future payment.");
         return [new(cargo, physicalDirection), new(cash, cashDirection)];
     }

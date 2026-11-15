@@ -35,7 +35,7 @@ class Collector:
         source = self.sources[key]
         end = start + timedelta(minutes=count * minutes)
         self.query(f"""INSERT INTO power_data.operating_days VALUES('{self.reference}','{self.revision}','{source['clock']}',
-          '{day}','{start.isoformat()}','{end.isoformat()}','{'a' * 64}') ON CONFLICT DO NOTHING;""")
+          '{day}','{start.isoformat()}','{end.isoformat()}',(SELECT encode(definition_digest,'hex') FROM ref_data.clock_captures WHERE(catalog_id,revision_id,clock_code)=('{self.reference}','{self.revision}','{source['clock']}'))) ON CONFLICT DO NOTHING;""")
         payload = json.dumps([{'sourceId': source['sourceId'], 'rows': [
             {'start': (start + timedelta(minutes=n * minutes)).isoformat(),
              'end': (start + timedelta(minutes=(n + 1) * minutes)).isoformat(),

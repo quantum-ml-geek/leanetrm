@@ -1,3 +1,4 @@
+import {displayPaymentDate} from './payment-date.js';
 import {numberText} from './schedule-grid.js';
 // How started-delivery gas is worded. The backend decides every state, amount and basis; this module only words what it reports.
 export type GasMeasures={unrealized:string;realizedUnsettled:string;total:string;label:string;discounting:string;expectedCash:{dueAt:string;amount:string}[]};
@@ -15,7 +16,7 @@ export function measureLines(m:GasMeasures,currency:string,instant:(at:string)=>
  const amount=(value:string)=>`${numberText(value)} ${currency}`;
  return [{label:measureTexts.Unrealized,value:amount(m.unrealized)},{label:measureTexts.RealizedUnsettled,value:amount(m.realizedUnsettled)},{label:m.label,value:amount(m.total)},
   {label:'Discounting',value:m.discounting},{label:'Expected cash by due date · not added to the total',value:''},
-  ...m.expectedCash.map(c=>({label:`Due ${instant(c.dueAt)}`,value:amount(c.amount)}))];
+  ...m.expectedCash.map(c=>({label:`Due ${displayPaymentDate(c.dueAt)}`,value:amount(c.amount)}))];
 }
 
 const basisTexts:Readonly<Record<string,string>>={contract_estimate_allocation_pending_v1:'estimated from contract; allocation pending'};
@@ -27,15 +28,15 @@ export function valueMeasureText(label:string|undefined,discounting:string|undef
 
 export const quantityBasisText=(state:string|null)=>state===null?'—':basisTexts[state]??words(state);
 
-const unpaid=new Set(['Remaining','AccruedUnpaid']),paidStates=new Set(['Paid','PartPaid']);
+const unpaid=new Set(['Remaining','AccruedUnpaid','Projected']),paidStates=new Set(['Paid','PartPaid']);
 
 /** The lines under a row's delivery state: its settlement, what was paid and when, what is still due, and its measure. A row without the
- *  started-delivery states (another product, an older program) words only the fields it always had. */
+ *  started-delivery states (another product) words only the fields it always had. */
 export function lifecycleLines(row:LifecycleRow,instant:(at:string|null)=>string):string[]{
  const state=row.lifecycle,cash=state.cash,physical=cash==='NotApplicable';
  // A part-paid day shows both when the recorded payment was made and when the unpaid remainder is due.
  const paidOn=cash!==null&&paidStates.has(cash)&&row.paidAt?`Paid on ${instant(row.paidAt)}`:'';
- const due=cash!==null&&(unpaid.has(cash)||cash==='PartPaid')&&row.paymentAt!==null?`Due date: ${instant(row.paymentAt)}`:'';
+ const due=cash!==null&&(unpaid.has(cash)||cash==='PartPaid')&&row.paymentAt!==null?`Due date: ${displayPaymentDate(row.paymentAt)}`:'';
  return [state.due&&`Payment: ${words(state.due)}`,cash&&(physical?'Settlement: not applicable (physical delivery)':`Cash: ${words(cash)}`),
   row.accrued!=null&&`Accrued: ${numberText(row.accrued)}`,row.paid!==null&&`Paid: ${numberText(row.paid)}`,row.outstanding!==null&&`Outstanding: ${numberText(row.outstanding)}`,paidOn,due,
   row.finalDetermination!=null&&`Final determination: ${numberText(row.finalDetermination)} · accrual unchanged`,

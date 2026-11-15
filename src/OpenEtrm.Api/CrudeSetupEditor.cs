@@ -15,7 +15,10 @@ public sealed record CrudeSetupVersionRequest(Guid SetupId);
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record CrudeSetupPublishRequest(Guid OperationId,Guid SetupId);
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record CrudeSetupPreviewRequest(Guid SnapshotId,Guid SetupId,string KnowledgeMode,string DeliveryFrom,string DeliveryTo,string Quantity,Guid? ContextId=null);
+public sealed record CrudeSetupPreviewRequest(Guid SnapshotId,Guid SetupId,string KnowledgeMode,string DeliveryFrom,string DeliveryTo,string Quantity,Guid? ContextId=null)
+{
+ [System.Text.Json.Serialization.JsonRequired]public SideCalendarPolicyInput CalendarPolicy { get; init; }=null!;
+}
 
 // Delivery masters and pricing sources have independent exact revisions. A setup
 // selects an admitted source; it never creates curves, observations or defaults.
@@ -112,7 +115,7 @@ public sealed class CrudeSetupEditor(PreviewDatabase database)
    suggestedDeliveryPeriod=view is null?null:DeliverySetupDefaults.FuturePeriod(s.GetProperty("deliveryPeriods").EnumerateArray().Select(p=>new DeliverySetupContract(
     p.Text("kind") switch{"forward"=>ContractKind.Forward,"future"=>ContractKind.Future,"future_option"=>ContractKind.FutureOption,_=>throw Invalid("The source contract kind is unsupported.")},
     DateWorkspace.Date(p.Text("from")),DateWorkspace.Date(p.Text("to")),p.GetProperty("hasInterval").GetBoolean())),view.Frame.At)}).ToArray();
-  var response=new{deliveryReferences=await CrudeDeliveryReferences.Read(c,revision,ct),deliveryPoints=points,sources=authoringSources,clocks=await ProfileClocks(c,revision,ct),versions,contextSetups,proposals,proposal,context=view?.Context,fieldDescriptions=DeliverySetupDescriptions.Crude,quantityPolicies=new[]{new{code=CrudeQuantityEquivalence.Policy,label="Same standard volume at 60°F · no conversion"}},
+  var response=new{sideCalendars=await SideCalendarPolicies.Catalog(c,ct),deliveryReferences=await CrudeDeliveryReferences.Read(c,revision,ct),deliveryPoints=points,sources=authoringSources,clocks=await ProfileClocks(c,revision,ct),versions,contextSetups,proposals,proposal,context=view?.Context,fieldDescriptions=DeliverySetupDescriptions.Crude,quantityPolicies=new[]{new{code=CrudeQuantityEquivalence.Policy,label="Same standard volume at 60°F · no conversion"}},
    canSave=working&&await PreviewDatabase.HasPermission(c,"WriteMarketDefinitions",ct),canPublish=working&&await PreviewDatabase.HasPermission(c,"SealMarketDefinitions",ct),
    scope="Maintain exact delivery-to-price bindings for pre-delivery crude booking and valuation. Booked contracts retain their exact setup and original pricing source. Delivery-to-cash for separate delivery masters remains unsupported."};
   var references=versions.Concat(contextSetups).Concat(proposals).Concat(proposal is {} exact?[exact]:[]).SelectMany(v=>new[]{v.Id("delivery_reference_catalog_id"),v.Id("source_reference_catalog_id")})
@@ -214,7 +217,8 @@ public sealed class CrudeSetupEditor(PreviewDatabase database)
   if(frame.ContextId is not {} contextId)throw Invalid("Preview requires a certified knowledge context.");
   var context=(await new KnowledgeStore(Catalog).Read(c,contextId,ct)).Context;
   var snapshot=MarketSnapshotBinding.Bind(data.Snapshot(source),contextId,SchedulePreview.ParseAt(context.KnownAt));
-  var side=new PhysicalCrudeSide(Guid.NewGuid(),assignment,from,to,default);
+  data=await SideCalendarPolicies.Prepare(c,data,[body.CalendarPolicy],ct);
+  var side=new PhysicalCrudeSide(Guid.NewGuid(),assignment,from,to,default,SideCalendarPolicies.Resolve(data,body.CalendarPolicy));
   var market=data.Model.Build(snapshot,side.DependenciesAt(snapshot),ct);
   var result=side.PV(SideValuationContext.ForPhysicalCrude(market,market,new ExplicitDiscounting(ExactDecimal.Parse("1"),DiscountFactorSource.Undiscounted),[assignment]));
   await using(var authority=ScheduleStore.Command(c,"SELECT security.crude_setup_visible($1,$2)",Catalog,body.SetupId))

@@ -30,8 +30,8 @@ public sealed partial class SwapStore
         var now=await ResolveRetained(connection,currentMarket.Data,currentMarket.Frame,revised,current.Id("instrument_id"),current.Id("fixed_side_id"),current.Id("floating_side_id"),ct);
         if(old.Instrument.Currency!=now.Instrument.Currency||old.Quantity.Specification!=now.Quantity.Specification)
             throw Error("settlement_contract_change","Contractual changes must retain exact currency and quantity basis.");
-        var completions=await SettlementCompletions(connection,prior,old.Instrument,ct);
-        var currentCompletions=await SettlementCompletions(connection,current,now.Instrument,ct);
+        var completions=SettlementCompletions(old.Instrument);
+        var currentCompletions=SettlementCompletions(now.Instrument);
         var signatures=old.Instrument.Sides.SelectMany((membership,slot)=>((SidePaymentSchedule)membership.Side.GenerateSchedule()).Payments.Select(plan=>
         {
             var completion=completions.Single(c=>c.MembershipOrdinal==slot&&c.DeliveryFrom==plan.DeliveryFrom&&c.DeliveryTo==plan.DeliveryTo);
@@ -66,15 +66,12 @@ public sealed partial class SwapStore
         (data,frame)=await ScheduledMarket(connection,data,frame,row.Id("definition_revision_id"),ct);
         var terms=Terms(data,row,frame.Id);
         var resolved=await ResolveRetained(connection,data,frame,terms,row.Id("instrument_id"),row.Id("fixed_side_id"),row.Id("floating_side_id"),ct);
-        var completions=await SettlementCompletions(connection,row,resolved.Instrument,ct);
-        var starts=completions.Any(completion=>completion.Source=="retained_quantity_interval_end_v1")
-            ?await QuantityPeriodBounds(connection,row,ct):[];
+        var completions=SettlementCompletions(resolved.Instrument);
         return (resolved.Instrument.Currency,resolved.Quantity.Specification,resolved.Instrument.Sides.SelectMany((membership,slot)=>((SidePaymentSchedule)membership.Side.GenerateSchedule()).Payments.Select(plan=>
         {
             var completion=completions.Single(c=>c.MembershipOrdinal==slot&&c.DeliveryFrom==plan.DeliveryFrom&&c.DeliveryTo==plan.DeliveryTo);
-            var start=completion.Source=="retained_quantity_interval_end_v1"
-                ?starts.Single(s=>int.Parse(s.Text("slot"),CultureInfo.InvariantCulture)==slot&&int.Parse(s.Text("period"),CultureInfo.InvariantCulture)==plan.Key.Ordinal).Instant("starts")
-                :new DateTimeOffset(plan.DeliveryFrom.ToDateTime(TimeOnly.MinValue,DateTimeKind.Utc));
+            var clock=membership.Side switch{FixedSide fixedSide=>fixedSide.PowerQuantity,FloatingSide floating=>floating.PowerQuantity,_=>null};
+            var start=clock?.CompletionAt(plan.DeliveryFrom)??PaymentDatePolicy.Start(plan.DeliveryFrom);
             var projection=terms.Scheduled is {} schedule?(slot==0?schedule.First:schedule.Second).Periods[plan.Key.Ordinal].Floating?.CustomProjection
                 :slot==0?terms.FirstFloating?.CustomProjection:terms.Floating?.CustomProjection;
             return new BridgePeriod(slot,plan.DeliveryFrom,plan.DeliveryTo,SettlementHash(new{

@@ -13,7 +13,12 @@ internal static class GasTicketChecks
         Snapshot = Guid.Parse("00000000-0000-0000-0000-000000000051"), Operation = Guid.Parse("00000000-0000-0000-0000-000000000001"), Definition = Guid.Parse("00000000-0000-0000-0000-0000000000d1");
 
     static ImmutableDictionary<string, string> V(params (string Id, string Value)[] values) => values.ToImmutableDictionary(v => v.Id, v => v.Value);
-    static TicketSideDraft Side(string kind, string code, params (string Id, string Value)[] values) => new(kind, code, V(values));
+    static SideCalendarPolicyInput Policy(string kind)
+    {
+        var key=new ReferenceKey(new(Guid.Parse("00000000-0000-0000-0000-000000000011"),Guid.Parse("00000000-0000-0000-0000-000000000012")),"synthetic_calendar");
+        return new("side_calendar_policy_v1",new(true,key),new(kind=="floating",kind=="floating"?key:null),new(kind!="physical",kind!="physical"?key:null));
+    }
+    static TicketSideDraft Side(string kind, string code, params (string Id, string Value)[] values) => new(kind, code, V(values)){CalendarPolicy=Policy(kind)};
     static readonly ImmutableDictionary<string, string> Trade = V(("book", Book.ToString()), ("legal_entity", $"{Entity}@4"), ("counterparty", $"{Counterparty}@7"), ("gas_setup", Setup.ToString()));
     static TicketSideDraft Receipt => Side("physical", "RCT", ("direction", "receive"), ("delivery_from", "2027-01-01"), ("delivery_to", "2027-02-01"), ("product", "firm"), ("quantity", "10000"), ("quantity_basis", "per_operating_day"), ("pipeline", "PIPE"), ("zone", "Z1"), ("delivery_point", "P1"));
     static TicketSideDraft Linked => Side("physical", "DLV", ("direction", "deliver"), ("delivery_from", "2027-01-01"), ("delivery_to", "2027-02-01"), ("product", "firm"), ("quantity_basis", "per_operating_day"), ("pipeline", "PIPE"), ("zone", "Z1"), ("delivery_point", "P2"), ("link_source", "RCT"), ("link_formula", "gross_less_fraction"), ("link_fraction", "0.02"));
@@ -35,6 +40,25 @@ internal static class GasTicketChecks
         }
         void Equal(object? expected, object? actual, string what) { if (!Equals(expected, actual)) throw new Exception($"{what}: expected '{expected}', got '{actual}'."); }
         var full = Draft(Receipt, Linked, Cash, Fee);
+        Check("ticket mapping preserves missing calendar bytes for completed-command lookup",()=>
+        {
+            var mapped=Map(Draft(Receipt with{CalendarPolicy=null},Cash with{CalendarPolicy=null}));
+            var wire=JsonSerializer.Serialize(mapped,new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            if(wire.Contains("calendarPolicy",StringComparison.Ordinal))throw new Exception("Mapping must not alter a retained request hash or invent calendars.");
+            try{SideCalendarPolicies.Resolve(null!,mapped.PhysicalSides[0].CalendarPolicy);}
+            catch(MarketDataException error)when(error.Code=="side_calendar_policy"){return;}
+            throw new Exception("New generation must still reject missing calendars.");
+        });
+        Check("ticket maps the explicit per-Side calendar contract",()=>
+        {
+            var options=new JsonSerializerOptions(JsonSerializerDefaults.Web);
+            var json=System.Text.Json.Nodes.JsonNode.Parse(JsonSerializer.Serialize(Draft(Receipt),options))!;
+            var key=new ReferenceKey(new(Guid.Parse("00000000-0000-0000-0000-000000000011"),Guid.Parse("00000000-0000-0000-0000-000000000012")),"synthetic_calendar");
+            var policy=new SideCalendarPolicyInput("side_calendar_policy_v1",new(true,key),new(false,null),new(false,null));
+            json["sides"]![0]!["calendarPolicy"]=JsonSerializer.SerializeToNode(policy,options);
+            Equal(policy,Map(json.Deserialize<TicketDraft>(options)!).PhysicalSides[0].CalendarPolicy,"explicit calendar policy");
+        });
+
 
         Check("entry choices suggest sole required values and explicit gas defaults without inventing optional links", () =>
         {
@@ -76,11 +100,11 @@ internal static class GasTicketChecks
             Equal(Counterparty, r.CounterpartyId, "counterparty"); Equal(7, r.CounterpartyRevision, "counterparty revision");
             Equal(2, r.PhysicalSides.Length, "physical count"); Equal(2, r.CashSides.Length, "cash count");
             var p = r.PhysicalSides[0];
-            Equal(new GasPhysicalRequest("RCT", "PIPE", "Z1", "P1", "firm", "receive", "2027-01-01", "2027-02-01", "per_operating_day", "10000", null), p, "receipt side");
+            Equal(new GasPhysicalRequest("RCT", "PIPE", "Z1", "P1", "firm", "receive", "2027-01-01", "2027-02-01", "per_operating_day", "10000", null){CalendarPolicy=Policy("physical")}, p, "receipt side");
             var l = r.PhysicalSides[1];
             Equal(new GasQuantityLinkRequest("RCT", "gross_less_fraction", "0.02"), l.Link, "link"); Equal(null, l.Quantity, "linked quantity");
-            Equal(new GasCashRequest("PAY", "consideration", "pay", "RCT", "receipt", "2.5", null, "2027-03-01T00:00:00Z"), r.CashSides[0], "cash side");
-            Equal(new GasCashRequest("FEE", "fee", "pay", "DLV", "delivery", null, "TARIFF", "2027-03-01T00:00:00Z"), r.CashSides[1], "fee side");
+            Equal(new GasCashRequest("PAY", "consideration", "pay", "RCT", "receipt", "2.5", null, "2027-03-01T00:00:00Z"){CalendarPolicy=Policy("cash")}, r.CashSides[0], "cash side");
+            Equal(new GasCashRequest("FEE", "fee", "pay", "DLV", "delivery", null, "TARIFF", "2027-03-01T00:00:00Z"){CalendarPolicy=Policy("fee")}, r.CashSides[1], "fee side");
         });
         Check("an exact forecast source survives ticket mapping and reopening",()=>
         {
@@ -365,7 +389,7 @@ internal static class GasTicketChecks
         Refuses("ticket_input", "booked terms without an explicit discounting policy do not reopen", () => GasTicket.Reopen(Map(full) with { Discounting = null }));
         // A single-point trade's retained terms: a receipt priced at 2.5 with a 0.045 fee paid, both paid at one instant.
         var point = new PhysicalGasTerms(Snapshot, PhysicalGasStore.Convention, "current", Operation, Book, Definition, "PIPE", "Z1", "P1", "firm", "2027-01-01", "2027-02-01", "10000", "per_operating_day",
-            "receive", "2.5", "0.045", null, "pay", "2027-03-01T00:00:00+00:00", false, Entity, 4, Counterparty, 7, Setup);
+            "receive", "2.5", "0.045", null, "pay", "2027-03-01T00:00:00+00:00", false, Entity, 4, Counterparty, 7, Setup){DeliveryCalendarPolicy=Policy("physical"),ConsiderationCalendarPolicy=Policy("cash"),FeeCalendarPolicy=Policy("fee")};
         Check("a single-point trade opens as one physical side with its payment and fee, each charged on its delivered quantity", () =>
         {
             TicketSideDraft Charge(string kind, string direction, (string, string) price) => Side(kind, $"{kind}-1", ($"{kind}_direction", direction), ($"{kind}_source", "physical-1"), ($"{kind}_stage", "delivery"), price, ($"{kind}_payment_at", "2027-03-01T00:00:00+00:00"));

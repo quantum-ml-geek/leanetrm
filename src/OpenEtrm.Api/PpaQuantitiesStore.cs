@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 using Npgsql;
 using OpenEtrm.MarketData;
 using OpenEtrm.MarketData.Power;
+using OpenEtrm.MarketData.Trading;
 using OpenEtrm.Shared.Temporal;
 
 namespace OpenEtrm.Api;
@@ -21,7 +22,7 @@ public sealed record PpaCapacityRequest([property:JsonRequired]Guid SnapshotId,[
 public sealed record PpaProfileRequest([property:JsonRequired]Guid SnapshotId,[property:JsonRequired]string Clock,
     [property:JsonRequired]int IntervalMinutes,[property:JsonRequired]string Capacity,[property:JsonRequired]string Energy,
     [property:JsonRequired]string From,[property:JsonRequired]string To,[property:JsonRequired]string Membership,
-    [property:JsonRequired]Guid? TouProduct,[property:JsonRequired]int? TouVersion,[property:JsonRequired]string Calendar,
+    [property:JsonRequired]Guid? TouProduct,[property:JsonRequired]int? TouVersion,[property:JsonRequired]ReferenceKey Calendar,
     [property:JsonRequired]string ContractMw);
 
 // These current-session reads consume exact sealed definitions and certified revision history. The selected
@@ -87,27 +88,28 @@ public sealed class PpaQuantitiesStore(MarketReads reads,TouProductStore product
         var data=await reads.Data(connection,pin,ct,[],includeCalendarDays:true);var clock=Clock(data,request.Clock);
         var from=IntervalSeriesStore.ParseInstant(request.From);var to=IntervalSeriesStore.ParseInstant(request.To);
         var intervals=Window(clock,request.IntervalMinutes,from,to);var scale=Scale(request.ContractMw);
-        var membership=PowerPreview.Membership(request.Membership);TouPeak? peak=null;
+        data=await SideCalendarPolicies.PrepareReferences(connection,data,[request.Calendar],ct);
+        var calendar=CalendarDefinitions.From(data,request.Calendar);
+        var first=intervals.Min(i=>i.OperatingDate);var last=intervals.Max(i=>i.OperatingDate);
+        var firstMonth=new DateOnly(first.Year,first.Month,1);var lastMonth=new DateOnly(last.Year,last.Month,1);
+        var membership=PowerPreview.Membership(request.Membership);PublishedTouBinding? product=null;
         if(membership==BlockMembership.All)
         {if(request.TouProduct is not null || request.TouVersion is not null)throw Invalid("All hours has no TOU product.");}
         else
         {
             var version=(await products.Read(connection,ct)).SingleOrDefault(v=>v.Id==request.TouProduct && v.Version==request.TouVersion && v.State=="published")
                 ??throw Invalid("Select an exact published TOU version.");
-            if(version.Clock!=new ClockReference(data.ReferenceRevision.CatalogId,data.ReferenceRevision.RevisionId,request.Clock))
-                throw Invalid("The TOU product must match the selected clock revision.");
-            peak=version.Peak;
+            product=version.Binding(data.DefinitionRevision.CatalogId);
         }
-        var first=intervals.Min(i=>i.OperatingDate);var last=intervals.Max(i=>i.OperatingDate);
-        var calendar=One(data.References["calendars"],request.Calendar);
-        var firstMonth=new DateOnly(first.Year,first.Month,1);var lastMonth=new DateOnly(last.Year,last.Month,1);
-        var holidays=PowerPreview.Holidays(data,calendar,firstMonth,lastMonth.AddMonths(1));
-        var profile=new ContractProfileQuantity(clock,request.IntervalMinutes,new(membership,peak,[..holidays]),Quantity(data,request.Capacity),Quantity(data,request.Energy));
+        var policy=new SideCalendarPolicy(CalendarBinding.Owned(calendar),CalendarBinding.NotApplicable(),CalendarBinding.NotApplicable(),SideCalendarPolicy.Implementation);
+        var hours=product is null?new DeliveryHours(membership,null,calendar.Closures(firstMonth,lastMonth.AddMonths(1))):
+            product.Bind(membership,new(data.ReferenceRevision,request.Clock),policy,firstMonth,lastMonth.AddMonths(1));
+        var profile=new ContractProfileQuantity(clock,request.IntervalMinutes,hours,Quantity(data,request.Capacity),Quantity(data,request.Energy));
         var rows=new List<object>();
         for(var month=firstMonth;month<=lastMonth;month=month.AddMonths(1))
             rows.AddRange(profile.Rows(month).Where(r=>r.Interval.Start>=from && r.Interval.End<=to).Select(r=>(object)new {
                 interval=IntervalCurveDefinitions.Label(r.Interval),state=State(r.State),perUnit=Value(r.PerUnit),quantity=Value(r.PerUnit.Scale(scale))}));
-        return new {definitions=data.DefinitionRevision,reference=data.ReferenceRevision,valuationAt=pin.RequireFrame().At,contractMw=scale.ToString(),rows};
+        return new {definitions=data.DefinitionRevision,reference=data.ReferenceRevision,valuationAt=pin.RequireFrame().At,contractMw=scale.ToString(),calendar,product,rows};
     }
 
     internal static ImmutableArray<GenerationAsset> Assets(PreviewData data,string[]? codes)
@@ -169,7 +171,13 @@ public sealed class PpaQuantitiesStore(MarketReads reads,TouProductStore product
         var q=One(data.References["quantity_specifications"],code);var r=data.ReferenceRevision;
         return new(new(r,code),new(r,q.Text("commodity_code")),new(r,q.Text("basis_code")),new(r,q.Text("unit_code")),new(r,q.Text("dimension_code")));
     }
-    internal static PowerClock Clock(PreviewData data,string code)=>PowerClock.FromRule(ReferenceClockJson.Read(One(data.References["clock_rules"],code)),TimeZoneDatabase.Installed());
+    internal static PowerClock Clock(PreviewData data,string code)=>PublishedClocks.Resolve(data,code);
+    internal static string FixedClockRules(PreviewData data,string code)
+    {
+        var rule=ReferenceClockJson.Read(One(data.References["clock_rules"],code));
+        if(rule.Kind!="fixed_offset")throw new MarketDataException("gas_day_clock","Select the gas profile's exact fixed-offset clock.");
+        return PowerClock.FromRule(rule,TimeZoneDatabase.Installed()).Rules;
+    }
     private static PowerInterval[] Window(PowerClock clock,int minutes,DateTimeOffset from,DateTimeOffset to)
     {
         if(from>=to || (to-from).TotalDays>365 || minutes is not(15 or 60))throw Invalid("Choose an aligned UTC window of at most 365 days at 15 or 60 minutes.");

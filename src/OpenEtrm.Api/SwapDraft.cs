@@ -49,6 +49,7 @@ public sealed partial class SwapStore
         var terms=new SwapWriteRequest(body.Context.SnapshotId,Convention,body.Context.KnowledgeMode,Guid.Empty,Guid.Empty,null,
             quantity.Amount.ToString(),body.FixedCoefficient,body.Discounting,missingPrice?body.Fixed! with{Price="0"}:body.Fixed,body.Floating,DefinitionRevisionId:body.DefinitionRevisionId,Commodity:body.Commodity,
             FirstFloating:body.FirstFloating,SwapType:body.SwapType,FirstCoefficient:body.FirstCoefficient);
+        data=await SideCalendarPolicies.Prepare(connection,data,SideCalendarPolicies.Inputs(terms),ct);
         RequireWriteRules(data,terms);var instrument=Resolve(data,terms,null,null,null).Instrument;
         var discount=body.Discounting?await Discount(connection,data,frame,instrument.Currency,ct):null;
         FinancialSwapValuation.ParSwapRate? par=null;

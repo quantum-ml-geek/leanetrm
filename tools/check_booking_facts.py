@@ -1,4 +1,5 @@
 """Server booking facts are immutable across retries and financial amendments."""
+from synthetic_side_calendars import all_dates_policy
 from datetime import datetime, timezone
 from uuid import uuid4
 from preview_client import PreviewClient
@@ -35,8 +36,8 @@ def run_checks(url,query=None,manifest=None,client=None,administrator=None):
     swap_catalog=c.call('swaps/catalog',swap_context);index=next(i for i in swap_catalog['indices'] if i['curve']=='base_forward')
     rule={'frequency':'monthly','rule':'days_after_period_end','days':18,'dayOfMonth':None,'dayBasis':'calendar_days','shortMonth':None,'adjustment':'unadjusted','calendar':None,'implementation':'monthly_payment_date_rules_v1'}
     swap={**swap_context,**parties,'operationId':str(uuid4()),'bookId':body['bookId'],'definitionRevisionId':index['definitionRevisionId'],'commodity':index['commodity'],'quantity':'100','fixedCoefficient':'-1','discounting':False,
-          'fixed':{'price':'3','currency':index['currencyCode'],'deliveryFrom':'2021-01-01','deliveryTo':'2021-02-01','paymentSchedule':rule},
-          'floating':{'spread': '0', 'settlement': {'mode': 'curve_target', 'index': None, 'projectionPolicy': None}, 'curve':index['curve'],'index':index['index'],'currency':index['currencyCode'],'deliveryFrom':'2021-01-01','deliveryTo':'2021-02-01','paymentSchedule':rule,'resetFrequency':'monthly','averagingMethod':'none'}}
+          'fixed':{'calendarPolicy': all_dates_policy(observation=False), 'price':'3','currency':index['currencyCode'],'deliveryFrom':'2021-01-01','deliveryTo':'2021-02-01','paymentSchedule':rule},
+          'floating':{'calendarPolicy': all_dates_policy(observation=True), 'spread': '0', 'settlement': {'mode': 'curve_target', 'index': None, 'projectionPolicy': None}, 'curve':index['curve'],'index':index['index'],'currency':index['currencyCode'],'deliveryFrom':'2021-01-01','deliveryTo':'2021-02-01','paymentSchedule':rule,'resetFrequency':'monthly','averagingMethod':'none'}}
     c.call('swaps/preview',swap);swap_result=c.call('swaps/book',swap)
     swap_state=c.call('swaps/editor',{'context':swap_context,'tradeId':swap_result['tradeId'],'revision':None})['state']
     assert swap_state['traderId']==state['traderId'] and swap_state['booking']['tradeDate']==datetime.fromisoformat(swap_state['executedAt'].replace('Z','+00:00')).date().isoformat()

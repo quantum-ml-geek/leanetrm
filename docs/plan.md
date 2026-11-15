@@ -1,5 +1,41 @@
 # Delivery plan and acceptance criteria
 
+D403 replaces the absolute single-calendar restriction with an explicit
+per-purpose Side calendar policy and one UTC payment-day execution contract.
+Local managed and native checks cover exact published calendar capture, immutable
+typed bindings, retained scheduled-power generation, published TOU terms, payment
+completion/fixing boundaries, and financial/PPA booking and replay. Independent
+calendar publications are readable under the original knowledge cutoff without
+creating a financial date context. Retained proofs do not require certifying
+later publications. Clock captures reject ambiguous wire data; native collection
+verifies the published fingerprint and operating-day boundaries at both admission
+and completion. New TOUs require exact published clock captures.
+
+Crude retains independent consideration and fee dates through booking and invoices.
+Gas checks cover daily observations with monthly settlement, multiple periods,
+physical composition, billing corrections, current authority and retained worker
+risk. LNG checks cover same-day evening discharge/payment, native admission,
+retained worker valuation and booking recovery. Focused browser checks preserve
+standard payment dates across display zones, including calculation details.
+Standard cash remains nominal on its UTC payment day; negotiated correction
+instants and exchange option expiry retain their explicit timing and rate inputs. Agent request schemas describe
+required purpose bindings and Side-owned rules; omission checks are mandatory
+in the verification runner.
+
+The integrated verification runner requires 183 commands, including 63 isolated
+application previews, with domain, native database, populated-upgrade, agent and
+browser coverage. Local integration checks passed 737 managed core checks,
+88 rate checks, 1,806 frontend checks, 121 Python checks and 28 owned lifecycle
+browser checks. The integrated CI
+matrix must pass before publication qualification is complete. Native rejection
+probes cover altered calendar and clock captures, payment dates, quantities,
+source contracts and retained program agreement.
+
+Activation remains separate. Existing trades are unchanged; reviewed migration
+must align exact terms, typed references, identities and retained executable
+schedules. Calendar and TOU changes require explicit published versions, without
+automatic backfill. Merging and deployment remain separate steps.
+
 The current lifecycle increment follows [D401’s delivery contract](lifecycle-delivery.md).
 Its native operations, inventory continuation and economic historical/Monte Carlo
 consumers have disposable native, worker and browser qualification. Release
@@ -816,6 +852,9 @@ weekday dates have synthetic monthly/daily gas and power examples.
 Each side now selects either a period-end day lag or a day of the following
 month, with explicit day basis, short-month behavior, date adjustment and exact
 calendar where consumed. Generated date-only rows retain the rule evidence.
+D403's per-purpose calendar controls require explicit published selections.
+The shared-selection action expands concrete bindings; product-owned bindings
+remain locked through validation and refresh.
 New entry has commodity-filtered indices/units and separate reset-frequency and
 averaging-method fields. Earlier manual-date revisions remain inspectable without
 inferred replacement conventions; amendments must select the new rules explicitly.

@@ -22,10 +22,11 @@ public sealed record IndexedPhysicalGasPurchase:SidedInstrument
     {
         if(delivery is null||consideration is null||delivery.UnitQuantity!=consideration.UnitQuantity||delivery.Currency!=consideration.Currency)
             throw Invalid("Select compatible independent physical delivery and indexed consideration sides.");
+        GasCashDelivery.Require(consideration,delivery,"indexed_physical_gas");
         var physical=delivery.GenerateSchedule().Quantities.Rows;
         var cash=consideration.GenerateDatedSchedule().Payments;
         if(cash.Length!=physical.Length||cash.Where((p,n)=>p.DeliveryFrom!=physical[n].OperatingDay||p.DeliveryTo!=physical[n].OperatingDay.AddDays(1)||
-            p.AllocatedQuantity!=physical[n].Delivery||p.PaymentAt<physical[n].End||p.Prices.Length!=1||p.Prices[0].Lookup?.Fixing is null).Any())
+            p.AllocatedQuantity!=physical[n].Delivery||PaymentDatePolicy.Date(p.PaymentAt)<PaymentDatePolicy.Date(physical[n].End)||p.Prices.Length!=1||p.Prices[0].Lookup?.Fixing is null).Any())
             throw Invalid("Each physical gas day requires its exact indexed cash quantity, daily fixing and explicit later payment date.");
     }
     public override void ValidateValuationState(IBindingValuationState? state)

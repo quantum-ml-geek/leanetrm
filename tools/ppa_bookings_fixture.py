@@ -37,10 +37,10 @@ def prepare(reference, market, security, manifest):
             f"INSERT INTO ref_data.settlement_targets VALUES({R},'test_ppa_capacity_days_target','index','test_ppa_capacity_days_index',NULL);"]
     definitions, observations, contracts, pins = [], [], {}, []
 
-    def period(code, profile, quote, target, rows, seed, membership=None, tou='pjm'):
+    def period(code, profile, quote, target, rows, seed, membership=None, tou='pjm', product=None):
         definitions.append(f"INSERT INTO market_data.curves VALUES({M},'{code}',{R},'test_power','test_hub_a','{quote}','{profile}','{target}','direct','fixture','trader_mark','Synthetic PPA {code}');")
         if membership:
-            definitions.append(f"INSERT INTO market_data.curve_blocks VALUES({M},'{code}','{membership}','{tou_product(tou)}',1);")
+            definitions.append(f"INSERT INTO market_data.curve_blocks VALUES({M},'{code}','{membership}','{product or tou_product(tou)}',1);")
             definitions.append(f"INSERT INTO market_data.curve_expiry_rules VALUES({M},'{code}','freeze_final_settlement_v1');")
         contracts[code] = []
         for n, (start, end, value) in enumerate(rows):
@@ -89,12 +89,23 @@ def prepare(reference, market, security, manifest):
             f"INSERT INTO power_data.sources(id,catalog_id,name,provider,dataset,market,point,minutes,reference_catalog_id,reference_revision_id,location_code,clock_code,currency_code,quantity_code) VALUES('{source}','{CAT}','Synthetic PPA {minutes} prices','{provider}','{dataset}','{price_market}','synthetic_ppa_{minutes}',{minutes},{R},'test_hub_a','{clock}','usd','test_power_quantity');"])
         if minutes == 60:
             definitions.append(definitions[-2].replace(f"VALUES({M},'{asset}',",f"VALUES({M},'{asset}_deadline',",1).replace("129600);","60);"))
+        # This workload's exact calendar is a separate published product.
+        product=identity('d',902100+ordinal)
+        definitions.append(f"INSERT INTO market_data.tou_products VALUES('{CAT}','{product}','synthetic_ppa_long_{minutes}');")
+        columns='catalog_id,product_id,version,generation,state,name,clock_catalog_id,clock_revision_id,clock_code,peak_start_hour,peak_end_hour,peak_saturday,publication_order,published_at'
+        start,end=(7,23) if minutes==60 else (6,22)
+        values=f"'{CAT}','{product}',1,1,'published','Synthetic PPA {minutes} hours',{R},'{clock}',{start},{end},false,{100+ordinal},'{now}'"
+        definitions.append(f"""DO $tou_fixture$ BEGIN
+         IF EXISTS(SELECT 1 FROM pg_attribute WHERE attrelid='market_data.tou_product_versions'::regclass AND attname='calendar_catalog_id') THEN
+          INSERT INTO market_data.tou_product_versions({columns},calendar_catalog_id,calendar_revision_id,calendar_code,holiday_treatment)
+           VALUES({values},{R},'{calendar}','weekly_mask_explicit_closures_v1');
+         ELSE INSERT INTO market_data.tou_product_versions({columns}) VALUES({values});END IF;END $tou_fixture$;""".replace('\n',' '))
         for b, (membership, value) in enumerate((('peak', 60), ('off', 40))):
             block = f'test_ppa_long_{minutes}_{membership}'
             rows=[];month=FIRST
             while month < LAST:
                 rows.append((month, next_month(month), value));month=next_month(month)
-            period(block, profile, 'test_power_outright', 'test_power_target', rows, 910000 + ordinal * 10000 + b * 1000, membership, 'pjm' if minutes == 60 else 'spp')
+            period(block, profile, 'test_power_outright', 'test_power_target', rows, 910000 + ordinal * 10000 + b * 1000, membership, product=product)
             definitions.append(f"INSERT INTO market_data.shaped_curve_blocks VALUES({M},'{shaped}','{block}','period');")
         # The parent must precede its child rows.
         definitions.insert(next(i for i,x in enumerate(definitions) if f"VALUES({M},'{shaped}'," in x),
@@ -112,8 +123,9 @@ def prepare(reference, market, security, manifest):
     market = market.rsplit('COMMIT;', 1)[0] + '\n' + '\n'.join(observations) + '\nCOMMIT;\n'
     for frame in manifest['frames']:
         frame['observationIds'].extend(pins); frame['curveContracts'].update(deepcopy(contracts))
-    overdue = deepcopy(manifest['frames'][0]);overdue['at'] = '2021-01-10T00:00:00Z'
-    manifest['frames'].append(overdue)
+    due = deepcopy(manifest['frames'][0]);due['at'] = '2021-01-10T00:00:00Z'
+    overdue = deepcopy(due);overdue['at'] = '2021-01-11T00:00:00Z'
+    manifest['frames'].extend([due,overdue])
     manifest['ppaBookings'] = dict(workloads=workloads, calendar=CALENDAR, certificate=CERTIFICATE,
                                    capacity=CAPACITY, overdueAt=overdue['at'], first=str(FIRST), last=str(LAST))
     return reference, market, security, manifest

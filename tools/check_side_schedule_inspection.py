@@ -142,6 +142,10 @@ def check_due_swap(client,before,later):
           'fixed':dict(currency=index['currencyCode'],deliveryFrom='2020-12-01',deliveryTo='2021-01-01',price='3',paymentSchedule=payment(1)),
           'floating':dict(currency=index['currencyCode'],deliveryFrom='2021-02-01',deliveryTo='2021-03-01',curve=index['curve'],index=index['index'],
                           resetFrequency='monthly',averagingMethod='none',spread='0',paymentSchedule=payment(18),settlement=dict(mode='curve_target',index=None,projectionPolicy=None))}
+    from synthetic_side_calendars import side_calendar_policy
+    calendar=next(row['reference'] for row in catalog['sideCalendars'] if row['code']=='test_utc_every_day')
+    body['fixed']['calendarPolicy']=side_calendar_policy(calendar,delivery=True,observation=False,payment=True)
+    body['floating']['calendarPolicy']=side_calendar_policy(calendar,delivery=True,observation=True,payment=True)
     saved=client.call('swaps/book',body)
     position=dict(context=dict(snapshotId=later['id'],convention='trading_workspace_v1',knowledgeMode='current'),tradeId=saved['tradeId'],bindingId=saved['bindingId'],revision=1,instrumentType='financial_swap')
     read=client.call('trading/side-schedules',dict(position=position,sideSlot=0,contribution=None,offset=0,limit=8))['page']

@@ -11,6 +11,7 @@ const path={pipeline:'pipe',zone:'zone',point:'point',product:'gas',clock:'utc',
 const gas={activeSetupId:head,configuration:{paths:[path],groups:[{code:'group',pipeline:'pipe',product:'gas',curve:'curve',adjustment:'0'}],meters:[{code:'meter',pipeline:'pipe',zone:'zone',point:'point',product:'gas',identifier:'M1',quantity:'energy',validFrom:'2021-01-01',validTo:'2021-02-01'}],tariffs:[{code:'fee',pipeline:'pipe',product:'gas',quote:'rate',rate:'0.1',validFrom:'2021-01-01',validTo:'2021-02-01'}]},versions:[],proposals:[],proposal:null,canSave:true,canPublish:true,locations:['pipe','zone','point'].map(code=>({code})),products:[{code:'gas'}],clocks:[{code:'utc'}],quantities:[{code:'energy'}],quotes:[{code:'rate'}],curves:[{code:'curve'}],fieldDescriptions:Object.fromEntries(['tab','row','paths.pipeline','paths.zone','paths.point','paths.product','paths.clock','paths.dayStartMinute','paths.groupCode','paths.adjustment','groups.code','groups.pipeline','groups.product','groups.curve','groups.adjustment','meters.code','meters.pipeline','meters.zone','meters.point','meters.product','meters.identifier','meters.quantity','meters.validFrom','meters.validTo','tariffs.code','tariffs.pipeline','tariffs.product','tariffs.quote','tariffs.rate','tariffs.validFrom','tariffs.validTo','from','to'].map(k=>[k,'Definition for '+k]))};
 gas.startingValues={records:{paths:{clock:'utc',dayStartMinute:540,adjustment:'0'},groups:{adjustment:'0'},meters:{validFrom:'2021-01-01',validTo:'2021-02-01'},tariffs:{validFrom:'2021-01-01',validTo:'2021-02-01'}},checkPeriod:{from:'2021-01-01',to:'2021-02-01'}};
 crude.sources[0].suggestedDeliveryPeriod={from:'2021-01-01',to:'2021-02-01'};
+crude.sideCalendars=[{reference:{revision:{catalogId:'refs',revisionId:'r1'},code:'synthetic_all_dates'},code:'synthetic_all_dates',coverageFrom:'2020-01-01',coverageTo:'2022-01-01',weekendMask:0,exceptions:[]}];
 crude.clocks=[{code:'utc',kind:'fixed_offset',fixed_offset_seconds:0}];
 
 async function init(evaluate,kind,catalog,pending){
@@ -112,10 +113,20 @@ test('crude shows field definitions and reads a historical header without enabli
   assert.equal(await evaluate("document.querySelector('#cs-preview-from').disabled"),false,'delivery dates remain explicit contract parameters');
   assert.equal(await evaluate("document.querySelector('#cs-revise').disabled"),true);
   await evaluate("(async()=>{document.querySelector('#cs-preview-from').value='2021-01-01T00:00:00';document.querySelector('#cs-preview-to').value='2021-02-01T00:00:00';document.querySelector('#cs-quantity').value='1';document.querySelector('#cs-preview').click();await new Promise(r=>setTimeout(r,0));})()");
+  assert.equal(await evaluate("requests.filter(r=>r.path==='crude-setup/preview').length"),0,'a sole calendar still requires selection');
+  assert.match(await evaluate('editorErrors.at(-1)'),/calendar/);
+  await evaluate(`(async()=>{const select=document.querySelector('#cs-calendar-delivery');select.value='["refs","r1","synthetic_all_dates"]';select.dispatchEvent(new Event('change'));document.querySelector('#cs-preview').click();await new Promise(r=>setTimeout(r,0));})()`);
+  assert.deepEqual(await evaluate("requests.at(-1).body.calendarPolicy"),{implementation:'side_calendar_policy_v1',delivery:{applicable:true,calendar:crude.sideCalendars[0].reference},observation:{applicable:false,calendar:null},payment:{applicable:false,calendar:null}});
   assert.equal(await evaluate("requests.at(-1).body.knowledgeMode"),'context');
   assert.equal(await evaluate("requests.at(-1).body.snapshotId"),'frame');
+  await evaluate("document.querySelector('#cs-calendar-delivery').value='';document.querySelector('#cs-calendar-delivery').dispatchEvent(new Event('change'))");
+  assert.equal(await evaluate("document.querySelector('#cs-value').textContent"),'','calendar changes invalidate delivery value');
   await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
   assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true);
+  await evaluate(`document.querySelector('#cs-calendar-delivery').value='["refs","r1","synthetic_all_dates"]';document.querySelector('#cs-calendar-delivery').dispatchEvent(new Event('change'));editor.reset()`);
+  assert.equal(await evaluate("document.querySelector('#cs-calendar-delivery').value"),'','reset discards the private calendar selection');
+  await evaluate('editor.load()');
+  assert.equal(await evaluate("document.querySelector('#cs-calendar-delivery').value"),'','a newly loaded context requires another explicit choice');
   await evaluate('editor.reset()');
   assert.equal(await evaluate("document.querySelector('#cs-code').value"),'');
   assert.equal(await evaluate("document.querySelector('#cs-binding').options.length"),0);
@@ -142,5 +153,19 @@ for(const kind of ['gas','crude'])test(kind+' inspection waits for a resolved he
   assert.equal(await evaluate('requests.length'),0);
   assert.match(await evaluate(`document.querySelector('#${kind==='gas'?'gs':'cs'}-status').textContent`),/header/);
   assert.equal(await evaluate(`document.querySelector('#${kind==='gas'?'gs':'cs'}-${kind==='gas'?'current':'new'}').disabled`),true);
+ });
+});
+
+
+test('crude calendar versions and inspectable exceptions fit a narrow viewport',options,async()=>{
+ await withBrowserPage(page,async(evaluate,command)=>{
+  await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:false});
+  const calendar=structuredClone(crude.sideCalendars[0]);calendar.reference.revision.revisionId='20000000-0000-0000-0000-000000000001';
+  calendar.exceptions=[{date:'2021-01-01',open:false}];
+  await init(evaluate,'crude',{...crude,sideCalendars:[calendar]});
+  await evaluate("{const s=document.querySelector('#cs-calendar-delivery');s.value=s.options[1].value;s.dispatchEvent(new Event('change'));document.querySelector('#cs-calendar-delivery').parentElement.querySelector('details').open=true;}");
+  assert.equal(await evaluate('innerWidth'),390);
+  assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true);
+  assert.match(await evaluate("document.querySelector('.side-calendar pre').textContent"),/2021-01-01: closed/);
  });
 });

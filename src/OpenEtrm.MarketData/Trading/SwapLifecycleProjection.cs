@@ -52,8 +52,8 @@ public sealed record ProjectedSwapValuation:IBindingValuationState
         Require(instrument,context);
         var keys=Periods.SelectMany(period=>Contributions(period).IsEmpty?
             new[]{new SidePaymentKey(period.Id,0,period.Plan.PaymentAt,instrument.Currency)}:
-            Contributions(period).Select(c=>new SidePaymentKey(c.Id,0,c.DueAt,instrument.Currency)))
-            .Where(p=>p.PaymentAt>context.CalculationAt).Distinct();
+            Contributions(period).Select(c=>c.DiscountKey))
+            .Where(p=>p.PaymentAt>context.CalculationAt&&!p.OnPaymentDay(context.CalculationAt)).Distinct();
         var discounts=keys.Select(key=>new DiscountInput(key,Discounting)).ToImmutableArray();
         return new(instrument.Id,"projected_swap_side_cash_pv_v1",Dependencies,instrument.UnitQuantity.Specification,instrument.Currency){
             Time=ValuationTimeDependency.Pinned,DiscountInputs=discounts};
@@ -64,9 +64,9 @@ public sealed record ProjectedSwapValuation:IBindingValuationState
         foreach(var obligation in Obligations(instrument,context))
         {
             var value=obligation.Amount;
-            if(value.Numerator!="0"&&obligation.Due>context.CalculationAt)
+            if(value.Numerator!="0"&&obligation.Key.PaymentAt>context.CalculationAt&&!obligation.Key.OnPaymentDay(context.CalculationAt))
             {
-                var factor=context.Inputs.Discounts([new(obligation.Id,0,obligation.Due,instrument.Currency)]).Single();
+                var factor=context.Inputs.Discounts([obligation.Key]).Single();
                 var enabled=instrument switch{FinancialSwapInstrument swap=>swap.Discounting,MonthlyFinancialSwap swap=>swap.Discounting,
                     ScheduledFinancialSwap swap=>swap.Discounting,CrossCommodityScheduledSwap swap=>swap.Discounting,
                     _=>throw new MarketDataException("projection_swap_state","Select the qualified financial swap adapter.")};
@@ -91,17 +91,17 @@ public sealed record ProjectedSwapValuation:IBindingValuationState
     internal ExactMoney Reserved(Guid contribution,ExactMoney amount,DateTimeOffset after)=>CashAllocationBalance.ReserveFuture(amount,
         Payments.Payments.Where(p=>p.EffectiveAt>after)
         .SelectMany(p=>p.Allocations.Where(a=>a.ContributionId==contribution).Select(a=>(p.EffectiveAt,a.Amount))));
-    private IEnumerable<(Guid Id,DateTimeOffset Due,ExactMoney Amount)> Obligations(SidedInstrument instrument,UnitValuationContext context)
+    private IEnumerable<(SidePaymentKey Key,ExactMoney Amount)> Obligations(SidedInstrument instrument,UnitValuationContext context)
     {
         foreach(var period in Periods)
         {
             var native=Contributions(period);
             if(!native.IsEmpty)
             {
-                foreach(var contribution in native)yield return(contribution.Id,contribution.DueAt,
+                foreach(var contribution in native)yield return(contribution.DiscountKey,
                     contribution.Outstanding.Subtract(FutureApplied(contribution.Id,context.CalculationAt)).Subtract(Discharges.GetValueOrDefault(contribution.Id)??ExactMoney.Parse("0",instrument.Currency)));
             }
-            else yield return(period.Id,period.Plan.PaymentAt,(Amounts.GetValueOrDefault(period.Id)??Amount(instrument,period,term=>
+            else yield return(new(period.Id,0,period.Plan.PaymentAt,instrument.Currency),(Amounts.GetValueOrDefault(period.Id)??Amount(instrument,period,term=>
                 context.Inputs.ExactPrice(Mappings[term].Market))).Subtract(Discharges.GetValueOrDefault(period.Id)??ExactMoney.Parse("0",instrument.Currency)));
         }
     }
@@ -153,6 +153,9 @@ public sealed class SwapLifecycleProjection:ILifecycleProjection
         if(!periods.Select(p=>new SwapProjectionPeriod(p.Membership,p.Plan.DeliveryFrom,p.Plan.DeliveryTo)).ToHashSet().SetEquals(roundings.Keys))
             throw Error("Select the exact explicit rounding policy of every contractual payment period.");
         _=actual.Settlement.RequiredPrices(instrument); // exact period/contribution continuity
+        foreach(var period in periods)
+            PaymentDatePolicy.RequireCompletion(period.Plan.PaymentAt,actual.Settlement.Completions.Single(c=>
+                c.MembershipOrdinal==period.Membership&&c.DeliveryFrom==period.Plan.DeliveryFrom&&c.DeliveryTo==period.Plan.DeliveryTo).At);
         RequirePayments(payments,actual.Settlement,periods,source);
         var required=actual.Settlement.RequiredPrices(instrument).Distinct().ToArray();
         var captured=required.Select(p=>(Term:p,Price:sourcePrices.Resolve(p))).ToArray();
@@ -186,7 +189,8 @@ public sealed class SwapLifecycleProjection:ILifecycleProjection
         foreach(var period in periods)
         {
             var native=state.Contributions(period);
-            var obligations=native.IsEmpty?new[]{(period.Id,period.Plan.PaymentAt)}:native.Select(c=>(c.Id,c.DueAt));
+            var obligations=native.IsEmpty?new[]{(period.Id,PaymentDatePolicy.OverdueBoundary(period.Plan.PaymentAt))}:
+                native.Select(c=>(c.Id,c.Ordinal==1?PaymentDatePolicy.OverdueBoundary(c.DueAt):c.DueAt));
             foreach(var (id,due) in obligations.Where(o=>o.Item2>source.ValuationAt))
             {
                 var eventId=LifecycleProjectionEvent.ScopedId(Owner,id);dues.Add(eventId,(id,due));
@@ -196,11 +200,13 @@ public sealed class SwapLifecycleProjection:ILifecycleProjection
                 events.Add(new(eventId,due,[..prerequisites.Distinct()],"swap_cash_due"));
             }
         }
-        foreach(var determination in actualEvents.Values.Where(d=>d.DueAt>=d.EffectiveAt))
+        foreach(var determination in actualEvents.Values)
         {
+            var due=determination.PreviousId is null?PaymentDatePolicy.OverdueBoundary(determination.DueAt):determination.DueAt;
+            if(due<determination.EffectiveAt)continue;
             var eventId=LifecycleProjectionEvent.ScopedId(Owner,determination.ContributionId);
-            dues.Add(eventId,(determination.ContributionId,determination.DueAt));
-            events.Add(new(eventId,determination.DueAt,[ActualId(determination.ContributionId)],"swap_cash_due"));
+            dues.Add(eventId,(determination.ContributionId,due));
+            events.Add(new(eventId,due,[ActualId(determination.ContributionId)],"swap_cash_due"));
         }
         dueEvents=dues.ToImmutableDictionary();Events=[..events.OrderBy(e=>e.At).ThenBy(e=>e.Id)];
     }

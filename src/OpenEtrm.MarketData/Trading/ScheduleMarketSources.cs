@@ -106,7 +106,7 @@ public sealed partial class ScheduleMarketSources
             .Where(row=>row.Operation=="discount").Select(Key).Distinct().ToImmutableArray();
         var factors=keys.IsEmpty?ImmutableArray<SidePaymentFactor>.Empty:discounting.Resolve(keys,basis.Snapshot);
         if(factors.IsDefault||factors.Length!=keys.Length||factors.Any(factor=>factor is null||!keys.Contains(factor.Payment)||
-            !factor.Snapshot.HasSameInputs(basis.Snapshot)||!Enum.IsDefined(factor.Source)||factor.DiscountFactor.CompareTo(default)<=0||
+            !factor.Snapshot.HasSameInputs(basis.Snapshot)||!Enum.IsDefined(factor.Source) || !factor.HasValidPaymentDayTerms(context.ValuationAt)||factor.DiscountFactor.CompareTo(default)<=0||
             factor.Source==DiscountFactorSource.Undiscounted&&factor.DiscountFactor!=ExactDecimal.Parse("1"))||
             factors.Select(factor=>factor.Payment).Distinct().Count()!=factors.Length)
             throw new MarketDataException("side_payment_factors","Every requested value date requires exactly one positive factor under the selected context.");

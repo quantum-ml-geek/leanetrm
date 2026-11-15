@@ -47,7 +47,7 @@ public sealed partial record FuturesOptionInstrument
             // The selected economic consumer redeclares at its event clock. A
             // generic frozen-clock child cannot invent new margin-due inputs.
             Time=ValuationTimeDependency.Pinned,
-            DiscountInputs=[new(new(Id,0,Series.Terms.ExpiryAt,Currency),reference.Discounting),
+            DiscountInputs=[new(new(Id,0,Series.Terms.ExpiryAt,Currency){Timing=ValueTimingKind.Instant},reference.Discounting),
                 ..margins.Where(o=>o.DueAt>context.CalculationAt).Select(o=>new DiscountInput(MarginPayment(o),selected.MarginDiscounting)),
                 ..physical.Select(p=>new DiscountInput(p,selected.Carrying!){Source=selected.Asset.Snapshot})],
             Volatility=reference.Calibration is SolvedVolatility solved?[new(reference.Id,solved.Volatility.ToString(),VolatilityInput.Annualized)]:[],

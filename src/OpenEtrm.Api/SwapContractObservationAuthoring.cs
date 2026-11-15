@@ -20,7 +20,10 @@ public sealed record SwapContractObservationPreviewRequest([property:JsonRequire
     [property:JsonRequired]Guid DefinitionRevisionId,[property:JsonRequired]string Commodity,[property:JsonRequired]string Curve,
     [property:JsonRequired]string Currency,[property:JsonRequired]string DeliveryFrom,[property:JsonRequired]string DeliveryTo,
     [property:JsonRequired]SwapPaymentInput PaymentSchedule,[property:JsonRequired]string Spread,
-    [property:JsonRequired]SwapContractObservationAuthoringInput Source);
+    [property:JsonRequired]SwapContractObservationAuthoringInput Source)
+{
+    [JsonRequired]public SideCalendarPolicyInput CalendarPolicy { get; init; }=null!;
+}
 
 internal static class SwapContractObservationAuthoring
 {
@@ -41,18 +44,20 @@ public sealed partial class SwapStore
         SwapContractObservationPreviewRequest body,CancellationToken ct)
     {
         (data,frame)=await ScheduledMarket(connection,data,frame,body.DefinitionRevisionId,ct);
+        data=await SideCalendarPolicies.Prepare(connection,data,[body.CalendarPolicy],ct);
+        var calendars=SideCalendarPolicies.Resolve(data,body.CalendarPolicy);
+        calendars.RequirePurposes(true,true,true);
+        calendars.For(CalendarPurpose.Observation).RequireCoverage(Date(body.DeliveryFrom),Date(body.DeliveryTo));
         var source=body.Source??throw Error("contract_observation_input","Supply explicit observation source terms.");
         var input=source.FixingClock??throw Error("contract_observation_clock","Select an exact fixing clock.");
         if(input.Clock.Revision!=data.ReferenceRevision)throw Error("contract_observation_clock","Select a clock in the exact source reference revision.");
-        var row=One(data.References["clock_rules"].Where(r=>r.Text("code")==input.Clock.Code));
-        var clock=PowerClock.FromRule(new(row.Text("code"),row.Text("kind"),row.OptionalText("fixed_offset_seconds") is {} seconds?int.Parse(seconds,CultureInfo.InvariantCulture):null,
-            row.OptionalText("iana_zone"),row.OptionalText("tzdb_version")),TimeZoneDatabase.Installed());
+        var clock=PublishedClocks.Resolve(data,input.Clock.Code);
         var observations=SwapContractObservationAuthoring.Generate(Date(body.DeliveryFrom),Date(body.DeliveryTo),input,clock);
         var floating=new SwapFloatingInput(body.Curve,null,body.Currency,body.DeliveryFrom,body.DeliveryTo,
             PaymentSchedule:body.PaymentSchedule,ResetFrequency:"daily",AveragingMethod:"arithmetic",Spread:body.Spread,
             ContractObservations:new(source.Implementation,source.HistoryPolicy,source.Role,source.ExpiryPolicy,source.Selection,observations));
-        var resolved=ResolveContractObservationPeriod(data,floating,Required(body.Commodity),null);
-        _=new FloatingSide(Guid.NewGuid(),resolved.Quote,resolved.UnitQuantity,[resolved.Period]);
+        var resolved=ResolveContractObservationPeriod(data,floating,Required(body.Commodity),null,calendars);
+        _=new FloatingSide(Guid.NewGuid(),resolved.Quote,resolved.UnitQuantity,[resolved.Period],calendars);
         var contextId=frame.ContextId??throw Error("swap_context","Supply the exact certified context.");
         var context=(await new KnowledgeStore(manifest.CatalogId).Read(connection,contextId,ct)).Context;
         if(data.Snapshot(frame).MarketCutoff!=frame.At)throw Error("contract_observation_context","This source consumer requires an explicit market cutoff equal to the valuation instant.");

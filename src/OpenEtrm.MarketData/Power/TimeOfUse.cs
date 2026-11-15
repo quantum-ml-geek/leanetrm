@@ -34,9 +34,9 @@ public sealed record TimeOfUse
         {
             var duration=TimeSpan.FromTicks(grid.DurationTicks(i));
             if(duration.Ticks%TimeSpan.TicksPerMinute!=0 || duration.TotalMinutes is not (5 or 15 or 30 or 60) || TimeSpan.FromMinutes(Minutes).Ticks%duration.Ticks!=0 ||
-                !PowerHours.IsCell(clock.Zone,grid.Start(i),duration))
+                !PowerHours.IsCell(clock,grid.Start(i),duration))
                 throw new MarketDataException("power_clock","TOU selection requires whole aligned cells of the pinned market clock.");
-            var local=TimeZoneInfo.ConvertTime(grid.Start(i),clock.Zone);
+            var local=clock.LocalAt(grid.Start(i));
             if(Contains(local.DateTime,closed.Contains(DateOnly.FromDateTime(local.DateTime))))slots.Add(i);
         }
         return grid.Select(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(slots));

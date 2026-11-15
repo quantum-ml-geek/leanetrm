@@ -1,3 +1,4 @@
+import type {SideCalendarPolicy,CalendarPurposes,SideCalendarCatalogRow} from './side-calendar.js';
 import type {CatalogueSource} from './market-navigation.js';
 import type {GasMeasures} from './lifecycle-text.js';
 // Mirrors of the deal ticket routes' JSON (System.Text.Json web defaults, nulls written).
@@ -9,12 +10,12 @@ export type TicketField={id:string;label:string;meaning:string;type:string;unit:
 // soon, on a field, side kind, column or tab, is the hover text of an item drawn as coming soon: it holds no value, is never sent and reads nothing.
 export type TicketColumn={id:string;label:string;unit:string|null;measure:string;input:string[];soon:string|null};
 // A new ticket opens with `initial` sides of the kind; none of a coming-soon kind is ever added.
-export type TicketSideKind={kind:string;pill:string;colour:string;min:number;initial:number;max:number;fields:TicketField[];columns:TicketColumn[];soon:string|null};
+export type TicketSideKind={kind:string;pill:string;colour:string;min:number;initial:number;max:number;fields:TicketField[];columns:TicketColumn[];soon:string|null;calendarPurposes?:CalendarPurposes|null};
 // At most `max` sides of the named kinds together.
 export type TicketSideLimit={kinds:string[];max:number};
 export type TicketTab={id:string;label:string;soon:string|null};
-export type TicketDescription={product:string;version:number;rowShape:string;tradeFields:TicketField[];sides:TicketSideKind[];sideLimits:TicketSideLimit[];tradeColumns:TicketColumn[];levels:string[];tabs:TicketTab[];modes:string[]};
-export type TicketSideDraft={kind:string;code:string;values:Record<string,string>};
+export type TicketDescription={product:string;version:number;rowShape:string;tradeFields:TicketField[];sides:TicketSideKind[];sideLimits:TicketSideLimit[];tradeColumns:TicketColumn[];levels:string[];tabs:TicketTab[];modes:string[];sideCalendars?:SideCalendarCatalogRow[]};
+export type TicketSideDraft={kind:string;code:string;values:Record<string,string>;calendarPolicy?:SideCalendarPolicy};
 export type TicketDraft={product:string;version:number;trade:Record<string,string>;sides:TicketSideDraft[]};
 export type TicketChoice={value:string;label:string};
 export type TicketLookup={value:string;source:{kind:string;label:string}};

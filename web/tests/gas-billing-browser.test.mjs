@@ -28,3 +28,20 @@ test('a handed request winning at acceptance cannot strand the billing form busy
  })()`);
  assert.equal(result.queued,1);assert.match(result.message,/handed request/);assert.equal(result.enabled,true);assert.equal(result.held,false);
 }));
+
+test('original gas payment dates stay contractual while correction due times use the display zone',{skip:!browserAvailable,timeout:browserTestTimeout},()=>withBrowserPage('<div id="host"></div>',async evaluate=>{
+ const results=await evaluate(`(async()=>{const {setupGasBilling}=await import('/gas-billing.js');const results=[];
+  for(const zone of ['America/Los_Angeles','Pacific/Auckland']){
+   const data=${JSON.stringify(view)};data.determinations=[{id:'original',cash_slot:1,day:'2021-01-01',ordinal:1,rounded_total:'-300',contribution:'-300',currency_code:'usd',due_at:'2021-02-02T00:00:00Z',reason:null,evidence:'Synthetic original'},
+    {id:'correction',cash_slot:1,day:'2021-01-01',ordinal:2,rounded_total:'-330',contribution:'-30',currency_code:'usd',due_at:'2021-02-03T18:00:00Z',reason:'quantity_correction',evidence:'Synthetic correction'}];
+   const api=async path=>path==='gas/billing/read'?data:{previewHash:'reviewed',sourceId:'source',previousId:null,amount:'-300',contribution:'-300',currency:'usd',contractualDueAt:'2021-02-02T00:00:00Z',alreadyDetermined:false};
+   const widget=setupGasBilling(document.querySelector('#host'),{api,context:()=>({}),tradeId:'synthetic',actor:()=> 'operator',zone:()=>zone,workflow:{busy:()=>false,pending:()=>undefined,changed(){},async queue(){}}});
+   const tick=()=>new Promise(r=>setTimeout(r,30));await tick();const root=document.querySelector('.gas-billing');
+   for(const [name,value] of [['claim','0'],['policy','final_allocated_billing_v1'],['profile','gas_final_daily_fixed_cash_v1'],['rounding','currency_minor_units_to_even_v1'],['evidence','Synthetic review']])root.querySelector('[data-billing='+name+']').value=value;
+   root.querySelector('form').requestSubmit();await tick();
+   results.push({review:root.querySelector('[data-billing=review]').textContent,history:root.querySelector('[data-billing=history]').textContent});widget.destroy();
+  }return results;
+ })()`);
+ for(const result of results){assert.match(result.review,/Due: Feb 2, 2021\n/);assert.match(result.history,/Feb 2, 2021/);}
+ assert.notEqual(results[0].history,results[1].history,'Correction timestamps must still use the display zone.');
+}));

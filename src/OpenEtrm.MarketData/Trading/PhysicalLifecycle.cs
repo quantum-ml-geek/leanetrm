@@ -45,7 +45,7 @@ public sealed class PhysicalCashState:IBindingValuationState
 }
 
 public enum DeliveryState { NotStarted=1,InProgress,Ended }
-public enum SettlementState { Remaining=1,AccruedUnpaid,PartPaid,Paid,Overpaid,NoAmountDue }
+public enum SettlementState { Remaining=1,AccruedUnpaid,PartPaid,Paid,Overpaid,NoAmountDue,Projected }
 public enum LifecycleMeasure { Unrealized=1,RealizedUnsettled }
 // Settlement is null on physical rows: delivery is not cash and is never settled by a date.
 // DueAt, Expected (undiscounted cash still to be paid: amount less visible payments) and PaidAt are cash-only.
@@ -56,7 +56,7 @@ public sealed record PhysicalLifecycleRow(int Slot,int Occurrence,DateOnly Deliv
     // The P&L explain measures the row contributes to: a day not yet ended is unrealized (remaining delivery MTM); cash
     // accrued on ended, fixed days and not yet paid is realized unsettled. A fully paid, ended day is history only and contributes to neither.
     public ImmutableArray<LifecycleMeasure> Measures=>[
-        ..Delivery!=DeliveryState.Ended?[LifecycleMeasure.Unrealized]:Array.Empty<LifecycleMeasure>(),
+        ..Delivery!=DeliveryState.Ended||Settlement==SettlementState.Projected?[LifecycleMeasure.Unrealized]:Array.Empty<LifecycleMeasure>(),
         ..Settlement is SettlementState.AccruedUnpaid or SettlementState.PartPaid or SettlementState.Overpaid?[LifecycleMeasure.RealizedUnsettled]:Array.Empty<LifecycleMeasure>()];
 }
 public sealed record ExpectedCashFlow(DateTimeOffset DueAt,ExactMoney Amount);
@@ -126,7 +126,7 @@ public static class PhysicalLifecycle
         foreach(var document in programs.Select(p=>p.Document))
             foreach(var row in document.Instructions.Select(i=>i.Output).Where(o=>o.Operation=="output_guard"))
                 if(row.Parameters.GetValueOrDefault("lifecycle") switch
-                    {ScheduleLifecycles.WholeGasDayDelivery=>document.Grids[row.Grid!.Value].Interval(0).Start<=at,ScheduleLifecycles.AccruedPayment=>row.ValueAt<=at,_=>false})
+                    {ScheduleLifecycles.WholeGasDayDelivery=>document.Grids[row.Grid!.Value].Interval(0).Start<=at,ScheduleLifecycles.AccruedPayment=>PaymentDatePolicy.IsOverdue(row.ValueAt!.Value,at),_=>false})
                     throw new MarketDataException("gas_delivery_lifecycle","A started gas delivery is valued only with its held lifecycle state.");
     }
 
@@ -186,12 +186,24 @@ public static class PhysicalLifecycle
                 if(covered.Select(day=>quantities[day]).Distinct().Count()!=1)
                     throw new MarketDataException("physical_lifecycle_quantity","Whole-day accrual of a multi-day payment requires equal daily contract quantities.");
                 var ended=covered.Count(day=>days[day]==DeliveryState.Ended);var started=covered.Any(day=>days[day]!=DeliveryState.NotStarted);
-                var due=valueAt<=at;
+                var due=PaymentDatePolicy.IsOverdue(valueAt,at);
                 var prices=contribution.Amount.States[0].Prices;
-                if(ended>0&&(prices==SchedulePriceFacts.None||(prices&~(SchedulePriceFacts.Fixed|SchedulePriceFacts.Actual|SchedulePriceFacts.PublishedFixing))!=0))
+                const SchedulePriceFacts finalPrices=SchedulePriceFacts.Fixed|SchedulePriceFacts.Actual|SchedulePriceFacts.PublishedFixing;
+                var fixedPrice=prices!=SchedulePriceFacts.None&&(prices&~finalPrices)==0;
+                var projectedPrice=(prices&SchedulePriceFacts.Projected)!=0&&(prices&~(finalPrices|SchedulePriceFacts.Projected))==0;
+                if(ended>0&&!fixedPrice&&(due||!projectedPrice))
                     throw new MarketDataException("side_due_leg_unresolved","Accrued cash requires its fixed, actual or published price.");
                 if(due&&ended<covered.Length)throw Unsupported("A due payment requires every gas day it covers to have ended.");
                 var amount=Held(member,contribution.Amount);
+                if(ended>0&&!fixedPrice)
+                {
+                    // Delivery completion does not turn a forecast into earned
+                    // cash. Until the required fixing, its projection keeps its market risk.
+                    _=state.Paid(slot,occurrence,snapshot,zero,false);
+                    rows.Add(new(slot,occurrence,from,to,ended==covered.Length?DeliveryState.Ended:DeliveryState.InProgress,
+                        SettlementState.Projected,zero,zero,amount,Held(member,contribution.PresentValue),zero,EstimatedQuantity,valueAt,amount));
+                    continue;
+                }
                 var accrued=amount.Scale(new SignedRatio(ended,covered.Length));
                 var(paid,paidAt)=state.Paid(slot,occurrence,snapshot,accrued,ended>0);var outstanding=accrued.Subtract(paid);
                 if(due)RequireOutside(contribution);

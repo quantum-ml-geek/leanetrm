@@ -1,8 +1,9 @@
+import {isCalendarAuthoringRefusal} from './side-calendar.js';
 import {isCatalogueSource,type CatalogueSource} from './market-navigation.js';
 import {renderTicket,type TicketEntry,type TicketEvents,type TicketView} from './deal-ticket.js';
 import {quantityRecord,quantityRecordChoices,quantityRecordFields,recordedBy,type GasQuantityReceipt,type GasQuantityView} from './gas-daily-quantities.js';
 import {actorTransport,PendingCommand,restoreTradeRequest,type RequestCommand} from './pending-command.js';
-import {acceptOffer,acceptPreview,addSide,applyLookup,draftOf,dropLookup,newTicket,nextPreview,removeSide,resolveChoice,setValue,ticketOf,type FieldValue,type TicketState,type TicketSide} from './ticket-model.js';
+import {acceptOffer,acceptPreview,addSide,applyLookup,draftOf,dropLookup,newTicket,nextPreview,removeSide,resolveChoice,setValue,setCalendarPolicy,ticketOf,type FieldValue,type TicketState,type TicketSide} from './ticket-model.js';
 import {previewed,reasonOf,type SchedulePanel} from './ticket-preview.js';
 import type {GasMeasures} from './lifecycle-text.js';
 import type {FacilityAllocationTrack,ScheduleView,TicketChoice,TicketDescription,TicketDraft,TicketField,TicketLookup,TicketPreview,TicketReceipt,TicketTrade,TradeActions} from './ticket-types.js';
@@ -22,7 +23,7 @@ export type TicketHandle={unsaved():boolean;pending():boolean;destroy():void};
 const settleMs=300;
 const keyOf=(side:string|null,field:string)=>side===null?field:`${side}.${field}`;
 // A booking refused with one of these codes wrote nothing; any other failure leaves its outcome unknown.
-const definite=(code:string|undefined)=>!!code&&(code.startsWith('gas_')||code.startsWith('ticket_')||['access_denied','historical_read_only','numeric_format','request_format','swap_context','trade_party'].includes(code));
+const definite=(code:string|undefined)=>isCalendarAuthoringRefusal(code)||!!code&&(code.startsWith('gas_')||code.startsWith('ticket_')||['access_denied','historical_read_only','numeric_format','request_format','swap_context','trade_party'].includes(code));
 
 // A booking request outlives the ticket that sent it, per product and person, until its outcome is known.
 const transports=new Map<string,ReturnType<typeof actorTransport<RequestCommand>>>();
@@ -259,6 +260,7 @@ export function setupTicket(host:HTMLElement,o:TicketOptions):TicketHandle{
  }
  const retry=()=>listed().filter(([side,f])=>keyOf(side,f.id) in choiceErrors);
  const on:TicketEvents={
+  calendar:(side,policy)=>change(s=>setCalendarPolicy(s,side,policy),'all'),
   amend:o.onAmend,
   edit:(side,field,value)=>{
    const key=keyOf(side,field);choiceEdits.set(key,(choiceEdits.get(key)??0)+1);retainedChoices.delete(key);

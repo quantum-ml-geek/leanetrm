@@ -24,7 +24,15 @@ internal static class CrudePhysicalCashRules
             throw Error("crude_receipt_terms", "The receipt contract requires exact references from one selected revision.");
         RequireQuantity(terms.ContractQuantity, terms.Quantity.Key, "crude_receipt_terms");
         RequireTime(terms.PaymentAt, "crude_receipt_terms");
-        if (terms.PaymentAt < terms.Delivery.To) throw Error("crude_receipt_terms", "Retain the original contractual payment date.");
+        if (PaymentDatePolicy.Date(terms.PaymentAt) < PaymentDatePolicy.Date(terms.Delivery.To)) throw Error("crude_receipt_terms", "Retain the original contractual payment date.");
+        if((terms.HandlingFee is not null)!=(terms.HandlingFeePaymentAt is not null))
+            throw Error("crude_receipt_terms","A handling fee requires its own payment date; an absent fee cannot have one.");
+        if(terms.HandlingFeePaymentAt is {} feePayment)
+        {
+            RequireTime(feePayment,"crude_receipt_terms");
+            if(PaymentDatePolicy.Date(feePayment)<PaymentDatePolicy.Date(terms.Delivery.To))
+                throw Error("crude_receipt_terms","The fee payment date cannot precede delivery completion.");
+        }
         RequireRounding(terms.Rounding);
         foreach (var rate in terms.HandlingFee is null ? new[] { terms.Consideration } : new[] { terms.Consideration, terms.HandlingFee })
             if (rate.Price is null || rate.Price.Value.CompareTo(default) < 0 || !Sign(rate.Direction) || rate.Price.Unit.Quantity != terms.Quantity.Key || rate.Price.Unit.Multiplier != ExactDecimal.Parse("1") ||

@@ -1,3 +1,4 @@
+import {chooseCalendars} from './side-calendars.mjs';
 import {reloadPage} from './reload-page.mjs';
 import {workspaceProbeScript} from './workspace-probe.mjs';
 import {sideSession} from './side-session.mjs';
@@ -20,7 +21,8 @@ export async function run({command,evaluate,wait,click,set,persona,check,shot,id
  async function newContract(composition){
   if(!firstContract){await openPpaBookings({click,wait,evaluate});await chooseFrame(fixture.baseFrameAt);}firstContract=false;
  await set('#ppa-composition',composition);await set('#ppa-book','d1000000-0000-0000-0000-000000000002');await first('ppa-entity');await first('ppa-counterparty');
-  await fill({'ppa-clock':'synthetic_eastern','ppa-cadence':'60','ppa-from':'2031-11-01','ppa-to':'2031-12-01','ppa-coverage-from':'2031-11-02T00:00','ppa-coverage-to':'2031-11-03T00:00','ppa-mw':'80','ppa-unit':'test_capacity_quantity','ppa-currency':'usd','ppa-discount':'false','ppa-quantity-kind':'profile','ppa-profile-capacity':'test_capacity_quantity','ppa-profile-energy':'test_power_quantity','ppa-hours':'all','ppa-calendar':'synthetic_eastern_holidays','ppa-pending-actuals':'require_actuals_v1'});
+  await fill({'ppa-clock':'synthetic_eastern','ppa-cadence':'60','ppa-from':'2031-11-01','ppa-to':'2031-12-01','ppa-coverage-from':'2031-11-02T00:00','ppa-coverage-to':'2031-11-03T00:00','ppa-mw':'80','ppa-unit':'test_capacity_quantity','ppa-currency':'usd','ppa-discount':'false','ppa-quantity-kind':'profile','ppa-profile-capacity':'test_capacity_quantity','ppa-profile-energy':'test_power_quantity','ppa-hours':'all','ppa-pending-actuals':'require_actuals_v1'});
+  await chooseCalendars({evaluate,set,wait},'#ppa-components','synthetic_eastern_holidays');
   await set('#ppa-component-0-coefficient','1');await payment(0);await set('#ppa-component-1-coefficient','-1');await payment(1);
   await fill({'ppa-component-1-price-kind':'flat','ppa-component-1-price-quantity':'test_power_quantity','ppa-component-1-multiplier':'1','ppa-component-1-price':'40'});
   if(composition==='fixed_physical'){
@@ -91,7 +93,8 @@ export async function run({command,evaluate,wait,click,set,persona,check,shot,id
  await click('#ppa-components [data-role=fixed_charge] > button');
  await check('removing an optional PPA side restores its plus control',"!!document.querySelector('[data-add-role=fixed_charge]')&&document.querySelectorAll('#ppa-components [data-role=fixed_charge]').length===0");
  await click('[data-add-role=fixed_charge]');await set('#ppa-component-3-coefficient','-1');await payment(3);
- await fill({'ppa-component-3-price-kind':'flat','ppa-component-3-price-quantity':'test_power_quantity','ppa-component-3-multiplier':'1','ppa-component-3-price':'0.25'});await click('#ppa-preview');
+ await fill({'ppa-component-3-price-kind':'flat','ppa-component-3-price-quantity':'test_power_quantity','ppa-component-3-multiplier':'1','ppa-component-3-price':'0.25'});
+ await chooseCalendars({evaluate,set,wait},'#ppa-components [data-role=fixed_charge]','synthetic_eastern_holidays');await click('#ppa-preview');
  await check('three-side PPA preview deducts the independent 500 charge from 2500',"[...document.querySelectorAll('#ppa-measures tbody tr')].slice(0,2).every(r=>r.lastElementChild.textContent==='2,000.000')&&document.querySelector('#error').hidden",text('error'));
  await click('#blotter-dock [data-maximize=details]');await evaluate("document.querySelector('#ppa-components').scrollIntoView({block:'start'})");await shot('ppa-three-side-entry');await click('#blotter-dock [data-maximize=details]');
  await set('#ppa-reason','Synthetic three-side PPA booking');await click('#ppa-confirm');await click('#ppa-submit');await manageSaved();

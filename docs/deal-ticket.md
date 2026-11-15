@@ -723,6 +723,50 @@ source/plan head identifiers. Changing another target's allocation alone does no
 change this response. This operational plan stays separate from direct daily
 quantity inputs and contractual billing/valuation.
 
+## Aligned side entry
+
+Native swap, scheduled swap, PPA, crude and LNG entry cards use shared comparison
+rows for direction, dates, quantity, pricing and payment terms. Matching dated
+periods in scheduled swaps align across sides even when their contract ranges
+differ. The existing described gas ticket retains its common field bands.
+Wide panels place sides alongside each other; panels narrower than 600 pixels
+stack native cards, preserving their controls and entries. Additional sides can
+scroll horizontally without compressing their fields.
+
+### Explicit schedule calendars (D403)
+
+Each Side has one versioned calendar policy with separate delivery,
+observation/reset and payment bindings. Applicable purposes require an exact
+published calendar even for all-days observations or unadjusted payments.
+Inapplicable purposes are recorded explicitly. All periods of a purpose share
+that binding; independent Sides keep their own policies.
+
+“Use one calendar for all applicable schedules” copies an explicitly selected
+calendar into the applicable bindings. There is no automatic first selection.
+The controls show differing versions and expose coverage, weekend rules and dated
+open/closed exceptions. Selecting a published product locks its contractual
+calendar and clock. Linked quantity schedules and published fixing events retain
+their source terms; a consuming Side cannot override them.
+
+Changing a calendar, product, clock, rule or payment term invalidates dependent
+qualification and preview evidence. An unavailable version remains visible and
+requires repair under the selected context. Missing or conflicting bindings are
+refused by the same managed operations used by agents and the browser.
+
+Standard payments display the contractual UTC date without converting it to the
+user's zone. Actual invoices, payments and publication events still display their
+instants in that zone. Same-day unpaid cash remains valued; it becomes overdue
+on the next UTC date. Stored incompatible contracts require reviewed migration
+of their terms, exact relationships, identities and retained programs before
+execution under the single supported contract.
+
+Booking is an open form. All supported instrument types are discoverable before
+ownership or counterparties are entered. Instrument terms precede ownership and
+parties, with prerequisite market and reference selectors ahead of dependent
+inputs. Described gas tickets keep their pricing setup above the sides and order
+side details by their declared field dependencies. Required choices, validation,
+authorization and protection of pending submissions still apply.
+
 ## Indexed consideration and refreshed entry fields
 
 D350 adds **Index payment**, an independent existing FloatingSide linked to one

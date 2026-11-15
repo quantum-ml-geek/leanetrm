@@ -104,11 +104,14 @@ internal static class PpaPortfolio
             var envelope=envelopes[id];
             try
             {
+                var programs=await retained.LoadPrograms(connection,id,context.ContextId,frame.At,ct,recoverMissing:admission is not null);
+                var sideIds=envelope.GetProperty("sideIds").EnumerateArray().ToDictionary(s=>new SideSlot(PpaCompiler.Role(s.Text("role")),s.GetProperty("ordinal").GetInt32()),s=>s.Id("sideId"));
+                terms[id]=SideCalendarPolicies.Retain(terms[id],slot=>programs.Single(p=>p.SideId==sideIds[slot]).Identity.EconomicIdentity);
                 var schedules=await retained.Load(connection,id,context.ContextId,frame.At,ct,recoverMissing:admission is not null);
                 // Report exclusions do not waive an admitted instrument's own bound.
                 if(admission is not null)RequirePreparationWork(rows.Where(r=>r.Id("instrument_id")==id),terms);
                 var instrument=PpaCompiler.Compile(data,terms[id],tou,await PpaCompiler.ReadQuantityTypes(connection,data,terms[id],ct),id,
-                    envelope.GetProperty("sideIds").EnumerateArray().ToDictionary(s=>new SideSlot(PpaCompiler.Role(s.Text("role")),s.GetProperty("ordinal").GetInt32()),s=>s.Id("sideId")));
+                    sideIds);
                 instrument=retainedSides.Attach(instrument,schedules);
                 await PpaCompiler.ValidateDefinitions(connection,data,instrument,ct);instruments.Add(id,instrument);
             }
@@ -164,6 +167,10 @@ internal static class PpaPortfolio
             SELECT row_to_json(r)::text FROM(SELECT instrument_id,reference_number AS instrument_reference FROM trading.instrument_references
             WHERE catalog_id=$1 AND instrument_id=ANY($2::uuid[]))r
             """,[catalog,instruments.ToArray()],ct);
-        return(tradeRows.ToDictionary(r=>r.Id("trade_id"),TradingReference.Trade),instrumentRows.ToDictionary(r=>r.Id("instrument_id"),TradingReference.Instrument));
+        var tradeReferences=tradeRows.ToDictionary(r=>r.Id("trade_id"),TradingReference.Trade);
+        var instrumentReferences=instrumentRows.ToDictionary(r=>r.Id("instrument_id"),TradingReference.Instrument);
+        if(trades.Any(id=>!tradeReferences.ContainsKey(id))||instruments.Any(id=>!instrumentReferences.ContainsKey(id)))
+            throw new PreviewDeniedException();
+        return(tradeReferences,instrumentReferences);
     }
 }

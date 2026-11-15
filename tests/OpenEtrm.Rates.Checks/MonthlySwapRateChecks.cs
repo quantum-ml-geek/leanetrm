@@ -70,8 +70,8 @@ internal static class MonthlySwapRateChecks
         var nominal=new CurrencyDefaultDiscounting([intraday],two.Snapshot,false,null);
         Equal(nominal.Inputs[intraday].Factor,1m);passed++;
         var scheduled=new ScheduledFinancialSwap(Guid.NewGuid(),[
-            new(new FixedSide(Guid.NewGuid(),original.Fixed.Price,two.Quote,original.UnitQuantity,[original.Fixed.Periods[0] with{Allocation=new(1,3)},original.Fixed.Periods[1] with{Allocation=new(2,3)}]),D(-1),ExactRatio.One),
-            new(new FloatingSide(Guid.NewGuid(),original.Floating.Settlement,two.Quote,original.UnitQuantity,[original.Floating.Periods[0] with{Allocation=new(3,5)},original.Floating.Periods[1] with{Allocation=new(2,5)}]),D(1),new(5,6))],true,ScheduledFinancialSwap.Implementation);
+            new(new FixedSide(Guid.NewGuid(),original.Fixed.Price,two.Quote,original.UnitQuantity,[original.Fixed.Periods[0] with{Allocation=new(1,3)},original.Fixed.Periods[1] with{Allocation=new(2,3)}],SyntheticSideCalendars.FixedPeriods([original.Fixed.Periods[0] with{Allocation=new(1,3)},original.Fixed.Periods[1] with{Allocation=new(2,3)}])),D(-1),ExactRatio.One),
+            new(new FloatingSide(Guid.NewGuid(),original.Floating.Settlement,two.Quote,original.UnitQuantity,[original.Floating.Periods[0] with{Allocation=new(3,5)},original.Floating.Periods[1] with{Allocation=new(2,5)}],SyntheticSideCalendars.FloatingPeriods([original.Floating.Periods[0] with{Allocation=new(3,5)},original.Floating.Periods[1] with{Allocation=new(2,5)}])),D(1),new(5,6))],true,ScheduledFinancialSwap.Implementation);
         var priced=FinancialSwapValuation.Evaluate(scheduled,two.Model.Build(two.Snapshot,scheduled.Dependencies),true,two.Mapping);
         var par=FinancialSwapValuation.ParRate(scheduled,priced.Sides,new AmountFormat(6,CashTieRule.ToEven,false,true));
         var expectedPar=decimal.Round((3.01m*0.6m*two.Factors[0]+3.02m*0.4m*two.Factors[1])*(5m/6m)/(two.Factors[0]/3m+two.Factors[1]*2m/3m),6,MidpointRounding.ToEven);
@@ -199,8 +199,8 @@ internal static class MonthlySwapRateChecks
         {
             var quantities=SwapSidePeriods.MonthlyAllocations([..fixedPeriods.Select(p=>new QuantityPeriod(p.DeliveryFrom,p.DeliveryTo))],basis);
             var unit=new Quantity(D(1),Quote.Quantity);
-            var fixedSide=new FixedSide(Guid.NewGuid(),new FlatPrice(new(D(3),Quote)),Quote,unit,[..fixedPeriods.Select((p,n)=>p with{Allocation=quantities[n]})]);
-            var floating=new FloatingSide(Guid.NewGuid(),PriceSettlementSelection.CurveTarget(index),Quote,unit,[..floatingPeriods.Select((p,n)=>p with{Allocation=quantities[n]})]);
+            var fixedSide=new FixedSide(Guid.NewGuid(),new FlatPrice(new(D(3),Quote)),Quote,unit,[..fixedPeriods.Select((p,n)=>p with{Allocation=quantities[n]})],SyntheticSideCalendars.FixedPeriods([..fixedPeriods.Select((p,n)=>p with{Allocation=quantities[n]})]));
+            var floating=new FloatingSide(Guid.NewGuid(),PriceSettlementSelection.CurveTarget(index),Quote,unit,[..floatingPeriods.Select((p,n)=>p with{Allocation=quantities[n]})],SyntheticSideCalendars.FloatingPeriods([..floatingPeriods.Select((p,n)=>p with{Allocation=quantities[n]})]));
             return new(Guid.NewGuid(),[new(fixedSide,D(-1)),new(floating,D(1))],MonthlyFinancialSwap.Implementation,true);
         }
         private static DateTimeOffset At(DateOnly date) => new(date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));

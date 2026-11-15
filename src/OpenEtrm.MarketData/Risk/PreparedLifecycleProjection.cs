@@ -232,7 +232,7 @@ public sealed class PreparedLifecycleProjection
             if(!selected.CashCurves.TryGetValue(currency,out provider!))throw LifecycleProjection.Error("projection_cash_policy","Select this currency's cash accumulation curve.");
             source=selected.SourceSnapshot;
         }
-        var start=new SidePaymentKey(cash.Id,0,cash.DueAt,currency);var end=new SidePaymentKey(cash.Id,1,Horizon,currency);
+        var start=new SidePaymentKey(cash.Id,0,cash.DueAt,currency){Timing=ValueTimingKind.Instant};var end=new SidePaymentKey(cash.Id,1,Horizon,currency){Timing=ValueTimingKind.Instant};
         var factors=provider.Resolve([start,end],source);
         if(factors.Length!=2||factors[0].Payment!=start||factors[1].Payment!=end||factors.Any(f=>f.DiscountFactor.CompareTo(default)<=0||!f.Snapshot.HasSameInputs(source)))
             throw LifecycleProjection.Error("projection_cash_policy","Cash accumulation requires both exact retained currency curve factors.");

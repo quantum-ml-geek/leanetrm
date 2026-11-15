@@ -5,8 +5,54 @@ using OpenEtrm.MarketData.Trading;
 
 internal static class SwapLifecycleProjectionChecks
 {
+    private static void SameDayFixing()
+    {
+        var date=Fixture.Utc("2041-02-02T00:00:00Z");
+        var f=new IndexFixingChecks.FixingFixture(monthly:true,delayedMonthlyPublication:true,projectionExpiry:date.AddHours(13));
+        var original=f.Floating();var periods=ImmutableArray.Create(original.Periods[0] with{PaymentAt=date});
+        var floating=new FloatingSide(Guid.NewGuid(),original.Settlement,original.Quote,original.UnitQuantity,periods,SyntheticSideCalendars.FloatingPeriods(periods));
+        var fixedSide=new FixedSide(Guid.NewGuid(),new(ExactDecimal.Parse("15"),f.Quote),original.UnitQuantity,
+            f.From,f.To,date,FixedSide.Implementation,f.Quote,SyntheticSideCalendars.Dated(false));
+        var swap=new FinancialSwapInstrument(Guid.NewGuid(),[new(fixedSide,ExactDecimal.Parse("-1")),new(floating,ExactDecimal.Parse("1"))],FinancialSwapInstrument.Implementation,false);
+        var source=f.Snapshot(date.AddHours(-1)).WithKnowledge(Guid.NewGuid(),date.AddDays(2));
+        var qty=new Quantity(ExactDecimal.Parse("2"),swap.UnitQuantity.Specification);
+        var trade=new Trade(Guid.NewGuid(),Guid.NewGuid(),[new(Guid.NewGuid(),swap,qty)]);
+        var owner=new AccountingPositionKey(trade.Id,trade.Instruments[0].Id,trade.BookId);var zero=ExactMoney.Parse("0",swap.Currency);
+        var completions=Enumerable.Range(0,2).Select(n=>new SwapPeriodCompletion(n,f.From,f.To,date.AddHours(20),"retained_contract_clock_v1")).ToImmutableArray();
+        var input=new SwapSettlementInputs(trade.Id,owner.BindingId,qty,[],zero,zero,completions,"swap_due_nominal_v1","swap_completed_period_trading_pnl_v1");
+        var discount=new ExplicitDiscounting(ExactDecimal.Parse("1"),DiscountFactorSource.Undiscounted);
+        var actual=new SwapBindingValuation(input,discount,trade.BookId);
+        var setup=new ValuationSetup(ValuationMeasure.PresentValue,ImmutableDictionary<Guid,FuturesMarketBinding>.Empty,discount){
+            BindingStates=ImmutableDictionary<MeasureBinding,IBindingValuationState>.Empty.Add(new(trade.Id,owner.BindingId),actual)};
+        var term=input.RequiredPrices(swap).Single(p=>p.Lookup is not null);
+        var mapping=ImmutableDictionary<SchedulePriceTerm,ProjectedFixingKey>.Empty.Add(term,new(term.Lookup!.ProjectionRequest,ObservationRole.IndexFixing,term.Lookup.Fixing!.FixingAt));
+        var component=new SwapLifecycleProjection(trade,owner.BindingId,actual,setup,new(f.Model.Build(source,swap.DependenciesAt(source)),discount),mapping,
+            new(owner,source.Knowledge!.ContextId,source.Knowledge.KnownAt,[]),new SwapSettlementRounding(swap.Currency,2,CashTieRule.ToEven,SwapSettlementRounding.Implementation),source);
+        var late=new SwapSettlementInputs(trade.Id,owner.BindingId,qty,[],zero,zero,
+            [..completions.Select(c=>c with{At=date.AddDays(1)})],"swap_due_nominal_v1","swap_completed_period_trading_pnl_v1");
+        try
+        {
+            _=new SwapLifecycleProjection(trade,owner.BindingId,new(late,discount,trade.BookId),setup,
+                new(f.Model.Build(source,swap.DependenciesAt(source)),discount),mapping,
+                new(owner,source.Knowledge.ContextId,source.Knowledge.KnownAt,[]),
+                new SwapSettlementRounding(swap.Currency,2,CashTieRule.ToEven,SwapSettlementRounding.Implementation),source);
+            throw new Exception("A projected payment was admitted before its required completion date.");
+        }
+        catch(MarketDataException e)when(e.Code=="payment_before_completion"){}
+        var policy=new LifecycleProjectionPolicy(LifecycleProjectionPolicy.Version,LifecycleProjectionPolicy.Hold,LifecycleProjectionPolicy.PayAtDue,
+            LifecycleProjectionPolicy.Nominal,LifecycleProjectionPolicy.Numerics,LifecycleProjectionPolicy.HeldNonPrice,LifecycleProjectionPolicy.DeclaredCurveExpiry,LifecycleProjectionPolicy.RetainPhysical);
+        foreach(var (hour,cash,residual) in new[]{(8,"0","-4"),(12,"0","-4"),(20,"0","-4"),(24,"-4","0")})
+        {
+            var horizon=new LifecycleProjectionHorizon(new(Guid.NewGuid(),"synthetic_close",1),f.Base.R("calendar"),[new(PaymentDatePolicy.Date(date.AddHours(hour)),date.AddHours(hour),0)]);
+            var prepared=LifecycleProjection.Prepare(f.Model,source,horizon,policy,[component],[]);var factor=prepared.Factors.Single();
+            var result=prepared.Evaluate("same_day",[new(factor.Input,factor.Quote,factor.Unit,ExactDecimal.Parse("2"),QuoteShift.Convention)]).Values.Single();
+            if(result.OpeningValue.ToExactString()!="-8"||result.PeriodCash.ToExactString()!=cash||result.ResidualValue.ToExactString()!=residual||result.EconomicPnl.ToExactString()!="4")
+                throw new Exception("A noon fixing or evening completion removed value during its UTC payment day.");
+        }
+    }
     internal static void Run()
     {
+        SameDayFixing();
         var f=new IndexFixingChecks.FixingFixture(monthly:true,projectedFixingCoverage:true);var swap=f.Swap();
         var source=f.Snapshot(Fixture.Utc("2040-12-30T12:00:00Z")).WithKnowledge(Guid.NewGuid(),f.Payment.AddDays(2));
         var qty=new Quantity(ExactDecimal.Parse("2"),swap.UnitQuantity.Specification);var trade=new Trade(Guid.NewGuid(),Guid.NewGuid(),[new(Guid.NewGuid(),swap,qty)]);
@@ -30,7 +76,7 @@ internal static class SwapLifecycleProjectionChecks
             throw new Exception("A swap component retained an unrelated source instrument's discount provider.");
         var policy=new LifecycleProjectionPolicy(LifecycleProjectionPolicy.Version,LifecycleProjectionPolicy.Hold,LifecycleProjectionPolicy.PayAtDue,
             LifecycleProjectionPolicy.Nominal,LifecycleProjectionPolicy.Numerics,LifecycleProjectionPolicy.HeldNonPrice,LifecycleProjectionPolicy.DeclaredCurveExpiry,LifecycleProjectionPolicy.RetainPhysical);
-        var horizon=new LifecycleProjectionHorizon(new(Guid.NewGuid(),"synthetic_close",1),f.Base.R("calendar"),[new(new(2041,2,18),f.Payment.AddHours(2),0)]);
+        var horizon=new LifecycleProjectionHorizon(new(Guid.NewGuid(),"synthetic_close",1),f.Base.R("calendar"),[new(new(2041,2,18),f.Payment.AddHours(26),0)]);
         var prepared=LifecycleProjection.Prepare(f.Model,source,horizon,policy,[component],[]);var factor=prepared.Factors.Single();
         var changed=prepared.Evaluate("swap",[new(factor.Input,factor.Quote,factor.Unit,ExactDecimal.Parse("2"),QuoteShift.Convention)]);
         void Equal(ExactMoney value,string expected){if(value.CompareTo(ExactMoney.Parse(expected,swap.Currency))!=0)throw new Exception($"Expected {expected}; got {value.ToExactString()}.");}
@@ -50,7 +96,7 @@ internal static class SwapLifecycleProjectionChecks
             throw new Exception("A shared source merged the independent swap accounting roots.");
         foreach(var member in mixed.Values){Equal(member.OpeningValue,"-8");Equal(member.EconomicPnl,"4");}
         var fixedSide=new FixedSide(Guid.NewGuid(),new(ExactDecimal.Parse("15.1233"),f.Quote),new(ExactDecimal.Parse("1"),f.Quote.Quantity),
-            f.From,f.To,f.Payment,FixedSide.Implementation,f.Quote);
+            f.From,f.To,f.Payment,FixedSide.Implementation,f.Quote,SyntheticSideCalendars.Dated(false));
         var uneven=new FinancialSwapInstrument(Guid.NewGuid(),[new(fixedSide,ExactDecimal.Parse("-1")),swap.Sides[1]],FinancialSwapInstrument.Implementation,false);
         var unevenTrade=new Trade(trade.Id,trade.BookId,[new(owner.BindingId,uneven,qty)]);
         var perPeriod=ImmutableDictionary<SwapProjectionPeriod,SwapSettlementRounding>.Empty
@@ -73,7 +119,7 @@ internal static class SwapLifecycleProjectionChecks
         var knownInputs=new SwapSettlementInputs(trade.Id,owner.BindingId,qty,[fixedPay,receive],zero,zero,completions,
             "swap_due_nominal_v1","swap_completed_period_trading_pnl_v1");
         var knownActual=new SwapBindingValuation(knownInputs,discount,trade.BookId);
-        var payment=new SwapKnownPayment(Guid.NewGuid(),null,f.Payment.AddHours(1),knownSource.Knowledge!.KnownAt,3,ExactMoney.Parse("6",swap.Currency),
+        var payment=new SwapKnownPayment(Guid.NewGuid(),null,f.Payment.AddHours(25),knownSource.Knowledge!.KnownAt,3,ExactMoney.Parse("6",swap.Currency),
             [new(receive.Id,1,f.From,f.To,ExactMoney.Parse("6",swap.Currency))]);
         var knownHistory=new SwapKnownPaymentHistory(owner,knownSource.Knowledge.ContextId,knownSource.Knowledge.KnownAt,[payment]){
             Determinations=[new(fixedPay.Id,null,0,f.From,f.To,knownSource.ValuationAt,f.Payment,knownSource.Knowledge.KnownAt,2,fixedPay.Amount,fixedPay.Amount),
@@ -82,7 +128,7 @@ internal static class SwapLifecycleProjectionChecks
             ImmutableDictionary<SchedulePriceTerm,ProjectedFixingKey>.Empty,knownHistory,rounding,knownSource);
         var knownValue=LifecycleProjection.Prepare(f.Model,knownSource,horizon,policy,[knownComponent],[]).Evaluate("known_future_payment",[]).Values.Single();
         Equal(knownValue.OpeningValue,"-10");Equal(knownValue.ResidualValue,"0");Equal(knownValue.PeriodCash,"-10");Equal(knownValue.EconomicPnl,"0");
-        var beforeKnown=horizon with{Closes=[new(new(2041,2,18),f.Payment.AddMinutes(30),0)]};
+        var beforeKnown=horizon with{Closes=[new(new(2041,2,18),f.Payment.AddHours(24.5),0)]};
         var reserved=LifecycleProjection.Prepare(f.Model,knownSource,beforeKnown,policy,[knownComponent],[]).Evaluate("reserve",[]).Values.Single();
         Equal(reserved.ResidualValue,"6");Equal(reserved.PeriodCash,"-16");Equal(reserved.EconomicPnl,"0");
         foreach(var contribution in new[]{receive,fixedPay})
@@ -90,13 +136,13 @@ internal static class SwapLifecycleProjectionChecks
             var signed=contribution.Amount.CompareTo(zero)>0?"6":"-6";var opposite=signed=="6"?"-6":"6";
             var paid=payment with{Amount=ExactMoney.Parse(signed,swap.Currency),Allocations=[new(contribution.Id,contribution.MembershipOrdinal,
                 f.From,f.To,ExactMoney.Parse(signed,swap.Currency))]};
-            var reversal=new SwapKnownPayment(Guid.NewGuid(),paid.PaymentId,f.Payment.AddHours(3),knownSource.Knowledge.KnownAt,4,
+            var reversal=new SwapKnownPayment(Guid.NewGuid(),paid.PaymentId,f.Payment.AddHours(27),knownSource.Knowledge.KnownAt,4,
                 ExactMoney.Parse(opposite,swap.Currency),[paid.Allocations[0] with{Amount=ExactMoney.Parse(opposite,swap.Currency)}]);
             var reversed=new SwapLifecycleProjection(trade,owner.BindingId,knownActual,setup,new(f.Model.Build(knownSource,[]),discount),
                 ImmutableDictionary<SchedulePriceTerm,ProjectedFixingKey>.Empty,knownHistory with{Payments=[paid,reversal]},rounding,knownSource);
             var paidOnly=LifecycleProjection.Prepare(f.Model,knownSource,horizon,policy,[reversed],[]).Evaluate("before_actual_reversal",[]).Values.Single();
             Equal(paidOnly.PeriodCash,"-10");Equal(paidOnly.ResidualValue,"0");
-            var afterReverse=horizon with{Closes=[new(new(2041,2,18),f.Payment.AddHours(4),0)]};
+            var afterReverse=horizon with{Closes=[new(new(2041,2,18),f.Payment.AddHours(28),0)]};
             var restored=LifecycleProjection.Prepare(f.Model,knownSource,afterReverse,policy,[reversed],[]).Evaluate("after_actual_reversal",[]).Values.Single();
             Equal(restored.PeriodCash,signed=="6"?"-16":"-4");Equal(restored.ResidualValue,signed);Equal(restored.EconomicPnl,"0");
             var beforeDue=knownSource.ValuationAt+(f.Payment-knownSource.ValuationAt)/2;

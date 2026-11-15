@@ -1,4 +1,5 @@
 """Contracts for immutable Side schedule content and atomic publication."""
+from synthetic_side_calendars import all_dates_policy
 
 
 def run_checks(query):
@@ -57,12 +58,21 @@ def run_checks(query):
     print('PASS retained schedules: exact graph ownership and publication-scoped immutable content', flush=True)
 
 
-def run_stage_checks(query, manifest):
+def run_stage_checks(query, manifest, *, generator_version='whole_term_side_blocks_v3', program_version='booked_side_program_v2'):
     """Literal arithmetic provides an independent small complete pricing graph."""
     import json
     from uuid import uuid4
 
     catalog=manifest['catalogId'];reference=manifest['referenceCatalogId'];revision=manifest['referenceRevisionId']
+    from check_side_calendar_policies import calendar_terms
+    policy,requested_calendar=calendar_terms(reference,revision)
+    def identity(name,family='fixed',**terms):
+        selected=dict(policy,Observation=policy['Delivery']) if family=='floating' else policy
+        return json.dumps(dict(contract=name,**terms,**({'CalendarPolicy':selected} if generator_version=='whole_term_side_blocks_v3' else {})))
+    def command(name,family='fixed'):
+        selected=dict(requested_calendar,observation=requested_calendar['delivery']) if family=='floating' else requested_calendar
+        return dict(test=name,**({'terms':dict(memberships=[dict(side=dict(calendarPolicy=selected)) for _ in range(8)])}
+                                if generator_version=='whole_term_side_blocks_v3' else {}))
     quantity=query(f"SELECT quantity_code FROM ref_data.quote_specifications WHERE(catalog_id,revision_id,code)=('{reference}','{revision}','test_gas_outright');")
     unit=dict(revision=dict(catalogId=reference,revisionId=revision),code=quantity)
     currency=dict(revision=dict(catalogId=reference,revisionId=revision),code='usd')
@@ -71,10 +81,14 @@ def run_stage_checks(query, manifest):
     def runtime(statement,actor='trader'):
         token=query(f"SET SESSION AUTHORIZATION preview_authenticator;SELECT security.issue_context('https://preview.invalid','{actor}','human_interactive','{manifest['tenantId']}','{manifest['workspaceId']}',NULL,'preview_runtime',60);")
         return query(f"SET SESSION AUTHORIZATION preview_runtime;BEGIN;SELECT security.use_context('{token}');{statement} COMMIT;")
+    if generator_version=='whole_term_side_blocks_v3':
+        runtime(f"SELECT security.capture_date_context('{catalog}','2021-01-01',NULL);")
+        captured=json.loads(runtime(f"SELECT security.read_side_calendar('{reference}','{revision}','test_utc_every_day');"))
+        policy,requested_calendar=calendar_terms(reference,revision,publication=captured['publication'])
     header=dict(family='fixed',definitionRevisionId=manifest['revisionId'],referenceCatalogId=reference,referenceRevisionId=revision,
-        economicIdentity='{"contract":"synthetic_schedule_check_v2"}',pricingBindingIdentity='',schemaVersion='side_schedule_blocks_v2',generatorVersion='whole_term_side_blocks_v2',
+        economicIdentity=identity('synthetic_schedule_check_v2'),pricingBindingIdentity='',schemaVersion='side_schedule_blocks_v2',generatorVersion=generator_version,
         manifest='a'*64,rowCount=7,edgeCount=7,bindingCount=0,rootCount=2,portCount=0,gridCount=0)
-    begin=f"SELECT security.begin_side_schedule('{catalog}','{request}',0,{literal(dict(test='complete_literal_side'))},'BookTrade',NULL,NULL,{literal(header)});"
+    begin=f"SELECT security.begin_side_schedule('{catalog}','{request}',0,{literal(command('complete_literal_side'))},'BookTrade',NULL,NULL,{literal(header)});"
     schedule=runtime(begin)
     assert runtime(begin)==schedule, 'The same request must retain its original stage identity'
     def row(ordinal,operation,kind,role='intermediate',parameters=None):
@@ -141,7 +155,7 @@ def run_stage_checks(query, manifest):
     runtime(f"SELECT security.append_side_schedule_aux('{catalog}','{request}','{schedule}','roots',{literal(roots)});")
     from check_booked_side_programs import append_program,check_literal_program,literal_program,install_stage_prerequisite
     runtime(reject(seal,'side_schedule_missing'))
-    program=literal_program(header,rows,roots)
+    program=literal_program(header,rows,roots,version=program_version)
     check_literal_program(runtime,query,catalog,request,schedule,program,reject)
     runtime(seal);runtime(seal)
     runtime(append_program(catalog,request,schedule,json.dumps(program,separators=(',',':'))))
@@ -151,10 +165,12 @@ def run_stage_checks(query, manifest):
     runtime(f"SELECT security.lock_side_schedule_request('{catalog}','{request}');")
     assert query(f"SELECT count(*) FROM trading.side_schedule_seals WHERE schedule_id='{schedule}';")=='1'
     assert runtime(f"SELECT count(*) FROM trading.side_schedule_rows WHERE schedule_id='{schedule}';")=='0', 'Sealing must not publish a schedule'
-    runtime(reject(begin.replace(literal(dict(test='complete_literal_side')),literal(dict(test='changed'))),'side_schedule_request_conflict'))
+    runtime(reject(begin.replace(literal(command('complete_literal_side')),literal(command('changed'))),'side_schedule_request_conflict'))
     def stage_graph(name,**changes):
-        invalid_request=str(uuid4());invalid_header=dict(header,economicIdentity=json.dumps({'contract':name}),**changes)
-        invalid_schedule=runtime(begin.replace(request,invalid_request).replace(literal(header),literal(invalid_header)))
+        family=changes.get('family','fixed')
+        invalid_request=str(uuid4());invalid_header=dict(header,economicIdentity=identity(name,family=family),**changes)
+        invalid_schedule=runtime(begin.replace(request,invalid_request).replace(literal(header),literal(invalid_header))
+            .replace(literal(command('complete_literal_side')),literal(command('complete_literal_side',family=family))))
         def scoped(statement):return statement.replace(request,invalid_request).replace(schedule,invalid_schedule)
         return scoped,invalid_schedule
     def complete_program_fixture(name,values,named,geometries=()):
@@ -172,6 +188,26 @@ def run_stage_checks(query, manifest):
         runtime(reject(append_program(catalog,operation,identifier,content),code))
         assert query(f"SELECT count(*) FROM trading.side_schedule_programs WHERE schedule_id='{identifier}';")=='0', \
             'Invalid structure or a typed seal failure must roll back the executable insert'
+    if generator_version=='whole_term_side_blocks_v3':
+        expected=[dict(ordinal=0,deliveryFrom='2021-01-01',deliveryTo='2021-02-01',paymentAt='2021-02-18T00:00:00Z',paymentRule='explicit_payment_date_v1',unadjustedPayment='none')]
+        query(f"SELECT trading.require_side_payment_dates('{catalog}','{schedule}',{literal(expected)});")
+        shifted=[dict(r,valueAt='2021-02-19T00:00:00Z') for r in rows]
+        shifted_operation,shifted_schedule=complete_program_fixture('synthetic_shifted_payment_day',shifted,roots)
+        shifted_program=literal_program(dict(header,economicIdentity=identity('synthetic_shifted_payment_day')),shifted,roots,version=program_version)
+        runtime(append_program(catalog,shifted_operation,shifted_schedule,json.dumps(shifted_program,separators=(',',':'))))
+        runtime(f"SELECT security.seal_side_schedule('{catalog}','{shifted_operation}','{shifted_schedule}','{'a'*64}');")
+        query(reject(f"SELECT trading.require_side_payment_dates('{catalog}','{shifted_schedule}',{literal(expected)});",'side_schedule_payment_date'))
+        for name,changes in [('anchor',dict(unadjustedPayment='2021-02-17')),
+                             ('convention',dict(paymentRule='["payment_rule","monthly_payment_date_rules_v1",1,1,18,null,1,null,4,null]',unadjustedPayment='2021-02-18'))]:
+            changed=[dict(r,parameters={**r['parameters'],**changes}) if r['operation']=='output_guard' else r for r in rows]
+            label='synthetic_forged_payment_'+name
+            forged_operation,forged_schedule=complete_program_fixture(label,changed,roots)
+            program=literal_program(dict(header,economicIdentity=identity(label)),changed,roots,version=program_version)
+            runtime(append_program(catalog,forged_operation,forged_schedule,json.dumps(program,separators=(',',':'))))
+            runtime(f"SELECT security.seal_side_schedule('{catalog}','{forged_operation}','{forged_schedule}','{'a'*64}');")
+            query(reject(f"SELECT trading.require_side_payment_dates('{catalog}','{forged_schedule}',{literal(expected)});",'side_schedule_payment_provenance'))
+        assert query("SELECT position('security.require_staged_payment_dates' in pg_get_functiondef('security.publish_side_schedules(uuid,uuid,uuid)'::regprocedure))>0;")=='t'
+        print('PASS native payment agreement: self-consistent staged bytes with a shifted covered payment date refuse publication admission',flush=True)
     unreadable_program('synthetic_empty_program_key',[dict(r,key='') if r['ordinal']==0 else r for r in rows],roots)
     unreadable_program('synthetic_empty_program_root',rows,[dict(r,name='') if r['name']=='cash' else r for r in roots])
     unreadable_program('synthetic_empty_program_measure',rows,[dict(r,measure='') if r['name']=='cash' else r for r in roots])
@@ -189,7 +225,7 @@ def run_stage_checks(query, manifest):
     for conflicting in (False,True):
         name='synthetic_program_seal_race_'+str(conflicting)
         operation,identifier=complete_program_fixture(name,rows,roots)
-        exact=literal_program(dict(header,economicIdentity=json.dumps({'contract':name})),rows,roots)
+        exact=literal_program(dict(header,economicIdentity=identity(name)),rows,roots,version=program_version)
         first_payload=json.dumps(exact,separators=(',',':'))
         other_payload=json.dumps(exact,indent=1) if conflicting else first_payload
         def attempt(payload):
@@ -226,9 +262,9 @@ def run_stage_checks(query, manifest):
     runtime(vector(append_rows(vector_rows)))
     runtime(vector(f"SELECT security.append_side_schedule_edges('{catalog}','{request}','{schedule}',{literal(edges)});"))
     runtime(vector(f"SELECT security.append_side_schedule_aux('{catalog}','{request}','{schedule}','roots',{literal(roots)});"))
-    vector_header=dict(header,economicIdentity=json.dumps({'contract':'synthetic_four_cell_block_v2'}),gridCount=1)
+    vector_header=dict(header,economicIdentity=identity('synthetic_four_cell_block_v2'),gridCount=1)
     vector_request=query(f"SELECT request_id FROM trading.side_schedules WHERE id='{vector_id}';")
-    runtime(append_program(catalog,vector_request,vector_id,json.dumps(literal_program(vector_header,vector_rows,roots,[grid]),separators=(',',':'))))
+    runtime(append_program(catalog,vector_request,vector_id,json.dumps(literal_program(vector_header,vector_rows,roots,[grid],version=program_version),separators=(',',':'))))
     runtime(vector(seal));runtime(vector(seal))
     assert query(f"SELECT (SELECT count(*) FROM trading.side_schedule_grids WHERE schedule_id='{vector_id}')::text||':'||(SELECT count(*) FROM trading.side_schedule_rows WHERE schedule_id='{vector_id}')::text;")=='1:7'
     invalid_grid,invalid_grid_id=stage_graph('synthetic_misaligned_block_grid_v2',gridCount=1)
@@ -348,9 +384,9 @@ def run_stage_checks(query, manifest):
             firstRowOrdinal=1,axisCount=2,selection=[0,1],lengths=[1,1],operatingDays=[day]*2,
             localMinutes=[300,360] if mismatched else [60,120],occurrences=[1,1])
         for slot,geometry in ((0,grid),(1,target_grid)):
-            proposed=dict(header,economicIdentity=json.dumps(dict(contract=name,slot=slot)),gridCount=1,rootCount=3,
+            proposed=dict(header,economicIdentity=identity(name,slot=slot),gridCount=1,rootCount=3,
                 portCount=slot,bindingCount=slot)
-            identifier=runtime(f"SELECT security.begin_side_schedule('{catalog}','{operation}',{slot},{literal(dict(test=name))},'BookTrade',NULL,NULL,{literal(proposed)});")
+            identifier=runtime(f"SELECT security.begin_side_schedule('{catalog}','{operation}',{slot},{literal(command(name))},'BookTrade',NULL,NULL,{literal(proposed)});")
             def write(function,*args):
                 arguments=','.join("'"+arg.replace("'","''")+"'" if isinstance(arg,str) else literal(arg) for arg in args)
                 return runtime(f"SELECT security.{function}('{catalog}','{operation}','{identifier}',{arguments});")
@@ -381,10 +417,10 @@ def run_stage_checks(query, manifest):
         operation=str(uuid4());port='synthetic_energy/0'
         for slot,geometries in enumerate((source_grids,target_grids)):
             count=len(geometries)
-            proposed=dict(header,economicIdentity=json.dumps(dict(contract=name,slot=slot)),
+            proposed=dict(header,economicIdentity=identity(name,slot=slot),
                 gridCount=count,rowCount=7*count+1,edgeCount=8*count,rootCount=2*count+1,
                 portCount=slot,bindingCount=slot*count)
-            identifier=runtime(f"SELECT security.begin_side_schedule('{catalog}','{operation}',{slot},{literal(dict(test=name))},'BookTrade',NULL,NULL,{literal(proposed)});")
+            identifier=runtime(f"SELECT security.begin_side_schedule('{catalog}','{operation}',{slot},{literal(command(name))},'BookTrade',NULL,NULL,{literal(proposed)});")
             def write(function,*args):
                 arguments=','.join("'"+arg.replace("'","''")+"'" if isinstance(arg,str) else literal(arg) for arg in args)
                 return runtime(f"SELECT security.{function}('{catalog}','{operation}','{identifier}',{arguments});")
@@ -461,9 +497,9 @@ def run_temporal_checks(url,query,manifest):
         assert fragment in original
         before=query('SELECT count(*) FROM trading.swap_trade_revisions;')
         try:
-            query(original.replace(fragment,"'economicIdentity',s.economic_identity||'synthetic mismatch',"))
+            query(original.replace(fragment,"'economicIdentity',left(s.economic_identity,length(s.economic_identity)-1)||',\"syntheticMismatch\":true}',"))
             refused=client.call('swaps/book',body,expected=422)
-            assert refused['code']=='side_schedule_identity'
+            assert refused['code']=='side_schedule_identity',refused
             assert query('SELECT count(*) FROM trading.swap_trade_revisions;')==before
             assert query(f"SELECT count(*) FROM trading.swap_trade_revisions WHERE operation_id='{body['operationId']}';")=='0'
         finally:
@@ -473,10 +509,10 @@ def run_temporal_checks(url,query,manifest):
         return result
     booking_inputs={}
     def book(frame,index,daily):
-        floating=dict(settlement=dict(mode='curve_target',index=None,projectionPolicy=None),curve=index['curve'],index=index['index'],currency=index['currencyCode'],deliveryFrom='2021-01-01',deliveryTo='2021-02-01',paymentSchedule=payment,resetFrequency='daily' if daily else 'monthly',averagingMethod='arithmetic' if daily else 'none',spread='0')
+        floating=dict(calendarPolicy=all_dates_policy(observation=True),settlement=dict(mode='curve_target',index=None,projectionPolicy=None),curve=index['curve'],index=index['index'],currency=index['currencyCode'],deliveryFrom='2021-01-01',deliveryTo='2021-02-01',paymentSchedule=payment,resetFrequency='daily' if daily else 'monthly',averagingMethod='arithmetic' if daily else 'none',spread='0')
         body={**context(frame),**trade_booking(), 'operationId':str(uuid4()),'bookId':catalog['books'][0]['id'],
             'definitionRevisionId':index['definitionRevisionId'],'commodity':index['commodity'],'quantity':'10','fixedCoefficient':'-1','discounting':False,
-            'fixed':dict(price='3',currency=index['currencyCode'],deliveryFrom='2021-01-01',deliveryTo='2021-02-01',paymentSchedule=payment),'floating':floating}
+            'fixed':dict(calendarPolicy=all_dates_policy(observation=False),price='3',currency=index['currencyCode'],deliveryFrom='2021-01-01',deliveryTo='2021-02-01',paymentSchedule=payment),'floating':floating}
         result=checked_booking(body);booking_inputs[result['tradeId']]=body
         return result
     first=book(later,secondary,True)
@@ -489,7 +525,7 @@ def run_temporal_checks(url,query,manifest):
             curve=primary['curve'],index=primary['index'],currency=primary['currencyCode'],deliveryFrom=start,deliveryTo=end,
             paymentSchedule=payment,resetFrequency='monthly',averagingMethod='none',spread='0')))
     def schedule_side(periods):
-        return dict(basis='period_total',quantity=specification,amount=None,allocation=None,
+        return dict(calendarPolicy=all_dates_policy(observation=periods[0]['floating'] is not None),basis='period_total',quantity=specification,amount=None,allocation=None,
                     priceApplication='period_average_times_quantity_v1',power=None,periods=periods)
     whole=checked_booking({**context(later),**trade_booking(),'operationId':str(uuid4()),'bookId':catalog['books'][0]['id'],
         'definitionRevisionId':primary['definitionRevisionId'],'commodity':primary['commodity'],'quantity':None,'fixedCoefficient':None,
@@ -497,7 +533,7 @@ def run_temporal_checks(url,query,manifest):
         'scheduled':dict(implementation='whole_term_scheduled_financial_swap_v1',first=schedule_side(fixed_periods),second=schedule_side(floating_periods))})
     power=next(i for i in catalog['indices'] if i['curve']=='local_power_all_in' and i['definitionRevisionId']==primary['definitionRevisionId'])
     def factor_side(index,amount,basis):
-        return dict(basis=basis,quantity=next(q['specification'] for q in index['quantityChoices'] if q['specification']['code']==index['quantityCode']),
+        return dict(calendarPolicy=all_dates_policy(observation=True),basis=basis,quantity=next(q['specification'] for q in index['quantityChoices'] if q['specification']['code']==index['quantityCode']),
             amount=None,allocation=None,priceApplication='period_average_times_quantity_v1',power=None,
             periods=[dict(amount=amount,fixed=None,floating=dict(settlement=dict(mode='curve_target',index=None,projectionPolicy=None),
                 curve=index['curve'],index=index['index'],currency=index['currencyCode'],deliveryFrom='2021-01-01',deliveryTo='2021-02-01',

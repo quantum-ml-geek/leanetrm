@@ -87,7 +87,7 @@ internal static class CashAccumulationSelectionChecks
         public ImmutableArray<SidePaymentFactor> Resolve(ImmutableArray<SidePaymentKey> payments,MarketSnapshot snapshot)
         {Seen=snapshot;return [..payments.Select(p=>new SidePaymentFactor(p,Factor(p.PaymentAt),snapshot,DiscountFactorSource.Explicit))];}
         public ImmutableArray<SidePaymentFactor> ResolveForValuation(ImmutableArray<SidePaymentKey> payments,MarketSnapshot snapshot,DateTimeOffset at,string? policy)
-        {Seen=snapshot;return [..payments.Select(p=>new SidePaymentFactor(p,Factor(p.PaymentAt).DivideExact(Factor(at)),snapshot,DiscountFactorSource.Explicit))];}
+        {Seen=snapshot;return [..payments.Select(p=>new SidePaymentFactor(p,Factor(p.PaymentAt).DivideExact(Factor(at)),snapshot,DiscountFactorSource.Explicit){ClockRoll=new(policy!,at,Factor(p.PaymentAt),Factor(at),[])})];}
     }
     private sealed record NativeCurve(MarketSnapshot SourceSnapshot,ReferenceKey Currency,MarketObservation Observation):IProjectionCurrencyCurve
     {

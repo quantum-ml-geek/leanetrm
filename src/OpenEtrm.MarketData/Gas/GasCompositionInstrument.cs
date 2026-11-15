@@ -82,6 +82,7 @@ public sealed record GasCompositionInstrument:SidedInstrument
   foreach(var p in cash)
   {
    var source=Index(p.Source);var a=physical[source].Side;
+   GasCashDelivery.Require(p.Side,a,"gas_composition_input");
    var indexed=p.Role=="indexed_consideration"&&p.Side is FloatingSide;
    if(!(indexed||p.Role is("consideration" or "fee")&&p.Side is FixedSide)||!Enum.IsDefined(p.Stage)||p.Direction!=one&&p.Direction!=minus||
     p.Side.GenerateSchedule() is not SidePaymentSchedule schedule||schedule.Currency!=native.Currency||schedule.UnitQuantity!=native.UnitQuantity||schedule.Rows.Count<1||!indexed&&schedule.Rows.Count!=1)

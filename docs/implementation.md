@@ -1,5 +1,38 @@
 # Current implementation record
 
+## Explicit Side calendars and payment days (D403)
+
+Supported swaps, scheduled power, PPAs, physical gas, crude and LNG now require
+one immutable Side calendar policy with exact per-purpose bindings. Managed
+previews, booking and retained execution use captured published calendars and
+clocks; native admission verifies dates, quantities, source contracts and program
+agreement. Published TOU terms are locked, linked schedules keep their source
+ownership, and whole-term Sides retain multiple periods and daily observations
+with monthly settlement.
+
+Standard payments use `utc_payment_day_v1`. Users see the contractual UTC date,
+including in filters, hover text and calculation evidence. Same-day unpaid cash
+remains valued; later same-day fixing retains projection and risk. Actual events,
+negotiated correction due instants and exchange expiry retain instant semantics.
+Crude consideration and fee dates stay independent through invoice aging; gas
+and LNG dates survive booking, billing and retained replay.
+
+The integrated calendar/lifecycle runner requires 183 commands, including 63
+isolated application previews across fourteen CI partitions. Local checks passed
+737 managed core checks, 88 rate checks, 1,806 frontend checks and 121 Python
+checks. Domain, native database, populated-upgrade, agent and browser checks are
+mandatory in the runner and CI. Independent adversarial review findings were
+resolved with verified fixes. These checks use stock PostgreSQL 18 and disposable
+synthetic resources; the required aggregate CI result gates publication readiness.
+
+Migrations 0318–0337 preserve stored rows, retained bytes, invoices and completed
+command outcomes. There is one supported execution contract: incompatible stored
+trades need reviewed migration of their terms, exact relationships, identities
+and retained programs. Existing application databases were not modified. Merge,
+contract migration and deployment remain separate steps. See
+[the decision](decisions.md#d403--explicit-schedule-purpose-calendars-and-utc-payment-days)
+and [the time contract](time-and-schedules.md).
+
 D391 adds [contract observation terms](custom-curves.md#contract-observation-terms-d391)
 to custom curves, implemented locally. A `contract_observations` node sums
 groups of weighted, averaged contract-position observations over a calendar month
@@ -196,6 +229,14 @@ anchors, adjustments and selection, shortcut date roles, identity kinds, power
 blocks and classifications, rate convention labels) from the validating backend, and an IANA clock is
 refused unless its declared tzdb release equals the installed release. Economic
 power choices (curve, period, product, hours, interval) start unselected.
+
+D403 adds exact published calendar and clock capture for Side-owned schedules
+and published TOUs. Their readers preserve captured coverage, overrides and
+clock transitions, and authorize calendar sources independently of the pricing
+reference revision. This does not extend the older general date-schedule reader
+below. Published TOU hours, clock and holiday treatment cannot be overridden by
+the booking ticket; an explicitly custom schedule retains its own parameters.
+
 Retained `date_schedule_v1` inline calendars remain readable and are never
 reinterpreted.
 
@@ -1977,11 +2018,11 @@ New swap entry selects commodity from exact reference data and filters the
 compatible floating indices, curves and working units. The editor labels its
 selector Floating Index. Reset frequency and averaging method are distinct:
 monthly index/no averaging or daily calendar/arithmetic mean are backed choices.
-Payment frequency currently supports monthly payments over one delivery month.
+Payment frequency supports monthly settlement across a whole-term Side with multiple delivery months, including daily observations within each month.
 
 Each side owns an explicit payment rule: days after its last delivery day, or a
 specified day of the following month. Calendar/business-day lag, short-month
-reject/clamp and unadjusted/following/preceding/modified-following adjustments are
+reject/clamp and unadjusted/following/preceding/modified-following/modified-preceding adjustments are
 implemented with covered exact reference calendars. Lag precedes adjustment.
 Missing/inapplicable parameters, inconsistent dates, unknown conventions and
 unsupported coverage fail explicitly. Managed generation reuses the shared date
@@ -1989,10 +2030,14 @@ rolling kernel; database admission independently validates the generated result.
 
 Actual valued plans retain their rule/calendar evidence and generated
 unadjusted/final dates. Payment dates display as dates and never shift with user
-time zone. The existing selected UTC rate-date convention still determines DF
-lookup and due-date eligibility. Legacy manual-instant revisions retain their
-original contents; no rule is inferred. Latest-head amendments choose explicit
-rules and append new immutable definitions/events. New entry has no editable
+time zone. Under D403's explicit `utc_payment_day_v1` policy, standard cash is
+due on its UTC payment date, becomes overdue on a later UTC date and remains
+valued while unpaid on that date. A later same-day fixing retains projection and
+risk until its qualified publication is available. Correction due instants and
+exchange option expiry retain instant semantics. Stored contracts are never
+silently converted: incompatible contracts require reviewed replacement with
+consistent terms, exact relationships, identities and retained programs. There
+is one supported execution contract. Amendments append immutable definitions/events. New entry has no editable
 payment date/time field. New rule identities remain distinct even if their
 currently generated dates happen to coincide.
 

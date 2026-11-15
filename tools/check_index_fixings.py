@@ -1,4 +1,5 @@
 """Exact published synthetic fixings: full, partial, missing, wrong and unpublished actual observations."""
+from synthetic_side_calendars import all_dates_policy
 from datetime import datetime, timezone
 from fractions import Fraction as F
 import json
@@ -47,7 +48,7 @@ def prepare(reference, market, manifest):
         frame(at,'2021-01-15T08:00:00Z',[JANUARY_GAS],[wrong])
     frame('2021-01-15T13:00:00Z','2021-01-15T08:00:00Z',[JANUARY_GAS])
     # February publishes at 2021-01-31T12:00Z and pays on 2021-04-15.
-    for at in ['2021-01-31T12:00:00Z','2021-02-01T08:00:00Z','2021-04-15T00:00:00Z']:
+    for at in ['2021-01-31T12:00:00Z','2021-02-01T08:00:00Z','2021-04-15T00:00:00Z','2021-04-15T23:59:00Z','2021-04-16T00:00:00Z']:
         frame(at,'2021-01-31T08:00:00Z',add=[FEBRUARY_GAS])
     frame('2021-02-01T09:00:00Z','2021-01-31T08:00:00Z',[JANUARY_GAS],[FEBRUARY_GAS])
     from check_swap_settlement_selection import prepare_primary
@@ -73,8 +74,8 @@ def draft(frame, index, curve, strike, period=JANUARY, quantity='100'):
             'definitionRevisionId':index['definitionRevisionId'],'commodity':index['commodity'],
             'quantity':{'value':quantity,'specification':index['quantityChoices'][0]['specification']},
             'fixedCoefficient':'-1','discounting':False,
-            'fixed':{'price':strike,'currency':index['currencyCode'],'deliveryFrom':period[0],'deliveryTo':period[1],'paymentSchedule':RULE},
-            'floating':{'spread': '0', 'settlement': {'mode': 'curve_target', 'index': None, 'projectionPolicy': None}, 'curve':curve,'index':index['index'],'currency':index['currencyCode'],
+            'fixed':{'calendarPolicy': all_dates_policy(observation=False), 'price':strike,'currency':index['currencyCode'],'deliveryFrom':period[0],'deliveryTo':period[1],'paymentSchedule':RULE},
+            'floating':{'calendarPolicy': all_dates_policy(observation=True), 'spread': '0', 'settlement': {'mode': 'curve_target', 'index': None, 'projectionPolicy': None}, 'curve':curve,'index':index['index'],'currency':index['currencyCode'],
                         'deliveryFrom':period[0],'deliveryTo':period[1],'paymentSchedule':RULE,
                         'resetFrequency':'daily' if daily else 'monthly','averagingMethod':'arithmetic' if daily else 'none'}}
 
@@ -102,14 +103,14 @@ def reject(sql, message):
             f"EXCEPTION WHEN SQLSTATE 'P0001' THEN IF SQLERRM<>'{message}' THEN RAISE; END IF; END $$;")
 
 
-def writer(at, pins):
+def writer(at, pins, operation):
     """The authorized booking function called directly for the January monthly gas swap."""
-    fixed={'price':'3','currency':'usd','deliveryFrom':'2021-01-01','deliveryTo':'2021-02-01','paymentSchedule':RULE}
-    floating={'curve':'base_forward','index':'test_price','currency':'usd','deliveryFrom':'2021-01-01','deliveryTo':'2021-02-01',
+    fixed={'calendarPolicy': all_dates_policy(observation=False), 'price':'3','currency':'usd','deliveryFrom':'2021-01-01','deliveryTo':'2021-02-01','paymentSchedule':RULE}
+    floating={'calendarPolicy': all_dates_policy(observation=True), 'curve':'base_forward','index':'test_price','currency':'usd','deliveryFrom':'2021-01-01','deliveryTo':'2021-02-01',
               'paymentSchedule':RULE,'resetFrequency':'monthly','averagingMethod':'none','spread':'0',
               'settlement':{'mode':'curve_target','index':None,'projectionPolicy':None}}
     pinned=','.join(f"'{p}'" for p in pins)
-    return (f"SELECT security.save_composed_swap('{CAT}','{uuid4()}',NULL,NULL,'{BOOK}','{REV}','{RCAT}','{RREV}',"
+    return (f"SELECT security.save_composed_swap('{CAT}','{operation}',NULL,NULL,'{BOOK}','{REV}','{RCAT}','{RREV}',"
             f"'test_gas','{json.dumps(fixed)}'::jsonb,NULL,'{json.dumps(floating)}'::jsonb,100,-1,false,'{at}Z','{at}Z',"
             f"'Initial booking','{CONVENTION}',NULL,'{json.dumps(trade_booking())}'::jsonb,ARRAY[{pinned}]::uuid[])::text;")
 
@@ -182,9 +183,12 @@ def run_oracle_checks(c, frames, gas):
     assert (reset['fixingState'],reset['price'])==('Actual','3.2') and [o['id'] for o in reset['lineage']]==[FEBRUARY_GAS]
     assert all((p['paymentDate'],p['discountFactor'])==('2021-04-15','1') for side in value['sides'] for p in side['payments'])
     assert F(value['presentValue'])==2000 and value['quantity']=='10000'
-    due=c.call('swaps/price',draft(frames['2021-04-15T00:00:00'],gas,'base_forward','3',FEBRUARY,'10000'),expected=422)
-    assert due['code']=='side_payment_due',due
-    print('PASS acceptance oracle: 10,000 MMBtu receive a published 3.20 USD/MMBtu index and pay 3.00 for 2,000 USD undiscounted before fees; at the payment date valuation requires lifecycle state',flush=True)
+    for at in ['2021-04-15T00:00:00','2021-04-15T23:59:00']:
+        due=c.call('swaps/price',draft(frames[at],gas,'base_forward','3',FEBRUARY,'10000'))['valuation']
+        assert F(due['presentValue'])==2000 and all(p['discountFactor']=='1' for s in due['sides'] for p in s['payments']),due
+    overdue=c.call('swaps/price',draft(frames['2021-04-16T00:00:00'],gas,'base_forward','3',FEBRUARY,'10000'),expected=422)
+    assert overdue['code']=='side_payment_due',overdue
+    print('PASS acceptance oracle: 10,000 MMBtu receive a published 3.20 USD/MMBtu index and pay 3.00 for 2,000 USD undiscounted before fees; unpaid cash stays valued throughout its payment date and becomes overdue on the next UTC date',flush=True)
 
 
 def run_input_checks(c, query, manifest, frames, gas, book):
@@ -202,11 +206,22 @@ def run_input_checks(c, query, manifest, frames, gas, book):
             assert error['code']==code,(path,at,error)
     assert written(query)==before
     print('PASS wrong actuals through the API: another source, a trader mark, a preliminary value, no actual or only another period cannot price or book',flush=True)
-    # The database writer selects the actual itself instead of trusting its managed caller.
-    for at,pins,_ in cases:
-        query(runtime(issue(query,manifest),reject(writer(at,pins),'index_fixing_missing')))
-    # The same call with the exact January actual is admitted, so the rejections are not malformed calls.
-    accepted=json.loads(query(runtime(issue(query,manifest),writer('2021-01-15T10:00:00',[JANUARY_GAS]))))
+    # Stage complete managed programs once, then exercise native pin admission
+    # under the same actor. Each direct command and its stage are rolled back.
+    seed=booking(draft(frames['2021-01-15T08:00:00'],gas,'base_forward','3'),book)
+    c.call('swaps/book',seed)
+    before=written(query)
+    def direct(at,pins,expected=None):
+        operation=str(uuid4());token=issue(query,manifest)
+        selected=writer(at,pins,operation)
+        if expected:selected=reject(selected,expected)
+        stage=f"""INSERT INTO trading.side_schedule_requests SELECT(jsonb_populate_record(NULL::trading.side_schedule_requests,to_jsonb(r)||jsonb_build_object('request_id','{operation}'))).*
+          FROM trading.side_schedule_requests r WHERE(catalog_id,request_id)=('{CAT}','{seed['operationId']}');
+          INSERT INTO trading.side_schedule_request_items SELECT catalog_id,'{operation}',slot,schedule_id
+          FROM trading.side_schedule_request_items WHERE(catalog_id,request_id)=('{CAT}','{seed['operationId']}');"""
+        return query(f"BEGIN;{stage}SET LOCAL SESSION AUTHORIZATION preview_runtime;SELECT security.use_context('{token}');{selected}ROLLBACK;")
+    for at,pins,_ in cases:direct(at,pins,'index_fixing_missing')
+    accepted=json.loads(direct('2021-01-15T10:00:00',[JANUARY_GAS]))
     assert accepted['tradeId'],accepted
     assert written(query)==before
     print('PASS wrong actuals through the database writer: each pin set rejects independently, while the exact January actual is admitted',flush=True)

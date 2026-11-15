@@ -32,7 +32,7 @@ internal static class DiscountLookupChecks
         SidePaymentSchedule Schedule(DateOnly date, QuoteSpecification? selectedQuote = null) =>
             new FixedSide(Guid.NewGuid(), new(ExactDecimal.Parse("3"), selectedQuote ?? quote),
                 new(ExactDecimal.Parse("1"), (selectedQuote ?? quote).Quantity), start, start.AddDays(1),
-                new DateTimeOffset(date.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero), FixedSide.Implementation, selectedQuote ?? quote).GenerateDatedSchedule();
+                new DateTimeOffset(date.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero), FixedSide.Implementation, selectedQuote ?? quote,SyntheticSideCalendars.Dated(false)).GenerateDatedSchedule();
         Check("first interior and last exact pillars retain independent rational factors and evidence", () =>
         {
             var plans = dates.Select(d => Schedule(d)).ToArray();
@@ -124,7 +124,7 @@ internal static class DiscountLookupChecks
             var context = new CurrencyDefaultDiscounting([original], snapshot, false, null);
             var changed = new FixedSide(original.SideId, new UnitPrice(ExactDecimal.Parse("3"), quote),
                 new Quantity(ExactDecimal.Parse("1"), quote.Quantity), start, start.AddDays(1),
-                new DateTimeOffset(dates[1].ToDateTime(TimeOnly.MinValue), TimeSpan.Zero), FixedSide.Implementation, quote);
+                new DateTimeOffset(dates[1].ToDateTime(TimeOnly.MinValue), TimeSpan.Zero), FixedSide.Implementation, quote,SyntheticSideCalendars.Dated(false));
             Reject("side_payment_factors", () => changed.PV(new SideValuationContext(snapshot, context)));
         });
         Check("far-future supported dates keep exact day counts and no implicit extrapolation", () =>
@@ -149,7 +149,7 @@ internal static class DiscountLookupChecks
             Reject("side_payment_factors",()=>discounting.Resolve([keys[0],keys[0]],snapshot));
             Reject("discount_context",()=>discounting.Resolve(keys,snapshot with {MarketCutoff=snapshot.MarketCutoff.AddSeconds(-1)}));
             Reject("discount_curve_missing",()=>new CurrencyDefaultDiscounting(keys,snapshot,true,null));
-            Reject("side_payment_due",()=>new CurrencyDefaultDiscounting([keys[0] with {PaymentAt=at}],snapshot,false,null));
+            Reject("side_payment_due",()=>new CurrencyDefaultDiscounting([keys[0] with {PaymentAt=at.AddDays(-1)}],snapshot,false,null));
             Reject("discount_coverage",()=>new CurrencyDefaultDiscounting([keys[0] with {PaymentAt=new DateTimeOffset(dates[^1].AddDays(1).ToDateTime(TimeOnly.MinValue),TimeSpan.Zero)}],snapshot,true,mapping));
             var empty=new CurrencyDefaultDiscounting(ImmutableArray<SidePaymentKey>.Empty,snapshot,true,null);
             if(!empty.Inputs.IsEmpty || !empty.Resolve(ImmutableArray<SidePaymentKey>.Empty,snapshot).IsEmpty)throw new Exception("No eligible value dates invented rate inputs.");
@@ -163,7 +163,7 @@ internal static class DiscountLookupChecks
                 !keys.All(k=>covering.Inputs[k].Factor==new CurrencyDefaultDiscounting(keys,snapshot,true,mapping).Inputs[k].Factor))
                 throw new Exception("An uncovered payment date failed or changed the covered ones.");
             Reject("discount_curve_missing",()=>CurrencyDefaultDiscounting.Covering(keys,snapshot,true,null,out _));
-            Reject("side_payment_due",()=>CurrencyDefaultDiscounting.Covering([keys[0] with {PaymentAt=at}],snapshot,true,mapping,out _));
+            Reject("side_payment_due",()=>CurrencyDefaultDiscounting.Covering([keys[0] with {PaymentAt=at.AddDays(-1)}],snapshot,true,mapping,out _));
         });
         return passed;
     }

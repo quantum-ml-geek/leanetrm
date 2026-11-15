@@ -3,6 +3,7 @@ using Npgsql;
 using OpenEtrm.MarketData;
 using OpenEtrm.MarketData.Calculation;
 using OpenEtrm.MarketData.CustomCurves;
+using OpenEtrm.MarketData.Power;
 using System.Globalization;
 
 namespace OpenEtrm.Api;
@@ -79,7 +80,7 @@ public static partial class CustomCurves
             calendars=calendars.Select(row=>new{code=row.Reference.Code,name=row.Reference.Code,row.Reference.CatalogId,row.Reference.RevisionId}),
             schedules=versions.Where(v=>v.State=="published").Select(v=>new{value=v.Id.ToString("D")+":"+v.Version.ToString(CultureInfo.InvariantCulture),name=v.Definition.Name,v.Id,v.Version}),
             contextSchedules=contextSchedules.Select(v=>new{value=v.Id.ToString("D")+":"+v.Version.ToString(CultureInfo.InvariantCulture),name=v.Definition.Name,v.Id,v.Version}),
-            powerProducts=powerProducts.Where(p=>p.State=="published").Select(p=>new{p.Id,p.Code,p.Name,p.Version,p.Clock}),
+            powerProducts=powerProducts.Where(p=>p.State=="published"&&p.Calendar is not null&&p.HolidayTreatment==PublishedTouBinding.HolidayConvention).Select(p=>new{p.Id,p.Code,p.Name,p.Version,p.Clock,p.Calendar,p.HolidayTreatment}),
             powerProfiles=data.References["delivery_profiles"].Where(p=>p.Text("interval_minutes")=="60").Select(p=>new{code=p.Text("code")}),
             powerPublications=powerPublications.Select(p=>new{id=p.Key.Id,p.Name,p.Key.Version}),
             powerSettlementIndices=powerPublications.SelectMany(p=>p.Indices).DistinctBy(i=>i.Key).Select(i=>new{code=i.Key.Code}),

@@ -870,6 +870,15 @@ Each side may have its own commodity, location, unit, currency, index, delivery
 shape, observation convention, payment convention and calendar. An instrument
 does not impose a shared location or schedule on all its sides.
 
+D403 supersedes D402: one versioned Side policy binds each applicable schedule
+purpose explicitly. Different purposes may use different exact calendars, while
+every period of a purpose uses the same binding. Product-owned and linked source
+schedules retain their original terms. Standard payment coordinates remain
+internal; users see their UTC contractual date. The unified contract requires
+explicit review of incompatible stored terms, without automatic rewrites or a
+second execution path. Supported product families have passed the mandatory
+synthetic gate; see the [implementation record](implementation.md#explicit-side-calendars-and-payment-days-d403).
+
 Physical activity and its financial payments remain distinguishable. Reusing a
 physical quantity as a payment basis must not count that quantity or cashflow
 twice. Operating constraints must not be disguised as linear financial sides.
@@ -1137,7 +1146,8 @@ pins (D172). A corrected actual reaches valuation only through a new snapshot th
 selects it, or through a certified context's latest-correction policy at its cutoff.
 The bounded implementation consumes qualified, explicit dated schedules; it does
 not invent publisher conventions, peak calendars or holiday/DST publication rules.
-Old projection-only definitions retain their original boundary and replay meaning.
+Stored projection-only bytes remain unchanged. Definitions incompatible with the
+unified execution contract require explicit review before further execution.
 
 Contractual payment dates are generated from each side's payment convention,
 not authored as payment timestamps. New entry chooses monthly payment frequency,
@@ -1146,8 +1156,9 @@ applicable lag basis/short-month policy, business-day adjustment and exact calen
 Generate anchor/lag first and adjust afterward. Retain the immutable originating
 rule, calendar and unadjusted/final dates on the actual valued payment plan.
 Calendar-day dates do not shift with the user's display time zone. Existing
-manual-instant revisions remain exact historical definitions; no rule is inferred
-from their dates. New writes require explicit rules.
+manual-instant revisions remain exact historical records; no rule is inferred
+from their dates. Execution requires terms and retained programs consistent with
+the unified payment-day contract. New scheduled writes require explicit rules.
 
 Commodity is selected from the pinned reference catalogue and filters available
 floating indices/curves and compatible units. Exact quote/quantity references

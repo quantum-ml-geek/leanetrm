@@ -45,7 +45,7 @@ def run_checks(Client, check):
     peak=c.call('power/preview',request(block='peak'))
     off=c.call('power/preview',request(block='off'))
     check('on-peak and off-peak partition the actual UTC intervals',set(r['start'] for r in peak['rows']).isdisjoint(r['start'] for r in off['rows']) and len(peak['rows'])+len(off['rows'])==len(result['rows']))
-    check('reference calendar closure removes exactly one 16-hour peak weekday',peak['summary']['hours']=='352' and peak['holidays']==['2021-03-15'] and peak['holidayCalendar']=='test_business')
+    check('published product calendar closure removes exactly one 16-hour peak weekday',peak['summary']['hours']=='352' and peak['holidays']==['2021-03-15'] and peak['holidayCalendar']['code']=='test_business' and peak['sourceIndexCalendar']=='test_business')
     c.call('power/preview',{**body,'holidayDates':['2021-03-16']},expected=400)
     check('clients cannot supply their own holiday list')
     custom=c.call('power/preview',{**body,'priceType':'Custom test','timing':'Custom timing'})

@@ -1,4 +1,5 @@
 """Independent cash/exposure oracles for temporary, unit-aware deal valuation."""
+from synthetic_side_calendars import all_dates_policy
 from copy import deepcopy
 from fractions import Fraction as F
 from preview_client import PreviewClient
@@ -20,8 +21,8 @@ def run_checks(url, query, manifest, client=None):
         daily = curve.startswith('daily_')
         return {'context': context, 'definitionRevisionId': index['definitionRevisionId'], 'commodity': index['commodity'],
                 'quantity': {'value': amount, 'specification': index['quantityChoices'][0]['specification']}, 'fixedCoefficient': '-1', 'discounting': False,
-                'fixed': {'price': '3', 'currency': index['currencyCode'], 'deliveryFrom': '2021-01-01', 'deliveryTo': '2021-02-01', 'paymentSchedule': rule},
-                'floating': {'spread': '0', 'settlement': {'mode': 'curve_target', 'index': None, 'projectionPolicy': None}, 'curve': curve, 'index': index['index'], 'currency': index['currencyCode'], 'deliveryFrom': '2021-01-01', 'deliveryTo': '2021-02-01', 'paymentSchedule': rule, 'resetFrequency': 'daily' if daily else 'monthly', 'averagingMethod': 'arithmetic' if daily else 'none'}}
+                'fixed': {'calendarPolicy': all_dates_policy(observation=False), 'price': '3', 'currency': index['currencyCode'], 'deliveryFrom': '2021-01-01', 'deliveryTo': '2021-02-01', 'paymentSchedule': rule},
+                'floating': {'calendarPolicy': all_dates_policy(observation=True), 'spread': '0', 'settlement': {'mode': 'curve_target', 'index': None, 'projectionPolicy': None}, 'curve': curve, 'index': index['index'], 'currency': index['currencyCode'], 'deliveryFrom': '2021-01-01', 'deliveryTo': '2021-02-01', 'paymentSchedule': rule, 'resetFrequency': 'daily' if daily else 'monthly', 'averagingMethod': 'arithmetic' if daily else 'none'}}
 
     def run(draft, pv, deltas):
         priced = c.call('swaps/price', draft)

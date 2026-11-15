@@ -3,7 +3,7 @@ import json
 from uuid import uuid4
 
 
-def checks(query, manifest, call, managed, booking, occurrence, determine_policy, snapshot):
+def checks(query, manifest, call, managed, booking, occurrence, determine_policy, snapshot,calendar_source):
     catalog=manifest['catalogId']
     def lit(value):return "'"+json.dumps(value).replace("'","''")+"'::jsonb"
     booked=managed(dict(snapshotId=snapshot,booking={**booking,'operationId':str(uuid4())}))['LIFECYCLE_SWAP_BOOKED']
@@ -78,6 +78,14 @@ def checks(query, manifest, call, managed, booking, occurrence, determine_policy
         return call(f"SELECT security.admit_trading_business_source('{catalog}','{source['contextId']}','2021-01-15T08:00:00Z','2021-01-15');"
             f"SELECT lifecycle.record_swap_net_action('{catalog}',{lit(body)},lifecycle.capture_action_authority('{catalog}','swap.net',{lit(body)}),{lit(derived)})::text;")
     accepted=json.loads(native(first_request,calculation).splitlines()[-1]);assert accepted['paymentId']==first['paymentId'] and accepted['currentVersion']==7
+    from lifecycle_calendar_fixture import check_calendar_authority
+    retained=json.loads(query(f"SELECT request FROM lifecycle.commands WHERE(catalog_id,operation_id)=('{catalog}','{first_request['operationId']}');"))
+    check_calendar_authority(query,manifest,calendar_source,[(label,
+        f"SELECT security.admit_trading_business_source('{catalog}','{source['contextId']}','2021-01-15T08:00:00Z','2021-01-15');"
+        f"SELECT lifecycle.record_swap_net_action('{catalog}',{lit(body)},clock_timestamp()+interval '30 seconds',{lit(calculation)})")
+        for label,body in (('committed net retry',retained),('new net settlement',{**retained,'operationId':str(uuid4())}))])
+    assert json.loads(native(first_request,calculation).splitlines()[-1])==accepted
+
     for body,derived,code in [(dict(first_request,operationId=str(uuid4())),dict(calculation,amount='51'),'lifecycle_native_calculation'),
         (dict(first_request,operationId=str(uuid4())),dict(calculation,allocations=[dict(determination=ids[0],amount='-301'),dict(determination=ids[1],amount='351')]),'lifecycle_native_calculation')]:
         try:native(body,derived)

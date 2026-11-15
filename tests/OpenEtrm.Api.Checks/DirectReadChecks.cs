@@ -52,27 +52,49 @@ internal static class DirectReadChecks
                 var ids=packet.Select(row=>row.Id("id")).ToImmutableArray();
                 var at=all.Observations.Max(row=>row.Instant("observed_at"));
                 var ordered=ImmutableArray.Create(frames[0] with{At=at,ObservationIds=ids},frames[1] with{At=at,ObservationIds=[fault]});
-                var yielded=0;var faulted=false;
-                await Execute(connection,"SAVEPOINT ordered_stream",ct);
-                try
+                foreach(var filtered in new[]{false,true})
                 {
-                    await using(var choose=ScheduleStore.Command(connection,"SELECT set_config('openetrm.synthetic_frame_read_fault',$1,true)",[fault.ToString()]))
-                        await choose.ExecuteNonQueryAsync(ct);
+                    var series=filtered?packet.Select(row=>row.Id("series_id")).Distinct().ToImmutableArray():(ImmutableArray<Guid>?)null;
+                    var yielded=0;var faulted=false;
+                    await Execute(connection,"SAVEPOINT ordered_stream",ct);
                     try
                     {
-                        await foreach(var data in database.ReadFrameObservations(connection,metadata,ordered,ObservationReadScope.ExactPins,ct))
+                        await using(var choose=ScheduleStore.Command(connection,"SELECT set_config('openetrm.synthetic_frame_read_fault',$1,true)",[fault.ToString()]))
+                            await choose.ExecuteNonQueryAsync(ct);
+                        try
                         {
-                            if(yielded++!=0||!data.Observations.Select(row=>row.Id("id")).ToHashSet().SetEquals(ids))
-                                throw new Exception("The first streamed frame changed its exact pins or order.");
+                            await foreach(var data in database.ReadFrameObservations(connection,metadata,ordered,ObservationReadScope.ExactPins,ct,series))
+                            {
+                                if(yielded++!=0||!data.Observations.Select(row=>row.Id("id")).ToHashSet().SetEquals(ids))
+                                    throw new Exception("The first streamed frame changed its exact pins or order.");
+                            }
                         }
+                        catch(PostgresException error) when(error is {SqlState:"P0001",MessageText:"synthetic_frame_read_fault"}){faulted=true;}
                     }
-                    catch(PostgresException error) when(error is {SqlState:"P0001",MessageText:"synthetic_frame_read_fault"}){faulted=true;}
+                    finally{await Execute(connection,"ROLLBACK TO SAVEPOINT ordered_stream;RELEASE SAVEPOINT ordered_stream;SELECT 1",ct);}
+                    if(yielded!=1||!faulted)throw new Exception($"The first {(filtered?"series-filtered ":"")}frame must be yielded before a later frame's native read failure.");
+                    Console.WriteLine($"PASS exact {(filtered?"series-filtered ":"")}frame payloads stream in request order before a later native read failure and release their reader");
                 }
-                finally{await Execute(connection,"ROLLBACK TO SAVEPOINT ordered_stream;RELEASE SAVEPOINT ordered_stream;SELECT 1",ct);}
-                if(yielded!=1||!faulted)throw new Exception("The first frame must be yielded before a later frame's native read failure.");
-                Console.WriteLine("PASS exact frame payloads stream in request order before a later native read failure and release their reader");
                 return true;
             }
+
+            var source=all.Observations.Take(256).ToArray();
+            var exact=source.Select(row=>row.Id("id")).ToImmutableArray();
+            foreach(var series in new[]{ImmutableArray.Create(source[0].Id("series_id")),ImmutableArray<Guid>.Empty})
+            foreach(var missing in new[]{false,true})
+            {
+                var frame=frames[0] with{ObservationIds=missing?exact.Add(Guid.NewGuid()):exact};
+                var expectedPins=source.Where(row=>series.Contains(row.Id("series_id"))).Select(row=>row.Id("id")).ToHashSet();
+                var returned=0;
+                await foreach(var data in database.ReadFrameObservations(connection,metadata,[frame],ObservationReadScope.ExactPins,ct,series))
+                {
+                    if(data.CompletePins==missing||!data.Observations.Select(row=>row.Id("id")).ToHashSet().SetEquals(expectedPins))
+                        throw new Exception("Series filtering must retain full-frame completeness, including missing pins outside an empty or partial payload.");
+                    returned++;
+                }
+                if(returned!=1)throw new Exception("A filtered exact frame must produce one payload even when no series is demanded.");
+            }
+            Console.WriteLine("PASS exact series filtering preserves full-frame completeness for partial and empty payloads with unavailable pins");
 
             var group=all.Observations.GroupBy(row=>(row.Id("series_id"),row.Text("source_code"),row.Text("role")))
                 .First(rows=>rows.Select(row=>row.Instant("observed_at")).Distinct().Count()>=3).ToArray();

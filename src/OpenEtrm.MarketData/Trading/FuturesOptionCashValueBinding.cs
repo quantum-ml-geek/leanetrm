@@ -29,7 +29,7 @@ public sealed partial record FuturesOptionInstrument
         var margins=CashFuturesOptionModel.RequiredMarginOccurrences(Series.Terms,selected.Margin,context.CalculationAt,reference.Policy);
         return new(Id,CashFuturesOptionPolicy.Version,[reference.Underlying],UnitQuantity.Specification,Currency){
             Time=ValuationTimeDependency.Pinned,
-            DiscountInputs=[new(new(Id,0,Series.Terms.ExpiryAt,Currency),reference.Discounting),
+            DiscountInputs=[new(new(Id,0,Series.Terms.ExpiryAt,Currency){Timing=ValueTimingKind.Instant},reference.Discounting),
                 ..margins.Where(o=>o.DueAt>context.CalculationAt).Select(o=>new DiscountInput(MarginPayment(o),selected.MarginDiscounting))],
             Volatility=reference.Calibration is SolvedVolatility solved?[new(reference.Id,solved.Volatility.ToString(),VolatilityInput.Annualized)]:[],
             StaticDerivatives=new(StaticDerivativeRestriction.Version,"cash_option_reference_strategy_derivatives_not_qualified"),

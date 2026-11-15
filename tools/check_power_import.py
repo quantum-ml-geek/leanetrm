@@ -27,7 +27,10 @@ def run_checks(query,manifest,dotnet,root,environment):
     INSERT INTO power_data.sources VALUES('{source}','{c}','Synthetic delivery prices','PJM','da_hrl_lmps','DA','51288',60,'{r}','{rr}','test_hub_a','synthetic_eastern','usd','test_power_quantity');
     INSERT INTO power_data.jobs VALUES('{job}',gen_random_uuid(),'Synthetic paused schedule','synthetic_collector','{c}','PJM',true,false,'0 8 * * *','UTC',-7,-1);
     INSERT INTO power_data.job_sources VALUES('{job}','{source}','{c}');""")
-    query(f"INSERT INTO power_data.operating_days VALUES('{r}','{rr}','synthetic_eastern','2026-11-02','2026-11-02T05:00:00Z','2026-11-03T05:00:00Z','{'a'*64}');")
+    captured=json.loads(query(f"SET SESSION AUTHORIZATION synthetic_collector;DO $$BEGIN PERFORM power_data.worker_lock();END$$;SELECT power_data.source_config('{job}');"))[0]
+    assert captured.get('clockCapture',{}).get('clock_code')=='synthetic_eastern', 'Collectors must consume the exact published clock, not current installed rules.'
+    assert captured['clockCapture']['definition_digest']==query(f"SELECT definition_digest FROM ref_data.clock_captures WHERE(catalog_id,revision_id,clock_code)=('{r}','{rr}','synthetic_eastern');")
+    query(f"INSERT INTO power_data.operating_days VALUES('{r}','{rr}','synthetic_eastern','2026-11-02','2026-11-02T05:00:00Z','2026-11-03T05:00:00Z',(SELECT encode(definition_digest,'hex') FROM ref_data.clock_captures WHERE(catalog_id,revision_id,clock_code)=('{r}','{rr}','synthetic_eastern')));")
     from datetime import datetime,timedelta,timezone
     first_at=datetime(2026,11,2,5,tzinfo=timezone.utc)
     def payload(price):return json.dumps([{'sourceId':source,'rows':[{'start':(first_at+timedelta(hours=h)).isoformat(),'end':(first_at+timedelta(hours=h+1)).isoformat(),'price':price,'revision':1} for h in range(24)]}])
@@ -35,6 +38,22 @@ def run_checks(query,manifest,dotnet,root,environment):
         return query(f"""SET SESSION AUTHORIZATION synthetic_collector;SELECT power_data.worker_lock();
         DO $$DECLARE a uuid;BEGIN a=power_data.begin_attempt('{job}','2026-11-02','2026-11-02');{extra}
         PERFORM power_data.finish_attempt(a,'{payload(price)}'::jsonb,NULL);END$$;""")
+    # Populated upgrades preserve old rows. Admission must recheck their exact
+    # clock proof even if a prior schema accepted shifted dates or any digest.
+    for edit in ["starts_at=starts_at+interval '1 hour',ends_at=ends_at+interval '1 hour'", "clock_fingerprint='"+'b'*64+"'"]:
+        for phase in ('begin','finish'):
+            admission=f"SELECT power_data.begin_attempt('{job}','2026-11-02','2026-11-02');" if phase=='begin' else f"SELECT power_data.finish_attempt(:'held_attempt','{payload('1')}'::jsonb,NULL);"
+            held='' if phase=='begin' else f"SET SESSION AUTHORIZATION synthetic_collector;SELECT power_data.worker_lock();SELECT power_data.begin_attempt('{job}','2026-11-02','2026-11-02') AS held_attempt \\gset\nRESET SESSION AUTHORIZATION;"
+            try:
+                query(f"""BEGIN;{held}
+                  ALTER TABLE power_data.operating_days DISABLE TRIGGER USER;
+                  UPDATE power_data.operating_days SET {edit} WHERE(reference_catalog_id,reference_revision_id,clock_code,operating_date)=('{r}','{rr}','synthetic_eastern','2026-11-02');
+                  ALTER TABLE power_data.operating_days ENABLE TRIGGER USER;
+                  SET SESSION AUTHORIZATION synthetic_collector;SELECT power_data.worker_lock();{admission}ROLLBACK;""")
+            except RuntimeError as error:
+                assert 'collection_clock' in str(error),str(error)
+            else:
+                raise AssertionError('Retained divergent operating day entered '+phase)
     # The job's scheduler remains paused while an explicit operator run is supported.
     publish('-17.125')
     assert query("SELECT count(*) FROM power_data.batches;")=='1'
@@ -84,7 +103,7 @@ def run_checks(query,manifest,dotnet,root,environment):
     token=query(f"SET SESSION AUTHORIZATION preview_authenticator;SELECT security.issue_context('https://preview.invalid','editor','human_interactive','{t}','{w}',NULL,'preview_runtime',60);")
     query(f"SET SESSION AUTHORIZATION preview_runtime;BEGIN;SELECT security.use_context('{token}');SELECT power_data.read_prices('{source}','2026-10-02T04:00:00Z','2026-11-02T05:00:00Z','{latest}') IS NOT NULL;COMMIT;")
     # Independent calendar oracles: PJM 25-hour fall day and ERCOT 92/100 quarter-hours.
-    query(f"INSERT INTO power_data.operating_days VALUES('{r}','{rr}','synthetic_eastern','2026-11-01','2026-11-01T04:00:00Z','2026-11-02T05:00:00Z','{'a'*64}');")
+    query(f"INSERT INTO power_data.operating_days VALUES('{r}','{rr}','synthetic_eastern','2026-11-01','2026-11-01T04:00:00Z','2026-11-02T05:00:00Z',(SELECT encode(definition_digest,'hex') FROM ref_data.clock_captures WHERE(catalog_id,revision_id,clock_code)=('{r}','{rr}','synthetic_eastern')));")
     fall_start=datetime(2026,11,1,4,tzinfo=timezone.utc)
     fall_payload=json.dumps([{'sourceId':source,'rows':[{'start':(fall_start+timedelta(hours=h)).isoformat(),'end':(fall_start+timedelta(hours=h+1)).isoformat(),'price':'-3.125','revision':1} for h in range(25)]}])
     query(f"SET SESSION AUTHORIZATION synthetic_collector;BEGIN;SELECT power_data.worker_lock();DO $$DECLARE a uuid;BEGIN a=power_data.begin_attempt('{job}','2026-11-01','2026-11-01');PERFORM power_data.finish_attempt(a,'{fall_payload}'::jsonb,NULL);END$$;ROLLBACK;")
@@ -96,7 +115,7 @@ def run_checks(query,manifest,dotnet,root,environment):
         INSERT INTO power_data.sources VALUES('{ercot_source}','{c}','Synthetic ERCOT settlement prices','ERCOT','np6-905-cd/spp_node_zone_hub','RT','HB_NORTH',15,'{r}','{rr}','test_hub_a','synthetic_central','usd','test_power_quantity');
         INSERT INTO power_data.jobs VALUES('{ercot_job}',gen_random_uuid(),'Synthetic ERCOT check','synthetic_collector','{c}','ERCOT',true,false,'0 8 * * *','UTC',-7,-1);
         INSERT INTO power_data.job_sources VALUES('{ercot_job}','{ercot_source}','{c}');
-        INSERT INTO power_data.operating_days VALUES('{r}','{rr}','synthetic_central','{day}','{start.isoformat()}','{(start+timedelta(minutes=15*count)).isoformat()}','{'a'*64}');
+        INSERT INTO power_data.operating_days VALUES('{r}','{rr}','synthetic_central','{day}','{start.isoformat()}','{(start+timedelta(minutes=15*count)).isoformat()}',(SELECT encode(definition_digest,'hex') FROM ref_data.clock_captures WHERE(catalog_id,revision_id,clock_code)=('{r}','{rr}','synthetic_central')));
         SET SESSION AUTHORIZATION synthetic_collector;SELECT power_data.worker_lock();DO $$DECLARE a uuid;BEGIN a=power_data.begin_attempt('{ercot_job}','{day}','{day}');PERFORM power_data.finish_attempt(a,'{values}'::jsonb,NULL);END$$;ROLLBACK;""")
     # Malformed/duplicate input must roll back the whole batch, including attempt state.
     query(f"""SET SESSION AUTHORIZATION synthetic_collector;SELECT power_data.worker_lock();DO $$DECLARE a uuid;BEGIN
@@ -146,7 +165,7 @@ SELECT power_data.finish_attempt(:'fence_token','{payload('5')}'::jsonb,NULL);""
     worker_day,worker_offset=malformed_report_window(datetime.now(timezone.utc).date())
     directory=root/'collector-check';directory.mkdir(mode=0o700)
     request=directory/'calendar.json';calendar_sql=directory/'calendar.sql'
-    request.write_text(json.dumps({'referenceCatalogId':r,'referenceRevisionId':rr,'from':worker_day.isoformat(),'through':worker_day.isoformat(),'clocks':[{'code':'synthetic_eastern','kind':'iana','fixedOffsetSeconds':None,'ianaZone':'America/New_York','tzdbVersion':installed_tzdb()}]}))
+    request.write_text(json.dumps({'referenceCatalogId':r,'referenceRevisionId':rr,'from':worker_day.isoformat(),'through':worker_day.isoformat(),'clockCodes':['synthetic_eastern']}))
     repository=Path(__file__).resolve().parents[1]
     subprocess.run([str(dotnet),str(repository/'src/OpenEtrm.Api/bin/Debug/net10.0/OpenEtrm.Api.dll'),'--render-power-days',str(request),str(calendar_sql)],cwd=repository,env=environment,check=True,timeout=30)
     query(calendar_sql.read_text());query(f"UPDATE power_data.jobs SET from_day={worker_offset},through_day={worker_offset} WHERE id='{job}';INSERT INTO power_data.request_gates VALUES('PJM',120,clock_timestamp());")

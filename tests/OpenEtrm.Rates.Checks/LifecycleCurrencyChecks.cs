@@ -21,7 +21,7 @@ internal static class LifecycleCurrencyChecks
             RateConventionSet.Parse("actual_360","simple","linear_zero","none","decimal_per_year"),
             [..new[]{1,2,4,8}.Select((n,i)=>new RateTenor(n+"D",series[i],new DateOnly(2031,1,1).AddDays(n)))],Guid.NewGuid(),1);
         var mapping=new CurrencyDiscountCurve(Guid.NewGuid(),R("usd"),definition);
-        var payment=new SidePaymentKey(Guid.NewGuid(),0,due,R("usd"));
+        var payment=new SidePaymentKey(Guid.NewGuid(),0,due,R("usd")){Timing=ValueTimingKind.Instant};
         ISideDiscounting provider=new LifecycleCurrencyDiscounting(mapping,source,RateDiscountTiming.Version,ClockChange.FrozenInputs);
         if(provider.ResolveForValuation([payment],source,source.ValuationAt,null).Single().DiscountFactor.ToString()!="0.997755672276703731")
             throw new Exception("Ordinary opening PV must use the selected exact-instant curve without requiring a nonexistent clock roll.");
@@ -50,9 +50,10 @@ internal static class LifecycleCurrencyChecks
             Timing=f.RateDefinition.Timing! with{CalculationAt=horizon.AddHours(1)}}})));
         Reject("discount_curve",()=>Value(new Changed((IProjectionCurrencyCurve)provider,f=>f with{RateDefinition=f.RateDefinition! with{
             Pillars=f.RateDefinition.Pillars.RemoveAt(1)}})));
+        Reject("risk_dependency",()=>Value(new Changed((IProjectionCurrencyCurve)provider,f=>f with{RateDefinition=f.RateDefinition! with{Timing=null}})));
         Reject("discount_context",()=>provider.Resolve([payment],source.WithKnowledge(Guid.NewGuid(),source.Knowledge!.KnownAt)));
         Reject("valuation_time_event",()=>provider.ResolveForValuation([payment],source,due,ClockChange.FrozenInputs));
-        var second=new SidePaymentKey(Guid.NewGuid(),1,due,R("usd"));
+        var second=new SidePaymentKey(Guid.NewGuid(),1,due,R("usd")){Timing=ValueTimingKind.Instant};
         if(provider.Resolve([second],source).Single().DiscountFactor.ToString()!="0.997755672276703731")
             throw new Exception("A deterministic new cash membership could not reuse its captured currency term structure.");
         Console.WriteLine("PASS lifecycle currency curve: exact intraday conditional cash and retained three-pillar source evidence");

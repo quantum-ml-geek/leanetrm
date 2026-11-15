@@ -1,10 +1,11 @@
+import type {SideCalendarPolicy} from './side-calendar.js';
 import type {TicketChoice,TicketDescription,TicketDraft,TicketField,TicketLookup} from './ticket-types.js';
 
 // The state of one deal ticket: the user's values, drawn from a backend description. Every function
 // returns a new state; the description alone says which fields exist, which are editable and what depends on what.
 export type Source={kind:string;label:string};
 export type FieldValue={value:string;looked?:Source;offered?:{value:string;kind:string;label:string}};
-export type TicketSide={kind:string;code:string;values:Record<string,FieldValue>};
+export type TicketSide={kind:string;code:string;values:Record<string,FieldValue>;calendarPolicy?:SideCalendarPolicy};
 // removed holds the codes of the sides taken off the ticket, which no later side is given.
 export type TicketState={description:TicketDescription;trade:Record<string,FieldValue>;sides:TicketSide[];removed:string[];notices:string[];previewSerial:number};
 
@@ -77,7 +78,7 @@ export function ticketOf(d:TicketDescription,draft:TicketDraft):TicketState{
  if(draft.product!==d.product||draft.version!==d.version)throw new Error(`The draft is for ${draft.product} version ${draft.version}, not ${d.product} version ${d.version}.`);
  const values=(given:Record<string,string>)=>Object.fromEntries(Object.entries(given).map(([id,value])=>[id,{value}]));
  for(const side of draft.sides)if(!d.sides.some(k=>k.kind===side.kind))throw new Error(`The ticket has no side kind '${side.kind}'.`);
- return {description:d,trade:values(draft.trade),sides:draft.sides.map(x=>({kind:x.kind,code:x.code,values:values(x.values)})),removed:[],notices:[],previewSerial:0};
+ return {description:d,trade:values(draft.trade),sides:draft.sides.map(x=>({kind:x.kind,code:x.code,...x.calendarPolicy?{calendarPolicy:structuredClone(x.calendarPolicy)}:{},values:values(x.values)})),removed:[],notices:[],previewSerial:0};
 }
 
 export function applyLookup(s:TicketState,side:string|null,field:string,r:{value:string;source:Source}):TicketState{
@@ -141,7 +142,7 @@ function editable(fields:TicketField[],values:Record<string,FieldValue>){
 export function draftOf(s:TicketState):TicketDraft{
  const d=s.description;
  return {product:d.product,version:d.version,trade:editable(d.tradeFields,s.trade),
-  sides:s.sides.map(x=>({kind:x.kind,code:x.code,values:editable(d.sides.find(k=>k.kind===x.kind)!.fields,x.values)}))};
+  sides:s.sides.map(x=>({kind:x.kind,code:x.code,...x.calendarPolicy?{calendarPolicy:structuredClone(x.calendarPolicy)}:{},values:editable(d.sides.find(k=>k.kind===x.kind)!.fields,x.values)}))};
 }
 
 export function nextPreview(s:TicketState):{state:TicketState;serial:number}{
@@ -150,3 +151,8 @@ export function nextPreview(s:TicketState):{state:TicketState;serial:number}{
 }
 
 export function acceptPreview(s:TicketState,serial:number):boolean{return serial===s.previewSerial;}
+
+export function setCalendarPolicy(s:TicketState,side:string,calendarPolicy:SideCalendarPolicy):TicketState{
+ if(!s.sides.some(x=>x.code===side))throw Error('Choose an existing Side.');
+ return{...s,sides:s.sides.map(x=>x.code===side?{...x,calendarPolicy:structuredClone(calendarPolicy)}:x)};
+}

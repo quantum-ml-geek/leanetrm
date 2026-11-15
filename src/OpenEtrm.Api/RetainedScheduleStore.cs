@@ -282,32 +282,34 @@ internal sealed partial class RetainedScheduleStore
     private async Task<ImmutableArray<JsonElement>> ReadHeaders(NpgsqlConnection connection,Guid instrument,
         Guid? context,DateTimeOffset? asOf,CancellationToken cancellation,bool recoverMissing=false,bool contentIdentity=false)
     {
-        // Membership visibility and every current source authority are checked
-        // on every instrument read, including when its immutable content is shared.
-        // A report may continue with other instruments after this exact missing-artifact
-        // refusal. PostgreSQL exceptions abort the transaction, so restore only this
-        // read's savepoint; permission, cancellation and integrity failures still escape.
-        const string savepoint="retained_schedule_admission";
-        async Task Savepoint(string sql)
-        {await using var command=ScheduleStore.Command(connection,sql);await command.ExecuteNonQueryAsync(cancellation);}
-        if(recoverMissing)await Savepoint("SAVEPOINT "+savepoint);
-        ImmutableArray<JsonElement> metadata;
-        try
-        {
-            var query=contentIdentity
-                ?"SELECT (h.value||m.value)::text FROM security.read_instrument_side_schedule_headers($1,$2,$3,$4) m(value) CROSS JOIN LATERAL security.read_side_schedule_header($1,(m.value->>'schedule_id')::uuid,NULL,$2,$3,$4) h(value) ORDER BY (m.value->>'slot')::integer"
-                :"SELECT security.read_instrument_side_schedule_headers($1,$2,$3,$4)::text";
-            metadata=await ReadRows(connection,query,
-                [Catalog,instrument,(object?)context??DBNull.Value,(object?)asOf??DBNull.Value],cancellation);
-        }
-        catch(PostgresException error)when(error.SqlState=="P0001"&&error.MessageText=="side_schedule_missing")
-        {
-            if(recoverMissing){await Savepoint("ROLLBACK TO SAVEPOINT "+savepoint);await Savepoint("RELEASE SAVEPOINT "+savepoint);}
-            throw new MarketDataException("side_schedule_missing","The booked instrument has no complete retained schedule and must be rebooked.");
-        }
-        if(recoverMissing)await Savepoint("RELEASE SAVEPOINT "+savepoint);
+        // Authority is checked on every read, including shared immutable content.
+        var query=contentIdentity
+            ?"SELECT (h.value||m.value)::text FROM security.read_instrument_side_schedule_headers($1,$2,$3,$4) m(value) CROSS JOIN LATERAL security.read_side_schedule_header($1,(m.value->>'schedule_id')::uuid,NULL,$2,$3,$4) h(value) ORDER BY (m.value->>'slot')::integer"
+            :"SELECT security.read_instrument_side_schedule_headers($1,$2,$3,$4)::text";
+        var metadata=await ReadArtifact(connection,()=>ReadRows(connection,query,
+            [Catalog,instrument,(object?)context??DBNull.Value,(object?)asOf??DBNull.Value],cancellation),recoverMissing,cancellation);
         if(metadata.IsEmpty)throw new MarketDataException("side_schedule_missing","The booked instrument has no retained schedule and must be rebooked.");
         return metadata;
+    }
+    // Reports may continue after an explicitly recoverable artifact refusal.
+    // Restore only this read: authority, cancellation and corruption stay hard errors.
+    private static async Task<T> ReadArtifact<T>(NpgsqlConnection connection,Func<Task<T>> read,bool recoverMissing,CancellationToken ct)
+    {
+        const string savepoint="retained_schedule_admission";
+        async Task Savepoint(string sql)
+        {await using var command=ScheduleStore.Command(connection,sql);await command.ExecuteNonQueryAsync(ct);}
+        if(recoverMissing)await Savepoint("SAVEPOINT "+savepoint);
+        T result;
+        try{result=await read();}
+        catch(PostgresException error)when(error.SqlState=="P0001"&&PpaBlotterAdmission.NeedsRebooking(error.MessageText))
+        {
+            if(recoverMissing){await Savepoint("ROLLBACK TO SAVEPOINT "+savepoint);await Savepoint("RELEASE SAVEPOINT "+savepoint);}
+            throw new MarketDataException(error.MessageText,"The booked instrument has no supported complete retained schedule and must be rebooked.");
+        }
+        catch(MarketDataException error)when(recoverMissing&&PpaBlotterAdmission.NeedsRebooking(error.Code))
+        {await Savepoint("RELEASE SAVEPOINT "+savepoint);throw;}
+        if(recoverMissing)await Savepoint("RELEASE SAVEPOINT "+savepoint);
+        return result;
     }
     internal async Task RequireCurrent(NpgsqlConnection connection,SidedInstrument instrument,Guid context,
         DateTimeOffset asOf,CancellationToken cancellation)

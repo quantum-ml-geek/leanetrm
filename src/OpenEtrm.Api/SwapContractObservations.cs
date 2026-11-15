@@ -57,7 +57,7 @@ internal static class SwapContractObservations
 
 public sealed partial class SwapStore
 {
-    private ResolvedFloatingSwapPeriod ResolveContractObservationPeriod(PreviewData data,SwapFloatingInput input,string? commodity,JsonElement? retained)
+    private ResolvedFloatingSwapPeriod ResolveContractObservationPeriod(PreviewData data,SwapFloatingInput input,string? commodity,JsonElement? retained,SideCalendarPolicy calendars)
     {
         var terms=input.ContractObservations!;
         if(input.Index is not null || input.Settlement is not null || input.CustomProjection is not null || input.ObservationSchedule is not null ||
@@ -69,6 +69,8 @@ public sealed partial class SwapStore
             quote.Kind!=QuoteKind.Outright || quote.Currency.Code!=input.Currency || commodity is not null&&commodity!=curve.Text("commodity_code"))
             throw Error("contract_observation_source","Choose an exact direct futures settlement curve with the declared quote, commodity and role.");
         var from=Date(input.DeliveryFrom);var to=Date(input.DeliveryTo);
+        calendars.RequirePurposes(true,true,true);
+        calendars.For(CalendarPurpose.Observation).RequireCoverage(from,to);
         if(from.Day!=1 || from.Year>=9999 || from.AddMonths(1)!=to || input.PaymentSchedule is null || input.Spread is null)
             throw Error("contract_observation_input","Supply one complete month, explicit payment terms and spread.");
         var policy=terms.ExpiryPolicy switch {"require_live"=>ContractObservationExpiry.RequireLive,"carry_final_settlement"=>ContractObservationExpiry.CarryFinalSettlement,
@@ -112,11 +114,11 @@ public sealed partial class SwapStore
                 selection,new(data.ReferenceRevision,source),new(data.DefinitionRevision,series),ObservationRole.DailySettlement,policy,terms.Implementation);
             lookup.Validate();return lookup;
         }
-        var rule=Payment(data,input.PaymentSchedule);
+        var rule=Payment(data,input.PaymentSchedule,calendars);
         var payment=new DateTimeOffset(rule.Generate(from,to).Date.ToDateTime(TimeOnly.MinValue,DateTimeKind.Utc));
         return new(null,quote,new(ExactDecimal.Parse("1"),quote.Quantity),
             new(from,to,lookups.Min(row=>row.FixingAt),payment,FloatingAveraging.CalendarDayArithmetic,
                 [..lookups.Select(row=>new SwapProjection(row.Market,row.Contract))],[],null,SwapScheduledAssembly.Spread(input.Spread,quote),
-                rule,null,OpenEtrm.Shared.Numerics.ExactRatio.One,FloatingSide.ContractObservationImplementation){ContractObservations=lookups});
+                rule,null,OpenEtrm.Shared.Numerics.ExactRatio.One,FloatingSide.ContractObservationImplementation){ContractObservations=lookups},calendars);
     }
 }

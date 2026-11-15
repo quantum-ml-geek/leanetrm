@@ -3,6 +3,8 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using OpenEtrm.Shared.Temporal;
+using OpenEtrm.MarketData;
+using OpenEtrm.MarketData.Trading;
 
 namespace OpenEtrm.Api;
 
@@ -62,16 +64,17 @@ public sealed class DateWorkspace
     }
     public static DateSet Calendar(ReferenceCalendar calendar)
     {
-        if(calendar.WeekendMask is <0 or >127 || calendar.Days.Select(d=>d.Date).Distinct().Count()!=calendar.Days.Length)
-            throw Error("calendar_definition","The reference calendar has an invalid weekend mask or repeated days.");
         var count=calendar.CoverageTo.DayNumber-calendar.CoverageFrom.DayNumber;
         if(count<1||count>3660)throw Error("calendar_definition","Calendar coverage must be nonempty and at most 3660 days.");
-        var overrides=DateSet.Create(calendar.CoverageFrom,calendar.CoverageTo,calendar.Days.Select(d=>d.Date));
-        var open=calendar.Days.Where(d=>d.Open).Select(d=>d.Date).ToHashSet();
-        bool Weekend(DateOnly day)=>(calendar.WeekendMask>>(((int)day.DayOfWeek+6)%7)&1)==1;
-        return DateSet.Create(calendar.CoverageFrom,calendar.CoverageTo,Enumerable.Range(0,count).Select(calendar.CoverageFrom.AddDays)
-            .Where(day=>overrides.Contains(day)?open.Contains(day):!Weekend(day)));
+        if(calendar.Days.Any(day=>day.Date<calendar.CoverageFrom||day.Date>=calendar.CoverageTo))
+            throw Error("date_coverage","Calendar exceptions must lie within the exact definition's coverage.");
+        try{return CaptureCalendar(calendar).BusinessDays;}
+        catch(MarketDataException error){throw Error(error.Code,error.Message);}
     }
+    internal static CalendarDefinition CaptureCalendar(ReferenceCalendar calendar)=>new(
+        new(new(calendar.Reference.CatalogId,calendar.Reference.RevisionId),calendar.Reference.Code),
+        calendar.CoverageFrom,calendar.CoverageTo,calendar.WeekendMask,
+        [..calendar.Days.Select(day=>new CalendarException(day.Date,day.Open))],CalendarDefinition.Implementation);
     // The supported schedule rules: one table drives both validation and the editor's choices.
     private static readonly (string Code,string Name,MonthlyAnchor Value)[] AnchorRules=[("day","Day of month",MonthlyAnchor.DayOfMonth),("month_end","Month end",MonthlyAnchor.MonthEnd)];
     private static readonly (string Code,string Name,ShortMonth Value)[] ShortMonthRules=[("reject","Reject the schedule",ShortMonth.Reject),

@@ -88,7 +88,7 @@ internal static class GasCashoutProjectionChecks
         private ExactDecimal Factor(DateTimeOffset at)=>ExactDecimal.Parse(at==due?"0.6":at==horizon?"0.8":"1");
         public ImmutableArray<SidePaymentFactor> Resolve(ImmutableArray<SidePaymentKey> payments,MarketSnapshot selected)=>[..payments.Select(p=>new SidePaymentFactor(p,Factor(p.PaymentAt),selected,DiscountFactorSource.Explicit))];
         public ImmutableArray<SidePaymentFactor> ResolveForValuation(ImmutableArray<SidePaymentKey> payments,MarketSnapshot selected,DateTimeOffset at,string? policy)=>
-            [..payments.Select(p=>new SidePaymentFactor(p,Factor(p.PaymentAt).DivideExact(Factor(at)),selected,DiscountFactorSource.Explicit))];
+            [..payments.Select(p=>new SidePaymentFactor(p,Factor(p.PaymentAt).DivideExact(Factor(at)),selected,DiscountFactorSource.Explicit){ClockRoll=new(policy!,at,Factor(p.PaymentAt),Factor(at),[])})];
     }
     private static void Equal(ExactMoney actual,string expected){if(actual!=ExactMoney.Parse(expected,actual.Currency))throw new Exception($"Expected cashout {expected}; got {actual.ToExactString()}.");}
     private static void Reject(Action action){try{action();}catch(MarketDataException e)when(e.Code=="gas_projection_cashout"){return;}throw new Exception("Expected explicit cashout policy refusal.");}

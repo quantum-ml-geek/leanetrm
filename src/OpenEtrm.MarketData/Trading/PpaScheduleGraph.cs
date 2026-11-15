@@ -141,7 +141,7 @@ internal sealed class PpaScheduleGraph
                     var amount = graph.Add([..boundComponents.Select(c => graph.Amount(c.Price, c.Quantity))]);
                     graph.CountRowAmounts(amount);
                     SidePaymentFactor? factor = null; ScheduleCashColumn? pv = null;ScheduleDiscountNode? discount=null;
-                    if (partition.Key.Holding) pv = amount;
+                    if (partition.Key.Holding || side is FixedSide or FloatingSide && PaymentDatePolicy.SameDay(rows[0].ValueAt,scenario.Snapshot.ValuationAt)) pv = amount;
                     else if (rows[0].ValueAt > scenario.Snapshot.ValuationAt)
                     {
                         if (!factorsByKey.TryGetValue(rows[0].Schedule.Key, out factor)) throw PpaErrors.Error("side_payment_factors", "discounting", "A future row requires its exact resolved discount input.");
@@ -222,7 +222,7 @@ internal sealed class PpaScheduleGraph
         var classification = holding && knownQuantity ? EconomicClass.Held : !delivered ? EconomicClass.Unrealised : known ? EconomicClass.Realised : EconomicClass.Estimated;
         ValueCoverage coverage; string? unavailable = null;
         if (holding) coverage = ValueCoverage.HoldingValue;
-        else if (row.ValueAt > valuation) coverage = ValueCoverage.Discounted;
+        else if (payment?!PaymentDatePolicy.IsOverdue(row.ValueAt,valuation):row.ValueAt>valuation) coverage = ValueCoverage.Discounted;
         else if (payment)
         {
             if (selected.Any(p => p is RowPriceState.Projected or RowPriceState.Modeled)) throw PpaErrors.Error("ppa_due_leg_unresolved", slot.ToString(), "A due payment cannot consume an unsupported projected or modeled amount.");

@@ -24,7 +24,7 @@ public sealed partial class SwapStore
     };
 
     private static (SwapObservationCalendar? Calendar,ImmutableArray<FloatingObservation> Quantities) ObservationTerms(
-        PreviewData data,SwapFloatingInput input,FloatingAveraging averaging)
+        PreviewData data,SwapFloatingInput input,FloatingAveraging averaging,SideCalendarPolicy policy)
     {
         var mode=SwapObservationCompatibility.Mode(averaging);
         var required=mode.RequiresObservationCalendar||mode.RequiresQuantityWeights;
@@ -32,10 +32,11 @@ public sealed partial class SwapStore
             throw Error("swap_averaging","Supply the explicit observation schedule only for a calendar-based or quantity-weighted convention.");
         if(input.ObservationSchedule is not {} schedule)return(null,[]);
         if(schedule.Implementation!=ObservationScheduleImplementation||
-            mode.RequiresObservationCalendar!=(schedule.Calendar is not null)||
+            schedule.Calendar is not null||
             mode.RequiresQuantityWeights!=(schedule.Quantities is not null)||input.FirstFixingAt is not null)
             throw Error("swap_averaging","The observation schedule must match its explicit convention and implementation.");
-        var calendar=schedule.Calendar is {} key?ObservationCalendar(data,key):null;
+        var binding=policy.For(CalendarPurpose.Observation);
+        var calendar=mode.RequiresObservationCalendar?new SwapObservationCalendar(binding.Key,binding.BusinessDays):null;
         if(schedule.Quantities is not {} entries)return(calendar,[]);
         if(entries.IsDefaultOrEmpty||entries.Length>FloatingSide.MaximumDeliveryDays||entries.Any(row=>row is null||row.Quantity is null))
             throw Error("swap_averaging","Supply one positive typed quantity for every required observation interval.");
@@ -72,24 +73,4 @@ public sealed partial class SwapStore
         };
     }
 
-    internal static SwapObservationCalendar ObservationCalendar(PreviewData data,ReferenceKey key)
-    {
-        var calendar=ReferenceCalendar(data,key);
-        return new(calendar.Key,calendar.BusinessDays);
-    }
-
-    private static PaymentCalendar ReferenceCalendar(PreviewData data,ReferenceKey key)
-    {
-        if(!data.CalendarDaysRead)throw Error("swap_observation_calendar","Load the exact calendar exceptions before resolving observation dates.");
-        if(key.Revision!=data.ReferenceRevision)throw Error("swap_averaging","The observation calendar must use the selected exact reference revision.");
-        var row=One(data.References["calendars"].Where(c=>c.Text("code")==key.Code));
-        var from=Date(row.Text("coverage_from"));var to=Date(row.Text("coverage_to"));
-        if(to.DayNumber-from.DayNumber>PaymentRule.MaximumCalendarDays)
-            throw Error("payment_calendar","The selected observation calendar exceeds supported coverage.");
-        var exceptions=data.References["calendar_days"].Where(c=>c.Text("calendar_code")==key.Code)
-            .ToDictionary(c=>Date(c.Text("business_date")),c=>c.GetProperty("is_business_day").GetBoolean());
-        var mask=int.Parse(row.Text("weekend_mask"),System.Globalization.CultureInfo.InvariantCulture);
-        return new(key,DateSet.Create(from,to,Enumerable.Range(from.DayNumber,to.DayNumber-from.DayNumber).Select(DateOnly.FromDayNumber)
-            .Where(d=>exceptions.TryGetValue(d,out var open)?open:(mask&(1<<(((int)d.DayOfWeek+6)%7)))==0)));
-    }
 }

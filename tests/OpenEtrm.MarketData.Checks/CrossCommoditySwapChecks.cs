@@ -14,8 +14,8 @@ internal static class CrossCommoditySwapChecks
         var quote=new QuoteSpecification(R("gas_quote"),QuoteKind.Outright,R("currency"),quantity.Specification,one,ExactDecimal.Parse("0.01"),ExactDecimal.Parse("0.001"),ExactDecimal.Parse("-1000"),ExactDecimal.Parse("1000"));
         var from=new DateOnly(2041,1,1);var to=from.AddMonths(1);var payment=Fixture.Utc("2041-02-18T00:00:00Z");
         var contract=new MarketContract(new(definition,Guid.Parse("50000000-0000-0000-0000-000000000001")),ContractKind.Forward,from,to,Fixture.Utc("2041-02-01T00:00:00Z"),null);
-        var fixedSide=new FixedSide(Guid.NewGuid(),new(ExactDecimal.Parse("4"),quote),quantity,from,to,payment,FixedSide.Implementation,quote);
-        var floating=new FloatingSide(Guid.NewGuid(),PriceSettlementSelection.CurveTarget(R("index")),quote,quantity,from,to,[new(R("index"),quote.Key,from,to,Fixture.Utc("2040-12-31T00:00:00Z"),new(definition,Guid.Parse("70000000-0000-0000-0000-000000000001")),R("synthetic_source"),IndexFixing.SupportedImplementation)],payment,FloatingAveraging.MonthlyIndexPrice,[new(new(new(definition,"gas"),contract.Key),contract)],FloatingSide.IndexedImplementation);
+        var fixedSide=new FixedSide(Guid.NewGuid(),new(ExactDecimal.Parse("4"),quote),quantity,from,to,payment,FixedSide.Implementation,quote,SyntheticSideCalendars.Dated(false));
+        var floating=new FloatingSide(Guid.NewGuid(),PriceSettlementSelection.CurveTarget(R("index")),quote,quantity,from,to,[new(R("index"),quote.Key,from,to,Fixture.Utc("2040-12-31T00:00:00Z"),new(definition,Guid.Parse("70000000-0000-0000-0000-000000000001")),R("synthetic_source"),IndexFixing.SupportedImplementation)],payment,FloatingAveraging.MonthlyIndexPrice,[new(new(new(definition,"gas"),contract.Key),contract)],FloatingSide.IndexedImplementation,SyntheticSideCalendars.Dated(true,null,null));
         var first=WholeTermSideFixtures.Fixed([fixedSide],quote,[ExactRatio.One]);
         var second=WholeTermSideFixtures.Floating([floating],[ExactRatio.One]);
         var legacy=new ScheduledFinancialSwap(Guid.NewGuid(),[new(first,ExactDecimal.Parse("-1"),ExactRatio.One),new(second,one,ExactRatio.One)],false,ScheduledFinancialSwap.Implementation);
@@ -28,7 +28,7 @@ internal static class CrossCommoditySwapChecks
         var fixingAt=Fixture.Utc("2040-12-31T00:00:00Z");
         FloatingSide Floating(QuoteSpecification q,CurveKey curve,ContractKey key,ReferenceKey index)=>new(Guid.NewGuid(),PriceSettlementSelection.CurveTarget(index),q,new(one,q.Quantity),from,to,
             [new(index,q.Key,from,to,fixingAt,q.Key==gasQuote.Key?f.S(8):f.S(7),f.R("actual_source"),IndexFixing.SupportedImplementation)],
-            payment,FloatingAveraging.MonthlyIndexPrice,[new(new(curve,key),f.Contracts.Single(c=>c.Key==key))],FloatingSide.IndexedImplementation);
+            payment,FloatingAveraging.MonthlyIndexPrice,[new(new(curve,key),f.Contracts.Single(c=>c.Key==key))],FloatingSide.IndexedImplementation,SyntheticSideCalendars.Dated(true,null,null));
         var power=WholeTermSideFixtures.Floating([Floating(powerQuote,powerCurve.Key,f.K(5),f.R("power_index"))],[ExactRatio.One]);
         var gas=WholeTermSideFixtures.Floating([Floating(gasQuote,f.C("base_forward"),f.K(2),f.R("index"))],[ExactRatio.One]);
         var extraGas=new QuantitySpecification(f.R("gas_bundle"),f.R("gas"),f.R("gas_energy"),f.R("thermal_bundle"),f.R("energy"));
@@ -50,8 +50,8 @@ internal static class CrossCommoditySwapChecks
         }
         Reject("quantity_mapping",()=>new CrossCommodityScheduledSwap(Guid.NewGuid(),members.SetItem(1,members[1] with{QuantityRatio=new(8,1)}),factor,converter,false,CrossCommodityScheduledSwap.Implementation));
         Reject("quantity_mapping",()=>new CrossCommodityScheduledSwap(Guid.NewGuid(),members.SetItem(1,members[1] with{QuantityRatio=null}),factor,converter,false,CrossCommodityScheduledSwap.Implementation));
-        var oversizedPower=new FloatingSide(Guid.NewGuid(),power.Settlement,power.Quote,power.UnitQuantity,[power.Periods[0] with{Allocation=new(2,1)}]);
-        var oversizedGas=new FloatingSide(Guid.NewGuid(),gas.Settlement,gas.Quote,gas.UnitQuantity,[gas.Periods[0] with{Allocation=new(2,1)}]);
+        var oversizedPower=new FloatingSide(Guid.NewGuid(),power.Settlement,power.Quote,power.UnitQuantity,[power.Periods[0] with{Allocation=new(2,1)}],SyntheticSideCalendars.FloatingPeriods([power.Periods[0] with{Allocation=new(2,1)}]));
+        var oversizedGas=new FloatingSide(Guid.NewGuid(),gas.Settlement,gas.Quote,gas.UnitQuantity,[gas.Periods[0] with{Allocation=new(2,1)}],SyntheticSideCalendars.FloatingPeriods([gas.Periods[0] with{Allocation=new(2,1)}]));
         Reject("quantity_mapping",()=>new CrossCommodityScheduledSwap(Guid.NewGuid(),[new(oversizedPower,one,ExactRatio.One),new(oversizedGas,ExactDecimal.Parse("-1"),new(7,1))],factor,converter,false,CrossCommodityScheduledSwap.Implementation));
         Reject("scheduled_swap_instrument",()=>new ScheduledFinancialSwap(Guid.NewGuid(),members,false,ScheduledFinancialSwap.Implementation));
         Reject("quantity_conversion",()=>new CrossCommodityScheduledSwap(Guid.NewGuid(),members,new(ExactDecimal.Parse("7"),power.UnitQuantity.Specification,gas.UnitQuantity.Specification,QuantityFactor.Implementation),converter,false,CrossCommodityScheduledSwap.Implementation));

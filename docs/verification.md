@@ -2,15 +2,49 @@
 
 For the current complete command and prerequisites, start with
 [Required tools](#required-tools). `tools/check_all.py` runs all suites by
-default; `--group workspace|standard|assistant|trading|lifecycle|gas|portfolio|settlement|ppa|recovery`
+default; `--group workspace|reference|standard|exchange|assistant|risk|trading|lifecycle|physical|gas|portfolio|settlement|ppa|recovery`
 selects one CI partition. CI requires every partition and its aggregate check
 to succeed. The implementation records below retain the results and limits of
 each dated increment; older check counts are not the current suite size.
 
+The reference-data, crude/LNG, gas and statistical-risk previews have separate
+required partitions. Each job keeps locked preparation and the shared domain and
+upgrade checks; the union contains every preview exactly once. Runner-contract
+checks enforce that coverage and bound each preview queue to twelve suites.
+The standard browser and exchange-option workflows each have a dedicated partition.
+Jobs have a 90-minute limit, including preparation and shared-runner variation;
+cancellation still fails the aggregate release gate.
+
 The gas partition runs the native amendment upgrade and real application checks.
 Every partition retains fresh-checkout preparation and the shared checks; the
-required aggregate waits for all ten partitions. The command-union checks require
+required aggregate waits for all fourteen partitions. The command-union checks require
 each owned consumer exactly once across the matrix.
+
+The integrated calendar/lifecycle runner contains 183 commands: 63 shared checks,
+63 isolated application previews and 57 partition-specific native/application
+checks. Local integration checks passed 737 managed core checks, 88 rate checks,
+1,806 frontend checks and 121 Python checks. Calendar migrations 0318–0337 follow
+the lifecycle schema without changing any published predecessor migration.
+Migration 0321 checks the exact retained schedule views, including invoker
+semantics, ownership, ACLs, column grants and rewrite rules. Its parity qualifier
+preserves economic values, period order, evidence and required-child refusal
+while comparing the explicitly changed calendar authoring shape.
+
+Migration 0336 resolves a calendar visibility cutoff once and checks each distinct
+retained publication once per invocation. Native checks independently count that
+work, refuse authority that expires during a proof-relation lock wait, and reject
+helper definition or privilege drift. The proof retains its exact publication
+transaction, sealed reference states and original knowledge boundary.
+Series-filtered exact observation frames stream in order while checking every
+original pin, including pins outside the requested series. Native checks cover
+partial and empty payloads, unavailable pins, later-frame faults and authority
+expiry. Selected-trade P&L checks refuse a hidden latest head and remain unchanged
+when an unrelated instrument is hidden.
+Migration 0337 selects the exact scheduled trade revision before Side aggregation.
+Its work check requires two Side calendar reads for one two-Side trade and none
+for an absent revision. Native parity retains amounts, dates, evidence, ordering,
+required-child refusal and caller settings. Both runtime and worker checks retain
+the invoker view's table and all five consumed-column permissions.
 
 The fixed-loan-fee consumer qualifies migration 0308 through native, managed and
 real browser paths on stock PostgreSQL 18.1 with synthetic data. The gas

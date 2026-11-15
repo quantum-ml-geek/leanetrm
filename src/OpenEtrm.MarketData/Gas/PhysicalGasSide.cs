@@ -38,7 +38,7 @@ public sealed record GasValuationAssignment
     }
 }
 
-[EconomicDefinition("physical_gas_side_v1")]
+[EconomicDefinition("physical_gas_side_v2")]
 public sealed record PhysicalGasSide : Side
 {
     [IdentityField] public GasDeliveryLocation Location { get; }
@@ -58,7 +58,7 @@ public sealed record PhysicalGasSide : Side
         [..GenerateSchedule().Rows.SelectMany(row=>row.Prices).Select(price => PeriodPriceSelector.ProjectionAt(price.Lookup!, snapshot)).OfType<CurveRequest>().Distinct()];
 
     public PhysicalGasSide(Guid id, GasDeliveryLocation location, ReferenceKey product, GasQuantityTerms quantities,
-        ImmutableArray<GasValuationAssignment> assignments, CustomCurveProjectionBinding? forecastCurve=null) : base(id)
+        ImmutableArray<GasValuationAssignment> assignments,SideCalendarPolicy calendarPolicy, CustomCurveProjectionBinding? forecastCurve=null) : base(id,calendarPolicy)
     {
         if (location is null) throw new MarketDataException("gas_delivery_location", "Select a complete gas delivery location.");
         var deliveryPoint = location.Point; Money.RequireKey(product);
@@ -71,6 +71,8 @@ public sealed record PhysicalGasSide : Side
             a.Quote.Quantity != quantities.Receipt.Specification || a.Quote.Currency != assignments[0].Quote.Currency) ||
             assignments.Select(a => (a.Key,a.From,a.To)).Distinct().Count() != assignments.Length)
             throw new MarketDataException("gas_valuation_assignment", "Supply distinct compatible market assignments for this exact gas point, product and quantity.");
+        CalendarPolicy.RequirePurposes(true,false,false);
+        CalendarPolicy.For(CalendarPurpose.Delivery).RequireCoverage(quantities.From,quantities.To);
         var used = new HashSet<(ReferenceKey,DateOnly,DateOnly)>();
         for (var day = quantities.From; day < quantities.To; day = day.AddDays(1))
         {
@@ -167,6 +169,7 @@ public sealed record PhysicalGasInstrument : SidedInstrument
         var expected = delivery.GenerateSchedule().Quantities.TotalDelivery;
         foreach (var side in new[] { consideration }.Concat(fees))
         {
+            GasCashDelivery.Require(side,delivery,"gas_instrument");
             if (side is not (FixedSide or FloatingSide) || side.GenerateSchedule() is not SidePaymentSchedule cash ||
                 cash.Currency != delivery.Currency || cash.UnitQuantity != delivery.UnitQuantity || cash.Rows.Count != 1) throw Invalid();
             var row = cash.Rows[0];

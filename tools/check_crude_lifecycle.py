@@ -20,7 +20,7 @@ def run_checks(url, query, manifest, booked):
     terms = c.call('crude/editor', dict(context=before, tradeId=trade))['terms']
     sale = c.call('crude/book', {**terms, 'operationId': str(uuid4()), 'direction': 'deliver',
         'considerationDirection': 'receive', 'quantity': '600', 'fixedPrice': '80',
-        'handlingFee': None, 'handlingFeeDirection': None})
+        'handlingFee': None, 'handlingFeeDirection': None, 'feeCalendarPolicy': None, 'handlingFeePaymentAt': None})
 
     companion = c.call('crude/book', {**terms, 'operationId': str(uuid4())})
 
@@ -77,13 +77,15 @@ def run_checks(url, query, manifest, booked):
         preview=c.call('crude/operations/invoice/preview',body)
         assert Decimal(preview['amount']) == Decimal(expected_amount), preview
         assert preview['direction'] == ('pay' if component=='consideration' else 'receive')
-        assert preview['dueAt'].startswith('2021-02-01T00:00:00'), preview
+        expected_due='2021-02-01' if component=='consideration' else '2021-02-05'
+        assert preview['dueAt'].startswith(expected_due+'T00:00:00'), preview
         assert c.call('crude/operations/invoice/issue',{**body,'previewHash':'0'*64},expected=409)['code']=='crude_invoice_preview'
         issued={**body,'previewHash':preview['previewHash']}
         result=c.call('crude/operations/invoice/issue',issued)
         assert c.call('crude/operations/invoice/issue',issued)==result
         repeated=c.call('crude/operations/invoice/issue',{**issued,'operationId':str(uuid4())})
         assert repeated['unchanged'] and repeated['eventId']==result['eventId']
+        assert query(f"SELECT (due_at AT TIME ZONE 'UTC')::date FROM trading.crude_invoices WHERE id='{result['eventId']}';")==expected_due
         return result
 
     inv_owned=invoice(corrected['eventId'],'consideration','28000','invoice-owned')

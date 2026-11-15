@@ -22,7 +22,7 @@ internal static class CustomProjectionChecks
             var first = original.WithCustomProjection(binding);
             var next = original.WithCustomProjection(binding with { Version = 2 });
             var coordinate = original.WithCustomProjection(binding with { Position = 1 });
-            if (DefinitionIdentity.For(original).Version != "FloatingSide_v8" || DefinitionIdentity.For(first).Version != "FloatingSide_v8" ||
+            if (DefinitionIdentity.For(original).Version != "FloatingSide_v9" || DefinitionIdentity.For(first).Version != "FloatingSide_v9" ||
                 DefinitionIdentity.For(first) == DefinitionIdentity.For(next) || DefinitionIdentity.For(first) == DefinitionIdentity.For(coordinate) ||
                 DefinitionIdentity.For(original) == DefinitionIdentity.For(first)) throw new Exception("Custom projection identity was lost.");
             if (original.CustomProjection is not null || first.CustomProjection != binding || !first.Fixings.SequenceEqual(original.Fixings) ||

@@ -29,7 +29,7 @@ internal static class CompactRetainedChecks
         var discount=new ExplicitDiscounting(ExactDecimal.Parse("1"),DiscountFactorSource.Undiscounted);
         var physical=fixture.Physical();
         var floating=new FloatingSide(Guid.NewGuid(),physical.Memberships[1].Side.Terms,
-            new(fixture.C("synthetic_energy"),ExactDecimal.Parse("2"),new(ExactDecimal.Parse("1"),fixture.EnergyPrice),null));
+            new(fixture.C("synthetic_energy"),ExactDecimal.Parse("2"),new(ExactDecimal.Parse("1"),fixture.EnergyPrice),null),SyntheticSideCalendars.Interval(physical.Memberships[1].Side.Terms,true));
         var indexed=new PpaInstrument(Guid.NewGuid(),fixture.Definitions,fixture.Reference,
             [physical.Memberships[0],new(new(PpaRole.IndexedPayment),floating,ExactDecimal.Parse("-1"))],false,PpaInstrument.Implementation);
         foreach(var(original,expected)in new[]{(fixture.Physical(),"1442"),(fixture.Physical(volume:true),"360.5"),
@@ -45,17 +45,20 @@ internal static class CompactRetainedChecks
             }
         }
         var overdue=fixture.WithCertificate();var copy=Retain(overdue);
-        var selected=fixture.Market(fixture.To.AddDays(9),actuals:_=>"40");
-        var meter=fixture.Meter(interval=>interval.Start==fixture.From?"50":"0");
-        var originalInputs=fixture.Prepare(selected,[overdue],meter);var loadedInputs=fixture.Prepare(selected,[copy],meter);
-        var changed=selected.Model.Scenarios(selected.Build,[selected.Bumps["synthetic_certificate"]]).Single();
-        foreach(var scenario in new[]{selected.Build,changed.Up,changed.Down})
+        foreach(var daysAfterEnd in new[]{9,10})
         {
-            var draft=ValueMeasures.From(originalInputs.Session(scenario).Value(overdue,new(fixture.From,fixture.To),discount));
-            var retained=ValueMeasures.From(loadedInputs.Session(scenario).Value(copy,new(fixture.From,fixture.To),discount));
-            Equal(FinancialRows(retained),FinancialRows(draft),"Held certificates and overdue cash retain their distinct loaded scopes");
-            Equal(retained.OverdueKnownBalance.ToExactString(),"-0.75","Paid-date boundary keeps overdue certificate cash outside PV");
-            if(ReferenceEquals(scenario,selected.Build))Equal(retained.ValueExcludingOverdue.ToExactString(),"1.25","Known generated certificate holding remains valued after payment is due");
+            var selected=fixture.Market(fixture.To.AddDays(daysAfterEnd),actuals:_=>"40");
+            var meter=fixture.Meter(interval=>interval.Start==fixture.From?"50":"0");
+            var originalInputs=fixture.Prepare(selected,[overdue],meter);var loadedInputs=fixture.Prepare(selected,[copy],meter);
+            var changed=selected.Model.Scenarios(selected.Build,[selected.Bumps["synthetic_certificate"]]).Single();
+            foreach(var scenario in new[]{selected.Build,changed.Up,changed.Down})
+            {
+                var draft=ValueMeasures.From(originalInputs.Session(scenario).Value(overdue,new(fixture.From,fixture.To),discount));
+                var retained=ValueMeasures.From(loadedInputs.Session(scenario).Value(copy,new(fixture.From,fixture.To),discount));
+                Equal(FinancialRows(retained),FinancialRows(draft),"Held certificates and overdue cash retain their distinct loaded scopes");
+                Equal(retained.OverdueKnownBalance.ToExactString(),daysAfterEnd==9?"0":"-0.75","Cash becomes overdue on the UTC date after its payment date");
+                if(ReferenceEquals(scenario,selected.Build))Equal(retained.ValueExcludingOverdue.ToExactString(),daysAfterEnd==9?"0.5":"1.25","Same-day cash remains nominal beside the independent certificate holding");
+            }
         }
     }
     private static string FinancialRows(ValueMeasureSet value)=>JsonSerializer.Serialize(new{
@@ -76,8 +79,8 @@ internal static class CompactRetainedChecks
         }
         var physical=(PowerPhysicalSide)original.Memberships[0].Side;var fixedSide=(FixedSide)original.Memberships[1].Side;
         var draft=new PpaInstrument(Guid.NewGuid(),f.Definitions,f.Reference,
-            [original.Memberships[0] with{Side=new PowerPhysicalSide(Guid.NewGuid(),Extend(physical.Terms),physical.Location)},
-             original.Memberships[1] with{Side=new FixedSide(Guid.NewGuid(),Extend(fixedSide.Terms),fixedSide.Price)}],false,PpaInstrument.Implementation);
+            [original.Memberships[0] with{Side=new PowerPhysicalSide(Guid.NewGuid(),Extend(physical.Terms),physical.Location,SyntheticSideCalendars.Interval(Extend(physical.Terms),false))},
+             original.Memberships[1] with{Side=new FixedSide(Guid.NewGuid(),Extend(fixedSide.Terms),fixedSide.Price,SyntheticSideCalendars.Interval(Extend(fixedSide.Terms),false))}],false,PpaInstrument.Implementation);
         var retained=Retain(draft);var span=new DeliveryCoverage(f.From.AddHours(25),f.From.AddHours(27));
         var coverage=ImmutableDictionary<Guid,ImmutableArray<DeliveryCoverage>>.Empty.Add(draft.Id,[span]);
         var cutoff=f.From.AddDays(-1);var forecast=f.Forecast();
@@ -106,7 +109,7 @@ internal static class CompactRetainedChecks
         var f=new PpaAcceptanceFixture();var original=f.Physical();var first=Retain(original);
         var oldPayment=(FixedSide)original.Memberships[1].Side;
         var stepped=new FixedSide(Guid.NewGuid(),oldPayment.Terms,new SteppedPrice([
-            new(f.Month,new(ExactDecimal.Parse("40"),f.EnergyPrice)),new(f.Month.AddDays(15),new(ExactDecimal.Parse("41"),f.EnergyPrice))]));
+            new(f.Month,new(ExactDecimal.Parse("40"),f.EnergyPrice)),new(f.Month.AddDays(15),new(ExactDecimal.Parse("41"),f.EnergyPrice))]),SyntheticSideCalendars.Interval(oldPayment.Terms,false));
         var amended=new PpaInstrument(Guid.NewGuid(),f.Definitions,f.Reference,[original.Memberships[0],original.Memberships[1] with{Side=stepped}],false,PpaInstrument.Implementation);
         var second=Retain(amended);var firstRows=first.Memberships[1].Side.GenerateSchedule().Rows;var secondRows=second.Memberships[1].Side.GenerateSchedule().Rows;
         var before=firstRows[0].RetainedReference!.Value;var after=secondRows[0].RetainedReference!.Value;

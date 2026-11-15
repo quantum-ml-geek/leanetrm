@@ -41,7 +41,7 @@ def run_checks(url, query, manifest):
                 row.update(value='2.5', shape='1.2' if n % 2 else '0.8')
             quantities.append(row)
         return {'snapshotId': frame['id'], 'curve': curve['code'], 'contractId': contract['id'],
-                'deliveryDate': day, 'knownAt': cutoff, 'product': key, 'productVersion': 1,
+                'deliveryDate': day, 'knownAt': cutoff, 'product': key, 'productVersion': 1, 'block': block,
                 'minutes': minutes, 'nonHolidays': preset['nonHolidays'], 'holidays': preset['holidays'],
                 'numericalPolicy': catalog['numericalPolicy'], 'quantityBasis': basis,
                 'quantitySpecification': specification, 'quantities': quantities}
@@ -90,6 +90,8 @@ def run_checks(url, query, manifest):
     body = request('pjm', '2021-03-14', pjm_start, 23, 60, first['knownAt'])
     first_result = verify(body, first_prices, first, 1)
     assert first_result['summary']['hours'] == '23'
+    changed=deepcopy(body);changed['nonHolidays']='0'+changed['nonHolidays'][1:]
+    assert client.call('power/settlement',changed,expected=422)['code']=='tou_product_override', 'A published product cannot be edited even on a weekday outside the selected day.'
     power = request('pjm', '2021-03-14', pjm_start, 23, 60, first['knownAt'], 'interval_power')
     power['quantities'][0]['shape'] = '0'
     power['quantities'][1]['value'] = '-2.5'

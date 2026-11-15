@@ -17,7 +17,18 @@ public sealed record PhysicalCrudeWriteRequest(Guid SnapshotId,string? Conventio
  [property:System.Text.Json.Serialization.JsonRequired]string? HandlingFee,[property:System.Text.Json.Serialization.JsonRequired]string? HandlingFeeDirection,
  Guid? LegalEntityId,int? LegalEntityRevision,Guid? CounterpartyId,int? CounterpartyRevision,
  [property:System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]Guid? CrudeSetupId=null,
- [property:System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]CrudePhysicalSelection? Physical=null);
+ [property:System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]CrudePhysicalSelection? Physical=null)
+{
+ // New-command validation follows the durable first-outcome lookup.
+ [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+ public SideCalendarPolicyInput DeliveryCalendarPolicy { get; init; }=null!;
+ [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+ public SideCalendarPolicyInput ConsiderationCalendarPolicy { get; init; }=null!;
+ [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+ public SideCalendarPolicyInput? FeeCalendarPolicy { get; init; }
+ [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+ public string? HandlingFeePaymentAt { get; init; }
+}
 public sealed record PhysicalCrudeEditorRequest(FuturesReadRequest Context,Guid TradeId);
 
 [System.Text.Json.Serialization.JsonUnmappedMemberHandling(System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow)]
@@ -44,7 +55,7 @@ public sealed class PhysicalCrudeStore(PreviewDatabase database)
  public async Task<object> References(NpgsqlConnection c,CancellationToken ct)
  {
   var revision=await new CrudeSetupEditor(database).DeliveryRevision(c,ct);
-  return new{deliveryReferences=await CrudeDeliveryReferences.Read(c,revision,ct),clocks=await CrudeSetupEditor.ProfileClocks(c,revision,ct),
+  return new{sideCalendars=await SideCalendarPolicies.Catalog(c,ct),deliveryReferences=await CrudeDeliveryReferences.Read(c,revision,ct),clocks=await CrudeSetupEditor.ProfileClocks(c,revision,ct),
    books=await PreviewDatabase.Rows(c,"SELECT row_to_json(b)::text FROM trading.books b WHERE catalog_id=$1 ORDER BY name",[Catalog],ct),
    legalEntities=await TradeParties.Catalog(c,Catalog,true,ct),counterparties=await TradeParties.Catalog(c,Catalog,false,ct),
    canBook=await PreviewDatabase.HasPermission(c,"BookTrade",ct),
@@ -169,19 +180,23 @@ public sealed class PhysicalCrudeStore(PreviewDatabase database)
  }
  private async Task<(PhysicalCrudeInstrument Instrument,CrudeValuationAssignment Assignment,ExactDecimal Quantity)> Resolve(NpgsqlConnection c,PreviewData data,PhysicalCrudeWriteRequest body,DateTimeOffset valuation,CancellationToken ct)
  {
+  data=await SideCalendarPolicies.Prepare(c,data,[body.DeliveryCalendarPolicy,body.ConsiderationCalendarPolicy,body.FeeCalendarPolicy],ct);
   var assignment=await Metadata(c,data,body,ct,valuation);var quantity=ExactDecimal.Parse(Required(body.Quantity));
   if(quantity.CompareTo(default)<=0)throw Invalid("The standard-volume quantity must be positive and below 10^24.");
-  var physical=new PhysicalCrudeSide(Guid.NewGuid(),assignment,Instant(body.DeliveryFrom),Instant(body.DeliveryTo),ExactDecimal.Parse(Required(body.Tolerance)));
+  var physical=new PhysicalCrudeSide(Guid.NewGuid(),assignment,Instant(body.DeliveryFrom),Instant(body.DeliveryTo),ExactDecimal.Parse(Required(body.Tolerance)),SideCalendarPolicies.Resolve(data,body.DeliveryCalendarPolicy));
   var payment=Instant(body.PaymentAt);
-  if(payment<physical.DeliveryTo)throw Invalid("Payment must be at or after delivery ends.");
-  FixedSide Cash(string value)
+  PaymentDatePolicy.RequireCompletion(payment,physical.DeliveryTo);
+  FixedSide Cash(string value,DateTimeOffset cashPayment,SideCalendarPolicyInput? calendarPolicy)
   {
    var amount=ExactDecimal.Parse(value);
    if(amount.CompareTo(ExactDecimal.Parse("1000000000000"))>=0||amount.CompareTo(ExactDecimal.Parse("-1000000000000"))<=0)throw Invalid("Cash prices must have absolute value below 10^12.");
-   return new(Guid.NewGuid(),new FlatPrice(new UnitPrice(amount,assignment.Quote)),assignment.Quote,physical.UnitQuantity,[new(physical.DeliveryDateFrom,physical.DeliveryDateTo,payment,new(System.Numerics.BigInteger.One,System.Numerics.BigInteger.One),null)]);
+   return new(Guid.NewGuid(),new FlatPrice(new UnitPrice(amount,assignment.Quote)),assignment.Quote,physical.UnitQuantity,
+    [new(physical.DeliveryDateFrom,physical.DeliveryDateTo,cashPayment,new(System.Numerics.BigInteger.One,System.Numerics.BigInteger.One),null){DeliveryCompletionAt=physical.DeliveryTo}],SideCalendarPolicies.Resolve(data,calendarPolicy));
   }
   if(body.HandlingFee is null&&body.HandlingFeeDirection is not null)throw Invalid("A handling-fee direction requires a handling fee.");
-  return(new(Guid.NewGuid(),physical,Cash(Required(body.FixedPrice)),body.HandlingFee is {} fee?Cash(fee):null,Sign(body.Direction,true),Sign(body.ConsiderationDirection),body.HandlingFee is null?null:Sign(body.HandlingFeeDirection)),assignment,quantity);
+  if(body.HandlingFee is null&&body.FeeCalendarPolicy is not null)throw Invalid("An absent handling-fee Side cannot have calendar bindings.");
+  if((body.HandlingFee is not null)!=(body.HandlingFeePaymentAt is not null))throw Invalid("A handling-fee Side requires its own payment date; an absent fee cannot have one.");
+  return(new(Guid.NewGuid(),physical,Cash(Required(body.FixedPrice),payment,body.ConsiderationCalendarPolicy),body.HandlingFee is {} fee?Cash(fee,Instant(body.HandlingFeePaymentAt),body.FeeCalendarPolicy):null,Sign(body.Direction,true),Sign(body.ConsiderationDirection),body.HandlingFee is null?null:Sign(body.HandlingFeeDirection)),assignment,quantity);
  }
  private async Task<object> Value(NpgsqlConnection c,PreviewData data,InputFrame frame,PhysicalCrudeWriteRequest body,PhysicalCrudeInstrument? draft,CrudeValuationAssignment assignment,ExactDecimal quantity,ImmutableArray<RetainedSideProgram>? retained,CancellationToken ct,Action<int,SideViewInput>? inspect=null,int? inspectSlot=null)
  {

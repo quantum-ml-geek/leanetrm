@@ -14,10 +14,19 @@ public sealed record ClockChoice(ClockReference Reference,string Kind,int? Fixed
 public sealed record TouProductVersion(Guid Id,string Code,int Version,int Generation,string State,string Name,ClockReference Clock,
     int PeakStartHour,int PeakEndHour,bool PeakSaturday,int? PublicationOrder,DateTimeOffset? PublishedAt)
 {
+    public ReferenceKey? Calendar { get; init; }
+    public string? HolidayTreatment { get; init; }
     [System.Text.Json.Serialization.JsonIgnore] public TouPeak Peak=>new(PeakStartHour,PeakEndHour,PeakSaturday);
+    internal PublishedTouBinding Binding(Guid catalog)=>new(catalog,Id,Version,new(new(Clock.CatalogId,Clock.RevisionId),Clock.Code),
+        Calendar??throw new MarketDataException("tou_calendar_contract","Select a published TOU version with an exact calendar."),Peak,
+        HolidayTreatment??throw new MarketDataException("tou_calendar_contract","Select a published TOU version with an explicit holiday convention."));
 }
 public sealed record TouProductSaveRequest(Guid? Id,int? Version,int? Generation,string? ExpectedState,string? Code,string? Name,
-    ClockReference? Clock,int? PeakStartHour,int? PeakEndHour,bool? PeakSaturday);
+    ClockReference? Clock,int? PeakStartHour,int? PeakEndHour,bool? PeakSaturday)
+{
+    [System.Text.Json.Serialization.JsonRequired]public ReferenceKey Calendar {get;init;}
+    [System.Text.Json.Serialization.JsonRequired]public string HolidayTreatment {get;init;}=null!;
+}
 public sealed record TouProductPublishRequest(Guid Id,int Version,int Generation);
 
 // Authored TOU products: drafts and immutable published versions bound to exact
@@ -26,11 +35,13 @@ public sealed class TouProductStore(Guid catalog,Guid referenceCatalog,Guid refe
 {
     public async Task<ImmutableArray<TouProductVersion>> Read(NpgsqlConnection connection,CancellationToken ct)
     {
-        await using var command=ScheduleStore.Command(connection,"SELECT v.product_id,p.code,v.version,v.generation,v.state,v.name,v.clock_catalog_id,v.clock_revision_id,v.clock_code,v.peak_start_hour,v.peak_end_hour,v.peak_saturday,v.publication_order,v.published_at FROM market_data.tou_product_versions v JOIN market_data.tou_products p ON (p.catalog_id,p.id)=(v.catalog_id,v.product_id) WHERE v.catalog_id=$1 ORDER BY p.code,v.version",catalog);
+        await using var command=ScheduleStore.Command(connection,"SELECT v.product_id,p.code,v.version,v.generation,v.state,v.name,v.clock_catalog_id,v.clock_revision_id,v.clock_code,v.peak_start_hour,v.peak_end_hour,v.peak_saturday,v.publication_order,v.published_at,v.calendar_catalog_id,v.calendar_revision_id,v.calendar_code,v.holiday_treatment FROM market_data.tou_product_versions v JOIN market_data.tou_products p ON (p.catalog_id,p.id)=(v.catalog_id,v.product_id) WHERE v.catalog_id=$1 ORDER BY p.code,v.version",catalog);
         await using var reader=await command.ExecuteReaderAsync(ct);var result=ImmutableArray.CreateBuilder<TouProductVersion>();
         while(await reader.ReadAsync(ct))result.Add(new(reader.GetGuid(0),reader.GetString(1),reader.GetInt32(2),reader.GetInt32(3),reader.GetString(4),reader.GetString(5),
             new(reader.GetGuid(6),reader.GetGuid(7),reader.GetString(8)),reader.GetInt16(9),reader.GetInt16(10),reader.GetBoolean(11),
-            reader.IsDBNull(12)?null:reader.GetInt32(12),reader.IsDBNull(13)?null:reader.GetFieldValue<DateTimeOffset>(13)));
+            reader.IsDBNull(12)?null:reader.GetInt32(12),reader.IsDBNull(13)?null:reader.GetFieldValue<DateTimeOffset>(13))
+            {Calendar=reader.IsDBNull(14)?null:new ReferenceKey(new(reader.GetGuid(14),reader.GetGuid(15)),reader.GetString(16)),
+             HolidayTreatment=reader.IsDBNull(17)?null:reader.GetString(17)});
         return result.ToImmutable();
     }
     // The product definitions in force: each product's latest published version.
@@ -58,6 +69,9 @@ public sealed class TouProductStore(Guid catalog,Guid referenceCatalog,Guid refe
             body.PeakStartHour>=body.PeakEndHour || body.PeakSaturday is null)
             throw new MarketDataException("tou_definition","Supply a lowercase code, a name, a market clock and an ordered peak window within the day.");
         var clock=await Clock(connection,body.Clock,ct);
+        if(body.HolidayTreatment!=PublishedTouBinding.HolidayConvention)throw new MarketDataException("tou_calendar_contract","Select the supported explicit weekly-mask holiday convention.");
+        await using(var calendar=ScheduleStore.Command(connection,"SELECT security.read_side_calendar($1,$2,$3)",
+            body.Calendar.Revision.CatalogId,body.Calendar.Revision.RevisionId,body.Calendar.Code))await calendar.ExecuteScalarAsync(ct);
         await using(var gate=ScheduleStore.Command(connection,"SELECT pg_advisory_xact_lock(730849105)"))await gate.ExecuteNonQueryAsync(ct);
         var all=await Read(connection,ct);Guid id;int version,generation;
         if(body.Id is null)
@@ -86,14 +100,14 @@ public sealed class TouProductStore(Guid catalog,Guid referenceCatalog,Guid refe
         var values=new object[]{body.Name,clock.Reference.CatalogId,clock.Reference.RevisionId,clock.Reference.Code,(short)body.PeakStartHour!.Value,(short)body.PeakEndHour!.Value,body.PeakSaturday!.Value};
         if(generation>1)
         {
-            await using var update=ScheduleStore.Command(connection,"UPDATE market_data.tou_product_versions SET generation=$8,name=$1,clock_catalog_id=$2,clock_revision_id=$3,clock_code=$4,peak_start_hour=$5,peak_end_hour=$6,peak_saturday=$7 WHERE catalog_id=$9 AND product_id=$10 AND version=$11 AND generation=$12 AND state='draft'",
-                [..values,generation,catalog,id,version,body.Generation!.Value]);
+            await using var update=ScheduleStore.Command(connection,"UPDATE market_data.tou_product_versions SET generation=$8,name=$1,clock_catalog_id=$2,clock_revision_id=$3,clock_code=$4,peak_start_hour=$5,peak_end_hour=$6,peak_saturday=$7,calendar_catalog_id=$13,calendar_revision_id=$14,calendar_code=$15,holiday_treatment=$16 WHERE catalog_id=$9 AND product_id=$10 AND version=$11 AND generation=$12 AND state='draft'",
+                [..values,generation,catalog,id,version,body.Generation!.Value,body.Calendar.Revision.CatalogId,body.Calendar.Revision.RevisionId,body.Calendar.Code,body.HolidayTreatment]);
             if(await update.ExecuteNonQueryAsync(ct)!=1)throw new MarketDataException("tou_conflict","The draft changed. Reload it.");
         }
         else
         {
-            await using var insert=ScheduleStore.Command(connection,"INSERT INTO market_data.tou_product_versions(name,clock_catalog_id,clock_revision_id,clock_code,peak_start_hour,peak_end_hour,peak_saturday,catalog_id,product_id,version,generation,state) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'draft')",
-                [..values,catalog,id,version,generation]);
+            await using var insert=ScheduleStore.Command(connection,"INSERT INTO market_data.tou_product_versions(name,clock_catalog_id,clock_revision_id,clock_code,peak_start_hour,peak_end_hour,peak_saturday,catalog_id,product_id,version,generation,state,calendar_catalog_id,calendar_revision_id,calendar_code,holiday_treatment) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'draft',$12,$13,$14,$15)",
+                [..values,catalog,id,version,generation,body.Calendar.Revision.CatalogId,body.Calendar.Revision.RevisionId,body.Calendar.Code,body.HolidayTreatment]);
             await insert.ExecuteNonQueryAsync(ct);
         }
         return (await Read(connection,ct)).Single(v=>v.Id==id&&v.Version==version);

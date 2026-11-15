@@ -93,6 +93,12 @@ public static class IntervalCurveDefinitions
         var version=membership==BlockMembership.All?null:tou.SingleOrDefault(v=>v.Id==row.Id("tou_product_id") &&
             v.Version==int.Parse(row.Text("tou_version"),CultureInfo.InvariantCulture) && v.State=="published")??
             throw new MarketDataException("interval_block","The block's published TOU product version is unavailable.");
+        if(version is not null)
+        {
+            var (profile,clockCode,_,_)=Grid(data,Curve(data,code));
+            version.Binding(data.DefinitionRevision.CatalogId).RequireGrid(new(data.ReferenceRevision,clockCode),
+                new(data.ReferenceRevision,profile.Text("calendar_code")));
+        }
         return (new(new(data.DefinitionRevision,code),membership,version?.Peak,Members(data,code)),new(code,row.Text("membership"),version?.Code,version?.Version));
     }
 
@@ -107,7 +113,7 @@ public static class IntervalCurveDefinitions
     {
         var profile=data.ReferenceRows("delivery_profiles","code",curve.Text("profile_code")).Single();
         var rule=data.ReferenceRows("clock_rules","code",profile.Text("clock_code")).Single();
-        return (profile,rule.Text("code"),PowerClock.FromRule(ReferenceClockJson.Read(rule),TimeZoneDatabase.Installed()),
+        return (profile,rule.Text("code"),PublishedClocks.Resolve(data,rule.Text("code")),
             int.Parse(profile.Text("interval_minutes"),CultureInfo.InvariantCulture));
     }
 

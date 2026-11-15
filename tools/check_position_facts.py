@@ -81,7 +81,25 @@ def run_checks(client, context, view, expected, query, psql, environment, owned_
         if blocker.poll() is None:release()
     print('PASS position facts: pages remain available while actual pricing is blocked; complete working values retain booking rights',flush=True)
     _directory_authority(client,pinned,query,root)
+    _ppa_reference_visibility(client,context,view,expected,query)
     _publication_authority(client,context,view,query,psql,environment,root)
+
+
+def _ppa_reference_visibility(client,context,view,expected,query):
+    """A missing exact PPA alias refuses the whole result before dictionary use."""
+    ppa=next(row for row in expected if row['instrumentType']=='ppa')
+    for table,key,value in (('trade_references','trade_id',ppa['tradeId']),
+                            ('instrument_references','instrument_id',ppa['instrumentId'])):
+        query(f"CREATE POLICY synthetic_hidden_ppa_reference ON trading.{table} AS RESTRICTIVE "
+              f"FOR SELECT TO openetrm_runtime USING({key}<>'{value}'::uuid);")
+        try:
+            refused=client.call('trading/workspace',dict(context=context,view=view,bookingCatalog='directory',summaries=[],progressive=True),expected=403)
+            assert refused['code']=='access_denied' and set(refused)=={'code','message'},refused
+        finally:
+            query(f'DROP POLICY synthetic_hidden_ppa_reference ON trading.{table};')
+    restored=client.call('trading/workspace',dict(context=context,view=view,bookingCatalog='directory',summaries=[],progressive=True))
+    assert restored['blotter']['holdings']==expected
+    print('PASS PPA reference visibility: missing exact trade or instrument aliases refuse without partial values; restored authority reproduces every holding',flush=True)
 
 
 def _directory_authority(client,context,query,root):
@@ -118,6 +136,13 @@ def _publication_authority(client,context,view,query,psql,environment,root):
     role=query("SELECT id FROM security.roles WHERE code='trader';")
     actor=query("SELECT principal_id FROM security.identity_bindings WHERE issuer='https://preview.invalid' AND subject='trader' AND login_kind='human_interactive';")
     assert role and actor
+    # This shared publication boundary needs actual priced positions, but not
+    # every mixed-product valuation. Book A is the explicit futures-only fixture.
+    from seed_preview_positions import BOOKS
+    view={**view,'bookIds':[BOOKS[0]],'portfolioIds':[]}
+    control=client.call('trading/workspace',dict(context=context,view=view,bookingCatalog='directory',summaries=[],progressive=True))
+    holdings=control['blotter']['holdings']
+    assert holdings and all(row['instrumentType']=='future' and row['executionPnl'] is not None for row in holdings)
 
     def until(predicate,message,seconds=5):
         deadline=time.monotonic()+seconds
@@ -159,14 +184,14 @@ def _publication_authority(client,context,view,query,psql,environment,root):
                 f"INSERT INTO security.role_grants(id,principal_id,role_id,tenant_id,workspace_id,granted_from,granted_to,revoked) VALUES('{grant}','{actor}','{temporary_role}','{tenant}','{workspace}',"
                 "clock_timestamp()-interval '1 second',clock_timestamp()+interval '4 seconds',false);COMMIT;")
             configured=True
-            pricing_lock=lock('trading.side_schedule_rows')
+            pricing_lock=lock('trading.trade_revisions')
             gate_lock=lock('presentation.table_views')
             with ThreadPoolExecutor(max_workers=2) as pool:
                 priced=pool.submit(client.call,'trading/workspace',dict(context=context,view=view,bookingCatalog='directory',summaries=[],progressive=True),expected=403)
                 try:
                     pricing_pid=[]
                     def pricing_waits():
-                        value=query("SELECT a.pid FROM pg_locks l JOIN pg_stat_activity a USING(pid) WHERE a.usename='preview_runtime' AND l.relation='trading.side_schedule_rows'::regclass AND NOT l.granted;")
+                        value=query("SELECT a.pid FROM pg_locks l JOIN pg_stat_activity a USING(pid) WHERE a.usename='preview_runtime' AND l.relation='trading.trade_revisions'::regclass AND NOT l.granted;")
                         if value and '\n' not in value:pricing_pid.append(int(value));return True
                         return False
                     until(pricing_waits,'The progressive read did not reach actual pricing')

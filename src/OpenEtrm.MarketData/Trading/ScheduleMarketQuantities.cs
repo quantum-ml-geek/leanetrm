@@ -19,7 +19,7 @@ public sealed partial class ScheduleMarketSources
             throw Invalid("The stored quantity binding requires its exact source, asset, stage, units and series.");
         var periods=cells.Select(cell=>
         {
-            var interval=grid.Interval(cell);var local=TimeZoneInfo.ConvertTime(interval.Start,asset.OperatingClock.Zone);
+            var interval=grid.Interval(cell);var local=asset.OperatingClock.LocalAt(interval.Start);
             return new PowerInterval(interval.Start,interval.End,interval.OperatingDate,interval.HourBeginning,interval.HourBeginning+1,
                 interval.Minute,(int)local.Offset.TotalMinutes,interval.Occurrence,false);
         }).ToArray();

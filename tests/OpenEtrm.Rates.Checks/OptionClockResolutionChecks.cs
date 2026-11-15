@@ -40,7 +40,7 @@ internal static class OptionClockResolutionChecks
         var definition=new RateCurveDefinition(C("rates"),R("usd"),R("source"),
             RateConventionSet.Parse("actual_365_fixed","simple","linear_zero","none","decimal_per_year"),
             [new("182D",rateSeries[0],DateOnly.FromDateTime(horizon.UtcDateTime)),new("365D",rateSeries[1],DateOnly.FromDateTime(expiry.UtcDateTime))],Guid.NewGuid(),1);
-        var payment=new SidePaymentKey(option.Id,0,expiry,R("usd"));
+        var payment=new SidePaymentKey(option.Id,0,expiry,R("usd")){Timing=ValueTimingKind.Instant};
         var mapping=new CurrencyDiscountCurve(Guid.NewGuid(),R("usd"),definition);
         var provider=new CurrencyDefaultDiscounting([payment],source,true,mapping);
         var sourceFactor=provider.Resolve([payment],source).Single();

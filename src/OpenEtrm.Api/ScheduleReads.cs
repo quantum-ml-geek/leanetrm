@@ -20,6 +20,7 @@ public sealed record LibraryCalendar(CalendarReference Reference,DateOnly Covera
 }
 public sealed record TouProductLibrary(ImmutableArray<TouProductVersion> Versions,ImmutableArray<ClockChoice> Clocks,bool CanEdit,bool CanPublish)
 {
+    public ImmutableArray<LibraryCalendar> Calendars{get;init;}=[];
     public ImmutableArray<TouProductVersion> ContextVersions{get;init;}=[];
 }
 
@@ -86,7 +87,8 @@ public sealed class ScheduleReads
         var canEdit=await PreviewDatabase.HasPermission(connection,"WriteMarketDefinitions",ct);
         var canPublish=await PreviewDatabase.HasPermission(connection,"SealMarketDefinitions",ct);
         var versions=await products.Read(connection,ct);
-        return new(versions,await products.Clocks(connection,ct),canEdit,canPublish){ContextVersions=ContextVersions.Latest(versions,v=>v.Id,v=>v.Version)};
+        return new(versions,await products.Clocks(connection,ct),canEdit,canPublish){ContextVersions=ContextVersions.Latest(versions,v=>v.Id,v=>v.Version),
+            Calendars=[..(await schedules.Calendars(connection,ct)).Select(LibraryCalendar.From)]};
     }
 
     // Each TOU product's latest published version, resolved to its market clock.

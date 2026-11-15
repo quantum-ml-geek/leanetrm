@@ -15,7 +15,7 @@ def run(c, context, template):
     assert all(s['curve'] not in ('base_forward', 'daily_gas') for s in sources)
     clock = next(k['reference'] for k in source['clocks'] if k['reference']['code'] == 'test_utc')
     floating = template['scheduled']['second']['periods'][0]['floating']
-    request = dict(context=context, definitionRevisionId=source['definitionRevisionId'],
+    request = dict(calendarPolicy=template['scheduled']['second']['calendarPolicy'], context=context, definitionRevisionId=source['definitionRevisionId'],
                    commodity=source['commodity'], curve=source['curve'], currency=source['currencyCode'],
                    deliveryFrom=floating['deliveryFrom'], deliveryTo=floating['deliveryTo'],
                    paymentSchedule=floating['paymentSchedule'], spread='0',
@@ -49,9 +49,12 @@ def run(c, context, template):
     late['paymentSchedule'] = dict(frequency='monthly', rule='day_of_following_month', days=None,
         dayOfMonth=1, dayBasis=None, shortMonth='reject', adjustment='unadjusted', calendar=None,
         implementation='monthly_payment_date_rules_v1')
-    # January31 at23:00 fixed UTC-05 is February1 at04:00Z, after
-    # the explicitly selected February1 midnight payment. A receipt must refuse
-    # the same invalid ordering that booking refuses.
+    # January 31 at 23:00 fixed UTC-05 is February 1 at 04:00Z. The
+    # contractual February 1 payment day permits that day's later fixing.
+    same_day = c.call('swaps/contract-observation-preview', late)
+    assert same_day['floating']['contractObservations']['observations'][-1]['fixingAt'].startswith('2021-02-01T04:00:00')
+    # A January 31 payment precedes the completion and fixing day.
+    late['paymentSchedule'].update(rule='days_after_period_end',days=0,dayOfMonth=None,dayBasis='calendar_days',shortMonth=None)
     c.call('swaps/contract-observation-preview', late, expected=422)
     for name, mutate in [
         ('missing fixing policy', lambda r: r['source']['fixingClock'].pop('ambiguousTime')),

@@ -2,6 +2,9 @@
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 import json
+from functools import lru_cache
+from hashlib import sha256
+from zoneinfo import ZoneInfo
 import os
 from pathlib import Path
 import re
@@ -59,13 +62,24 @@ TOU_PRODUCTS = [
     ('caiso', 'CAISO / WECC · Pacific prevailing', 'pacific', 6, 22, True)]
 
 
-def tou_products(catalog, reference, clocks, published_at, product_id):
+def tou_products(catalog, reference, clocks, published_at, product_id, calendar):
     """Published TOU product rows for one market catalog, bound to that catalog's clock rules."""
     rows = []
     for n, (code, name, clock, start, end, saturday) in enumerate(TOU_PRODUCTS, start=1):
         pid = product_id(n)
+        product_calendar = calendar[clock] if isinstance(calendar,dict) else calendar
         rows.append(f"INSERT INTO market_data.tou_products VALUES ('{catalog}','{pid}','{code}');")
-        rows.append(f"INSERT INTO market_data.tou_product_versions(catalog_id,product_id,version,generation,state,name,clock_catalog_id,clock_revision_id,clock_code,peak_start_hour,peak_end_hour,peak_saturday,publication_order,published_at) VALUES ('{catalog}','{pid}',1,1,'published','{name}',{reference},'{clocks[clock]}',{start},{end},{str(saturday).lower()},{n},'{published_at}');")
+        columns='catalog_id,product_id,version,generation,state,name,clock_catalog_id,clock_revision_id,clock_code,peak_start_hour,peak_end_hour,peak_saturday,publication_order,published_at'
+        values=f"'{catalog}','{pid}',1,1,'published','{name}',{reference},'{clocks[clock]}',{start},{end},{str(saturday).lower()},{n},'{published_at}'"
+        # Populated-upgrade checks load the original synthetic TOU contract into
+        # the pre-calendar schema. New-schema fixtures author an exact calendar;
+        # this never updates or backfills any retained product version.
+        rows.append(f"""DO $tou_fixture$ BEGIN
+ IF EXISTS(SELECT 1 FROM pg_attribute WHERE attrelid='market_data.tou_product_versions'::regclass AND attname='calendar_catalog_id') THEN
+  INSERT INTO market_data.tou_product_versions({columns},calendar_catalog_id,calendar_revision_id,calendar_code,holiday_treatment)
+   VALUES({values},{reference},'{product_calendar}','weekly_mask_explicit_closures_v1');
+ ELSE INSERT INTO market_data.tou_product_versions({columns}) VALUES({values});END IF;
+END $tou_fixture$;""".replace("\n", " "))
     return rows
 
 
@@ -82,7 +96,7 @@ def monthly_value(kind, month, distance=0):
             6:Decimal('7')-d*Decimal('.02'),7:Decimal('29.1')+m*Decimal('.605')-d*Decimal('.05')}[kind]
 
 
-def fixture(root, current_schema=True, fixing_frames=False, date_plan=None, window_frames=False):
+def fixture(root, current_schema=True, fixing_frames=False, date_plan=None, window_frames=False, publish_clocks=True):
     """current_schema=False omits rows that need migrations 0026+ (curve names, TOU products)."""
     def historical(text):
         for old, new in [('2039','2019'),('2040','2020'),('2041','2021'),('2042','2022')]:
@@ -142,6 +156,7 @@ def fixture(root, current_schema=True, fixing_frames=False, date_plan=None, wind
     for code,zone in [('synthetic_eastern','America/New_York'),('synthetic_central','America/Chicago'),('synthetic_pacific','America/Los_Angeles')]:
         extra_ref.append(f"INSERT INTO ref_data.clock_rules (catalog_id,revision_id,code,kind,iana_zone,tzdb_version) VALUES ({R},'{code}','iana','{zone}','{tzdb}');")
     extra_ref.append(f"INSERT INTO ref_data.clock_rules (catalog_id,revision_id,code,kind,fixed_offset_seconds) VALUES ({R},'synthetic_fixed_est','fixed_offset',-18000);")
+    extra_ref.append(f"INSERT INTO ref_data.clock_rules (catalog_id,revision_id,code,kind,fixed_offset_seconds) VALUES ({R},'synthetic_fixed_east','fixed_offset',39600);")
     for closed in ['2021-01-01','2021-03-15']:
         extra_ref.append(f"INSERT INTO ref_data.calendar_days VALUES ({R},'test_business','{closed}',false,'Synthetic weekday closure');")
     now=datetime.now(timezone.utc).isoformat()
@@ -304,7 +319,7 @@ def fixture(root, current_schema=True, fixing_frames=False, date_plan=None, wind
     if current_schema:
         market=named_curves(market)
         clocks={'eastern':'synthetic_eastern','central':'synthetic_central','pacific':'synthetic_pacific','fixed_est':'synthetic_fixed_est'}
-        tou=tou_products(CAT,R,clocks,now,lambda n:identity('d',n))
+        tou=tou_products(CAT,R,clocks,now,lambda n:identity('d',n),'test_business')
         market=market.rsplit('COMMIT;',1)[0]+'\n'.join(tou)+'\nCOMMIT;\n'
     manifest={'mode':'local-synthetic-preview','catalogId':CAT,'revisionId':REV,'referenceCatalogId':RCAT,'referenceRevisionId':RREV,
               'tenantId':TENANT,'workspaceId':WORKSPACE,'frames':frames,'futuresConvention':'contract_lot_execution_pnl_v2',
@@ -320,6 +335,8 @@ def fixture(root, current_schema=True, fixing_frames=False, date_plan=None, wind
     # The preview uses a real currency reference; market prices remain synthetic.
     reference=reference.replace("'test_currency_a'",f"'{CURRENCY}'").replace("'TST','Synthetic currency A'","'USD','US Dollar'")
     market=market.replace("'test_currency_a'",f"'{CURRENCY}'")
+    if publish_clocks:
+        market=market.replace("UPDATE ref_data.revisions SET", fixture_clock_publications(clock_capture_request(manifest))+"\nUPDATE ref_data.revisions SET",1)
     return reference, market, security_fixture(CAT,RCAT), manifest
 
 
@@ -408,11 +425,73 @@ def gas_purchase(context, catalog, point='synthetic_gas_point_a', fee='0.1'):
 
     It is the composition of one physical side that a single-point gas trade maps to; `fee=None` leaves the fee out.
     """
+    from synthetic_side_calendars import side_calendar_policy
+    reference = next(c['reference'] for c in catalog['sideCalendars'] if c['code'] == 'test_utc_every_day')
+    physical_policy = side_calendar_policy(reference, delivery=True, observation=False, payment=False)
+    cash_policy = side_calendar_policy(reference, delivery=True, observation=False, payment=True)
     p = next(p for p in catalog['locations'] if p['deliveryPoint'] == point)
     charge = lambda code, role, price: {'code': code, 'role': role, 'direction': 'pay', 'source': 'gas', 'stage': 'delivery', 'price': price,
-                                        'tariffCode': None, 'paymentAt': '2021-02-02T00:00:00Z'}
+                                        'tariffCode': None, 'paymentAt': '2021-02-02T00:00:00Z', 'calendarPolicy': cash_policy}
     return {**context, **trade_booking(), 'operationId': str(uuid4()), 'bookId': catalog['books'][0]['id'], 'definitionRevisionId': p['definitionRevisionId'],
             'gasSetupId': catalog['gasSetupId'], 'discounting': False, 'profile': 'fixed_gas_composition_v1',
             'physicalSides': [{'code': 'gas', 'pipeline': p['pipeline'], 'zone': p['zone'], 'deliveryPoint': p['deliveryPoint'], 'product': p['product'], 'direction': 'receive',
-                               'deliveryFrom': '2021-01-01', 'deliveryTo': '2021-02-01', 'quantityBasis': 'period_total_equal_days', 'quantity': '1000', 'link': None}],
+                               'deliveryFrom': '2021-01-01', 'deliveryTo': '2021-02-01', 'quantityBasis': 'period_total_equal_days', 'quantity': '1000', 'link': None, 'calendarPolicy': physical_policy}],
             'cashSides': [charge('payment', 'consideration', '3'), *([] if fee is None else [charge('usage', 'fee', fee)])]}
+
+
+def clock_capture_request(manifest):
+    """Explicit reusable power-clock publication for this synthetic reference."""
+    clocks=[dict(code='test_utc',kind='fixed_offset',fixedOffsetSeconds=0,ianaZone=None,tzdbVersion=None),
+            dict(code='synthetic_fixed_est',kind='fixed_offset',fixedOffsetSeconds=-18000,ianaZone=None,tzdbVersion=None),
+            dict(code='synthetic_fixed_east',kind='fixed_offset',fixedOffsetSeconds=39600,ianaZone=None,tzdbVersion=None)]
+    for code,zone in [('synthetic_eastern','America/New_York'),('synthetic_central','America/Chicago'),
+                      ('synthetic_pacific','America/Los_Angeles'),('test_london_clock','Europe/London'),('test_new_york_clock','America/New_York')]:
+        clocks.append(dict(code=code,kind='iana',fixedOffsetSeconds=None,ianaZone=zone,tzdbVersion=installed_tzdb()))
+    return dict(referenceCatalogId=manifest['referenceCatalogId'],referenceRevisionId=manifest['referenceRevisionId'],
+                **{'from':'2020-01-01','to':'2053-01-01'},clocks=clocks)
+
+
+@lru_cache(maxsize=32)
+def fixture_clock_payload(code, kind, seconds, zone, release, start, end):
+    """Synthetic publication input, not an expected-date/quantity oracle.
+
+    Read the exact TZif source whose release the fixture declares. Production
+    publication uses the managed renderer. Native-only tests do not build or
+    invoke application binaries; both fixtures publish explicit bounded cells.
+    """
+    if kind == 'fixed_offset':
+        clock = timezone(timedelta(seconds=seconds))
+        identifier = code
+    else:
+        if release != installed_tzdb():
+            raise ValueError('The fixture clock release is unavailable')
+        with (Path(os.environ.get('TZDIR') or '/usr/share/zoneinfo') / zone).open('rb') as source:
+            clock = ZoneInfo.from_file(source, key=zone)
+        identifier = zone
+    first = datetime.fromisoformat(start).replace(tzinfo=clock).astimezone(timezone.utc)
+    last = datetime.fromisoformat(end).replace(tzinfo=clock).astimezone(timezone.utc)
+    at, previous, runs = first, None, []
+    while at <= last:
+        offset = at.astimezone(clock).utcoffset().total_seconds()
+        if offset % 60:
+            raise ValueError('The synthetic clock must use whole-minute offsets')
+        minutes = int(offset / 60)
+        if minutes != previous:
+            runs.append(dict(From=at.isoformat(), Minutes=minutes))
+            previous = minutes
+        at += timedelta(minutes=5)
+    return json.dumps(dict(Implementation='captured_power_grid_clock_v1', Id=identifier,
+                           From=first.isoformat(), To=last.isoformat(), Runs=runs), separators=(',', ':'))
+
+
+def fixture_clock_publications(request):
+    """Publish only on the new schema, before the synthetic reference is sealed."""
+    rows=[]
+    literal=lambda value: 'NULL' if value is None else "'"+str(value).replace("'", "''")+"'"
+    for clock in request['clocks']:
+        payload=fixture_clock_payload(clock['code'],clock['kind'],clock['fixedOffsetSeconds'],clock['ianaZone'],clock['tzdbVersion'],request['from'],request['to'])
+        arguments=[literal(request['referenceCatalogId']),literal(request['referenceRevisionId']),literal(clock['code']),
+                   literal(request['from']),literal(request['to']),literal(payload),
+                   "decode('"+sha256(payload.encode()).hexdigest()+"','hex')",literal(clock['tzdbVersion'])]
+        rows.append('PERFORM ref_data.publish_clock_capture('+','.join(arguments)+');')
+    return "DO $clock_fixture$ BEGIN IF to_regprocedure('ref_data.publish_clock_capture(uuid,uuid,text,date,date,text,bytea,text)') IS NOT NULL THEN\n"+'\n'.join(rows)+"\nEND IF;END $clock_fixture$;"

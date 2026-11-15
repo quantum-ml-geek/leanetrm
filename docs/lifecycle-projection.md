@@ -128,8 +128,12 @@ Owned-browser presentation checks qualify explicit settings, complete sampled
 envelopes, signed tails and uncertain-response recovery. The native worker and
 full-application qualifiers below exercise those consumers independently.
 
-Cash disposition selects projected payment at the contractual due instant or
-continued outstanding cash. Future unpaid contributions use ordinary
+Cash disposition selects hypothetical payment or continued outstanding cash.
+For standard payments, `utc_payment_day_v1` keeps cash outstanding throughout
+its contractual UTC date and places hypothetical discharge at the following UTC
+midnight. Same-day fixings and completion precede that boundary. Exact-instant
+contracts discharge at their selected due instant. Neither assumption records an
+actual payment or creates a contractual deadline. Future unpaid contributions use ordinary
 `TimedCashPayment` PV. Period cash is either nominal or accumulated to the horizon
 using the exact ratio of captured source discount factors. Currency curves require
 an explicit captured term-structure capability, exact-instant timing and retained

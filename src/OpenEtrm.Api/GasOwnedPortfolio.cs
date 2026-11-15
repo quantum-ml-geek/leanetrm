@@ -93,7 +93,7 @@ internal static class GasOwnedPortfolio
             }
             var snapshots=market.Snapshot;var payments=positions.Select(p=>p.Instrument).OfType<GasCommodityHoldingInstrument>()
                 .Where(i=>i.Carrying==GasHoldingCarrying.CurrencyCurve&&i.ReturnAt>snapshots.ValuationAt)
-                .Select(i=>new SidePaymentKey(i.Id,0,i.ReturnAt!.Value,i.Currency))
+                .Select(i=>new SidePaymentKey(i.Id,0,i.ReturnAt!.Value,i.Currency){Timing=ValueTimingKind.Instant})
                 .Concat(positions.Select(p=>p.Instrument).OfType<GasPhysicalDeliveryObligationInstrument>().SelectMany(i=>i.RequiredDiscounts(snapshots.ValuationAt)))
                 .Concat(fees.Where(f=>!Nominal(f)&&!f.Instrument.Due(snapshots.ValuationAt)&&f.State.Outstanding(snapshots).Numerator!="0").Select(f=>f.Instrument.Payment))
                 .Distinct().ToImmutableArray();

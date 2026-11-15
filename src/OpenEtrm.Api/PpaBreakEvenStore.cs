@@ -33,6 +33,7 @@ internal sealed class PpaBreakEvenStore(PreviewDatabase database,PpaStore trades
         var market=await trades.SelectInputs(connection,frame,request.Terms.DefinitionRevisionId,ct);frame=market.Frame;var data=market.Data;
         await PpaReads.RequireMarket(connection,database.Manifest.CatalogId,request.Terms.DefinitionRevisionId,request.Terms.ReferenceCatalogId,request.Terms.ReferenceRevisionId,frame,context,ct);
         var tou=await PpaReads.Tou(connection,data,frame,context,[request.Terms],ct);
+        data=await SideCalendarPolicies.Prepare(connection,data,request.Terms.Memberships.Select(m=>m.Side.CalendarPolicy),ct);
         var instrument=PpaCompiler.Compile(data,request.Terms,tou,await PpaCompiler.ReadQuantityTypes(connection,data,request.Terms,ct));await PpaCompiler.ValidateDefinitions(connection,data,instrument,ct);
         var coverage=PpaCompiler.Coverage(instrument,PpaQuantitiesStore.Clock(data,instrument.Delivery.Clock.Code),request.CoverageFrom,request.CoverageTo);
         var plan=PpaBreakEvenPlan.Create(instrument,new(PpaCompiler.Role(request.SelectedSide.Role),request.SelectedSide.Ordinal),coverage,mw,request.Measure,request.QuoteDecimalPlaces,request.QuoteRounding);

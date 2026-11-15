@@ -100,7 +100,7 @@ public sealed class IntervalValuationInputs
             if(!assets.SetEquals(instrument.NormalizationAssets))throw PpaErrors.Error("ppa_normalization","assets","Normalization assets must equal the declared asset-derived source set.");
             foreach(var member in instrument.Memberships)
             {
-                if(!Reference.Clocks.TryGetValue(member.Side.Terms.Delivery.Clock,out var captured)||captured.Fingerprint!=member.Side.Terms.Schedule.Clock.Fingerprint)
+                if(!Reference.Clocks.TryGetValue(member.Side.Terms.Delivery.Clock,out var captured)||captured.CaptureForDelivery(member.Side.Terms.Delivery.From,member.Side.Terms.Delivery.To).Fingerprint!=member.Side.Terms.Schedule.Clock.Fingerprint)
                     throw PpaErrors.Error("ppa_reference_revision","clock","The side's captured delivery clock must equal its exact pinned reference rule.");
                 if(member.Side.GenerateSchedule() is not IntervalSideSchedule schedule)
                     throw PpaErrors.Error("ppa_cadence","schedule","An interval instrument requires interval schedules from every shared side.");
@@ -274,10 +274,10 @@ public sealed class IntervalValuationInputs
         Require(instrument);var full=FullCoverage(instrument);
         if(coverage is null || !full.Contains(coverage.From,coverage.To))throw PpaErrors.Error("ppa_segment_coverage","coverage","Select coverage within the full instrument term.");
         var clock=Clock(instrument);var grid=TimeSpan.FromMinutes(instrument.Delivery.IntervalMinutes);
-        if(!PowerHours.IsCell(clock.Zone,coverage.From,grid) || !PowerHours.IsCell(clock.Zone,coverage.To,grid))throw PpaErrors.Error("ppa_segment_boundary","coverage","A boundary cannot split a native interval.");
+        if(!PowerHours.IsCell(clock,coverage.From,grid) || !PowerHours.IsCell(clock,coverage.To,grid))throw PpaErrors.Error("ppa_segment_boundary","coverage","A boundary cannot split a native interval.");
         if(instrument.Memberships.Any(m=>m.Side is CapacityDeliverySide))
         {
-            bool MonthStart(DateTimeOffset at){var date=DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(at,clock.Zone).DateTime);return date.Day==1 && clock.StartOfDay(date).ToUniversalTime()==at;}
+            bool MonthStart(DateTimeOffset at){var date=DateOnly.FromDateTime(clock.LocalAt(at).DateTime);return date.Day==1 && clock.StartOfDay(date).ToUniversalTime()==at;}
             if(!MonthStart(coverage.From)||!MonthStart(coverage.To))throw PpaErrors.Error("ppa_segment_boundary","capacity","Capacity bindings require complete operating months.");
         }
     }
@@ -296,12 +296,14 @@ public sealed class IntervalValuationInputs
             foreach(var row in Rows(instrument,member.Side,coverage))
             {
                 cancellation.ThrowIfCancellationRequested();work++;if(DetailMonths.Contains(new(row.Quantity.Interval.OperatingDate.Year,row.Quantity.Interval.OperatingDate.Month,1)))detail++;
-                if(row.ValueAt>Snapshot.ValuationAt&&!(member.Side is CertificateDeliverySide&&row.Quantity.Interval.End<=Snapshot.ValuationAt)&&keys.Add(row.Schedule.Key))ordered.Add(row.Schedule.Key);
+                var future=member.Side is FixedSide or FloatingSide?!PaymentDatePolicy.IsDue(row.ValueAt,Snapshot.ValuationAt):row.ValueAt>Snapshot.ValuationAt;
+                if(future&&!(member.Side is CertificateDeliverySide&&row.Quantity.Interval.End<=Snapshot.ValuationAt)&&keys.Add(row.Schedule.Key))ordered.Add(row.Schedule.Key);
             }
         return new(work,detail,ordered.ToImmutable());
     });
     internal static bool InMeasure(Side side,PreparedRowInputs row,DateTimeOffset valuation)=>
-        side is CertificateDeliverySide && row.Quantity.Interval.End<=valuation || row.ValueAt>valuation;
+        side is CertificateDeliverySide && row.Quantity.Interval.End<=valuation ||
+        (side is FixedSide or FloatingSide?!PaymentDatePolicy.IsOverdue(row.ValueAt,valuation):row.ValueAt>valuation);
     public ImmutableArray<CurveRequest> Dependencies(PpaInstrument instrument,DeliveryCoverage coverage)
     {
         ValidateCoverage(instrument,coverage);

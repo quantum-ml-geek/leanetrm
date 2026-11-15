@@ -242,11 +242,11 @@ def run_checks(url, query, manifest):
           f"'{reason}',ARRAY['{hours[0]}']::timestamptz[],ARRAY['{hours[1]}']::timestamptz[],ARRAY['0.5']);COMMIT;")
     stale_window = {**window(hours[0], hours[3]), 'seriesId': stale}
     stored, logged = client.call('interval-series/values', stale_window), client.call('interval-series/changes', stale_window)
-    check('latest browsing survives a market clock tzdb update', client.call('interval-series/latest', {'seriesId': stale, 'knownAt': stale_window['knownAt']})['window'] is not None)
-    check('reads stay available after a tzdata update while revisions are refused',
+    check('latest browsing does not reinterpret retained rows with installed tzdb', client.call('interval-series/latest', {'seriesId': stale, 'knownAt': stale_window['knownAt']})['window'] is not None)
+    check('retained rows remain readable while an uncaptured clock refuses new generation',
           [(row['start'], row['value'], row['revision']) for row in stored['rows']] == [(utc(hours[0]), '0.5', 1)]
           and [(row['start'], row['value'], row['reason']) for row in logged['rows']] == [(utc(hours[0]), '0.5', reason)]
-          and refused('interval-series/revise', {**revise(1, hours[1], ['0.6']), 'seriesId': stale}, 422, 'clock_tzdb'))
+          and refused('interval-series/revise', {**revise(1, hours[1], ['0.6']), 'seriesId': stale}, 422, 'clock_reference'))
     latest_series = client.call('interval-series/define', {**definition, 'requestId': str(uuid4()),
         'code': 'synthetic_latest_browsing'})['seriesId']
     client.call('interval-series/revise', {**revise(0, hours[0], ['0.1', '0.2', '0.3']), 'seriesId': latest_series})

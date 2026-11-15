@@ -246,6 +246,16 @@ def main(checks=run_checks, before_migration=None, fixture_factory=None, argumen
                     from check_fact_anchor_upgrade import run_checks as check_reference_receipt_upgrade
                     check_reference_receipt_upgrade(query,migration,number='0249',guard='reference_receipt_upgrade',
                         signatures=('security.reference_version_visible(uuid,uuid)',))
+                if migration.name=='0332_calendar_publication_certification.sql':
+                    from check_fact_anchor_upgrade import run_checks as check_calendar_certification_upgrade
+                    check_calendar_certification_upgrade(query,migration,number=migration.name[:4],guard='calendar_certification_upgrade',signatures=('security.capture_market_and_schedule_context(uuid,date,timestamptz)','security.resolve_side_calendar(uuid,uuid,text,jsonb)','security.list_side_calendars()'))
+                if migration.name=='0333_collection_operating_clock.sql':
+                    from check_fact_anchor_upgrade import run_checks as check_operating_clock_upgrade
+                    check_operating_clock_upgrade(query,migration,number=migration.name[:4],guard='operating_clock_upgrade',signatures=('power_data.begin_attempt(uuid,date,date)','power_data.finish_attempt(uuid,jsonb,text)'))
+                if migration.name=='0331_published_clock_consumers.sql':
+                    from check_fact_anchor_upgrade import run_checks as check_clock_consumer_upgrade
+                    check_clock_consumer_upgrade(query,migration,number=migration.name[:4],guard='published_clock_consumer_upgrade',signatures=('power_data.source_config(uuid)',))
+
                 if migration.name=='0259_explicit_trading_business_date.sql':
                     from check_fact_anchor_upgrade import run_checks as check_trading_date_upgrade
                     check_trading_date_upgrade(query,migration,number=migration.name[:4],guard='trading_business_date_upgrade',signatures=(

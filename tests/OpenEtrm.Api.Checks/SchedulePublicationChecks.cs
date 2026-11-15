@@ -63,7 +63,7 @@ internal static class SchedulePublicationChecks
             catch(TemporalException e)when(e.Code==code){if(mentions is not null&&!mentions.Split(',').All(e.Message.Contains))throw new Exception($"{code} must name {mentions}: {e.Message}");return;}
             throw new Exception($"Expected {code}");
         }
-        var calendar=new ReferenceCalendar(new(Guid.Empty,Guid.Empty,"synthetic_business"),new(2026,1,1),new(2027,1,1),96,[]);
+        var calendar=new ReferenceCalendar(new(Guid.Parse("20000000-0000-0000-0000-000000000001"),Guid.Parse("20000000-0000-0000-0000-000000000002"),"synthetic_business"),new(2026,1,1),new(2027,1,1),96,[]);
         var days=new ScheduleVersion(Guid.NewGuid(),1,1,"published",new("Synthetic days","oe.days",null,null,null,null,null,null,null,Daily:new("calendar","2026-01-01","2030-12-31")),
             "on_or_after",new(2020,1,1),new(2040,1,1),1,new DateTimeOffset(2020,1,1,0,0,0,TimeSpan.Zero),"date_schedule_v4",Calendar:calendar.Reference,ResolvedCalendar:calendar);
         var context=new ScheduleContext("2026-11-03",1);

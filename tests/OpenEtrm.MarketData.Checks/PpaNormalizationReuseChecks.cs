@@ -15,7 +15,7 @@ internal static class PpaNormalizationReuseChecks
         var sealedInstrument=f.WithCertificate();
         var originalSide=(PowerPhysicalSide)sealedInstrument.Memberships[0].Side;
         var changedNormalization=f.Normalization([new(f.Definitions,"synthetic_other_denominator")]);
-        var changedSide=new PowerPhysicalSide(originalSide.Id,originalSide.Terms with{Normalization=changedNormalization},originalSide.Location);
+        var changedSide=new PowerPhysicalSide(originalSide.Id,originalSide.Terms with{Normalization=changedNormalization},originalSide.Location,SyntheticSideCalendars.Interval(originalSide.Terms with{Normalization=changedNormalization},false));
         if(DefinitionIdentity.For(changedSide)==DefinitionIdentity.For(originalSide))
             throw new Exception("A side's economic identity must include all normalization assets, basis and policy.");
         var rejected=false;
@@ -28,7 +28,7 @@ internal static class PpaNormalizationReuseChecks
         if(!rejected)throw new Exception("A reusable side's normalization denominator cannot be changed by placing it in another instrument.");
         var cash=(FixedSide)sealedInstrument.Memberships[1].Side;
         PpaInstrument WithCashTerms(PpaSideTerms terms)=>new(Guid.NewGuid(),f.Definitions,f.Reference,
-            sealedInstrument.Memberships.SetItem(1,sealedInstrument.Memberships[1] with{Side=new FixedSide(cash.Id,terms,cash.Price)}),false,PpaInstrument.Implementation);
+            sealedInstrument.Memberships.SetItem(1,sealedInstrument.Memberships[1] with{Side=new FixedSide(cash.Id,terms,cash.Price,SyntheticSideCalendars.Interval(terms,false))}),false,PpaInstrument.Implementation);
         Reject("ppa_quantity_reference",()=>WithCashTerms(cash.Terms with{InputPorts=default}));
         Reject("ppa_quantity_reference",()=>WithCashTerms(cash.Terms with{InputPorts=[]}));
         Reject("ppa_quantity_unit",()=>WithCashTerms(cash.Terms with{InputPorts=[cash.Terms.InputPorts[0] with{Quantity=f.CapacityDays.Key}]}));
@@ -40,10 +40,10 @@ internal static class PpaNormalizationReuseChecks
             var original=f.WithCertificate();
             var normalization=f.Normalization(assets.IsDefault?[f.Asset.Key]:assets);
             var members=original.Memberships.Select(m=>m with {Side=m.Side switch {
-                PowerPhysicalSide side=>new PowerPhysicalSide(side.Id,side.Terms with {Quantity=volume,Normalization=normalization},side.Location),
+                PowerPhysicalSide side=>new PowerPhysicalSide(side.Id,side.Terms with {Quantity=volume,Normalization=normalization},side.Location,SyntheticSideCalendars.Interval(side.Terms with {Quantity=volume,Normalization=normalization},false)),
                 CertificateDeliverySide side=>new CertificateDeliverySide(side.Id,side.Terms with {Quantity=volume,Normalization=normalization},side.CertificateQuantity,
-                    ExactDecimal.Parse(conversion),side.Eligibility,side.Holding,side.Disposition),
-                FixedSide side=>new FixedSide(side.Id,side.Terms with{Normalization=normalization},m.Slot.Role==PpaRole.StrikePayment?new FlatPrice(new(ExactDecimal.Parse(strike),f.EnergyPrice)):side.Price),
+                    ExactDecimal.Parse(conversion),side.Eligibility,side.Holding,side.Disposition,SyntheticSideCalendars.Interval(side.Terms with {Quantity=volume,Normalization=normalization},false)),
+                FixedSide side=>new FixedSide(side.Id,side.Terms with{Normalization=normalization},m.Slot.Role==PpaRole.StrikePayment?new FlatPrice(new(ExactDecimal.Parse(strike),f.EnergyPrice)):side.Price,SyntheticSideCalendars.Interval(side.Terms with{Normalization=normalization},false)),
                 _=>m.Side
             }}).ToImmutableArray();
             return new(Guid.NewGuid(),f.Definitions,f.Reference,members,false,PpaInstrument.Implementation);

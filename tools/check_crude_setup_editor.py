@@ -2,6 +2,8 @@
 from uuid import uuid4
 from decimal import Decimal
 import json
+from synthetic_side_calendars import side_calendar_policy
+from preview_fixture import RCAT, RREV
 import subprocess
 import time
 import socket
@@ -51,7 +53,7 @@ def run_gas_reference_bootstrap(manifest,owned_root,dotnet,dll,environment,brows
             assert 'synthetic_gas_point_unpriced' in {p['value'] for p in choices}
             refusal=c.call('tickets/lookup',{'context':context,'draft':draft,'side':'physical','field':'price'},expected=422)
             assert refusal=={'code':'ticket_lookup','message':"Choose the delivery from on side 'physical' first."},refusal
-            priced={**draft,'sides':[{'kind':'physical','code':'physical','values':{**draft['sides'][0]['values'],
+            priced={**draft,'sides':[{'kind':'physical','code':'physical','calendarPolicy':side_calendar_policy(dict(revision=dict(catalogId=RCAT,revisionId=RREV),code='test_utc_every_day'),delivery=True,observation=False,payment=False),'values':{**draft['sides'][0]['values'],
                 'delivery_from':'2021-01-01','delivery_to':'2021-02-01','delivery_point':'synthetic_gas_point_a'}}]}
             price=c.call('tickets/lookup',{'context':context,'draft':priced,'side':'physical','field':'price'})
             assert price['value']=='3.2' and price['source']['kind']=='market' and instant(price['asOf'])==instant(frame['at']),price
@@ -267,12 +269,12 @@ def run_checks(url, query, manifest):
     c.call('profile', {'profile': 'trader'})
     frame = initial_frame(c.call('workspace'), '2020-12-18')
     quoted = c.call('crude-setup/preview', {'snapshotId': frame['id'], 'setupId': saved['setupId'], 'knowledgeMode': 'current',
-                      'deliveryFrom': '2021-01-01T00:00:00Z', 'deliveryTo': '2021-02-01T00:00:00Z', 'quantity': '1000'})
+                      'deliveryFrom': '2021-01-01T00:00:00Z', 'deliveryTo': '2021-02-01T00:00:00Z', 'quantity': '1000', 'calendarPolicy': side_calendar_policy(dict(revision=dict(catalogId=RCAT,revisionId=RREV),code='test_utc_every_day'),delivery=True,observation=False,payment=False)})
     assert Decimal(quoted['presentValue']) == 80000
     assert quoted['deliveryQuantity']['revision']['revisionId'] == delivery['revision_id']
     assert quoted['pricingQuantity']['revision']['revisionId'] == source['referenceRevisionId']
     c.call('crude-setup/preview', {'snapshotId': frame['id'], 'setupId': saved['setupId'], 'knowledgeMode': 'current',
-        'deliveryFrom': '2020-12-18T00:00:00Z', 'deliveryTo': '2021-01-01T00:00:00Z', 'quantity': '1000'}, expected=422)
+        'deliveryFrom': '2020-12-18T00:00:00Z', 'deliveryTo': '2021-01-01T00:00:00Z', 'quantity': '1000', 'calendarPolicy': side_calendar_policy(dict(revision=dict(catalogId=RCAT,revisionId=RREV),code='test_utc_every_day'),delivery=True,observation=False,payment=False)}, expected=422)
     assert quoted['curve'] == source['curve'] and quoted['definitionRevisionId'] == source['definitionRevisionId']
     for context, expected in ((before,'0'),(quoted['contextId'],'1')):
         assert query(runtime(f"SELECT count(*) FROM market_data.crude_setup_versions WHERE(catalog_id,id)=('{catalog_id}','{saved['setupId']}');",context)) == expected
@@ -286,7 +288,7 @@ def run_checks(url, query, manifest):
             assert refused['code'] == ('snapshot_missing' if hidden else 'access_denied'), refused
             if reference == delivery['catalog_id']:
                 explicit = c.call('crude-setup/preview', {'snapshotId':frame['id'],'setupId':original_head['setupId'],'knowledgeMode':'current',
-                    'deliveryFrom':'2021-01-01T00:00:00Z','deliveryTo':'2021-02-01T00:00:00Z','quantity':'1000'})
+                    'deliveryFrom':'2021-01-01T00:00:00Z','deliveryTo':'2021-02-01T00:00:00Z','quantity':'1000','calendarPolicy':side_calendar_policy(dict(revision=dict(catalogId=RCAT,revisionId=RREV),code='test_utc_every_day'),delivery=True,observation=False,payment=False)})
                 assert Decimal(explicit['presentValue']) == 80000
             c.call('profile', {'profile': 'editor'}); c.call('crude-setup/save', body, expected=403)
             c.call('profile', {'profile': 'approver'}); c.call('crude-setup/publish', command, expected=403)
@@ -318,7 +320,9 @@ def run_booking_checks(url, query, manifest, *, run_worker):
             'definitionRevisionId': assignment['definitionRevisionId'], 'assignmentCode': assignment['code'], 'crudeSetupId': assignment['crudeSetupId'],
             'profile': catalog['profiles'][0]['code'], 'quantityBasis': 'standard_volume_total', 'tolerance': '0', 'discounting': False,
             'deliveryFrom': '2021-01-10T00:00:00Z', 'deliveryTo': '2021-01-11T00:00:00Z', 'paymentAt': '2021-02-01T00:00:00Z',
-            'quantity': '1000', 'direction': 'receive', 'considerationDirection': 'pay', 'fixedPrice': '78', 'handlingFee': None, 'handlingFeeDirection': None}
+            'quantity': '1000', 'calendarPolicy': side_calendar_policy(dict(revision=dict(catalogId=RCAT,revisionId=RREV),code='test_utc_every_day'),delivery=True,observation=False,payment=False), 'direction': 'receive', 'considerationDirection': 'pay', 'fixedPrice': '78', 'handlingFee': None, 'handlingFeeDirection': None}
+    body['deliveryCalendarPolicy']=body.pop('calendarPolicy')
+    body['considerationCalendarPolicy']=side_calendar_policy(dict(revision=dict(catalogId=RCAT,revisionId=RREV),code='test_utc_every_day'),delivery=True,observation=False,payment=True)
     ticket=c.call('crude/references',context);references=ticket['deliveryReferences']
     assert ticket['clocks'] and all(k['kind']=='fixed_offset' and int(k['fixed_offset_seconds'])==0 for k in ticket['clocks']), ticket['clocks']
     grade=next(g for g in references['grades'] if g['code']==assignment['grade'])
@@ -345,7 +349,7 @@ def run_booking_checks(url, query, manifest, *, run_worker):
     assert position['instrumentType'] == 'physical_crude'
     blotter = c.call('trading/blotter', {'context': shared, 'view': {'mode': 'trades', 'bookIds': [body['bookId']], 'portfolioIds': [], 'groupBy': [], 'measures': [], 'pivotConvention': None}})
     assert next(p for p in blotter['holdings'] if p['tradeId'] == booked['tradeId'])['grade'] == 'Synthetic delivery grade'
-    assert query(f"SELECT s.economic_identity::jsonb->>'contract' FROM trading.crude_memberships m JOIN trading.sides s ON(s.catalog_id,s.id)=(m.catalog_id,m.side_id) WHERE m.catalog_id='{manifest['catalogId']}' AND m.instrument_id='{booked['instrumentId']}' AND m.slot=0;") == 'physical_crude_side_v2'
+    assert query(f"SELECT s.economic_identity::jsonb->>'contract' FROM trading.crude_memberships m JOIN trading.sides s ON(s.catalog_id,s.id)=(m.catalog_id,m.side_id) WHERE m.catalog_id='{manifest['catalogId']}' AND m.instrument_id='{booked['instrumentId']}' AND m.slot=0;") == 'physical_crude_side_v3'
     # Native and queued risk must use one original factor for the old and mapped holdings.
     from fractions import Fraction
     retained = {**shared, 'knowledgeMode': 'retained', 'contextId': blotter['context']['contextId']}
@@ -395,10 +399,10 @@ def run_booking_checks(url, query, manifest, *, run_worker):
     current = next(a for a in c.call('crude/catalog', {**context, 'snapshotId': selected})['assignments'] if a['crudeSetupId'] == draft['setupId'])
     b_body = {**body, 'operationId': str(uuid4()), 'snapshotId': selected, 'assignmentCode': current['code'], 'crudeSetupId': current['crudeSetupId']}
     mark = c.call('crude-setup/preview', {'snapshotId': selected, 'setupId': current['crudeSetupId'], 'knowledgeMode': 'current',
-        'deliveryFrom': body['deliveryFrom'], 'deliveryTo': body['deliveryTo'], 'quantity': '1000'})
+        'deliveryFrom': body['deliveryFrom'], 'deliveryTo': body['deliveryTo'], 'quantity': '1000', 'calendarPolicy': side_calendar_policy(dict(revision=dict(catalogId=RCAT,revisionId=RREV),code='test_utc_every_day'),delivery=True,observation=False,payment=False)})
     assert Decimal(mark['presentValue']) == 81000
     contextual_body={'snapshotId':selected,'setupId':current['crudeSetupId'],'knowledgeMode':'context',
-        'deliveryFrom':body['deliveryFrom'],'deliveryTo':body['deliveryTo'],'quantity':'1000'}
+        'deliveryFrom':body['deliveryFrom'],'deliveryTo':body['deliveryTo'],'quantity':'1000','calendarPolicy':side_calendar_policy(dict(revision=dict(catalogId=RCAT,revisionId=RREV),code='test_utc_every_day'),delivery=True,observation=False,payment=False)}
     assert Decimal(c.call('crude-setup/preview',contextual_body)['presentValue'])==81000
     stale=c.call('crude-setup/preview',{**contextual_body,'setupId':assignment['crudeSetupId']},expected=422)
     assert stale['code']=='crude_setup_context'
@@ -502,8 +506,13 @@ def run_booking_checks(url, query, manifest, *, run_worker):
       DROP FUNCTION security.resolve_crude_delivery(uuid,jsonb,timestamptz,timestamptz,timestamptz);
       {upgrade}
       DO $upgrade$ BEGIN
-       IF(SELECT value IS DISTINCT FROM {snapshot} OR routine IS DISTINCT FROM pg_get_functiondef('security.book_physical_crude(uuid,jsonb,timestamptz)'::regprocedure) FROM physical_upgrade_before)
+       IF(SELECT value IS DISTINCT FROM {snapshot} FROM physical_upgrade_before)
        THEN RAISE EXCEPTION 'physical_reference_upgrade_changed_retained_inputs';END IF;
+       IF position('resolve_crude_delivery' IN pg_get_functiondef('security.book_physical_crude(uuid,jsonb,timestamptz)'::regprocedure))=0
+       THEN RAISE EXCEPTION 'physical_reference_upgrade_missing_resolver';END IF;
+       -- Resume the installed execution contract after checking the historical
+       -- migration. Later migrations intentionally extend this routine.
+       EXECUTE (SELECT routine FROM physical_upgrade_before);
       END $upgrade$;
       SET LOCAL SESSION AUTHORIZATION preview_runtime;SELECT security.use_context('{token}');
       DO $replay$ DECLARE receipt jsonb;BEGIN

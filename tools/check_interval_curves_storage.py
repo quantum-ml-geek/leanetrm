@@ -109,8 +109,8 @@ def run_checks(query, manifest):
     def tou(product, version=1):
         return f"||jsonb_build_object('tou_product_id','{product}','tou_version',{version})"
     draft_version = (f"INSERT INTO market_data.tou_product_versions(catalog_id,product_id,version,generation,state,name,clock_catalog_id,clock_revision_id,"
-                     f"clock_code,peak_start_hour,peak_end_hour,peak_saturday) VALUES('{catalog}','{curves['pjm']}',2,1,'draft','Synthetic draft peak',"
-                     f"'{reference}','{ref_revision}','synthetic_eastern',7,23,false);")
+                     f"clock_code,peak_start_hour,peak_end_hour,peak_saturday,calendar_catalog_id,calendar_revision_id,calendar_code,holiday_treatment) VALUES('{catalog}','{curves['pjm']}',2,1,'draft','Synthetic draft peak',"
+                     f"'{reference}','{ref_revision}','synthetic_eastern',7,23,false,'{reference}','{ref_revision}','synthetic_eastern_holidays','weekly_mask_explicit_closures_v1');")
     composition = 'one all-hours block, or the peak and off-peak blocks of one TOU product version'
     binding = 'bound to a published TOU product version'
     for name, prefix, selected, shapes, terms, where, extra, detail in [

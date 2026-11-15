@@ -8,6 +8,8 @@ from assistant_context import Contexts
 from assistant_fixture import Fixture
 from fake_model_provider import recording, stream, tool_use
 from preview_client import PreviewClient, initial_frame
+from synthetic_side_calendars import side_calendar_policy
+from preview_fixture import RCAT,RREV
 
 
 def run_checks(url, query, manifest, fake, demo, dotnet, environment, owned_root):
@@ -159,12 +161,12 @@ def run_checks(url, query, manifest, fake, demo, dotnet, environment, owned_root
     def crude_preview(rows):
         certificate=rows[0]['directory']['data']['context']
         return 'read_page_operation',operation('crude-setup.preview_v1',{'snapshotId':frame,'setupId':saved['setupId'],
-            'knowledgeMode':'retained','contextId':certificate['contextId'],'deliveryFrom':'2021-01-01T00:00:00Z','deliveryTo':'2021-02-01T00:00:00Z','quantity':'10'})
+            'knowledgeMode':'retained','contextId':certificate['contextId'],'deliveryFrom':'2021-01-01T00:00:00Z','deliveryTo':'2021-02-01T00:00:00Z','quantity':'10','calendarPolicy':side_calendar_policy(dict(revision=dict(catalogId=RCAT,revisionId=RREV),code='test_utc_every_day'),delivery=True,observation=False,payment=False)})
     _,results,_=ask([('read_workspace_page',{'page':'crude_setup'}),crude_preview],report={'page':'crude_setup','selection':{}},knowledge={**current,'frameId':frame})
     native_value=owner.call('crude-setup/preview',{'snapshotId':frame,'setupId':saved['setupId'],'knowledgeMode':'context',
-        'deliveryFrom':'2021-01-01T00:00:00Z','deliveryTo':'2021-02-01T00:00:00Z','quantity':'10'})
+        'deliveryFrom':'2021-01-01T00:00:00Z','deliveryTo':'2021-02-01T00:00:00Z','quantity':'10','calendarPolicy':side_calendar_policy(dict(revision=dict(catalogId=RCAT,revisionId=RREV),code='test_utc_every_day'),delivery=True,observation=False,payment=False)})
     check('crude delivery preview uses the native exact-context valuation',results[1]['data']['presentValue']==native_value['presentValue'])
-    check('current crude preview refuses a conflicting retained-context identity',owner.call('crude-setup/preview',{'snapshotId':frame,'setupId':saved['setupId'],'knowledgeMode':'current','contextId':str(uuid4()),'deliveryFrom':'2021-01-01T00:00:00Z','deliveryTo':'2021-02-01T00:00:00Z','quantity':'10'},expected=422)['code']=='crude_setup_input')
+    check('current crude preview refuses a conflicting retained-context identity',owner.call('crude-setup/preview',{'snapshotId':frame,'setupId':saved['setupId'],'knowledgeMode':'current','contextId':str(uuid4()),'deliveryFrom':'2021-01-01T00:00:00Z','deliveryTo':'2021-02-01T00:00:00Z','quantity':'10','calendarPolicy':side_calendar_policy(dict(revision=dict(catalogId=RCAT,revisionId=RREV),code='test_utc_every_day'),delivery=True,observation=False,payment=False)},expected=422)['code']=='crude_setup_input')
 
     # Native validators admit a publisher even without the separate draft-writing capability.
     updated=admin.call('admin/update',{'operationId':str(uuid4()),'id':member['id'],'expectedVersion':member['version'],

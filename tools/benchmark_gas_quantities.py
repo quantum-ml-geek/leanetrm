@@ -8,7 +8,8 @@ import time
 from uuid import uuid4
 from fractions import Fraction
 from preview_client import PreviewClient,initial_frame
-from preview_fixture import trade_booking
+from preview_fixture import trade_booking, RCAT, RREV
+from synthetic_side_calendars import side_calendar_policy
 from check_booked_side_programs import runtime_query
 from check_gas_daily_quantities import assert_batch_equivalence
 
@@ -26,7 +27,7 @@ def run(url,query,manifest,api_pid):
             point=locations[min(n//2,len(locations)-1)]
             basis='period_total_equal_days' if n%2==0 else 'per_operating_day'
             physical.append({'code':f'gas_{n}','pipeline':point['pipeline'],'zone':point['zone'],'deliveryPoint':point['deliveryPoint'],'product':point['product'],
-                'direction':'receive','deliveryFrom':'2021-01-01','deliveryTo':'2021-01-02' if days==1 else '2021-02-01','quantityBasis':basis,'quantity':str(1000*days if basis=='period_total_equal_days' else 1000),'link':None})
+                'direction':'receive','deliveryFrom':'2021-01-01','deliveryTo':'2021-01-02' if days==1 else '2021-02-01','quantityBasis':basis,'quantity':str(1000*days if basis=='period_total_equal_days' else 1000),'link':None,'calendarPolicy':side_calendar_policy(dict(revision=dict(catalogId=RCAT,revisionId=RREV),code='test_utc_every_day'),delivery=True,observation=False,payment=False)})
         terms={**ctx,**trade_booking(),'operationId':str(uuid4()),'bookId':catalog['books'][0]['id'],'definitionRevisionId':physical and catalog['locations'][0]['definitionRevisionId'],'gasSetupId':catalog['gasSetupId'],'discounting':False,'profile':'fixed_gas_composition_v1','physicalSides':physical,'cashSides':[]}
         trade=client.call('gas/composition/book',terms)
         request={'context':ctx,'tradeId':trade['tradeId'],'selectionPolicy':'operational_projection_v1','includeHistory':False,'measurePerformance':True}

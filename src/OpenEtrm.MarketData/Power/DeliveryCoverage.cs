@@ -32,7 +32,7 @@ public sealed record DeliveryCoverage
     public static void ValidateForwardBoundary(DateTimeOffset boundary,DateTimeOffset effectiveAt,PowerClock clock,int intervalMinutes)
     {
         if(clock is null || intervalMinutes is not(15 or 60) || boundary.Offset!=TimeSpan.Zero || effectiveAt.Offset!=TimeSpan.Zero ||
-            boundary.Ticks%10!=0 || effectiveAt.Ticks%10!=0 || boundary<effectiveAt || !PowerHours.IsCell(clock.Zone,boundary,TimeSpan.FromMinutes(intervalMinutes)))
+            boundary.Ticks%10!=0 || effectiveAt.Ticks%10!=0 || boundary<effectiveAt || !PowerHours.IsCell(clock,boundary,TimeSpan.FromMinutes(intervalMinutes)))
             throw new MarketDataException("ppa_segment_boundary","A forward change requires a native boundary at or after its effective instant; elapsed delivery cannot be restated.");
     }
 }

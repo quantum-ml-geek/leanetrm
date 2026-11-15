@@ -13,7 +13,7 @@ contract selectors are specified in
 ## 1. Instants, dates and clock rules
 
 Persist actual instants on the UTC timeline: knowledge/effective endpoints,
-observations, delivery interval endpoints, payments, lifecycle actions and audit
+observations, delivery interval endpoints, actual payments, lifecycle actions and audit
 timestamps. APIs emit UTC timestamps with an explicit `Z`; accepted offset-bearing
 inputs normalize to the same instant. Database session or server time zones must
 not change identity, comparisons or calculations.
@@ -33,6 +33,23 @@ Keep three independent conventions:
 
 One market can use different conventions for different products, rules and feeds.
 Do not infer a clock from the operator, location, browser or database connection.
+
+D403 gives each Side a versioned policy containing exact calendar bindings for
+its owned delivery, observation/reset and payment purposes. Each purpose has one
+binding across all periods, even when its rules are all-days or unadjusted.
+Calendar capture retains coverage, the weekend mask, dated open/closed exceptions,
+a definition digest and publication authority. Missing coverage or observations
+are structured errors. A correction or coverage extension publishes a new
+version; it never updates an already booked schedule.
+
+Standard cash uses `utc_payment_day_v1`: its internal instant coordinate retains
+a contractual UTC date, shown without user-zone conversion. Cash is due on that
+date, overdue only on a later UTC date, and remains valued while unpaid. Midnight
+is a valuation boundary, not a payment deadline or evidence of payment. Delivery
+completion and fixing may occur later on the payment date. Before a qualified
+fixing becomes available, its projection and risk remain. Actual event instants,
+negotiated correction due instants and exchange expiry keep explicit instant
+semantics.
 
 ## 2. Versioned clock definitions and TOU rules
 
@@ -60,6 +77,15 @@ UTC intervals `[start, end)`. Retain rule provenance, operating dates and any
 contractual labels alongside those interval identities. Generated schedule
 artifacts can be reused; their source definition remains the economic authority.
 UTC-authored TOU rules are supported when the contract actually specifies UTC.
+
+New published TOU versions bind an exact calendar, clock, weekly/hour mask and
+holiday-treatment convention. Booking cannot override these terms. Generic
+business-day rules use weekend masks and dated exceptions. Published peak rules
+instead apply their weekly/hour mask and explicit holiday closures: reopening a
+date restores eligibility only inside that mask. Off-peak is the exact complement
+of peak within the same all-hours grid. All-hours delivery includes holidays.
+Different contractual hours or clocks require a different published product
+version or an explicitly custom schedule.
 
 ## 3. DST, quantities and interval identity
 

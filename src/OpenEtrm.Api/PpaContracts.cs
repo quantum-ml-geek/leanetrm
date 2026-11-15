@@ -16,7 +16,7 @@ public sealed record PpaSlotInput([property:JsonRequired]string Role,
 public sealed record PpaHoursInput([property:JsonRequired]string Membership,
     [property:JsonRequired]Guid? TouProduct,
     [property:JsonRequired]int? TouVersion,
-    [property:JsonRequired]string Calendar);
+    [property:JsonRequired]string? Calendar);
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record PpaQuantityInput([property:JsonRequired]string Kind,
     [property:JsonRequired]string[] Sources,
@@ -76,7 +76,11 @@ public sealed record PpaSideInput([property:JsonRequired]string Kind,
     [property:JsonRequired]string? Location,
     [property:JsonRequired]PpaFixedInput? FixedPrice,
     [property:JsonRequired]PpaIndexInput? IndexPrice,
-    [property:JsonRequired]PpaAttributeInput? Attribute);
+    [property:JsonRequired]PpaAttributeInput? Attribute)
+{
+    [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+ public SideCalendarPolicyInput CalendarPolicy { get; init; }=null!;
+}
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record PpaMemberInput([property:JsonRequired]string Role,
     [property:JsonRequired]int Ordinal,
@@ -92,7 +96,10 @@ public sealed record PpaTermsInput([property:JsonRequired]Guid DefinitionRevisio
     [property:JsonRequired]bool Discounting,
     [property:JsonRequired]string Implementation,
     [property:JsonRequired]string[] NormalizationAssets,
-    [property:JsonRequired]PpaMemberInput[] Memberships);
+    [property:JsonRequired]PpaMemberInput[] Memberships)
+{
+    [JsonIgnore]internal OpenEtrm.MarketData.Power.PowerClock? RetainedClock {get;init;}
+}
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record PpaBookingInput([property:JsonRequired]Guid LegalEntityId,
     [property:JsonRequired]int LegalEntityRevision,

@@ -8,11 +8,13 @@ namespace OpenEtrm.MarketData.Trading;
 public sealed partial record FloatingSide
 {
  public const string DeliveryIndexImplementation="delivery_index_fixings_v1";
- public FloatingSide(Guid id,QuoteSpecification quote,Quantity unitQuantity,ImmutableArray<FloatingSidePeriod> periods,string implementation):base(id)
+ public FloatingSide(Guid id,QuoteSpecification quote,Quantity unitQuantity,ImmutableArray<FloatingSidePeriod> periods,string implementation,SideCalendarPolicy calendarPolicy,Gas.GasDayClock? gasDeliveryClock=null):base(id,calendarPolicy)
  {
+  CalendarPolicy.RequirePurposes(true,true,true);
   if(implementation!=DeliveryIndexImplementation||quote is null||unitQuantity is null||quote.Kind!=QuoteKind.Outright||
    unitQuantity.Amount!=ExactDecimal.Parse("1")||unitQuantity.Specification!=quote.Quantity||periods.IsDefaultOrEmpty||periods.Any(p=>p is null))throw DeliveryIndexInvalid();
-  SwapSidePeriods.Validate([..periods.Select(p=>(p.DeliveryFrom,p.DeliveryTo,p.PaymentAt,p.Allocation,p.PaymentSchedule))],quote.Currency);
+  SwapSidePeriods.Validate([..periods.Select(p=>(p.DeliveryFrom,p.DeliveryTo,p.PaymentAt,p.Allocation,p.PaymentSchedule,p.DeliveryCompletionAt))],CalendarPolicy,gasDeliveryClock:gasDeliveryClock);
+  foreach(var period in periods)CalendarPolicy.RequireObservation(period.DeliveryFrom,period.DeliveryTo,period.Calendar);
   foreach(var p in periods)
   {
    if(p.ObservationImplementation!=implementation||p.DeliveryTo!=p.DeliveryFrom.AddDays(1)||p.Allocation.Numerator<=0||
@@ -23,10 +25,11 @@ public sealed partial record FloatingSide
     !((contract.DeliveryFrom==p.DeliveryFrom&&contract.DeliveryTo==p.DeliveryTo)||(contract.DeliveryFrom.Day==1&&contract.DeliveryTo==contract.DeliveryFrom.AddMonths(1)))||
     fixing.From!=contract.DeliveryFrom||fixing.To!=contract.DeliveryTo||fixing.Index.Revision!=quote.Key.Revision||fixing.Quote!=quote.Key||fixing.Source.Revision!=quote.Key.Revision||
     fixing.Series.Revision!=contract.Key.Revision||fixing.Series.Id==Guid.Empty||string.IsNullOrWhiteSpace(fixing.Source.Code)||
-    fixing.Implementation!=IndexFixing.SupportedImplementation||!TradingInstant.IsSupported(fixing.FixingAt)||p.FirstFixingAt!=fixing.FixingAt||fixing.FixingAt>=p.PaymentAt||
+    fixing.Implementation!=IndexFixing.SupportedImplementation||!TradingInstant.IsSupported(fixing.FixingAt)||p.FirstFixingAt!=fixing.FixingAt||PaymentDatePolicy.Date(fixing.FixingAt)>PaymentDatePolicy.Date(p.PaymentAt)||
     p.Spread is not {} spread||spread.Unit!=PriceUnit.FromQuote(quote)||
     p.CustomProjection is {} custom&&custom.Selection!=CustomCurveProjectionBinding.ContainingDeliverySelection)throw DeliveryIndexInvalid();
   }
+  GasDeliveryClock=gasDeliveryClock;
   DateQuote=quote;UnitQuantity=unitQuantity;Periods=periods;
  }
  private static MarketDataException DeliveryIndexInvalid()=>new("delivery_index_terms","Supply one exact daily or containing monthly publication fixing per delivery day, with positive allocation, explicit spread and payment terms.");

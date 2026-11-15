@@ -211,7 +211,7 @@ internal static partial class LifecyclePortfolioProjection
                             var held=source.Swaps.Single(h=>h.Row.Id("trade_id")==owner.TradeId&&h.Row.Id("binding_id")==owner.BindingId);
                             var profiles=await SwapProfiles(connection,database,source,opening.Context,held,ct);
                             var due=profiles.Select(p=>p.Text("due_policy")).Distinct().Single();var recognition=profiles.Select(p=>p.Text("recognition_policy")).Distinct().Single();
-                            var accepted=await new SwapStore(database).ProjectionSettlement(connection,held,due,recognition,ct);
+                            var accepted=SwapStore.ProjectionSettlement(held,due,recognition);
                             var enabled=swap switch{FinancialSwapInstrument s=>s.Discounting,MonthlyFinancialSwap s=>s.Discounting,
                                 ScheduledFinancialSwap s=>s.Discounting,CrossCommodityScheduledSwap s=>s.Discounting,_=>throw Error("projection_swap_source","Select a qualified financial swap.")};
                             ISideDiscounting discounting=enabled?curves[swap.Currency]:new ExplicitDiscounting(ExactDecimal.Parse("1"),DiscountFactorSource.Undiscounted);

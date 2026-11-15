@@ -208,7 +208,7 @@ internal sealed class PpaQuantityPreparation(IntervalValuationInputs inputs)
     }
     private PowerInterval[] Periods(Side side,PpaDelivery delivery,DateOnly month)=>side.RetainedPlan is {} retained
         ?[..retained.MonthIntervals(month)
-            .Select(interval=>{var local=TimeZoneInfo.ConvertTime(interval.Start,Clock(delivery.Clock).Zone);
+            .Select(interval=>{var local=Clock(delivery.Clock).LocalAt(interval.Start);
                 return new PowerInterval(interval.Start,interval.End,interval.OperatingDate,interval.HourBeginning,interval.HourBeginning+1,interval.Minute,(int)local.Offset.TotalMinutes,interval.Occurrence,false);})]
         :PowerHours.Compile(delivery.From>month?delivery.From:month,delivery.To<month.AddMonths(1)?delivery.To:month.AddMonths(1),Clock(delivery.Clock),TimeOfUse.All(delivery.IntervalMinutes),[],delivery.IntervalMinutes);
     private static IEnumerable<DateOnly> Months(PpaDelivery delivery)

@@ -59,8 +59,8 @@ public sealed record GasUnfixedPhysicalDeliveryInstrument:Instrument
 // One carrying calculation serves the unfixed and fixed principal contracts.
 internal static class GasDeliveryExchange
 {
-    private static SidePaymentKey Cash(Guid id,GasPhysicalDeliveryTerms terms)=>new(id,0,terms.CashDueAt,terms.Currency);
-    private static SidePaymentKey Physical(Guid id,GasPhysicalDeliveryTerms terms)=>new(id,1,terms.From,terms.Currency);
+    private static SidePaymentKey Cash(Guid id,GasPhysicalDeliveryTerms terms)=>new(id,0,terms.CashDueAt,terms.Currency){Timing=ValueTimingKind.Instant};
+    private static SidePaymentKey Physical(Guid id,GasPhysicalDeliveryTerms terms)=>new(id,1,terms.From,terms.Currency){Timing=ValueTimingKind.Instant};
     internal static ImmutableArray<SidePaymentKey> RequiredDiscounts(Guid id,GasPhysicalDeliveryTerms terms,DateTimeOffset calculationAt)
     {
         if(!TradingInstant.IsSupported(calculationAt))throw new MarketDataException("gas_delivery_discount","Select an exact supported calculation instant.");

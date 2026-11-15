@@ -83,7 +83,7 @@ internal static class GasForwardSettlementExampleChecks
             var assignments=Daily.Select((d,n)=>new GasValuationAssignment(F.R("synthetic_day_"+n),location,F.R("gas"),d.DeliveryFrom,d.DeliveryTo,
                 PriceSettlementSelection.CurveTarget(F.R("index")),Quote,new(new(metadata.Key,d.Key),d),fixings[n],new(default,Quote))).ToImmutableArray();
             var physical=new PhysicalGasSide(Guid.NewGuid(),location,F.R("gas"),new(clock,from,to,GasQuantityBasis.PerOperatingDay,
-                new(ExactDecimal.Parse("1"),quantity.Key),GasFuelConvention.None,default),assignments);
+                new(ExactDecimal.Parse("1"),quantity.Key),GasFuelConvention.None,default),assignments,SyntheticSideCalendars.Physical());
             dailyIdentity=new(F.Revision.CatalogId,Guid.NewGuid(),1,RecipeEngine.Version);
             monthlyIdentity=new(F.Revision.CatalogId,Guid.NewGuid(),1,RecipeEngine.Version);
             combinedIdentity=new(F.Revision.CatalogId,Guid.NewGuid(),1,RecipeEngine.Version);
@@ -91,7 +91,7 @@ internal static class GasForwardSettlementExampleChecks
             Cash=new(Guid.NewGuid(),PriceSettlementSelection.CurveTarget(F.R("index")),Quote,new(ExactDecimal.Parse("1"),quantity.Key),
                 [..Daily.Select((d,n)=>new FloatingSidePeriod(d.DeliveryFrom,d.DeliveryTo,fixings[n].FixingAt,
                     Fixture.Utc(d.DeliveryFrom.Month==10?"2026-11-03T00:00:00Z":d.DeliveryFrom.Month==11?"2026-12-10T00:00:00Z":"2027-01-10T00:00:00Z"),
-                    FloatingAveraging.CalendarDayArithmetic,[new(new(metadata.Key,d.Key),d)],[fixings[n]],null,null,null,Projection,ExactRatio.One,FloatingSide.IndexedImplementation))]);
+                    FloatingAveraging.CalendarDayArithmetic,[new(new(metadata.Key,d.Key),d)],[fixings[n]],null,null,null,Projection,ExactRatio.One,FloatingSide.IndexedImplementation){DeliveryCompletionAt=clock.Boundary(d.DeliveryTo)})],SyntheticSideCalendars.Dated(true),gasDeliveryClock:clock);
             Instrument=new(Guid.NewGuid(),physical,Cash);
             Trade=new(Guid.NewGuid(),Guid.NewGuid(),[new(Binding,Instrument,new(ExactDecimal.Parse("100"),quantity.Key))]);
             var determinedAt=Fixture.Utc("2026-11-02T16:00:00Z");
@@ -178,10 +178,10 @@ internal static class GasForwardSettlementExampleChecks
             [new("payment",cash,"indexed_consideration","delivery",GasQuantityStage.Delivery,ExactDecimal.Parse("-1"))]);
         _=Composition(e.Cash);
         var redistributed=e.Cash.Periods.SetItem(0,e.Cash.Periods[0] with{Allocation=new(3,2)}).SetItem(1,e.Cash.Periods[1] with{Allocation=new(1,2)});
-        try{_=Composition(new(Guid.NewGuid(),e.Cash.Settlement,e.Quote,e.Cash.UnitQuantity,redistributed));throw new Exception("Redistributed indexed quantities were accepted.");}
+        try{_=Composition(new(Guid.NewGuid(),e.Cash.Settlement,e.Quote,e.Cash.UnitQuantity,redistributed,SyntheticSideCalendars.FloatingPeriods(redistributed),gasDeliveryClock:e.Cash.GasDeliveryClock));throw new Exception("Redistributed indexed quantities were accepted.");}
         catch(MarketDataException error)when(error.Code=="gas_composition_input"){}
-        var combined=e.Cash.Periods[0] with{DeliveryTo=e.Cash.Periods[1].DeliveryTo,Allocation=new(2,1),Projections=[..e.Cash.Periods[0].Projections,..e.Cash.Periods[1].Projections],Fixings=[..e.Cash.Periods[0].Fixings,..e.Cash.Periods[1].Fixings]};
-        try{_=Composition(new(Guid.NewGuid(),e.Cash.Settlement,e.Quote,e.Cash.UnitQuantity,[combined,..e.Cash.Periods.Skip(2)]));throw new Exception("Combined index delivery days were accepted.");}
+        var combined=e.Cash.Periods[0] with{DeliveryTo=e.Cash.Periods[1].DeliveryTo,DeliveryCompletionAt=e.Cash.Periods[1].DeliveryCompletionAt,Allocation=new(2,1),Projections=[..e.Cash.Periods[0].Projections,..e.Cash.Periods[1].Projections],Fixings=[..e.Cash.Periods[0].Fixings,..e.Cash.Periods[1].Fixings]};
+        try{_=Composition(new(Guid.NewGuid(),e.Cash.Settlement,e.Quote,e.Cash.UnitQuantity,[combined,..e.Cash.Periods.Skip(2)],SyntheticSideCalendars.FloatingPeriods([combined,..e.Cash.Periods.Skip(2)]),gasDeliveryClock:e.Cash.GasDeliveryClock));throw new Exception("Combined index delivery days were accepted.");}
         catch(MarketDataException error)when(error.Code=="gas_composition_input"){}
         var retainedGas=BookedSideProgram.Compile(ScheduleDefinitionCompiler.Generate(e.Instrument.Delivery));
         var retainedDays=GasDailyQuantitySelection.ReadContract(retainedGas,new ExactRatio(100,1));

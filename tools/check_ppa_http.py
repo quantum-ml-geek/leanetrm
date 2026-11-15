@@ -7,6 +7,7 @@ from preview_client import PreviewClient, initial_frame
 
 def run_checks(url, query, manifest):
     fixture=manifest['ppa']; passed=0
+    def calendar_ref(code):return dict(revision=dict(catalogId=manifest['referenceCatalogId'],revisionId=manifest['referenceRevisionId']),code=code)
     def check(name,condition):
         nonlocal passed
         assert condition,name
@@ -28,7 +29,7 @@ def run_checks(url, query, manifest):
               'pendingActuals':policy,'contractMw':'80','attribute':'energy'}
         body.update(changes)
         return client.call('ppa/quantities',body,expected=expected)
-    annual=client.call('ppa/profile',{'snapshotId':frame,'clock':'synthetic_eastern','intervalMinutes':60,'capacity':'test_capacity_quantity','energy':'test_power_quantity','from':'2031-01-01T05:00:00Z','to':'2032-01-01T05:00:00Z','membership':'all','touProduct':None,'touVersion':None,'calendar':'synthetic_eastern_holidays','contractMw':'80'})
+    annual=client.call('ppa/profile',{'snapshotId':frame,'clock':'synthetic_eastern','intervalMinutes':60,'capacity':'test_capacity_quantity','energy':'test_power_quantity','from':'2031-01-01T05:00:00Z','to':'2032-01-01T05:00:00Z','membership':'all','touProduct':None,'touVersion':None,'calendar':calendar_ref('synthetic_eastern_holidays'),'contractMw':'80'})
     check('a full 365-day profile compiles all 8760 native hours',len(annual['rows'])==8760 and all(fraction(r['quantity'])==80 for r in annual['rows']))
     start,end='2031-11-02T04:00:00Z','2031-11-03T05:00:00Z'
     inputs(60,start,end)
@@ -65,10 +66,11 @@ def run_checks(url, query, manifest):
     check('unknown financial members are malformed requests',quantity(start,end,valuationAt='2032-01-01T00:00:00Z',expected=400)['code']=='request_format')
     capacity=client.call('ppa/capacity',{'snapshotId':frame,'assets':fixture['assets'],'operatingDay':'2031-11-02','knownAt':cutoff(),'contractMw':'80'})
     check('daily accredited capacity consumes exact versions and capacity location assignment',fraction(capacity['quantity'])==64 and fraction(capacity['capacityBasis'])==300 and all(a['curve']==fixture['capacityCurve'] for a in capacity['assignments']))
-    profile=client.call('ppa/profile',{'snapshotId':frame,'clock':'synthetic_eastern','intervalMinutes':15,'capacity':'test_capacity_quantity','energy':'test_power_quantity','from':start,'to':end,'membership':'all','touProduct':None,'touVersion':None,'calendar':'synthetic_eastern_holidays','contractMw':'80'})
+    profile=client.call('ppa/profile',{'snapshotId':frame,'clock':'synthetic_eastern','intervalMinutes':15,'capacity':'test_capacity_quantity','energy':'test_power_quantity','from':start,'to':end,'membership':'all','touProduct':None,'touVersion':None,'calendar':calendar_ref('synthetic_eastern_holidays'),'contractMw':'80'})
     check('contract profile preserves 100 native DST cells and exact 1MW duration then scales once',len(profile['rows'])==100 and all(fraction(r['quantity'])==20 and r['state']=='contractual' for r in profile['rows']))
-    def selected_profile(membership,first,last,tou=manifest['intervalCurves']['pjm'],version=1,expected=200):
-        return client.call('ppa/profile',{'snapshotId':frame,'clock':'synthetic_eastern','intervalMinutes':60,'capacity':'test_capacity_quantity','energy':'test_power_quantity','from':first,'to':last,'membership':membership,'touProduct':tou,'touVersion':version,'calendar':'synthetic_eastern_holidays','contractMw':'80'},expected=expected)
+    def selected_profile(membership,first,last,tou=manifest['intervalCurves']['pjm'],version=1,expected=200,calendar='synthetic_eastern_holidays'):
+        return client.call('ppa/profile',{'snapshotId':frame,'clock':'synthetic_eastern','intervalMinutes':60,'capacity':'test_capacity_quantity','energy':'test_power_quantity','from':first,'to':last,'membership':membership,'touProduct':tou,'touVersion':version,'calendar':calendar_ref(calendar),'contractMw':'80'},expected=expected)
+    check('published profile refuses an independently chosen holiday calendar',selected_profile('peak','2031-11-27T05:00:00Z','2031-11-28T05:00:00Z',calendar='test_utc_every_day',expected=422)['code']=='tou_product_override')
     peak=selected_profile('peak','2031-11-03T05:00:00Z','2031-11-04T05:00:00Z')['rows']
     check('published peak profile independently selects the declared weekday hours',len(peak)==16 and [r['interval']['hourLabel'] for r in peak]==list(range(7,23)) and all(fraction(r['quantity'])==80 for r in peak))
     check('published holiday moves all hours into off-peak',not selected_profile('peak','2031-11-27T05:00:00Z','2031-11-28T05:00:00Z')['rows'] and len(selected_profile('off','2031-11-27T05:00:00Z','2031-11-28T05:00:00Z')['rows'])==24)

@@ -4,7 +4,8 @@ from pathlib import Path
 from uuid import UUID, uuid5
 import json
 from preview_client import initial_frame
-from preview_fixture import trade_booking
+from preview_fixture import trade_booking, RCAT, RREV
+from synthetic_side_calendars import side_calendar_policy
 from seed_demo_instruments import owned_client
 from seed_preview_positions import BOOKS
 
@@ -26,11 +27,12 @@ def seed(url, run_id, owned_root):
     after = {**before, 'snapshotId': next(f['id'] for f in workspace['frames'] if f['at'].startswith('2021-01-15T08:00:00'))}
     catalog = client.call('gas/catalog', before)
     point = next(p for p in catalog['locations'] if p['deliveryPoint'] == 'synthetic_gas_point_a')
+    reference=dict(revision=dict(catalogId=RCAT,revisionId=RREV),code='test_utc_every_day')
     terms = {**before, **trade_booking(), 'bookId': catalog['books'][0]['id'], 'definitionRevisionId': point['definitionRevisionId'],
              'gasSetupId': catalog['gasSetupId'], 'discounting': False, 'profile': 'fixed_gas_composition_v1',
              'physicalSides': [dict(code='gas', pipeline=point['pipeline'], zone=point['zone'], deliveryPoint=point['deliveryPoint'], product=point['product'],
-                                    direction='receive', deliveryFrom='2021-01-01', deliveryTo='2021-01-02', quantityBasis='per_operating_day', quantity='100', link=None)],
-             'cashSides': [dict(code='payment', role='consideration', direction='pay', source='gas', stage='delivery', price='3', tariffCode=None, paymentAt='2021-02-02T00:00:00Z')]}
+                                    direction='receive', deliveryFrom='2021-01-01', deliveryTo='2021-01-02', quantityBasis='per_operating_day', quantity='100', link=None, calendarPolicy=side_calendar_policy(reference,delivery=True,observation=False,payment=False))],
+             'cashSides': [dict(code='payment', role='consideration', direction='pay', source='gas', stage='delivery', price='3', tariffCode=None, paymentAt='2021-02-02T00:00:00Z', calendarPolicy=side_calendar_policy(reference,delivery=True,observation=False,payment=True))]}
     books=(BOOKS[0],BOOKS[1],BOOKS[0])
     parties=('d5000000-0000-0000-0000-000000000001','d5000000-0000-0000-0000-000000000002','d5000000-0000-0000-0000-000000000002')
     if not set(books)<={b['id'] for b in catalog['books']} or not set(parties)<={p['id'] for p in catalog['counterparties'] if p['revision']==1}:

@@ -135,6 +135,7 @@ def valuation_checks(url, query, manifest, frame):
     no_certificate=terms(manifest,five=False)
     indexed=deepcopy(no_certificate);indexed['memberships'][1].update(role='indexed_payment')
     indexed['memberships'][1]['side'].update(kind='indexed',fixedPrice=None,indexPrice={'curve':config['shaped'],'quantity':'test_power_quantity','multiplier':'1','indexMultiplier':'0.95', 'settlement': None,'adder':'2'})
+    indexed['memberships'][1]['side']['calendarPolicy']['observation']=deepcopy(indexed['memberships'][1]['side']['calendarPolicy']['payment'])
     indexed_value=fixture.preview(indexed,start,end,detail=['2031-11-01'])
     check('index multiplier precedes adder and preserves both gross components',value(indexed_value)==0 and [fraction(s['measures']['valueExcludingOverdue']) for s in indexed_value['bindings'][0]['sides']]==[40000,-40000])
     indexed['memberships'][1]['side']['indexPrice'].update(indexMultiplier='1',adder='1')
@@ -197,6 +198,8 @@ def valuation_checks(url, query, manifest, frame):
     multi['memberships'][0].update(role='indexed_payment')
     multi['memberships'][0]['side'].update(kind='indexed',quantity=deepcopy(q),location=None,indexPrice={'curve':config['shaped'],'quantity':'test_power_quantity','multiplier':'1','indexMultiplier':'1', 'settlement': None,'adder':'0'})
     multi['memberships'][1]['side']['quantity']=deepcopy(q)
+    multi['memberships'][0]['side']['calendarPolicy']['observation']=deepcopy(multi['memberships'][0]['side']['calendarPolicy']['payment'])
+    multi['memberships'][1]['side']['calendarPolicy']['delivery']=deepcopy(multi['memberships'][1]['side']['calendarPolicy']['payment'])
     multi_first,multi_last='2031-11-15T04:00:00Z','2031-11-15T06:00:00Z'
     a_source,b_source=[manifest['ppa']['series'][name] for name in source_names]
     fixture.revise(a_source['forecast'],multi_first,['0.5','0.5'])
@@ -234,7 +237,11 @@ def valuation_checks(url, query, manifest, frame):
     check('known delivered quantity plus actual physical price is realised',len(actual_payments)==3 and all(r['economicClass']=='Realised' for r in actual_payments) and actual['receipt']['actuals'] and actual['receipt']['quantityRevisions'])
     fixture.revise(config['meter'],past_start,['60']);new=fixture.cutoff()
     check('eligible later correction changes quantity while original cutoff replays exactly',value(fixture.preview(past,past_start,past_end,known=new))==48 and value(fixture.preview(past,past_start,past_end,known=old))==40)
-    overdue_frame=next(f['id'] for f in fixture.client.call('workspace')['frames'] if f['at'].startswith('2021-01-10T00:00:00'))
+    frames=fixture.client.call('workspace')['frames']
+    due_frame=next(f['id'] for f in frames if f['at'].startswith('2021-01-10T00:00:00'))
+    due_value=fixture.preview(past,past_start,past_end,known=old,frame=due_frame,detail=['2020-12-01'])
+    check('same-day unpaid PPA cash remains valued until a later UTC date',value(due_value)==-760 and fraction(due_value['overdueKnownBalance'])==0 and fraction(due_value['overdueEstimated'])==0)
+    overdue_frame=next(f['id'] for f in frames if f['at'].startswith('2021-01-11T00:00:00'))
     overdue=fixture.preview(past,past_start,past_end,known=old,frame=overdue_frame,detail=['2020-12-01'])
     check('retained vintage certificates remain current holding value after cash is due',value(overdue)==100 and overdue['completePv'] is None and fraction(overdue['overdueKnownBalance'])==-860 and fraction(overdue['overdueEstimated'])==0)
     check('past physical value never becomes an overdue cash obligation',[(r['coverage'],r['lifecycle']) for r in rows(overdue) if r['kind'] in ('Delivery','Holding')]==[('DeliveredValue',None),('HoldingValue',None)])
@@ -268,8 +275,11 @@ def valuation_checks(url, query, manifest, frame):
     virtual['memberships'][0].update(role='indexed_payment')
     virtual['memberships'][0]['side'].update(kind='indexed',location=None,indexPrice={'curve':config['shaped'],'quantity':'test_power_quantity','multiplier':'1','indexMultiplier':'1', 'settlement': None,'adder':'1'})
     virtual['memberships'][1]['side']['quantity']=deepcopy(volume)
+    virtual['memberships'][0]['side']['calendarPolicy']['observation']=deepcopy(virtual['memberships'][0]['side']['calendarPolicy']['payment'])
+    virtual['memberships'][1]['side']['calendarPolicy']['delivery']=deepcopy(virtual['memberships'][1]['side']['calendarPolicy']['payment'])
     basis=deepcopy(virtual);basis['memberships'][1].update(role='indexed_payment',ordinal=1)
     basis['memberships'][1]['side'].update(kind='indexed',fixedPrice=None,indexPrice={'curve':manifest['intervalCurves']['shaped'],'quantity':'test_power_quantity','multiplier':'1','indexMultiplier':'1', 'settlement': None,'adder':'0'})
+    basis['memberships'][1]['side']['calendarPolicy']['observation']=deepcopy(basis['memberships'][1]['side']['calendarPolicy']['payment'])
     for name,contract,first,last,expected in [('virtual_fixed_for_floating',virtual,start,end,1000),('basis_cash',basis,start,end,1000),('indexed_physical',indexed,start,end,-1000),('capacity_agreement',capacity,'2031-11-01T04:00:00Z','2031-12-01T05:00:00Z',7680)]:
         validation=fixture.client.call('ppa/validate',{'snapshotId':fixture.frame,'terms':contract,'quantity':'80','coverageFrom':first,'coverageTo':last})
         draft=fixture.preview(contract,first,last)
@@ -345,6 +355,8 @@ def composed_checks(fixture,query,manifest):
     command={k:v for k,v in body.items() if k!='operationId'};command.update(action='booked',valuationAt=frame['at'],effectiveAt=frame['at'],terms=wrong)
     encoded=json.dumps(command).replace("'","''")
     before=query('SELECT count(*) FROM trading.ppa_trade_revisions;')
-    runtime_query(query,manifest,f"DO $check$ BEGIN BEGIN PERFORM security.save_ppa_booking('{manifest['catalogId']}','{uuid4()}','{encoded}'::jsonb);RAISE EXCEPTION 'subset_capacity_accepted';EXCEPTION WHEN raise_exception THEN IF SQLERRM<>'ppa_normalization' THEN RAISE;END IF;END;END $check$;",commit=False)
+    from synthetic_schedule_stage import copy_stage
+    operation=str(uuid4())
+    runtime_query(query,manifest,f"DO $check$ BEGIN BEGIN PERFORM security.save_ppa_booking('{manifest['catalogId']}','{operation}','{encoded}'::jsonb);RAISE EXCEPTION 'subset_capacity_accepted';EXCEPTION WHEN raise_exception THEN IF SQLERRM<>'ppa_normalization' THEN RAISE;END IF;END;END $check$;",prefix=copy_stage(manifest['catalogId'],body['operationId'],operation),commit=False)
     assert query('SELECT count(*) FROM trading.ppa_trade_revisions;')==before
     print('PASS composed PPA: managed/direct-runtime capacity-set parity and complete rollback',flush=True)

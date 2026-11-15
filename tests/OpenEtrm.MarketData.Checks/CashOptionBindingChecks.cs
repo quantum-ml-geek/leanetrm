@@ -136,7 +136,8 @@ internal static class CashOptionBindingChecks
             if(!selected.HasSameInputs(original)||keys.Any(p=>dues.Count(d=>d.At==p.PaymentAt)!=1))throw new Exception("Funding escaped its saved due/source set.");
             return [..keys.Select(p=>new SidePaymentFactor(p,D(dues.Single(d=>d.At==p.PaymentAt).Factor),original,DiscountFactorSource.Explicit))];
         }
-        public ImmutableArray<SidePaymentFactor> ResolveForValuation(ImmutableArray<SidePaymentKey> keys,MarketSnapshot source,DateTimeOffset at,string? policy)=>Resolve(keys,source);
+        public ImmutableArray<SidePaymentFactor> ResolveForValuation(ImmutableArray<SidePaymentKey> keys,MarketSnapshot source,DateTimeOffset at,string? policy)=>
+            [..Resolve(keys,source).Select(f=>f with{ClockRoll=new(policy!,at,f.DiscountFactor,D("1"),[])})];
     }
     private static ExactDecimal D(string value)=>ExactDecimal.Parse(value);
     private static LatticeDecimal L(string value)=>LatticeDecimal.Parse(value);

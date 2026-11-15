@@ -1,3 +1,5 @@
+import {sideCalendar,referenceCalendarChoices,type SideCalendarPolicy} from './side-calendar.js';
+import {paymentDateInput,displayPaymentDate} from './payment-date.js';
 import {facilityAllocationTrack} from './facility-allocation-track.js';
 import type {FacilityAllocationTrack,ScheduleView,TicketChoice,TicketDescription,TicketField,TicketLink,TicketSummary,TradeActions} from './ticket-types.js';
 import {addSide,removeSide,type FieldValue,type TicketSide,type TicketState} from './ticket-model.js';
@@ -12,7 +14,7 @@ import {localTimeValue} from './user-time.js';
 // common band rows line up across the cards, and the schedule panel. Every value, aggregate and refusal is the backend's or the model's;
 // the view only lays them out and reports what the person does.
 export type TicketStatus={kind:'current'|'updating'|'stale'|'refused';text:string};
-export type TicketEvents={edit(side:string|null,field:string,value:string):void;editLocal(side:string|null,field:string,local:string):void;accept(side:string|null,field:string):void;selectSide(code:string):void;tab(id:string):void;
+export type TicketEvents={calendar?(side:string,policy:SideCalendarPolicy):void;edit(side:string|null,field:string,value:string):void;editLocal(side:string|null,field:string,local:string):void;accept(side:string|null,field:string):void;selectSide(code:string):void;tab(id:string):void;
  level(l:string):void;toggle(row:string,open:boolean):void;addSide(kind:string):void;removeSide(code:string):void;preview():void;book():void;
  enter(side:string,day:string,value:string):void;entryValue(field:string,value:string):void;record():void;cancelEntry():void;checkEntry():void;retryEntry():void;amend?():void};
 // A day's entry in a side's tab, as the person fills in its record: the fields the record takes, their values and choices, whether a record
@@ -31,6 +33,21 @@ export type TicketView={state:TicketState;mode:'new'|'booked'|'amend';presentati
 // The common band's rows, in order: TicketBand.Rows in TicketDescriptions.cs.
 const band=['direction','start','end','product','quantity','price','payment'];
 const levelLabels:Readonly<Record<string,string>>={term:'Whole term',month:'Month',day:'Day',hour:'Hour'};
+const ownershipFields=new Set(['book','legal_entity','counterparty','trade_date']);
+
+// Order only fields in this group; dependencies in the common band already appear above it.
+function dependencyOrder(fields:TicketField[]):TicketField[]{
+ const ordered:TicketField[]=[],done=new Set<string>(),visiting=new Set<string>(),byId=new Map(fields.map(f=>[f.id,f]));
+ const visit=(f:TicketField)=>{
+  if(done.has(f.id))return;
+  if(visiting.has(f.id))throw Error(`Cyclic field dependency at '${f.id}'.`);
+  visiting.add(f.id);
+  for(const id of f.dependsOn){const prerequisite=byId.get(id);if(prerequisite)visit(prerequisite);}
+  visiting.delete(f.id);done.add(f.id);ordered.push(f);
+ };
+ for(const f of fields)visit(f);
+ return ordered;
+}
 
 export function bandRows(d:TicketDescription,kinds:string[]):string[]{
  const used=new Set(kinds.flatMap(kind=>sideKind(d,kind).fields.flatMap(f=>f.state==='soon'||f.band===null?[]:[f.band])));
@@ -54,6 +71,11 @@ function soonButton(b:HTMLButtonElement,soon:string){
 
 // A date-time is entered as a local time in the user's zone; the controller resolves it to the instant the ticket holds.
 function editor(f:TicketField,value:string,choices:TicketChoice[]|undefined,edit:(value:string)=>void,zone?:string,editLocal?:(local:string)=>void){
+ if(f.type==='payment_date'){
+  const input=el('input','ticket-control');input.type='date';input.setAttribute('aria-label',f.label);
+  const payment=paymentDateInput(input);if(value)payment.set(value);
+  input.onchange=()=>{if(!input.value){edit('');return;}void payment.instant().then(edit);};return input;
+ }
  if(f.type==='datetime'&&zone&&editLocal){
   const input=el('input','ticket-control');input.type='datetime-local';input.value=value?localTimeValue(value,zone):'';input.setAttribute('aria-label',`${f.label} · ${zone}`);
   input.onchange=()=>editLocal(input.value);return input;
@@ -85,10 +107,10 @@ function fieldRow(o:TicketView,f:TicketField,side:string|null,v:FieldValue|undef
  }else if(f.state==='editable'&&entry){
   chip();body.append(editor(f,value,o.choices[key],next=>o.on.edit(side,f.id,next),o.zone,local=>o.on.editLocal(side,f.id,local)));
   if(unit)body.append(el('span','ticket-unit',unit));
-  if(v?.offered)body.append(button('ticket-offer',`Use ${v.offered.value} (${v.offered.label})`,()=>o.on.accept(side,f.id)));
+  if(v?.offered)body.append(button('ticket-offer',`Use ${f.type==='payment_date'?displayPaymentDate(v.offered.value):v.offered.value} (${v.offered.label})`,()=>o.on.accept(side,f.id)));
  }else{
   chip();
-  const shown=f.type==='choice'?choiceText(value,unit,o.choices[key]):f.type==='datetime'&&value?o.instant(value):value&&unit?`${value} ${unit}`:value;
+  const shown=f.type==='choice'?choiceText(value,unit,o.choices[key]):f.type==='datetime'&&value?o.instant(value):f.type==='payment_date'&&value?displayPaymentDate(value):value&&unit?`${value} ${unit}`:value;
   if(shown||(o.mode==='booked'&&f.type==='choice'&&value)){
    const text=el('span','ticket-value',shown);text.hidden=!shown;
    if(o.mode==='booked'&&f.type==='choice'){text.dataset.choiceKey=key;text.dataset.choiceValue=value;if(unit)text.dataset.choiceUnit=unit;}
@@ -131,7 +153,11 @@ function card(o:TicketView,side:TicketSide,rows:string[]){
   slot.dataset.band=row;node.append(slot);
  }
  const own=el('div','ticket-own');
- for(const f of kind.fields.filter(x=>x.band===null&&x.state!=='soon'))own.append(fieldRow(o,f,side.code,side.values[f.id]));
+ for(const f of dependencyOrder(kind.fields.filter(x=>x.band===null&&x.state!=='soon')))own.append(fieldRow(o,f,side.code,side.values[f.id]));
+ if(kind.calendarPurposes){
+  const calendar=sideCalendar({id:'ticket-calendar-'+side.code,choices:()=>referenceCalendarChoices(d.sideCalendars??[]),purposes:()=>kind.calendarPurposes!,changed:()=>o.on.calendar?.(side.code,calendar.draft())});
+  calendar.restore(side.calendarPolicy);calendar.sync(o.mode==='booked');own.append(calendar.element);
+ }
  const reported=o.summaries.find(s=>s.side===side.code);if(reported)own.append(summary(reported));
  const allocations=o.facilityAllocations?.filter(a=>a.sideCode===side.code)??[];
  if(allocations.length)own.append(facilityAllocationTrack(allocations));
@@ -149,13 +175,18 @@ function addCard(o:TicketView){
  return node;
 }
 
-function strip(o:TicketView){
- const d=o.state.description,view=o.schedule,node=el('header','ticket-strip');
+function tradeFields(o:TicketView,fields:TicketField[]){
+ const node=el('div','ticket-trade-fields');
+ for(const f of dependencyOrder(fields))node.append(fieldRow(o,f,null,o.state.trade[f.id]));
+ return node;
+}
+
+function strip(o:TicketView,fields:TicketField[]){
+ const view=o.schedule,node=el('header','ticket-strip');
  const title=el('div','ticket-title');
  // The panel heading names the product; the strip names only the trade's state.
  title.append(el('strong','ticket-state',o.mode==='amend'?'Amendment':o.mode==='new'?'Draft':!view?'Booked':view.delivered?'Booked · in delivery':'Booked · forward'));
- const fields=el('div','ticket-trade-fields');for(const f of d.tradeFields.filter(f=>f.state!=='soon'))fields.append(fieldRow(o,f,null,o.state.trade[f.id]));
- node.append(title,fields);
+ node.append(title,tradeFields(o,fields));
  if(view?.delivered){
   const progress=el('div','ticket-progress'),bar=el('progress');bar.max=view.leaves;bar.value=view.deliveredLeaves;
   progress.append(bar,el('span','ticket-progress-text',`${view.deliveredLeaves} of ${view.leaves} delivered`),el('span','ticket-valuation',`Valued at ${o.instant(view.valuationAt)}`));
@@ -267,7 +298,11 @@ export function renderTicket(host:HTMLElement,o:TicketView){
  for(const side of sides)deck.append(card(o,side,rows));
  if(o.mode!=='booked')deck.append(addCard(o));
  const {panel,content}=schedulePanel(o,named);
- if(o.presentation!=='schedules')root.append(strip(o),...o.state.notices.length?[notices]:[],chips,deck);
+ if(o.presentation!=='schedules'){
+  const fields=d.tradeFields.filter(f=>f.state!=='soon'),ownership=o.mode==='booked'?[]:fields.filter(f=>ownershipFields.has(f.id));
+  root.append(strip(o,fields.filter(f=>!ownership.includes(f))),...o.state.notices.length?[notices]:[],chips,deck);
+  if(ownership.length){const section=el('section','ticket-ownership');section.append(el('h3',undefined,'Ownership and parties'),tradeFields(o,ownership));root.append(section);}
+ }
  if(o.presentation==='schedules'){const state=el('p','ticket-status',o.status.text);state.dataset.kind=o.status.kind;root.append(state);}
  if(o.measures){if(!o.currency)throw Error('The trade measures require their currency.');root.append(measures(o.measures,o.currency,o.instant));}
  root.append(panel);

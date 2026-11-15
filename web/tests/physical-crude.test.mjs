@@ -5,7 +5,7 @@ import {prepareAmountDisplay,selectDisplayPrecision,initialDisplayPrecision} fro
 import {PendingCommand} from '../dist/pending-command.js';
 const assignment={code:'synthetic_assignment',definitionRevisionId:'exact-definition'};
 const profile={code:'physical_crude_standard_volume_v1',quantityBasis:'standard_volume_total',tolerance:'0',discounting:false};
-const fields={deliveryFrom:'2027-01-04T09:00:00Z',deliveryTo:'2027-01-05T09:00:00Z',quantity:'1000.125',direction:'receive',fixedPrice:'70.25',considerationDirection:'receive',paymentAt:'2027-02-01T12:00:00Z',feeMode:'none',handlingFee:'99',handlingFeeDirection:'pay'};
+const fields={deliveryFrom:'2027-01-04T09:00:00Z',deliveryTo:'2027-01-05T09:00:00Z',quantity:'1000.125',direction:'receive',fixedPrice:'70.25',considerationDirection:'receive',paymentAt:'2027-02-01T12:00:00Z',handlingFeePaymentAt:'2027-02-05T00:00:00Z',feeMode:'none',handlingFee:'99',handlingFeeDirection:'pay'};
 const header={bookId:'book',legalEntityId:'entity',legalEntityRevision:3,counterpartyId:'party',counterpartyRevision:4};
 test('crude request retains references, decimal strings, independent cash direction and explicit selected profile',()=>{
  const r=crudeRequest({snapshotId:'snapshot'},header,assignment,profile,fields);
@@ -49,13 +49,20 @@ test('a crude preview names its pricing source, profile, directions and sides, a
  assert.equal(shown.total,'Contractual present value: 292,500.000 USD');
  assert.deepEqual(shown.terms,[['Delivery window','Nov 30, 2026, 6:00 PM CST to Dec 31, 2026, 6:00 PM CST · exclusive'],['Contract volume','50,000 bbl'],
   ['Pricing source','Synthetic crude monthly curve'],['Physical direction','Receive crude'],['Consideration direction','Pay consideration'],['Fixed price','64.25 USD / bbl'],
-  ['Payment · America/Chicago','Jan 20, 2027, 12:00 PM CST'],['Handling fee','None'],['Profile','Fixed standard volume at 60°F · zero tolerance · undiscounted']]);
+  ['Payment date','Jan 20, 2027'],['Handling fee','None'],['Profile','Fixed standard volume at 60°F · zero tolerance · undiscounted']]);
  assert.deepEqual(shown.columns,['Side','Direction','Signed PV · USD']);
- assert.deepEqual(crudePreview(value,{...terms,handlingFee:'0.15',handlingFeeDirection:'receive'},'UTC').terms.find(([name])=>name==='Handling fee'),['Handling fee','0.15 USD / bbl · Receive fee']);
+ assert.deepEqual(crudePreview(value,{...terms,handlingFee:'0.15',handlingFeeDirection:'receive',handlingFeePaymentAt:'2027-02-05T00:00:00Z'},'UTC').terms.find(([name])=>name==='Handling fee'),['Handling fee','0.15 USD / bbl · Receive fee']);
  assert.deepEqual(shown.sides,[['Delivery','Receive','3,505,000.000'],['Consideration','Pay','-3,212,500.000']]);
 });
 test('a delivery clock unlike the entry time zone is named where delivery times are entered',()=>{
  assert.equal(crudeClockHint('UTC','America/Chicago'),'Delivery months start at midnight on the UTC delivery clock. Enter times here in America/Chicago.');
  assert.equal(crudeClockHint('America/Chicago','America/Chicago'),'');
  assert.equal(crudeClockHint(undefined,'America/Chicago'),'');
+});
+
+test('crude fee retains its independently entered payment date and refuses omission',()=>{
+ const fee={...fields,feeMode:'per_unit',handlingFee:'0.125',handlingFeeDirection:'receive',handlingFeePaymentAt:'2027-02-05T00:00:00Z'};
+ assert.equal(crudeRequest({},header,assignment,profile,fee).handlingFeePaymentAt,fee.handlingFeePaymentAt);
+ assert.throws(()=>crudeRequest({},header,assignment,profile,{...fee,handlingFeePaymentAt:''}),/payment date/);
+ assert.equal(crudeRequest({},header,assignment,profile,{...fee,feeMode:'none'}).handlingFeePaymentAt,null);
 });

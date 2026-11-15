@@ -1,3 +1,4 @@
+import {chooseCalendars} from './side-calendars.mjs';
 import {mkdtemp,copyFile} from 'node:fs/promises';
 import {dirname,join} from 'node:path';
 import {tmpdir} from 'node:os';
@@ -20,6 +21,7 @@ export async function run({command,evaluate,wait,click,set,submit,persona,check,
  const period=slot=>`${sides}[${slot}].querySelector('.scheduled-period')`;
  await evaluate(`(()=>{const put=(n,v)=>{n.value=v;n.dispatchEvent(new Event('change',{bubbles:true}));};for(const side of ${sides}){put(side.querySelector('[data-role=delivery-from]'),'2021-01-01');put(side.querySelector('[data-role=delivery-to]'),'2021-02-01');put(side.querySelector('[data-role=quantity-basis]'),'period_total');const unit=side.querySelector('[data-role=quantity-unit]');put(unit,[...unit.options].find(o=>o.textContent==='MMBtu (IT)').value);}for(const id of ['book','legal-entity','counterparty']){const n=document.querySelector('#scheduled-'+id);put(n,[...n.options].find(o=>o.value).value);}})()`);
  for(const slot of [0,1]){await evaluate(`[...${sides}[${slot}].querySelectorAll('button')].find(b=>b.textContent==='Generate monthly period rows').click()`);await wait(idle);}
+ await chooseCalendars({evaluate,set,wait},'#scheduled-swap-editor','test_utc_every_day');
  await set('[data-role=period-source-mode]','contract');
  const curveValue=await evaluate("[...document.querySelector('[data-role=contract-curve]').options].find(o=>o.textContent.includes('future')&&!o.textContent.includes('carry')&&!o.textContent.includes('prefix')).value");
  await set('[data-role=contract-curve]',curveValue);

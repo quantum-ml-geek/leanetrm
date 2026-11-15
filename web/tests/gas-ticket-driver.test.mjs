@@ -8,7 +8,7 @@ import {gasTicket} from '../../tests/browser/gas-ticket.mjs';
 // application's 20-second request deadline. Advance a clock instead of sleeping.
 function delayedChoices(readyAt){
  let now=0;
- const selector='#gas-ticket .deal-ticket .ticket-strip .ticket-field[data-field="book"] .ticket-control';
+ const selector='#gas-ticket .deal-ticket :is(.ticket-strip,.ticket-ownership) .ticket-field[data-field="book"] .ticket-control';
  const options=()=>now>=readyAt?[{value:''},{value:'synthetic-book'}]:[{value:''}];
  const document={
   querySelectorAll:query=>query===selector+' option'?options():[],

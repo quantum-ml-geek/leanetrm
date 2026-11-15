@@ -120,7 +120,7 @@ public sealed partial class PreparedCurve
             foreach(var span in spans)
                 for(var from=span.From;from<span.To;)
                 {
-                    var month=Month(DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(from,flat.Grid.Clock.Zone).DateTime));
+                    var month=Month(DateOnly.FromDateTime(flat.Grid.Clock.LocalAt(from).DateTime));
                     var to=flat.Grid.Clock.StartOfDay(month.AddMonths(1)).ToUniversalTime();if(to>span.To)to=span.To;
                     if(!parts.TryGetValue(month,out var pieces))parts.Add(month,pieces=[]);
                     if(flat.ActualPrefix is {} historical&&from<historical.To)
@@ -128,8 +128,8 @@ public sealed partial class PreparedCurve
                         if(from<historical.From)throw Invalid("Actual-only demand must stay within its declared prefix.");
                         if(to>historical.To)to=historical.To;
                         IntervalPrices.RequireWindow(flat.Grid.Clock,flat.Grid.IntervalMinutes,from,to);
-                        var first=DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(from,flat.Grid.Clock.Zone).DateTime);
-                        var last=DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(to.AddTicks(-1),flat.Grid.Clock.Zone).DateTime).AddDays(1);
+                        var first=DateOnly.FromDateTime(flat.Grid.Clock.LocalAt(from).DateTime);
+                        var last=DateOnly.FromDateTime(flat.Grid.Clock.LocalAt(to.AddTicks(-1)).DateTime).AddDays(1);
                         ImmutableArray<PowerInterval> cells=[..PowerHours.Compile(first,last,flat.Grid.Clock,TimeOfUse.All(flat.Grid.IntervalMinutes),[..flat.Grid.Holidays],flat.Grid.IntervalMinutes)
                             .Where(p=>p.Start>=from&&p.End<=to)];
                         pieces.Add(new(cells,[],[..cells.Select(_=>-1)]));
@@ -232,7 +232,7 @@ public sealed partial class PreparedCurve
             // Split before checking the bounded grid: multi-year consumers never compile a multi-year block.
             for(var from=span.From;from<span.To;)
             {
-                var month=Month(DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(from,clock.Zone).DateTime));
+                var month=Month(DateOnly.FromDateTime(clock.LocalAt(from).DateTime));
                 var to=clock.StartOfDay(month.AddMonths(1)).ToUniversalTime();if(to>span.To)to=span.To;
                 IntervalPrices.RequireWindow(clock,minutes,from,to);
                 if(!byMonth.TryGetValue(month,out var ranges))byMonth[month]=ranges=[];

@@ -9,7 +9,8 @@ from uuid import uuid4
 from assistant_context import check_guard
 from check_booked_side_programs import runtime_query
 from preview_client import PreviewClient, initial_frame
-from preview_fixture import trade_booking
+from preview_fixture import trade_booking, RCAT, RREV
+from synthetic_side_calendars import side_calendar_policy
 
 
 def upgrade_checks(query, migration):
@@ -35,15 +36,16 @@ def run_checks(url, query, manifest):
                                         if f['at'].startswith('2021-01-15T08:'))}
     catalog = client.call('gas/catalog', before)
     point = next(p for p in catalog['locations'] if p['deliveryPoint'] == 'synthetic_gas_point_a')
+    reference=dict(revision=dict(catalogId=RCAT,revisionId=RREV),code='test_utc_every_day')
     terms = {**before, **trade_booking(), 'bookId': catalog['books'][0]['id'],
              'definitionRevisionId': point['definitionRevisionId'], 'gasSetupId': catalog['gasSetupId'],
              'discounting': False, 'profile': 'fixed_gas_composition_v1',
              'physicalSides': [dict(code='receipt', pipeline=point['pipeline'], zone=point['zone'],
                                     deliveryPoint=point['deliveryPoint'], product=point['product'],
                                     direction='receive', deliveryFrom='2021-01-01', deliveryTo='2021-01-02',
-                                    quantityBasis='period_total_equal_days', quantity='1000', link=None)],
+                                    quantityBasis='period_total_equal_days', quantity='1000', link=None, calendarPolicy=side_calendar_policy(reference,delivery=True,observation=False,payment=False))],
              'cashSides': [dict(code='payment', role='consideration', direction='pay', source='receipt',
-                                stage='delivery', price='3', tariffCode=None, paymentAt='2021-02-02T00:00:00Z')]}
+                                stage='delivery', price='3', tariffCode=None, paymentAt='2021-02-02T00:00:00Z',calendarPolicy=side_calendar_policy(reference,delivery=True,observation=False,payment=True))]}
     targets, trades = [], []
     for _ in range(3):
         booked = client.call('gas/composition/book', {**deepcopy(terms), 'operationId': str(uuid4())})

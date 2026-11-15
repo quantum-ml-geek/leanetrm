@@ -15,7 +15,7 @@ async function fixture(work,{inline=false,windows=[]}={}){
     if(body.sideSlot===null){if(${inline})await new Promise(r=>setTimeout(r,30));return {...identity,sides:[{slot:0,sideId:'delivery',family:'gas',manifest:'m0',windows:window.windows},{slot:1,sideId:'payment',family:'floating',manifest:'m1',windows:window.windows}]};}
     const selected={...identity,window:body.window,sideSlot:body.sideSlot,sideId:body.sideSlot===0?'delivery':'payment',manifest:body.sideSlot===0?'m0':'m1'};
     if(body.contribution&&holdCalculation)await new Promise(resolve=>held.push(resolve));
-    if(body.contribution)return {...selected,page:{side:'payment',manifest:selected.manifest,contribution:body.contribution,valueBasis:'unit_side_v1',tradeQuantityScale:'100',membershipNumerator:'-1',membershipDenominator:'1',offset:body.offset,total:59,rows:[{key:'2:0',role:'source',operation:'price_lookup',kind:'price',value:'3',presence:'Resolved',deliveryFrom:row.deliveryFrom,deliveryTo:row.deliveryTo,start:row.start,end:row.end,observationFrom:row.deliveryFrom,observationTo:row.deliveryTo,valueAt:row.valueAt,unit:null,currency:null,quantityState:null,priceStates:['Projected'],inputs:[],bindings:[],fixingAt:'2041-01-01T12:00:00Z',contractFrom:row.deliveryFrom,contractTo:row.deliveryTo,lineage:[]}]}};
+    if(body.contribution)return {...selected,page:{side:'payment',manifest:selected.manifest,contribution:body.contribution,valueBasis:'unit_side_v1',tradeQuantityScale:'100',membershipNumerator:'-1',membershipDenominator:'1',offset:body.offset,total:59,rows:[{key:'2:0',role:'source',operation:'price_lookup',kind:'price',value:'3',presence:'Resolved',deliveryFrom:row.deliveryFrom,deliveryTo:row.deliveryTo,start:row.start,end:row.end,observationFrom:row.deliveryFrom,observationTo:row.deliveryTo,valueAt:row.valueAt,paymentDate:body.sideSlot===1?'2041-02-10':null,unit:null,currency:null,quantityState:null,priceStates:['Projected'],inputs:[],bindings:[],fixingAt:'2041-01-01T12:00:00Z',contractFrom:row.deliveryFrom,contractTo:row.deliveryTo,lineage:[]}]}};
     const rows=Array.from({length:Math.max(0,Math.min(body.limit,total-body.offset))},(_,n)=>({...row,key:'10:'+(body.offset+n),operatingDate:body.sideSlot===0?'2041-01-01':null,presentValue:body.sideSlot===0?'320':'-302',...patchRow}));
     const result={...selected,page:{side:body.sideSlot===0?'delivery':'payment',manifest:selected.manifest,valuationAt:'2040-12-18T16:00:00Z',knownAt:'2040-12-18T17:00:00Z',offset:body.offset,total,rows}};
     if(hold&&body.sideSlot===0)return new Promise(resolve=>held.push(()=>resolve(result)));
@@ -26,7 +26,7 @@ async function fixture(work,{inline=false,windows=[]}={}){
    window.rowCount=()=>document.querySelectorAll('.inspection-rows tbody tr:not(.inspection-window-heading):not(.inspection-window-more)').length;
    window.tab=n=>document.querySelectorAll('.inspection-sides [role=tab]')[n];
    window.toEnd=()=>{const box=find('.inspection-rows');box.scrollTop=box.scrollHeight;};
-   window.mount=()=>{window.dispose=mountSideScheduleInspection(find('#host'),{api,...${inline?`{side:{slot:0},quantityEntry:{days:new Map([['2041-01-01',{value:'120',sources:['nominated']}]]),disabled:false,enter:(...args)=>quantityEntries.push(args)}}`:'{}'},onDenied:()=>{denied++;},position:{context:{snapshotId:'snapshot',knowledgeMode:'current',convention:'trading_workspace_v1'},tradeId:'trade',bindingId:'binding',revision:2,instrumentType:'physical_gas'},instant:x=>x});};
+   window.mount=()=>{window.dispose=mountSideScheduleInspection(find('#host'),{api,...${inline?`{side:{slot:0},quantityEntry:{days:new Map([['2041-01-01',{value:'120',sources:['nominated']}]]),disabled:false,enter:(...args)=>quantityEntries.push(args)}}`:'{}'},onDenied:()=>{denied++;},position:{context:{snapshotId:'snapshot',knowledgeMode:'current',convention:'trading_workspace_v1'},tradeId:'trade',bindingId:'binding',revision:2,instrumentType:'physical_gas'},instant:x=>window.displayInstant?.(x)??x});};
   })()`);
   await work(evaluate);
  });
@@ -51,7 +51,7 @@ test('a Side tab shows that Side, and calculation evidence loads only on request
   await evaluate(`(async()=>{mount();await ${shown('320')};tab(1).click();await ${shown('-302')};})()`);
   assert.equal(await evaluate("tab(1).getAttribute('aria-selected')"),'true');
   assert.equal(await evaluate("find('.inspection-rows').textContent.includes('320')"),false);
-  assert.match(await evaluate("find('.inspection-rows').textContent"),/2041-02-10/);
+  assert.match(await evaluate("find('.inspection-rows').textContent"),/Feb 10, 2041/);
   assert.match(await evaluate("find('.inspection-rows').textContent"),/2041-01-01T09:00:00Z/);
   assert.match(await evaluate("find('.inspection-rows').textContent"),/Not tracked/);
   assert.equal(await evaluate('reads.some(r=>r.body.contribution!==null)'),false);
@@ -231,5 +231,15 @@ test('calculation paging retains its table and horizontal place until the replac
   await evaluate("(async()=>{held.shift()();await until(()=>find('.inspection-steps')!==oldSteps);})()");
   assert.equal(await evaluate("find('.inspection-steps').scrollLeft"),120);
   assert.equal(await evaluate("find('.inspection-evidence').inert"),false);
+ });
+});
+
+for(const zone of ['America/Chicago','Asia/Kathmandu'])test('calculation payment dates stay contractual in '+zone,{skip:!browserAvailable,timeout:browserTestTimeout},async()=>{
+ await fixture(async evaluate=>{
+  await evaluate(`(async()=>{window.displayInstant=x=>new Intl.DateTimeFormat('en-US',{timeZone:'${zone}',dateStyle:'medium',timeStyle:'short'}).format(new Date(x));mount();await until(()=>find('.inspection-calculation'));tab(1).click();await until(()=>document.querySelector('.inspection-calculation'));document.querySelector('.inspection-calculation').click();await until(()=>document.querySelector('.inspection-steps'));})()`);
+  assert.equal(await evaluate("document.querySelector('.inspection-steps tbody tr').children[8].textContent"),'Feb 10, 2041');
+  assert.equal(await evaluate("document.querySelector('.inspection-steps tbody tr').children[11].textContent"),await evaluate("displayInstant('2041-01-01T12:00:00Z')"));
+  await evaluate("(async()=>{tab(0).click();await until(()=>document.querySelector('.inspection-calculation'));document.querySelector('.inspection-calculation').click();await until(()=>document.querySelector('.inspection-steps'));})()");
+  assert.equal(await evaluate("document.querySelector('.inspection-steps tbody tr').children[8].textContent"),await evaluate("displayInstant('2041-02-10T00:00:00Z')"));
  });
 });

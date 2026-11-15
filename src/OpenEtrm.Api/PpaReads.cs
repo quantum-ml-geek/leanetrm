@@ -39,7 +39,9 @@ internal sealed class PpaReads
         return [..rows.Select(v=>new TouProductVersion(v.Id("product_id"),v.Text("code"),Number(v,"version"),Number(v,"generation"),
             v.Text("state"),v.Text("name"),new(v.Id("clock_catalog_id"),v.Id("clock_revision_id"),v.Text("clock_code")),
             Number(v,"peak_start_hour"),Number(v,"peak_end_hour"),v.GetProperty("peak_saturday").GetBoolean(),
-            Number(v,"publication_order"),v.Instant("published_at")))];
+            Number(v,"publication_order"),v.Instant("published_at"))
+            {Calendar=v.OptionalId("calendar_catalog_id") is {} calendarCatalog?new ReferenceKey(new(calendarCatalog,v.Id("calendar_revision_id")),v.Text("calendar_code")):null,
+             HolidayTreatment=v.OptionalText("holiday_treatment")})];
     }
     internal async Task<PpaPrepared> Prepare(NpgsqlConnection connection,PreviewData data,InputFrame frame,ImmutableArray<PpaBinding> bindings,
         DateTimeOffset known,MarketKnowledge resolvedKnowledge,IntervalKnowledgePolicy knowledgePolicy,PendingActualsPolicy pending,ImmutableHashSet<DateOnly> detail,CancellationToken ct,bool closeRiskInputs=false)

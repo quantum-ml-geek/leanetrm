@@ -11,7 +11,7 @@ internal static class RetainedScheduleLimitChecks
         Refuse(()=>RetainedScheduleLimits.Require(1_500_001));
         Refuse(()=>RetainedScheduleLimits.Require(0));
         var fixture=new PpaAcceptanceFixture();var side=new FixedSide(Guid.NewGuid(),fixture.Terms(fixture.Profile),
-            new FlatPrice(new(ExactDecimal.Parse("40"),fixture.EnergyPrice)));
+            new FlatPrice(new(ExactDecimal.Parse("40"),fixture.EnergyPrice)),SyntheticSideCalendars.Interval(fixture.Terms(fixture.Profile),false));
         var single=new Probe([new(side,ExactDecimal.Parse("1"))]);
         var repeated=new Probe([new(side,ExactDecimal.Parse("1")),new(side,ExactDecimal.Parse("-1"))]);
         // One 721-hour DST month:8 operators,8 edges,4 roots and1 grid.
@@ -22,7 +22,7 @@ internal static class RetainedScheduleLimitChecks
         var terms=fixture.Terms(fixture.Profile) with {Delivery=delivery,
             Schedule=new(delivery,fixture.Clock,IntervalScheduleCadence.NativeIntervals,fixture.Profile.Hours)};
         var large=new Probe([..new[]{"40","41","42","43"}.Select(strike=>new SideMembership(
-            new FixedSide(Guid.NewGuid(),terms,new FlatPrice(new(ExactDecimal.Parse(strike),fixture.EnergyPrice))),ExactDecimal.Parse("1")))]);
+            new FixedSide(Guid.NewGuid(),terms,new FlatPrice(new(ExactDecimal.Parse(strike),fixture.EnergyPrice)),SyntheticSideCalendars.Interval(terms,false)),ExactDecimal.Parse("1")))]);
         var retained=new RetainedScheduleTerms(fixture.Definitions,fixture.Reference,large).Generate(default);
         if(retained.Schedules.Count!=4||retained.Schedules.Any(s=>s.Rows.Count!=242||s.Grids.Count!=40)||
             RetainedScheduleLimits.Require(retained.Schedules)!=2892)

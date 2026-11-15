@@ -32,7 +32,7 @@ internal sealed partial class PricePublicationStore
         var metadata = await PowerHistory.Source(connection, request.SourceId, ct);
         ValidatePowerSource(publication, index, metadata, data, request.Market);
 
-        var clock = PowerClock.FromRule(metadata.Clock, TimeZoneDatabase.Installed());
+        var clock = PublishedClocks.Resolve(data,metadata.Clock.Code);
         var window = PowerImportProtocol.Window(request.FromDate, request.ThroughDate, clock, metadata.Minutes);
         var history = await PowerHistory.ReadPrices(connection, request.SourceId, window[0].Start, window[^1].End, request.KnownAt, ct);
         // Reuse the same start/end and completeness validation as delivery-price

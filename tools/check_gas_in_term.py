@@ -9,6 +9,7 @@ from uuid import uuid4
 from assistant_context import check_guard, migration_body
 from preview_client import PreviewClient, initial_frame
 from preview_fixture import trade_booking
+from synthetic_side_calendars import side_calendar_policy
 from check_booked_side_programs import runtime_query, capture_context
 from gas_in_term_fixture import ADMINISTRATOR, BOOK_ONLY_ADMINISTRATOR, CLOSE, DISABLED_ADMINISTRATOR, EXPIRED, POINT, TERM, custom_curves, fixing, marks, premium_curve, published_at, trade
 
@@ -98,9 +99,10 @@ def run_checks(url, query, manifest, run_worker, admin_load, browse=None):
     print('PASS an unknown, disabled or unauthorized administrator, or one without market reads, is refused with its own structured error and writes nothing', flush=True)
 
     # A forward composition booked through the ticket now selects the started-delivery lifecycles too.
+    calendar = body['physicalSides'][0]['calendarPolicy']['delivery']['calendar']
     forward = deepcopy(body); forward.update(operationId=str(uuid4()), profile='fixed_gas_composition_v1')
     forward['physicalSides'][0].update(deliveryFrom='2026-12-01', deliveryTo='2027-01-01')
-    forward['cashSides'] = [dict(code='payment', role='consideration', direction='pay', source='gas', stage='delivery', price='3.5', tariffCode=None, paymentAt='2027-01-10T00:00:00Z')]
+    forward['cashSides'] = [dict(code='payment', role='consideration', direction='pay', source='gas', stage='delivery', price='3.5', tariffCode=None, paymentAt='2027-01-10T00:00:00Z', calendarPolicy=side_calendar_policy(calendar,delivery=True,observation=False,payment=True))]
     other = c.call('gas/composition/book', forward)
     assert lifecycles(query, catalog, other['instrumentId']) == {0: {'whole_gas_day_delivery_v1'}, 1: {'accrued_payment_v1'}}
     # A non-composition booking keeps its own future lifecycles.
@@ -110,9 +112,9 @@ def run_checks(url, query, manifest, run_worker, admin_load, browse=None):
     rule = {'frequency': 'monthly', 'rule': 'days_after_period_end', 'days': 18, 'dayOfMonth': None, 'dayBasis': 'calendar_days', 'shortMonth': None, 'adjustment': 'unadjusted', 'calendar': None, 'implementation': 'monthly_payment_date_rules_v1'}
     leg = {'currency': index['currencyCode'], 'deliveryFrom': '2021-01-01', 'deliveryTo': '2021-02-01', 'paymentSchedule': rule}
     swap = c.call('swaps/book', {**swap_context, **trade_booking(), 'operationId': str(uuid4()), 'bookId': gas['books'][0]['id'], 'definitionRevisionId': index['definitionRevisionId'],
-                                 'commodity': index['commodity'], 'quantity': '100', 'fixedCoefficient': '-1', 'discounting': False, 'fixed': {'price': '3', **leg},
+                                 'commodity': index['commodity'], 'quantity': '100', 'fixedCoefficient': '-1', 'discounting': False, 'fixed': {'price': '3', **leg, 'calendarPolicy': side_calendar_policy(calendar,delivery=True,observation=False,payment=True)},
                                  'floating': {'spread': '0', 'settlement': {'mode': 'curve_target', 'index': None, 'projectionPolicy': None}, 'curve': index['curve'], 'index': index['index'],
-                                              **leg, 'resetFrequency': 'monthly', 'averagingMethod': 'none'}})
+                                              **leg, 'calendarPolicy': side_calendar_policy(calendar,delivery=True,observation=True,payment=True), 'resetFrequency': 'monthly', 'averagingMethod': 'none'}})
     swap_lifecycles = set().union(*lifecycles(query, catalog, swap['instrumentId']).values())
     assert swap_lifecycles and not swap_lifecycles & STARTED, swap_lifecycles
     print('PASS ticket compositions retain started-delivery lifecycles while a swap keeps its own', flush=True)
@@ -377,10 +379,11 @@ def delivery_mark_checks(c, frame, context, body, publish, sources):
 
 
 def expired_mark_checks(c, context, body, forward):
+    calendar = body['physicalSides'][0]['calendarPolicy']['delivery']['calendar']
     """An undelivered day whose contract expired without its final settlement is that trade's own refusal, never the read's."""
     last = deepcopy(body); last.update(operationId=str(uuid4()), profile='fixed_gas_composition_v1')
     last['physicalSides'][0].update(deliveryFrom='2026-11-30', deliveryTo='2026-12-01')
-    last['cashSides'] = [dict(code='payment', role='consideration', direction='pay', source='gas', stage='delivery', price='3.1', tariffCode=None, paymentAt='2026-12-10T00:00:00Z')]
+    last['cashSides'] = [dict(code='payment', role='consideration', direction='pay', source='gas', stage='delivery', price='3.1', tariffCode=None, paymentAt='2026-12-10T00:00:00Z', calendarPolicy=side_calendar_policy(calendar,delivery=True,observation=False,payment=True))]
     booked = c.call('gas/composition/book', last)
     later = initial_frame(c.call('workspace'), EXPIRED[:10])
     working = dict(snapshotId=later['id'], convention='trading_workspace_v1', knowledgeMode='current')
@@ -404,10 +407,11 @@ def expired_mark_checks(c, context, body, forward):
 
 
 def final_determination(c, query, manifest, frame, context, body, load):
+    calendar = body['physicalSides'][0]['calendarPolicy']['delivery']['calendar']
     """A fixed-price in-term day with a D338 final determination shows it beside the contract-estimate accrual."""
     single = deepcopy(body); single.update(operationId=str(uuid4()), profile='fixed_gas_composition_v1')
     single['physicalSides'][0].update(deliveryFrom='2026-11-01', deliveryTo='2026-11-02')
-    single['cashSides'] = [dict(code='payment', role='consideration', direction='pay', source='gas', stage='delivery', price='3.1', tariffCode=None, paymentAt='2026-12-10T00:00:00Z')]
+    single['cashSides'] = [dict(code='payment', role='consideration', direction='pay', source='gas', stage='delivery', price='3.1', tariffCode=None, paymentAt='2026-12-10T00:00:00Z', calendarPolicy=side_calendar_policy(calendar,delivery=True,observation=False,payment=True))]
     staged = c.call('gas/composition/book', single, expected=422)
     assert staged['code'] == 'gas_delivery_lifecycle', staged
     loaded = load({**single, 'operationId': str(uuid4())})
@@ -436,11 +440,12 @@ def final_determination(c, query, manifest, frame, context, body, load):
 
 
 def payment_revision_checks(c, query, manifest, frame, context, body, load):
+    calendar = body['physicalSides'][0]['calendarPolicy']['delivery']['calendar']
     """A later revision that moves a payment's paid instant past the view's business time leaves that view unpaid."""
     catalog = manifest['catalogId']
     single = deepcopy(body); single.update(profile='fixed_gas_composition_v1')
     single['physicalSides'][0].update(deliveryFrom='2026-11-02', deliveryTo='2026-11-03')
-    single['cashSides'] = [dict(code='payment', role='consideration', direction='pay', source='gas', stage='delivery', price='3.1', tariffCode=None, paymentAt='2026-12-10T00:00:00Z')]
+    single['cashSides'] = [dict(code='payment', role='consideration', direction='pay', source='gas', stage='delivery', price='3.1', tariffCode=None, paymentAt='2026-12-10T00:00:00Z', calendarPolicy=side_calendar_policy(calendar,delivery=True,observation=False,payment=True))]
     loaded = load({**single, 'operationId': str(uuid4())})
     def record(paid, as_of):
         payment = dict(operationId=str(uuid4()), tradeId=loaded['tradeId'], expectedRevision=1, slot=1, businessKey='synthetic-2026-11-02-remittance', paidAt=paid,

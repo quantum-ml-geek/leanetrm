@@ -25,11 +25,14 @@ export async function swapLifecycleFixture(driver,name,{net=false,shared=false}=
   const context={snapshotId:${q(dates[0].id)},convention:'independent_side_financial_swap_v2',knowledgeMode:'current'},c=await window.__swapPost('swaps/catalog',context),index=c.indices.find(i=>i.curve==='base_forward');
   const entity=c.legalEntities[0],party=c.counterparties[0],payment={frequency:'monthly',rule:'days_after_period_end',days:18,dayOfMonth:null,dayBasis:'calendar_days',shortMonth:null,adjustment:'unadjusted',calendar:null,implementation:'monthly_payment_date_rules_v1'};
   if(!c.books.some(b=>b.id===${q(bookId)})||!index||!entity||!party)throw Error('Missing explicit synthetic booking choices');
+  const calendars=c.sideCalendars.filter(choice=>choice.code==='test_utc_every_day');
+  if(calendars.length!==1)throw Error('Expected the exact authorized synthetic all-dates calendar');
+  const calendar=calendars[0].reference,policy=observation=>({implementation:'side_calendar_policy_v1',delivery:{applicable:true,calendar},observation:{applicable:observation,calendar:observation?calendar:null},payment:{applicable:true,calendar}});
   const terms={currency:index.currencyCode,deliveryFrom:'2021-01-01',deliveryTo:'2021-02-01',paymentSchedule:payment};
   const floating={...terms,curve:index.curve,index:index.index,resetFrequency:'monthly',averagingMethod:'none',spread:'0',settlement:{mode:'curve_target',index:null,projectionPolicy:null}},
-   side={basis:'period_total',quantity:index.quantityChoices[0].specification,amount:null,allocation:null,priceApplication:'period_average_times_quantity_v1',power:null,periods:[{amount:'100',fixed:null,floating}]};
+   side={calendarPolicy:policy(true),basis:'period_total',quantity:index.quantityChoices[0].specification,amount:null,allocation:null,priceApplication:'period_average_times_quantity_v1',power:null,periods:[{amount:'100',fixed:null,floating}]};
   const booked=await window.__swapPost('swaps/book',{...context,operationId:crypto.randomUUID(),bookId:${q(bookId)},executedAt:null,quantity:${shared?'null':q('100')},fixedCoefficient:${shared?'null':q('-1')},discounting:false,definitionRevisionId:index.definitionRevisionId,commodity:index.commodity,
-   fixed:${shared?'null':"{...terms,price:'3'}"},floating:${shared?'null':'floating'},${shared?"swapType:'scheduled_financial_swap',firstCoefficient:'-1',scheduled:{implementation:'whole_term_scheduled_financial_swap_v1',first:side,second:structuredClone(side)},":''}legalEntityId:entity.id,legalEntityRevision:entity.revision,counterpartyId:party.id,counterpartyRevision:party.revision});
+   fixed:${shared?'null':"{...terms,price:'3',calendarPolicy:policy(false)}"},floating:${shared?'null':'{...floating,calendarPolicy:policy(true)}'},${shared?"swapType:'scheduled_financial_swap',firstCoefficient:'-1',scheduled:{implementation:'whole_term_scheduled_financial_swap_v1',first:side,second:structuredClone(side)},":''}legalEntityId:entity.id,legalEntityRevision:entity.revision,counterpartyId:party.id,counterpartyRevision:party.revision});
   window.__swapFixture={tradeId:booked.tradeId,bookId:${q(bookId)},frame:${q(dates[1].id)},context:{...context,snapshotId:${q(dates[1].id)}}};return window.__swapFixture;
  })()`);
  await blotterAt({set,wait,click},dates[1]);await scopeBook();
@@ -57,7 +60,9 @@ export async function swapLifecycleFixture(driver,name,{net=false,shared=false}=
   await evaluate(`[...document.querySelectorAll('#desk-positions .tabulator-row[data-row-key]')].find(r=>r.dataset.rowKey.startsWith(${q(selected.tradeId+':')})).click()`);await wait('!document.querySelector("#position-details").hidden&&'+idle);
   await click('#position-details-tabs-terms');await wait('!!document.querySelector("#side-panel-settlement")&&'+idle);await click('#side-panel-settlement');await wait('!document.querySelector("#swap-settlement").hidden&&'+idle);
  }
- async function lifecycle(){await click('#nav-lifecycle');await wait(`document.querySelector(${q(root)})?.hidden===false&&document.querySelector(${q(root+' [data-lifecycle="rows"] .table-search')})&&${idle}`,60000);
+ async function lifecycle(){
+  try{await wait(`(()=>{const button=document.querySelector('#nav-lifecycle');if(!(${idle})||button.disabled)return false;button.click();return true;})()`);await wait(`document.querySelector(${q(root)})?.hidden===false&&document.querySelector(${q(root+' [data-lifecycle="rows"] .table-search')})&&${idle}`,60000);}
+  catch(error){throw Error(error.message+' · observed '+JSON.stringify(await evaluate("({busy:document.body.getAttribute('aria-busy'),pageHidden:document.querySelector('#lifecycle-page').hidden,navigationDisabled:document.querySelector('#nav-lifecycle').disabled,error:document.querySelector('#error').textContent,notice:document.querySelector('#notice').textContent,lifecycle:document.querySelector('#lifecycle-page').textContent.slice(0,1500)})")));}
   await set(root+' [data-lifecycle="rows"] .table-search',selected.reference);await wait(idle);
  }
  async function action(code,membership=0){await lifecycle();const occurrence=code==='swap.net'?null:await evaluate(`window.__swapFixture.occurrences.find(o=>o.membership_ordinal===${membership}).occurrence_id`),profile=code==='swap.net'?null:await evaluate(`window.__swapFixture.profiles.find(p=>p.action===${q(code)}&&p.membership===${membership}).id`);

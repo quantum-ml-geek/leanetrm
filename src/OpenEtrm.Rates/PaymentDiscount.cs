@@ -19,67 +19,68 @@ public sealed record PaymentDiscount
     public ReferenceKey Currency { get; }
     public RateCurveDefinition? Definition { get; }
     public DateOnly PaymentDate { get; }
+    public ValueTimingKind Timing { get; }
     public MarketSnapshot Snapshot { get; }
     public ImmutableArray<ZeroRateValue> Pillars { get; }
     public ImmutableArray<ObservationKey> Observations => Pillars.Select(p => p.Observation).ToImmutableArray();
     public string? RateNumericalPolicy { get; }
     public RateConventionSet? Conventions { get; }
+    public DiscountFactorSource Source=>!Enabled?DiscountFactorSource.Undiscounted:
+        Timing==ValueTimingKind.UtcPaymentDay&&PaymentDate==PaymentDatePolicy.Date(Snapshot.ValuationAt)?DiscountFactorSource.PaymentDay:DiscountFactorSource.CurrencyDefault;
 
     private PaymentDiscount(bool enabled, ExactDecimal factor, ReferenceKey currency, CurrencyDiscountCurve? mapping,
-        DateOnly paymentDate, MarketSnapshot snapshot, ImmutableArray<ZeroRateValue> pillars)
+        DateOnly paymentDate, MarketSnapshot snapshot, ImmutableArray<ZeroRateValue> pillars,ValueTimingKind timing)
     {
         Enabled = enabled; Factor = factor; MappingId = mapping?.Id; Curve = mapping?.Definition.Key;
         Currency = currency; Definition = mapping?.Definition;
-        PaymentDate = paymentDate; Snapshot = snapshot; Pillars = pillars;
-        RateNumericalPolicy = enabled ? ZeroRateCurve.Policy : null;
+        PaymentDate = paymentDate; Snapshot = snapshot; Pillars = pillars;Timing=timing;
+        RateNumericalPolicy = enabled ? Source==DiscountFactorSource.PaymentDay?PaymentDatePolicy.Implementation:ZeroRateCurve.Policy : null;
         Conventions = mapping?.Definition.Conventions;
     }
 
     public static PaymentDiscount Resolve(bool discounting, ReferenceKey currency, DateOnly paymentDate,
         MarketSnapshot snapshot, CurrencyDiscountCurve? currencyDefault) =>
-        new Resolver(discounting, snapshot, currencyDefault).Resolve(currency, paymentDate);
+        new Resolver(discounting, snapshot, currencyDefault).Resolve(currency, paymentDate,ValueTimingKind.UtcPaymentDay);
 
     // One valuation owns this resolver. Full curve validation is retained, while
     // every payment uses the same exact immutable snapshot and mapping.
     internal sealed class Resolver(bool discounting, MarketSnapshot snapshot, CurrencyDiscountCurve? currencyDefault)
     {
         private RatesCurve? rates;
-        private readonly Dictionary<DateOnly, PaymentDiscount> resolved = [];
+        private readonly Dictionary<(DateOnly,ValueTimingKind), PaymentDiscount> resolved = [];
 
-        internal PaymentDiscount Resolve(ReferenceKey currency, DateOnly paymentDate)
-            =>Resolve(currency,paymentDate,false);
         internal PaymentDiscount Resolve(SidePaymentKey payment)
         {
             payment.RequireUndue(snapshot);
-            return Resolve(payment.Currency,DateOnly.FromDateTime(payment.PaymentAt.UtcDateTime),!discounting);
+            return Resolve(payment.Currency,PaymentDatePolicy.Date(payment.PaymentAt),payment.Timing);
         }
-        private PaymentDiscount Resolve(ReferenceKey currency, DateOnly paymentDate,bool allowSameDay)
+        internal PaymentDiscount Resolve(ReferenceKey currency, DateOnly paymentDate,ValueTimingKind timing)
         {
-            if (snapshot is null || currency.Revision.CatalogId == Guid.Empty || currency.Revision.RevisionId == Guid.Empty ||
+            if (!Enum.IsDefined(timing) || snapshot is null || currency.Revision.CatalogId == Guid.Empty || currency.Revision.RevisionId == Guid.Empty ||
                 string.IsNullOrWhiteSpace(currency.Code) || snapshot.Id == Guid.Empty ||
                 snapshot.Definitions.CatalogId == Guid.Empty || snapshot.Definitions.RevisionId == Guid.Empty ||
                 snapshot.ValuationAt.Offset != TimeSpan.Zero || snapshot.MarketCutoff.Offset != TimeSpan.Zero ||
                 snapshot.MarketCutoff > snapshot.ValuationAt || snapshot.Selections.IsDefault ||
                 snapshot.SelectionPolicy != InputSelectionPolicy.ExactPinnedFinalObservationsNoAgeFiltering ||
                 snapshot.ValuationAt.Year is < 1901 or > 2199 || paymentDate.Year is < 1901 or > 2199 ||
-                paymentDate < DateOnly.FromDateTime(snapshot.ValuationAt.UtcDateTime) ||
-                !allowSameDay && paymentDate == DateOnly.FromDateTime(snapshot.ValuationAt.UtcDateTime))
-                throw new MarketDataException("discount_context", "An exact supported currency/context and future UTC payment date are required.");
-            if (!discounting) return new(false, ExactDecimal.Parse("1"), currency, null, paymentDate, snapshot, []);
+                paymentDate < DateOnly.FromDateTime(snapshot.ValuationAt.UtcDateTime))
+                throw new MarketDataException("discount_context", "An exact supported currency/context and current or future UTC payment date are required.");
+            if (!discounting) return new(false, ExactDecimal.Parse("1"), currency, null, paymentDate, snapshot, [],timing);
+            if(timing==ValueTimingKind.UtcPaymentDay&&paymentDate==PaymentDatePolicy.Date(snapshot.ValuationAt))return new(true,ExactDecimal.Parse("1"),currency,null,paymentDate,snapshot,[],timing);
             if (currencyDefault is null)
                 throw new MarketDataException("discount_curve_missing", "The selected currency has no configured default discount curve in this context.");
             var mapping = currencyDefault;
             if (mapping.Id == Guid.Empty || mapping.Definition is null || mapping.Currency != currency ||
                 mapping.Definition.Currency != currency)
                 throw new MarketDataException("discount_curve", "The configured default's currency and its curve's currency must both be the payment currency.");
-            if (resolved.TryGetValue(paymentDate, out var cached)) return cached;
+            if (resolved.TryGetValue((paymentDate,timing), out var cached)) return cached;
             if (rates is null)
             {
                 rates = new(mapping.Definition,snapshot);
             }
             var factor=rates.Lookup(paymentDate).Value;
-            var value=new PaymentDiscount(true,factor.Value,currency,mapping,paymentDate,snapshot,factor.Pillars);
-            resolved.Add(paymentDate, value);
+            var value=new PaymentDiscount(true,factor.Value,currency,mapping,paymentDate,snapshot,factor.Pillars,timing);
+            resolved.Add((paymentDate,timing), value);
             return value;
         }
     }
@@ -150,14 +151,14 @@ public sealed class CurrencyDefaultDiscounting : ISideDiscounting
             throw new MarketDataException("discount_context","Explicit side schedules and a selected market snapshot are required.");
         var plans=schedules.ToImmutableArray();
         if(plans.IsDefaultOrEmpty || plans.Any(p=>p is not SidePaymentSchedule))
-            throw new MarketDataException("discount_context","Legacy cash discounting requires at least one exact payment schedule.");
+            throw new MarketDataException("discount_context","Cash discounting requires at least one exact payment schedule.");
         foreach(var schedule in plans.Cast<SidePaymentSchedule>())schedule.RequireUndue(snapshot);
         return plans.Cast<SidePaymentSchedule>().SelectMany(p=>p.Payments).Select(p=>p.Key).ToImmutableArray();
     }
     private SidePaymentFactor Factor(SidePaymentKey key,PaymentDiscount input)
     {
-        var factor=new SidePaymentFactor(key,input.Factor,Snapshot,input.Enabled?DiscountFactorSource.CurrencyDefault:DiscountFactorSource.Undiscounted);
-        if(!input.Enabled)return factor;
+        var factor=new SidePaymentFactor(key,input.Factor,Snapshot,input.Source);
+        if(input.Source!=DiscountFactorSource.CurrencyDefault)return factor;
         var definition=input.Definition!;
         return factor with { RateDefinition=new(input.MappingId!.Value,definition.Key,definition.Currency,definition.Source,
             DateOnly.FromDateTime(Snapshot.ValuationAt.UtcDateTime),input.PaymentDate,definition.Conventions,input.RateNumericalPolicy!,
@@ -170,14 +171,18 @@ public sealed class CurrencyDefaultDiscounting : ISideDiscounting
         if(calculationAt==snapshot.ValuationAt)return factors;
         if(clockPolicy!=ClockChange.FrozenInputs||!TradingInstant.IsSupported(calculationAt)||calculationAt<snapshot.ValuationAt)
             throw new MarketDataException("scenario_clock","Select an explicit supported frozen-input clock roll.");
-        if(payments.Any(p=>p.PaymentAt<=calculationAt))throw new MarketDataException("valuation_time_event","The clock crosses a payment event.");
+        if(payments.Any(p=>p.ReachedValuationBoundary(calculationAt)))throw new MarketDataException("valuation_time_event","The clock crosses a payment event.");
         if(!enabled)return [..factors.Select(f=>f with{ClockRoll=new(clockPolicy,calculationAt,f.DiscountFactor,ExactDecimal.Parse("1"),[])})];
-        var curve=frozenCurve.Value;
-        var anchor=curve.Lookup(DateOnly.FromDateTime(calculationAt.UtcDateTime)).Value;
-        if(anchor.Value.CompareTo(default)<=0)throw new MarketDataException("discount_curve","The rolled discount anchor must be positive.");
-        return [..factors.Select(f=>rolledFactors.GetOrAdd((calculationAt,f.Payment),_=>f with{
-            DiscountFactor=RateCurveMath.DiscountRatio(f.DiscountFactor,anchor.Value,RateCurveMath.DiscountRatioPolicy),
-            ClockRoll=new(clockPolicy,calculationAt,f.DiscountFactor,anchor.Value,[..anchor.Pillars.Select(p=>p.Observation)])}))];
+        return [..factors.Select(f=>rolledFactors.GetOrAdd((calculationAt,f.Payment),_=>
+        {
+            if(f.Payment.OnPaymentDay(calculationAt))
+                return f with {DiscountFactor=ExactDecimal.Parse("1"),Source=DiscountFactorSource.PaymentDay,RateDefinition=null,
+                    ClockRoll=new(clockPolicy,calculationAt,f.DiscountFactor,f.DiscountFactor,[])};
+            var anchor=frozenCurve.Value.Lookup(PaymentDatePolicy.Date(calculationAt)).Value;
+            if(anchor.Value.CompareTo(default)<=0)throw new MarketDataException("discount_curve","The rolled discount anchor must be positive.");
+            return f with {DiscountFactor=RateCurveMath.DiscountRatio(f.DiscountFactor,anchor.Value,RateCurveMath.DiscountRatioPolicy),
+                ClockRoll=new(clockPolicy,calculationAt,f.DiscountFactor,anchor.Value,[..anchor.Pillars.Select(p=>p.Observation)])};
+        }))];
     }
 
     public ImmutableArray<SidePaymentFactor> Resolve(ImmutableArray<SidePaymentKey> payments,MarketSnapshot snapshot)
@@ -205,7 +210,7 @@ public sealed record DiscountedSidePayment
         if (cashflow.PaymentDiscount.DiscountFactor != discount.Factor || !snapshot.HasSameInputs(discount.Snapshot) ||
             discount.Currency != cashflow.Plan.Currency ||
             discount.PaymentDate != cashflow.Plan.PaymentDate ||
-            cashflow.PaymentDiscount.Source != (discount.Enabled ? DiscountFactorSource.CurrencyDefault : DiscountFactorSource.Undiscounted))
+            cashflow.PaymentDiscount.Source != discount.Source)
             throw new MarketDataException("schedule_discount", "Discount evidence must match the side payment's factor, date, currency and full context.");
         Cashflow = cashflow; Discount = discount;
     }

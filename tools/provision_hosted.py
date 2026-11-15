@@ -2,12 +2,14 @@
 """Prepare a fresh private pilot catalog, one-time owner invitation and page-assistant credential key files, or only the key
 files for an existing installation; never connect to a database."""
 import argparse
+from datetime import date
 import hashlib
 import json
 import os
 from pathlib import Path
 import re
 import secrets
+import subprocess
 from urllib.parse import urlparse
 from uuid import UUID, uuid4
 
@@ -46,17 +48,34 @@ def credential_keys(directory, uid, gid):
             os.close(listing)
 
 
-def prepare(origin, installation, tzdb, directory, collection=None):
+def prepare(origin, installation, tzdb, directory, collection=None, *, clock_publication=None):
     parsed=urlparse(origin)
     if parsed.scheme!='https' or not parsed.netloc or parsed.path or parsed.query or parsed.fragment or parsed.username:
         raise ValueError('Supply the exact HTTPS origin without a trailing slash.')
     UUID(installation)
     if not tzdb or not all(c.isalnum() for c in tzdb):raise ValueError('Supply the qualified runtime tzdb release.')
+    if collection is not None and clock_publication is None:
+        raise ValueError('Collection requires explicit published clock coverage and its managed renderer.')
+    if clock_publication is not None:
+        first,last,render=clock_publication
+        if not re.fullmatch(r'\d{4}-\d{2}-\d{2}',first) or not re.fullmatch(r'\d{4}-\d{2}-\d{2}',last) or date.fromisoformat(first)>=date.fromisoformat(last) or not callable(render):
+            raise ValueError('Supply ordered explicit clock coverage dates and the managed renderer.')
     directory.mkdir(mode=0o700,parents=True,exist_ok=False)
     ids={name:str(uuid4()) for name in ['tenant','workspace','reference','referenceRevision','catalog','revision','owner','portfolio','book']}
     t,w,r,rr,c,m,owner=[ids[n] for n in ['tenant','workspace','reference','referenceRevision','catalog','revision','owner']]
     token=secrets.token_hex(32);digest=hashlib.sha256(token.encode()).hexdigest()
     ref=f"'{r}','{rr}'"
+    clock_sql=''
+    if clock_publication is not None:
+        request=directory/'clock-captures.json';captured=directory/'clock-captures.sql'
+        request.write_text(json.dumps(dict(referenceCatalogId=r,referenceRevisionId=rr,**{'from':first,'to':last},clocks=[
+            dict(code='utc',kind='fixed_offset',fixedOffsetSeconds=0,ianaZone=None,tzdbVersion=None),
+            dict(code='pjm',kind='iana',fixedOffsetSeconds=None,ianaZone='America/New_York',tzdbVersion=tzdb),
+            dict(code='ercot',kind='iana',fixedOffsetSeconds=None,ianaZone='America/Chicago',tzdbVersion=tzdb)])))
+        request.chmod(0o600)
+        render(request,captured)
+        captured.chmod(0o600)
+        clock_sql=f"INSERT INTO ref_data.clock_rules VALUES({ref},'utc','fixed_offset',0,NULL,NULL),({ref},'pjm','iana',NULL,'America/New_York','{tzdb}'),({ref},'ercot','iana',NULL,'America/Chicago','{tzdb}');\n"+captured.read_text()
     sql=f"""BEGIN;
 DO $$ BEGIN IF EXISTS(SELECT 1 FROM security.tenants) OR EXISTS(SELECT 1 FROM market_data.catalogs) THEN RAISE EXCEPTION 'Fresh isolated database required';END IF;END $$;
 INSERT INTO security.tenants VALUES('{t}','pilot');
@@ -72,7 +91,7 @@ INSERT INTO ref_data.commodities VALUES({ref},'electricity','Electricity','energ
 INSERT INTO ref_data.measurement_bases VALUES({ref},'electrical_energy','electricity','energy'),({ref},'electrical_power','electricity','power');
 INSERT INTO ref_data.commodity_units VALUES({ref},'electricity','megawatt_hour','energy'),({ref},'electricity','kilowatt_hour','energy'),({ref},'electricity','megawatt','power'),({ref},'electricity','kilowatt','power');
 INSERT INTO ref_data.quantity_specifications VALUES({ref},'power_mwh','electricity','electrical_energy','megawatt_hour','energy'),({ref},'power_kwh','electricity','electrical_energy','kilowatt_hour','energy'),({ref},'power_mw','electricity','electrical_power','megawatt','power');
-INSERT INTO ref_data.clock_rules VALUES({ref},'utc','fixed_offset',0,NULL,NULL),({ref},'pjm','iana',NULL,'America/New_York','{tzdb}'),({ref},'ercot','iana',NULL,'America/Chicago','{tzdb}');
+{clock_sql}
 UPDATE ref_data.revisions SET state='sealed' WHERE(catalog_id,id)=({ref});
 INSERT INTO market_data.catalogs VALUES('{c}','trading');
 INSERT INTO market_data.revisions VALUES('{c}','{m}',{ref},'draft',0);
@@ -109,18 +128,28 @@ def main():
     parser.add_argument('--origin');parser.add_argument('--installation-id')
     parser.add_argument('--tzdb');parser.add_argument('--output',type=Path)
     parser.add_argument('--collection',type=Path,help='Private explicit source/job mapping contract')
+    parser.add_argument('--clock-from',help='First captured operating date, YYYY-MM-DD')
+    parser.add_argument('--clock-to',help='Exclusive final captured operating date, YYYY-MM-DD')
+    parser.add_argument('--dotnet',type=Path,help='Qualified runtime for clock publication')
+    parser.add_argument('--api',type=Path,help='Qualified OpenEtrm.Api.dll for clock publication')
     parser.add_argument('--credential-keys',type=Path,help="An existing installation's private application directory, to write only the two credential key files")
     parser.add_argument('--owner',help='UID:GID of the account the API runs as, with --credential-keys')
     args=parser.parse_args()
     if args.credential_keys:
-        if any((args.origin,args.installation_id,args.tzdb,args.output,args.collection)) or not re.fullmatch(r'[0-9]+:[0-9]+',args.owner or ''):
+        if any((args.origin,args.installation_id,args.tzdb,args.output,args.collection,args.clock_from,args.clock_to,args.dotnet,args.api)) or not re.fullmatch(r'[0-9]+:[0-9]+',args.owner or ''):
             parser.error('--credential-keys takes only --owner UID:GID.')
         uid,gid=(int(n) for n in args.owner.split(':'))
         credential_keys(args.credential_keys,uid,gid)
         print('Wrote the two credential key files. No key was shown.');return
     if not all((args.origin,args.installation_id,args.tzdb,args.output)):
         parser.error('Supply --origin, --installation-id, --tzdb and --output, or --credential-keys with --owner.')
-    prepare(args.origin,args.installation_id,args.tzdb,args.output,json.loads(args.collection.read_text()) if args.collection else None)
+    selected=(args.clock_from,args.clock_to,args.dotnet,args.api)
+    if (any(selected) or args.collection) and not all(selected):
+        parser.error('Clock publication requires --clock-from, --clock-to, --dotnet and --api; collection requires clock publication.')
+    def render(request,target):
+        subprocess.run([str(args.dotnet.resolve()),str(args.api.resolve()),'--render-clock-captures',str(request.resolve()),str(target.resolve())],check=True)
+    prepare(args.origin,args.installation_id,args.tzdb,args.output,json.loads(args.collection.read_text()) if args.collection else None,
+            clock_publication=(args.clock_from,args.clock_to,render) if all(selected) else None)
     print('Prepared private seed, exact manifest, owner invitation and credential key files. No database was modified.')
 
 

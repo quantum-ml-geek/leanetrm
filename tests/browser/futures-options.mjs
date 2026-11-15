@@ -53,10 +53,10 @@ export async function run({command,evaluate,wait,click,set,persona,check,idle,ur
  const values=id=>`[...document.querySelector(${q('#option-'+id)}).options].map(o=>o.value).filter(Boolean)`;
  const empty=id=>`(document.querySelector(${q('#option-'+id)}).disabled&&${values(id)}.length===0)`;
 
- await check('the option ticket stacks its sections, Trade to More, with one field per row',
+ await check('the option ticket puts contract selection before ownership, with one field per row',
   `(()=>{const titles=[...document.querySelectorAll('#option-page .option-section-title')].map(t=>t.textContent);
    const rows=[...document.querySelectorAll('#option-page .option-fields label, #option-page .option-fields .option-fact-label')].filter(n=>n.getClientRects().length).map(n=>Math.round(n.getBoundingClientRect().top));
-   return titles.join()==='Trade,Contract,Execution,From the backend,More'&&rows.length>15&&new Set(rows).size===rows.length;})()`,
+   return titles.join()==='Contract,Execution,Trade,From the backend,More'&&rows.length>15&&new Set(rows).size===rows.length;})()`,
   "[...document.querySelectorAll('#option-page .option-fields label, #option-page .option-fields .option-fact-label')].filter(n=>n.getClientRects().length).map(n=>n.textContent+'@'+Math.round(n.getBoundingClientRect().top)+'/'+Math.round(n.getBoundingClientRect().left))");
  const labelsIn=title=>`[...[...document.querySelectorAll('#option-page .option-section')].find(s=>s.querySelector('.option-section-title').textContent===${q(title)}).querySelectorAll('label,.option-fact-label')].map(l=>l.textContent)`;
  await check('Trade holds the book, entity and trader; Execution holds the counterparty, trade date, execution time and memo',

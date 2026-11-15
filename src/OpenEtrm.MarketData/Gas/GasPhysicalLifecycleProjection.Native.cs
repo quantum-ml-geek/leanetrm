@@ -34,7 +34,7 @@ public sealed partial class GasPhysicalLifecycleProjection
                 }
                 else
                 {
-                    var factors=principalDiscounting!.Resolve([new(native.Terms.Id,0,native.Terms.CashDueAt,Currency)],Source);
+                    var factors=principalDiscounting!.Resolve([new(native.Terms.Id,0,native.Terms.CashDueAt,Currency){Timing=ValueTimingKind.Instant}],Source);
                     if(factors.Length!=1||factors[0].Source!=DiscountFactorSource.Undiscounted||factors[0].DiscountFactor!=ExactDecimal.Parse("1")||
                         !factors[0].Snapshot.HasSameInputs(Source))throw Error();
                 }

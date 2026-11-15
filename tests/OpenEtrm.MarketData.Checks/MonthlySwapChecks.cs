@@ -26,7 +26,7 @@ internal static class MonthlySwapChecks
             var first=original.Fixed.Periods[0].DeliveryFrom;
             var price=new SteppedPrice([new(first,new(ExactDecimal.Parse("4"),three.Market.Quote)),
                 new(first.AddMonths(1),new(ExactDecimal.Parse("5"),three.Market.Quote)),new(first.AddMonths(2),new(ExactDecimal.Parse("6"),three.Market.Quote))]);
-            var side=new FixedSide(Guid.NewGuid(),price,three.Market.Quote,original.UnitQuantity,original.Fixed.Periods);
+            var side=new FixedSide(Guid.NewGuid(),price,three.Market.Quote,original.UnitQuantity,original.Fixed.Periods,SyntheticSideCalendars.FixedPeriods(original.Fixed.Periods));
             var schedule=side.GenerateSchedule();
             if(schedule.Rows.Count!=3 || schedule.Rows.Any(row=>!ReferenceEquals(row.Prices.Single().FixedPrice,price)))
                 throw new Exception("Each generated row must retain the contractual price-term reference.");
@@ -37,7 +37,7 @@ internal static class MonthlySwapChecks
             var thirteen=new StripFixture(13);var original=thirteen.Swap(MonthlyQuantityBasis.TotalEqualMonths);
             var price=new EscalatedPrice(new(ExactDecimal.Parse("4"),thirteen.Market.Quote),ExactDecimal.Parse("0.1"),original.Fixed.DeliveryFrom,
                 OpenEtrm.Shared.Temporal.ContractYearBasis.AnniversaryStep);
-            var side=new FixedSide(Guid.NewGuid(),price,thirteen.Market.Quote,original.UnitQuantity,original.Fixed.Periods);
+            var side=new FixedSide(Guid.NewGuid(),price,thirteen.Market.Quote,original.UnitQuantity,original.Fixed.Periods,SyntheticSideCalendars.FixedPeriods(original.Fixed.Periods));
             var value=side.PV(new(thirteen.Market.Snapshot,new ExplicitDiscounting(ExactDecimal.Parse("1"),DiscountFactorSource.Undiscounted))).PresentValue;
             Equal(value.Numerator,"262");Equal(value.Denominator,"65");
         });
@@ -90,7 +90,7 @@ internal static class MonthlySwapChecks
             Reject("swap_side_periods", () => ten.Leg(ten.Fixed.SetItem(1, ten.Fixed[0]), MonthlyQuantityBasis.PerMonth));
             Reject("swap_side_periods", () => ten.Leg(ten.Fixed.Reverse().ToImmutableArray(), MonthlyQuantityBasis.PerMonth));
             var first = (FixedSide)ten.Fixed[0];
-            var stub = new FixedSide(Guid.NewGuid(), first.Price, ten.Market.Quote, first.UnitQuantity,[first.Periods[0] with{DeliveryFrom=first.DeliveryFrom.AddDays(1)}]);
+            var stub = new FixedSide(Guid.NewGuid(), first.Price, ten.Market.Quote, first.UnitQuantity,[first.Periods[0] with{DeliveryFrom=first.DeliveryFrom.AddDays(1)}],SyntheticSideCalendars.FixedPeriods([first.Periods[0] with{DeliveryFrom=first.DeliveryFrom.AddDays(1)}]));
             Reject("swap_side_periods", () => ten.Leg(ten.Fixed.SetItem(0, stub), MonthlyQuantityBasis.PerMonth));
             Reject("swap_side_periods", () => ten.Leg([], MonthlyQuantityBasis.PerMonth));
             Reject("swap_side_periods", () => ten.Leg(Enumerable.Repeat(ten.Fixed[0], 1201).ToImmutableArray(), MonthlyQuantityBasis.PerMonth));
@@ -99,16 +99,16 @@ internal static class MonthlySwapChecks
         Check("mixed reference or quote units and mismatched legs reject", () =>
         {
             var first = (FixedSide)ten.Fixed[0]; var otherQuote = ten.Market.Quote with { Key = ten.Market.Quote.Key with { Code = "other_quote" } };
-            var other = new FixedSide(Guid.NewGuid(), first.Price, otherQuote, first.UnitQuantity,first.Periods);
+            var other = new FixedSide(Guid.NewGuid(), first.Price, otherQuote, first.UnitQuantity,first.Periods,SyntheticSideCalendars.FixedPeriods(first.Periods));
             Reject("swap_side_periods", () => ten.Leg(ten.Fixed.SetItem(0, other), MonthlyQuantityBasis.PerMonth));
             Reject("monthly_swap_instrument", () => new MonthlyFinancialSwap(Guid.NewGuid(),
                 [new(ten.Leg(ten.Fixed, MonthlyQuantityBasis.PerMonth), ExactDecimal.Parse("-1")),
                  new(ten.Leg(ten.Floating, MonthlyQuantityBasis.TotalEqualMonths), ExactDecimal.Parse("1"))], MonthlyFinancialSwap.Implementation, false));
         });
-        Check("due monthly payments preserve the explicit lifecycle rejection", () =>
+        Check("overdue monthly payments preserve the explicit lifecycle rejection", () =>
         {
             var swap = ten.Swap(MonthlyQuantityBasis.PerMonth);
-            var snapshot = ten.Market.Snapshot with { ValuationAt = ((FixedSide)ten.Fixed[0]).PaymentAt };
+            var snapshot = ten.Market.Snapshot with { ValuationAt = ((FixedSide)ten.Fixed[0]).PaymentAt.AddDays(1) };
             // Do not build expired projections to prove a due fixed leg's lifecycle boundary.
             Reject("side_payment_due", () => swap.Fixed.PV(new(snapshot, new ExplicitDiscounting(ExactDecimal.Parse("1"), DiscountFactorSource.Undiscounted))));
         });
@@ -135,7 +135,7 @@ internal static class MonthlySwapChecks
         Check("independent whole-term side identities cannot collide", () =>
         {
             var original=ten.Swap(MonthlyQuantityBasis.PerMonth);
-            var colliding=new FloatingSide(original.Fixed.Id,original.Floating.Settlement,original.Floating.Quote,original.UnitQuantity,original.Floating.Periods);
+            var colliding=new FloatingSide(original.Fixed.Id,original.Floating.Settlement,original.Floating.Quote,original.UnitQuantity,original.Floating.Periods,SyntheticSideCalendars.FloatingPeriods(original.Floating.Periods));
             Reject("monthly_swap_instrument",()=>new MonthlyFinancialSwap(Guid.NewGuid(),
                 [new(original.Fixed,ExactDecimal.Parse("-1")),new(colliding,ExactDecimal.Parse("1"))],MonthlyFinancialSwap.Implementation,false));
         });
@@ -187,13 +187,13 @@ internal static class MonthlySwapChecks
             var three=new StripFixture(3);var original=three.Swap(MonthlyQuantityBasis.PerMonth);
             var map=new InstrumentIdentityMap(Guid.NewGuid());map.Intern(original);
             var changed=new FixedSide(original.Fixed.Id,new FlatPrice(new(ExactDecimal.Parse("9"),three.Market.Quote)),three.Market.Quote,
-                original.UnitQuantity,original.Fixed.Periods);
+                original.UnitQuantity,original.Fixed.Periods,SyntheticSideCalendars.FixedPeriods(original.Fixed.Periods));
             var conflicting=new MonthlyFinancialSwap(Guid.NewGuid(),[new(changed,ExactDecimal.Parse("-1")),new(original.Floating,ExactDecimal.Parse("1"))],MonthlyFinancialSwap.Implementation,false);
             Reject("side_identity",()=>map.Intern(conflicting));
             var period=original.Floating.Periods[0];var projection=period.Projections[0];
             var contract=projection.Contract with{Key=projection.Contract.Key with{Id=Guid.NewGuid()}};
             var rebound=new FloatingSide(Guid.NewGuid(),original.Floating.Settlement,original.Floating.Quote,original.UnitQuantity,
-                original.Floating.Periods.SetItem(0,period with{Projections=[new(new(projection.Market.Curve,contract.Key),contract)]}));
+                original.Floating.Periods.SetItem(0,period with{Projections=[new(new(projection.Market.Curve,contract.Key),contract)]}),original.Floating.CalendarPolicy);
             var otherBinding=new MonthlyFinancialSwap(Guid.NewGuid(),[new(original.Fixed,ExactDecimal.Parse("-1")),new(rebound,ExactDecimal.Parse("1"))],MonthlyFinancialSwap.Implementation,false);
             Reject("valuation_binding",()=>map.Intern(otherBinding));
         });

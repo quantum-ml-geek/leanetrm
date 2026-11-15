@@ -3,6 +3,9 @@ using System.Collections.Immutable;
 using System.Globalization;
 using OpenEtrm.Api;
 using OpenEtrm.MarketData;
+if(args is ["--calendar-authoring"]){CalendarAuthoringSchemaChecks.Run();return;}
+if(args is ["--published-clock"]){PublishedClockChecks.Run();return;}
+
 if(args is ["--gas-operator-physical-value",var operatorPhysicalPath]){await GasOperatorPhysicalValueChecks.Run(operatorPhysicalPath);return;}
 if(args is ["--gas-operator-ordinary-value",var operatorOrdinaryPath]){await GasOperatorPhysicalValueChecks.Run(operatorOrdinaryPath,true);return;}
 if(args is ["--cash-option-value-policy"]){CashOptionPolicyChecks.Run();return;}
@@ -221,6 +224,8 @@ if (args is ["--schedules"])
     PowerImportChecks.Run();
     SwapChangeReviewChecks.Run();
     WholeTermSwapAssemblyChecks.Run();
+    CalendarPolicyReplayChecks.Run();
+    PublishedClockChecks.Run();
     RetainedScheduleLimitChecks.Run();
     TradingReadSelectionChecks.Run();
     await BookedScheduleReaderChecks.Run();

@@ -23,6 +23,12 @@ internal static class RetainedTimeZoneChecks
         Reject(()=>RetainedTimeZone.Restore("Missing/Zone"+rules[rules.IndexOf(';')..]+"invalid"));
         Reject(()=>RetainedTimeZone.Restore(new string('x',RetainedTimeZone.MaximumRulesLength+1)));
         Reject(()=>RetainedTimeZone.Restore("invalid"));
+        var sydney=TimeZoneInfo.FindSystemTimeZoneById("Australia/Sydney");
+        Equal(RetainedTimeZone.Restore(sydney.ToSerializedString(),sydney.Id).GetUtcOffset(
+            new DateTimeOffset(2026,12,31,13,0,0,TimeSpan.Zero)),TimeSpan.FromHours(11));
+        var eirunepe=TimeZoneInfo.FindSystemTimeZoneById("America/Eirunepe");
+        Equal(RetainedTimeZone.Restore(eirunepe.ToSerializedString(),eirunepe.Id).GetUtcOffset(
+            new DateTimeOffset(2013,11,10,6,0,0,TimeSpan.Zero)),TimeSpan.FromHours(-5));
         var custom=TimeZoneInfo.CreateCustomTimeZone("Fixed;Zone\\A",TimeSpan.FromMinutes(345),"Fixed zone","Fixed zone");
         var customRules=custom.ToSerializedString();
         Equal(RetainedTimeZone.Restore(customRules,custom.Id).ToSerializedString(),customRules);

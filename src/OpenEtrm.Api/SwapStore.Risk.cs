@@ -61,7 +61,7 @@ public sealed partial class SwapStore
             if(instrument is FinancialSwapInstrument primitive)ValidateProjections(primitive.Floating.GenerateDatedSchedule().Payments.SelectMany(payment=>payment.Prices),row);
             if(instrument is FinancialSwapInstrument primitiveFirst&&row.OptionalId("first_floating_side_id") is not null)ValidateProjections(((SidePaymentSchedule)primitiveFirst.First.GenerateSchedule()).Payments.SelectMany(payment=>payment.Prices),row,"first_projection_contracts","first_projection_weights");
             var state=await SettlementState(connection,row.Id("trade_id"),ct);
-            var settlement=state.GetProperty("occurrences").GetArrayLength()==0?null:SettlementInputs(row,resolved.Quantity,instrument.Currency,state,await SettlementCompletions(connection,row,instrument,ct));
+            var settlement=state.GetProperty("occurrences").GetArrayLength()==0?null:SettlementInputs(row,resolved.Quantity,instrument.Currency,state,SettlementCompletions(instrument));
             ISideDiscounting provider;
             if(settlement is not null)
             {

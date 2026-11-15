@@ -1,6 +1,7 @@
 """Independent mixed-portfolio crude risk oracles in an owned disposable database."""
 from fractions import Fraction
 from uuid import uuid4
+from synthetic_side_calendars import side_calendar_policy
 from preview_client import PreviewClient, initial_frame
 from preview_fixture import trade_booking
 
@@ -24,14 +25,15 @@ def run_checks(url, receipt, *, run_worker):
     gas_context = {**context, 'convention': 'physical_gas_fixed_quantity_v4'}
     gas_catalog = c.call('gas/catalog', gas_context)
     location = next(p for p in gas_catalog['locations'] if p['deliveryPoint'] == 'synthetic_gas_point_a')
+    reference=next(c['reference'] for c in gas_catalog['sideCalendars'] if c['code']=='test_utc_every_day')
     cash = lambda code, role, price: {'code': code, 'role': role, 'direction': 'pay', 'source': 'physical', 'stage': 'delivery',
-        'price': price, 'tariffCode': None, 'paymentAt': '2021-02-01T00:00:00Z'}
+        'price': price, 'tariffCode': None, 'paymentAt': '2021-02-01T00:00:00Z', 'calendarPolicy':side_calendar_policy(reference,delivery=True,observation=False,payment=True)}
     gas = c.call('gas/composition/book', {**gas_context, **trade_booking(), 'operationId': str(uuid4()), 'bookId': book,
         'gasSetupId': gas_catalog['gasSetupId'], 'definitionRevisionId': location['definitionRevisionId'],
         'discounting': False, 'profile': 'fixed_gas_composition_v1',
         'physicalSides': [{'code': 'physical', 'pipeline': location['pipeline'], 'zone': location['zone'], 'deliveryPoint': location['deliveryPoint'],
             'product': location['product'], 'direction': 'receive', 'deliveryFrom': '2021-01-01', 'deliveryTo': '2021-02-01',
-            'quantityBasis': 'period_total_equal_days', 'quantity': '1000', 'link': None}],
+            'quantityBasis': 'period_total_equal_days', 'quantity': '1000', 'link': None, 'calendarPolicy':side_calendar_policy(reference,delivery=True,observation=False,payment=False)}],
         'cashSides': [cash('cash', 'consideration', '3'), cash('fee', 'fee', '0.1')]})
 
     view = dict(mode='trades', bookIds=[book], portfolioIds=[], groupBy=[], measures=[], pivotConvention=None)

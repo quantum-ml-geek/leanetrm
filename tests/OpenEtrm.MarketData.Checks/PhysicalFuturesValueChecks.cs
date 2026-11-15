@@ -129,13 +129,15 @@ internal static class PhysicalFuturesValueChecks
     {
         public ImmutableArray<SidePaymentFactor> Resolve(ImmutableArray<SidePaymentKey> payments,MarketSnapshot snapshot)=>
             [..payments.Select(p=>new SidePaymentFactor(p,ExactDecimal.Parse(p.PaymentAt==terms.From?"0.97":p.PaymentAt==terms.CashDueAt?"0.91":throw new Exception("Unexpected due.")),snapshot,DiscountFactorSource.Explicit))];
-        public ImmutableArray<SidePaymentFactor> ResolveForValuation(ImmutableArray<SidePaymentKey> payments,MarketSnapshot source,DateTimeOffset at,string? clock)=>Resolve(payments,source);
+        public ImmutableArray<SidePaymentFactor> ResolveForValuation(ImmutableArray<SidePaymentKey> payments,MarketSnapshot source,DateTimeOffset at,string? clock)=>
+            [..Resolve(payments,source).Select(f=>f with{ClockRoll=new(clock!,at,f.DiscountFactor,ExactDecimal.Parse("1"),[])})];
     }
     private sealed class HeldVm(DateTimeOffset due):ISideDiscounting
     {
         public ImmutableArray<SidePaymentFactor> Resolve(ImmutableArray<SidePaymentKey> payments,MarketSnapshot source)=>
             [..payments.Select(p=>new SidePaymentFactor(p,p.PaymentAt==due?ExactDecimal.Parse("0.95"):throw new Exception("Unexpected margin due."),source,DiscountFactorSource.Explicit))];
-        public ImmutableArray<SidePaymentFactor> ResolveForValuation(ImmutableArray<SidePaymentKey> payments,MarketSnapshot source,DateTimeOffset at,string? clock)=>Resolve(payments,source);
+        public ImmutableArray<SidePaymentFactor> ResolveForValuation(ImmutableArray<SidePaymentKey> payments,MarketSnapshot source,DateTimeOffset at,string? clock)=>
+            [..Resolve(payments,source).Select(f=>f with{ClockRoll=new(clock!,at,f.DiscountFactor,ExactDecimal.Parse("1"),[])})];
     }
     private static void Equal(ExactMoney actual,string expected){if(actual!=ExactMoney.Parse(expected,actual.Currency))throw new Exception($"Expected {expected}, got {actual.ToExactString()}.");}
     private static void Reject(string code,Action action){try{action();}catch(MarketDataException e)when(e.Code==code){return;}throw new Exception("Expected "+code);}

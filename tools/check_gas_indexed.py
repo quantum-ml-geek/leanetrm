@@ -5,6 +5,7 @@ import json
 from uuid import uuid4
 from preview_client import PreviewClient,initial_frame
 from preview_fixture import trade_booking
+from synthetic_side_calendars import side_calendar_policy
 
 
 def run_checks(url,query,manifest,run_worker):
@@ -19,6 +20,9 @@ def run_checks(url,query,manifest,run_worker):
               deliveryFrom='2021-01-01',deliveryTo='2021-03-01',quantityBasis='per_operating_day',quantity='100',link=None)],
           'cashSides':[dict(code='payment',role='indexed_consideration',direction='pay',source='gas',stage='delivery',price=None,tariffCode=None,paymentAt=None,
               indexed=dict(index='test_price',observationConvention='daily_published_index_v1',paymentConvention='next_month_day_utc_v1',paymentDay=10,spread='0',forecastCurve=None))]}
+    calendar=next(row['reference'] for row in cat['sideCalendars'] if row['code']=='test_utc_every_day')
+    body['physicalSides'][0]['calendarPolicy']=side_calendar_policy(calendar,delivery=True,observation=False,payment=False)
+    body['cashSides'][0]['calendarPolicy']=side_calendar_policy(calendar,delivery=True,observation=True,payment=True)
     # Asset uses two monthly quotes; each payment day uses its own varying quote.
     asset=100*(31*Fraction('3.2')+28*Fraction('3.3'))
     payable=100*sum(Fraction(3)+Fraction(n,1000) for n in range(59))
@@ -117,7 +121,7 @@ def check_native(query,manifest,saved,body):
     where=f"WHERE(catalog_id,schedule_id)=('{catalog}','{schedule}')"
     for mutation,code in [
         (f"UPDATE trading.side_schedule_rows SET parameters='{{\"numerator\":\"2\",\"denominator\":\"1\"}}' {where} AND local_key='payment/0/quantity';",'gas_index_quantity'),
-        (f"UPDATE trading.side_schedule_rows SET value_at=value_at+interval '1 day' {where} AND payment_ordinal=0;",'gas_index_schedule'),
+        (f"UPDATE trading.side_schedule_rows SET value_at=value_at+interval '1 day' {where} AND payment_ordinal=0;",'gas_schedule_completion'),
         (f"UPDATE trading.side_schedule_rows SET parameters='{{\"numerator\":\"1\",\"denominator\":\"1\"}}' {where} AND local_key='payment/0/observation/0/adder';",'gas_index_schedule'),
         (f"UPDATE market_data.index_fixing_observations SET fixing_at='2021-03-10T00:00:00Z' WHERE(catalog_id,revision_id,index_code,observation_from,observation_to)=('{catalog}','{manifest['revisionId']}','test_price','2021-01-01','2021-01-02');",'gas_index_payment')]:
         query("BEGIN;ALTER TABLE trading.side_schedule_rows DISABLE TRIGGER ALL;ALTER TABLE market_data.index_fixing_observations DISABLE TRIGGER ALL;"+mutation+

@@ -6,6 +6,7 @@ or an issued target, refusals continue the turn, and the step limit, a revocatio
 flight, so do Stop, the deadline, the read's bound, the session's end and a lost generation. It runs after the turn
 checks, in the administrator and trader sessions they hand over, opening none of its own; owned synthetic preview
 only."""
+from synthetic_side_calendars import all_dates_policy
 import json
 import os
 import re
@@ -231,9 +232,9 @@ def run_checks(url, query, psql, manifest, environment, log, fake, trap, admin, 
     paid = {'frequency': 'monthly', 'shortMonth': None, 'adjustment': 'unadjusted', 'calendar': None, 'implementation': 'monthly_payment_date_rules_v1'}
     swap = trader.call('swaps/book', {**swapping, **trade_booking(), 'operationId': str(uuid4()), 'definitionRevisionId': REV, 'commodity': 'test_gas',
                                       'bookId': offer['books'][0]['id'], 'quantity': '1000000', 'fixedCoefficient': '-1', 'discounting': True,
-                                      'fixed': {**january, 'price': '3', 'paymentSchedule': {**paid, 'rule': 'day_of_following_month', 'days': None,
+                                      'fixed': {'calendarPolicy': all_dates_policy(observation=False), **january, 'price': '3', 'paymentSchedule': {**paid, 'rule': 'day_of_following_month', 'days': None,
                                                                                             'dayOfMonth': 18, 'dayBasis': None, 'shortMonth': 'reject'}},
-                                      'floating': {'spread': '0', 'settlement': {'mode': 'curve_target', 'index': None, 'projectionPolicy': None}, **january, 'curve': index['curve'], 'index': index['index'], 'resetFrequency': 'monthly',
+                                      'floating': {'calendarPolicy': all_dates_policy(observation=True), 'spread': '0', 'settlement': {'mode': 'curve_target', 'index': None, 'projectionPolicy': None}, **january, 'curve': index['curve'], 'index': index['index'], 'resetFrequency': 'monthly',
                                                    'averagingMethod': 'none', 'paymentSchedule': {**paid, 'rule': 'days_after_period_end', 'days': 46,
                                                                                                  'dayOfMonth': None, 'dayBasis': 'calendar_days'}}})['tradeId']
     for role, money in (('trade', 1), ('fixed', 2)):

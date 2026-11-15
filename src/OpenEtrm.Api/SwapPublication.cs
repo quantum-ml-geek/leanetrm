@@ -25,10 +25,11 @@ public sealed partial class SwapStore
         if(row.Id("definition_revision_id")!=data.DefinitionRevision.RevisionId)
             (data,frame)=await ScheduledMarket(connection,data,frame,row.Id("definition_revision_id"),ct);
         var body=Terms(data,row,frame.Id);
-        var actual=ResolveAny(data,body,instrument,row.OptionalId("fixed_side_id"),row.OptionalId("floating_side_id"));
         var identities=retained.GetProperty("identities").EnumerateArray().Select(value=>new RetainedPublicationIdentity(
             value.GetProperty("slot").GetInt32(),value.GetProperty("sideId").GetGuid(),value.GetProperty("economicIdentity").GetString()!,
             value.GetProperty("pricingBindingIdentity").GetString()!)).ToArray();
+        body=SideCalendarPolicies.Retain(body,slot=>identities.Single(p=>p.Slot==slot).EconomicIdentity);
+        var actual=ResolveAny(data,body,instrument,row.OptionalId("fixed_side_id"),row.OptionalId("floating_side_id"));
         RetainedSchedulePublication.Require(actual.Instrument.Sides.Select(member=>member.Side).ToArray(),identities);
         _=await Read(); // Recheck all current authority after compilation, before the booking commits.
     }

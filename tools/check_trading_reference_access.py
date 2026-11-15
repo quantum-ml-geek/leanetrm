@@ -1,4 +1,5 @@
 """Raw business operations must obey current reference scope after catalog revocation."""
+from synthetic_side_calendars import all_dates_policy
 import json
 from uuid import uuid4
 from preview_fixture import trade_booking
@@ -31,8 +32,8 @@ def run_checks(query,manifest,url,client=None):
     selection={'mode':'curve_target','index':None,'projectionPolicy':None}
     original_swap=c.call('swaps/book',{**context,**trade_booking(),'operationId':swap_op,'bookId':book,'definitionRevisionId':REVISION,
         'commodity':'test_gas','quantity':'100','fixedCoefficient':'-1','discounting':False,
-        'fixed':{'price':'3','currency':'usd','deliveryFrom':'2021-01-01','deliveryTo':'2021-02-01','paymentSchedule':rule(18)},
-        'floating':{'curve':'daily_gas','index':index,'currency':'usd','deliveryFrom':'2021-01-01','deliveryTo':'2021-02-01',
+        'fixed':{'calendarPolicy': all_dates_policy(observation=False), 'price':'3','currency':'usd','deliveryFrom':'2021-01-01','deliveryTo':'2021-02-01','paymentSchedule':rule(18)},
+        'floating':{'calendarPolicy': all_dates_policy(observation=True), 'curve':'daily_gas','index':index,'currency':'usd','deliveryFrom':'2021-01-01','deliveryTo':'2021-02-01',
             'paymentSchedule':rule(46),'resetFrequency':'daily','averagingMethod':'arithmetic','spread':'0','settlement':selection}})
     retained=json.loads(query(f"SELECT request::text FROM trading.swap_trade_revisions WHERE catalog_id='{catalog}' AND operation_id='{swap_op}';"))
     assert retained['floating']['settlement']==selection
@@ -68,10 +69,13 @@ def run_checks(query,manifest,url,client=None):
            PERFORM {statement};RAISE EXCEPTION 'Expected revoked reference rejection';
           EXCEPTION WHEN insufficient_privilege THEN NULL;END $$;ROLLBACK;""")
         assert before==query(f"SELECT count(*) FROM trading.publications WHERE catalog_id='{catalog}';")
-    # Revocation must not prevent a currently authorized actor from reconciling
-    # exact accepted requests: those operations return retained control IDs only.
+    # Status lookups and the exchange receipt expose retained control IDs. A
+    # composed Side receipt also requires its current reference/calendar authority;
+    # retry does not bypass revocation or regenerate its schedule.
     query(f"""BEGIN;DELETE FROM security.reference_catalog_scopes WHERE catalog_id='{ref}' AND tenant_id='{tenant}' AND workspace_id='{workspace}';
       SET SESSION AUTHORIZATION preview_runtime;SELECT security.use_context('{issue()}');
-      SELECT {future(future_op)};SELECT {swap(swap_op)};
+      SELECT {future(future_op)};
+      DO $$ BEGIN PERFORM {swap(swap_op)};RAISE EXCEPTION 'Expected revoked receipt rejection';
+       EXCEPTION WHEN insufficient_privilege THEN NULL;END $$;
       SELECT security.futures_booking_status('{catalog}','{future_op}');SELECT security.swap_operation_status('{catalog}','{swap_op}');ROLLBACK;""")
-    print('PASS current reference authority: raw futures/swap bookings, amendments and discount lookup reject revoked catalogs; exact replay/status remains available, historical lookup rejects later definitions and rejected writes leave no publication.',flush=True)
+    print('PASS current reference authority: raw futures/swap bookings, amendments and discount lookup reject revoked catalogs; composed receipt replay requires current authority while control status remains available, historical lookup rejects later definitions and rejected writes leave no publication.',flush=True)

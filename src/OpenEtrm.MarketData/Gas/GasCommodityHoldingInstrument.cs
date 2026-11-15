@@ -38,7 +38,7 @@ public sealed record GasCommodityHoldingInstrument:Instrument,IGasQuantityInstru
             throw new MarketDataException("gas_holding_terms","Select exact native mark, quantity/currency and explicit holding carrying terms.");
         Mark=mark;QuantitySpecification=quantity;PaymentCurrency=currency;ReturnAt=returnAt;Carrying=carrying;
     }
-    private SidePaymentKey Return=>new(Id,0,ReturnAt!.Value,Currency);
+    private SidePaymentKey Return=>new(Id,0,ReturnAt!.Value,Currency){Timing=ValueTimingKind.Instant};
     public override void ValidateValuationState(IBindingValuationState? state)
     {
         if(state is null)return;

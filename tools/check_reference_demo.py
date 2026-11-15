@@ -1,4 +1,5 @@
 """Working synthetic reference rows through exact-version discounted swap pricing."""
+from synthetic_side_calendars import all_dates_policy
 from decimal import Decimal, localcontext, ROUND_HALF_EVEN
 from fractions import Fraction
 from uuid import uuid4
@@ -35,8 +36,8 @@ def run_checks(url,manifest,demo,query,run_worker):
     payment={'frequency':'monthly','rule':'days_after_period_end','days':2,'dayOfMonth':None,'dayBasis':'calendar_days','shortMonth':None,'adjustment':'unadjusted','calendar':None,'implementation':'monthly_payment_date_rules_v1'}
     request={**context,**trade_booking(),'operationId':str(uuid4()),'bookId':book,'definitionRevisionId':demo['definitionRevisionId'],
         'commodity':index['commodity'],'quantity':'10','fixedCoefficient':'-1','discounting':True,
-        'fixed':{'price':'40','currency':index['currencyCode'],**delivery,'paymentSchedule':payment},
-        'floating':{'spread': '0', 'settlement': {'mode': 'curve_target', 'index': None, 'projectionPolicy': None}, 'curve':'demo_forward','index':'demo_monthly_index','currency':index['currencyCode'],**delivery,'paymentSchedule':payment,'resetFrequency':'monthly','averagingMethod':'none'}}
+        'fixed':{'calendarPolicy': all_dates_policy(observation=False), 'price':'40','currency':index['currencyCode'],**delivery,'paymentSchedule':payment},
+        'floating':{'calendarPolicy': all_dates_policy(observation=True), 'spread': '0', 'settlement': {'mode': 'curve_target', 'index': None, 'projectionPolicy': None}, 'curve':'demo_forward','index':'demo_monthly_index','currency':index['currencyCode'],**delivery,'paymentSchedule':payment,'resetFrequency':'monthly','averagingMethod':'none'}}
     priced=client.call('swaps/preview',request)
     # Independent simple ACT/365 zero-rate oracle: ten units at 50 minus 40.
     from datetime import date,datetime

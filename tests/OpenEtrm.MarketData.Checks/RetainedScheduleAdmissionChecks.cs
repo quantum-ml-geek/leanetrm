@@ -19,7 +19,7 @@ internal static class RetainedScheduleAdmissionChecks
             return Rewrite(definition,rows:definition.Rows.Select(value=>value.Ordinal==row.Ordinal?value with{Grid=grid.Ordinal}:value).ToArray(),grids:[..definition.Grids,grid]);
         }
         var admitted=new List<string>();
-        void Refuse(PpaInstrument instrument,Guid side,Func<ScheduleDefinition,ScheduleDefinition> change,string behavior)
+        void Refuse(SidedInstrument instrument,Guid side,Func<ScheduleDefinition,ScheduleDefinition> change,string behavior)
         {
             try
             {
@@ -30,6 +30,26 @@ internal static class RetainedScheduleAdmissionChecks
             catch(MarketDataException error)when(error.Code=="side_schedule_definition"){return;}
             admitted.Add(behavior);
         }
+        var datedFixture=new CommodityLookupFixture(1,monthly:true);
+        var dated=datedFixture.Swap(monthly:true,monthOrdinal:0);
+        var falseRule=new PaymentRule(PaymentFrequency.Monthly,PaymentDateRule.DaysAfterPeriodEnd,1,null,
+            PaymentDayBasis.CalendarDays,null,OpenEtrm.Shared.Temporal.DateRoll.Unadjusted,null,PaymentRule.Implementation);
+        Refuse(dated,dated.Fixed.Id,definition=>Rewrite(definition,rows:definition.Rows.Select(row=>row.Operation=="output_guard"
+            ?row with{Parameters=row.Parameters.SetItem("paymentRule",DefinitionIdentity.CanonicalTerm(falseRule))
+                .SetItem("unadjustedPayment",dated.Fixed.DeliveryTo.ToString("yyyy-MM-dd"))}:row).ToArray()),
+            "a dated cash obligation with a forged original anchor and payment convention");
+        var generatedPeriod=dated.Fixed.Periods[0] with{PaymentSchedule=falseRule,
+            PaymentAt=PaymentDatePolicy.Start(dated.Fixed.DeliveryTo)};
+        var generatedSide=new FixedSide(Guid.NewGuid(),dated.Fixed.Price,datedFixture.Quote,dated.Fixed.UnitQuantity,[generatedPeriod],
+            SyntheticSideCalendars.FixedPeriods([generatedPeriod]));
+        var generatedInstrument=new FinancialSwapInstrument(Guid.NewGuid(),
+            [new(generatedSide,ExactDecimal.Parse("-1")),new(dated.Floating,ExactDecimal.Parse("1"))],FinancialSwapInstrument.Implementation,true);
+        Refuse(generatedInstrument,generatedSide.Id,definition=>Rewrite(definition,rows:definition.Rows.Select(row=>row.Operation=="output_guard"
+            ?row with{Parameters=row.Parameters.SetItem("unadjustedPayment",generatedSide.DeliveryTo.AddDays(-1).ToString("yyyy-MM-dd"))}:row).ToArray()),
+            "a generated payment with its correct result and a falsified unadjusted anchor");
+        Refuse(generatedInstrument,generatedSide.Id,definition=>Rewrite(definition,rows:definition.Rows.Select(row=>row.Operation=="output_guard"
+            ?row with{Parameters=row.Parameters.SetItem("paymentRule","explicit_payment_date_v1").SetItem("unadjustedPayment","none")}:row).ToArray()),
+            "a generated payment presented as an explicit date without its contractual rule");
         var profile=fixture.Physical();var payment=profile.Memberships[1].Side.Id;
         Refuse(profile,profile.Memberships[0].Side.Id,definition=>Rewrite(definition,rows:definition.Rows.Select(row=>row.Operation=="price_lookup"
             ?row with{Parameters=row.Parameters.SetItem("selection","unsupported_physical_price_v1")}:row).ToArray()),"an unrecognized physical price lookup selection");
@@ -99,9 +119,9 @@ internal static class RetainedScheduleAdmissionChecks
         var normalization=fixture.Normalization([fixture.Asset.Key,secondAsset]);
         var secondSource=new VolumeSourceKey(fixture.Definitions,"synthetic_second_generation");
         var twoSourceQuantity=new VolumeQuantity([fixture.Source.Key,secondSource],QuantityStage.Generated,fixture.Energy.Key);
-        var twoSourceSide=new PowerPhysicalSide(Guid.NewGuid(),fixture.Terms(twoSourceQuantity,normalization:normalization),fixture.Asset.Location);
+        var twoSourceSide=new PowerPhysicalSide(Guid.NewGuid(),fixture.Terms(twoSourceQuantity,normalization:normalization),fixture.Asset.Location,SyntheticSideCalendars.Interval(fixture.Terms(twoSourceQuantity,normalization:normalization),false));
         var twoSourceCash=new FixedSide(Guid.NewGuid(),fixture.Terms(new SlotQuantity([new(PpaRole.EnergyDelivery)]),normalization:normalization),
-            new FlatPrice(new(ExactDecimal.Parse("40"),fixture.EnergyPrice)));
+            new FlatPrice(new(ExactDecimal.Parse("40"),fixture.EnergyPrice)),SyntheticSideCalendars.Interval(fixture.Terms(new SlotQuantity([new(PpaRole.EnergyDelivery)]),normalization:normalization),false));
         var twoSources=new PpaInstrument(Guid.NewGuid(),fixture.Definitions,fixture.Reference,
             [new(new(PpaRole.EnergyDelivery),twoSourceSide,ExactDecimal.Parse("1")),new(new(PpaRole.StrikePayment),twoSourceCash,ExactDecimal.Parse("-1"))],false,PpaInstrument.Implementation);
         Refuse(twoSources,twoSourceSide.Id,original=>
@@ -111,7 +131,7 @@ internal static class RetainedScheduleAdmissionChecks
             // refuse this different topology instead of pricing the total twice.
             var partitioned=new CertificateDeliverySide(twoSourceSide.Id,
                 fixture.Terms(twoSourceQuantity,normalization:normalization,scheduleQuantity:fixture.Energy.Key),fixture.Energy.Key,
-                ExactDecimal.Parse("1"),"asset_generation_at_stage_v1","held_at_current_vintage_mark_v1","none_recorded_v1");
+                ExactDecimal.Parse("1"),"asset_generation_at_stage_v1","held_at_current_vintage_mark_v1","none_recorded_v1",SyntheticSideCalendars.Interval(fixture.Terms(twoSourceQuantity,normalization:normalization,scheduleQuantity:fixture.Energy.Key),false));
             var template=ScheduleDefinitionCompiler.Generate(partitioned);
             var transforms=template.Rows.Where(row=>row.Operation=="quantity_transform").ToDictionary(row=>row.Ordinal,
                 row=>template.Edges.Single(edge=>edge.Target==row.Ordinal&&edge.Port=="input").Source);
@@ -130,7 +150,8 @@ internal static class RetainedScheduleAdmissionChecks
         },"a power delivery split into amounts that would each be evaluated using its total quantity");
         var twoSourceCertificate=new CertificateDeliverySide(Guid.NewGuid(),fixture.Terms(twoSourceQuantity,normalization:normalization,
             scheduleQuantity:fixture.Certificates.Key),fixture.Certificates.Key,ExactDecimal.Parse("1"),"asset_generation_at_stage_v1",
-            "held_at_current_vintage_mark_v1","none_recorded_v1");
+            "held_at_current_vintage_mark_v1","none_recorded_v1",SyntheticSideCalendars.Interval(fixture.Terms(twoSourceQuantity,normalization:normalization,
+            scheduleQuantity:fixture.Certificates.Key),false));
         var certificates=new PpaInstrument(Guid.NewGuid(),fixture.Definitions,fixture.Reference,
             [..twoSources.Memberships,new(new(PpaRole.CertificateDelivery),twoSourceCertificate,ExactDecimal.Parse("1"))],false,PpaInstrument.Implementation);
         Refuse(certificates,twoSourceCertificate.Id,definition=>
@@ -149,9 +170,9 @@ internal static class RetainedScheduleAdmissionChecks
                 roots:[..definition.Roots,new("omitted_source",omitted,"unused_quantity")]);
         },"a volume source omitted from one obligation but retained elsewhere under an unrelated root");
         var twoAssetSide=new CapacityDeliverySide(Guid.NewGuid(),fixture.Terms(new AccreditedQuantity([fixture.Asset.Key,secondAsset]),normalization:normalization),
-            fixture.CapacityDays.Key,"mw_day_per_operating_day_v1");
+            fixture.CapacityDays.Key,"mw_day_per_operating_day_v1",SyntheticSideCalendars.Interval(fixture.Terms(new AccreditedQuantity([fixture.Asset.Key,secondAsset]),normalization:normalization),false));
         var twoAssetCash=new FixedSide(Guid.NewGuid(),fixture.Terms(new SlotQuantity([new(PpaRole.CapacityDelivery)]),normalization:normalization),
-            new FlatPrice(new(ExactDecimal.Parse("0"),fixture.CapacityPrice)));
+            new FlatPrice(new(ExactDecimal.Parse("0"),fixture.CapacityPrice)),SyntheticSideCalendars.Interval(fixture.Terms(new SlotQuantity([new(PpaRole.CapacityDelivery)]),normalization:normalization),false));
         var twoAssets=new PpaInstrument(Guid.NewGuid(),fixture.Definitions,fixture.Reference,
             [new(new(PpaRole.CapacityDelivery),twoAssetSide,ExactDecimal.Parse("1")),new(new(PpaRole.CapacityPayment),twoAssetCash,ExactDecimal.Parse("-1"))],false,PpaInstrument.Implementation);
         Refuse(twoAssets,twoAssetSide.Id,definition=>

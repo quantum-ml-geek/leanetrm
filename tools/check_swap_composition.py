@@ -1,4 +1,5 @@
 """Synthetic checks for independent swap sides, spreads and reviewed par entry."""
+from synthetic_side_calendars import all_dates_policy
 from copy import deepcopy
 from decimal import Decimal, localcontext, ROUND_HALF_EVEN
 from uuid import uuid4
@@ -16,7 +17,7 @@ def run_checks(url, query=None, manifest=None):
     daily=next(i for i in catalog['indices'] if i['curve']=='daily_gas')
     monthly=daily
     def side(i,spread,frequency):
-        return {'settlement': {'mode': 'curve_target', 'index': None, 'projectionPolicy': None}, 'curve':i['curve'],'index':i['index'],'currency':i['currencyCode'],'deliveryFrom':'2021-01-01','deliveryTo':'2021-02-01',
+        return {'calendarPolicy': all_dates_policy(observation=True), 'settlement': {'mode': 'curve_target', 'index': None, 'projectionPolicy': None}, 'curve':i['curve'],'index':i['index'],'currency':i['currencyCode'],'deliveryFrom':'2021-01-01','deliveryTo':'2021-02-01',
             'paymentSchedule':{'frequency':'monthly','rule':'days_after_period_end','days':18,'dayOfMonth':None,'dayBasis':'calendar_days','shortMonth':None,'adjustment':'unadjusted','calendar':None,'implementation':'monthly_payment_date_rules_v1'},
             'resetFrequency':frequency,'averagingMethod':'arithmetic' if frequency=='daily' else 'none','spread':spread}
     right=side(daily,'0.2','daily');left=side(monthly,'0.1','daily')
@@ -48,7 +49,7 @@ def run_checks(url, query=None, manifest=None):
     old=c.call('swaps/editor',{'context':context,'tradeId':booked['tradeId'],'revision':1})
     assert old['state']['terms']['firstFloating']['spread']=='0.1' and not old['canAmend']
     print('PASS swap composition: booking replay, conflict and retained spread amendments',flush=True)
-    fixed={'price':'','currency':daily['currencyCode'],'deliveryFrom':'2021-01-01','deliveryTo':'2021-02-01','paymentSchedule':right['paymentSchedule']}
+    fixed={'calendarPolicy': all_dates_policy(observation=False), 'price':'','currency':daily['currencyCode'],'deliveryFrom':'2021-01-01','deliveryTo':'2021-02-01','paymentSchedule':right['paymentSchedule']}
     par_draft={**draft,'swapType':'financial_fixed_floating','firstCoefficient':None,'fixedCoefficient':'-1','fixed':fixed,'firstFloating':None,'parRatePolicy':{'implementation':'par_fixed_price_to_even_v1','decimalPlaces':6,'tieRule':'to_even'}}
     par=c.call('swaps/price',par_draft)
     assert par['resolvedFixedPrice']=='3.36' and par['valuation']['presentValue']=='0' and par['parRate']['policy']=='par_fixed_price_to_even_v1'
@@ -151,7 +152,7 @@ def check_custom_sides(c, context, query, manifest):
     index=next(i for i in catalog['indices'] if i['curve']=='base_forward' and i['definitionRevisionId']==manifest['revisionId'])
     def projection(version):return next(p['reference'] for p in index['customProjections'] if p['reference']['curveId']==version['curveId'])
     payment={'frequency':'monthly','rule':'days_after_period_end','days':18,'dayOfMonth':None,'dayBasis':'calendar_days','shortMonth':None,'adjustment':'unadjusted','calendar':None,'implementation':'monthly_payment_date_rules_v1'}
-    side={'settlement': {'mode': 'curve_target', 'index': None, 'projectionPolicy': None}, 'curve':index['curve'],'index':index['index'],'currency':index['currencyCode'],'deliveryFrom':'2021-01-01','deliveryTo':'2021-02-01','paymentSchedule':payment,'resetFrequency':'monthly','averagingMethod':'none','spread':'0.1','customProjection':projection(versions[0])}
+    side={'calendarPolicy': all_dates_policy(observation=True), 'settlement': {'mode': 'curve_target', 'index': None, 'projectionPolicy': None}, 'curve':index['curve'],'index':index['index'],'currency':index['currencyCode'],'deliveryFrom':'2021-01-01','deliveryTo':'2021-02-01','paymentSchedule':payment,'resetFrequency':'monthly','averagingMethod':'none','spread':'0.1','customProjection':projection(versions[0])}
     second={**side,'spread':'0.2','customProjection':projection({'curveId':combined['id']})}
     draft={'context':context,'definitionRevisionId':index['definitionRevisionId'],'commodity':index['commodity'],'quantity':{'value':'100','specification':index['quantityChoices'][0]['specification']},'swapType':'financial_floating_floating','firstCoefficient':'-1','firstFloating':side,'floating':second,'discounting':False}
     combined_price=(prices[0]+2*prices[1])/3
@@ -188,7 +189,14 @@ def check_composed_sql(query, manifest, trade_id, source_parent):
         token=query(f"SET SESSION AUTHORIZATION preview_authenticator;SELECT security.issue_context('https://preview.invalid','trader','human_interactive','{tenant}','{workspace}',NULL,'preview_runtime',60);")
         payload="'"+json.dumps(value).replace("'","''")+"'::jsonb"
         permission="INSERT INTO security.role_permissions SELECT DISTINCT role_id,p FROM security.role_permissions CROSS JOIN unnest(ARRAY['WriteMarketDefinitions','SealMarketDefinitions'])p WHERE permission='BookTrade' ON CONFLICT DO NOTHING;" if runtime_setup else ''
-        return query(f"""BEGIN;{permission}{'' if runtime_setup else setup}SET LOCAL SESSION AUTHORIZATION preview_runtime;SELECT security.use_context('{token}');{setup if runtime_setup else ''}
+        # Reuse valid retained schedules under this exact actor so the negative
+        # projection check reaches its own native admission, inside a rollback.
+        stage='' if request_id==operation else f"""
+        INSERT INTO trading.side_schedule_requests SELECT(jsonb_populate_record(NULL::trading.side_schedule_requests,to_jsonb(r)||jsonb_build_object('request_id','{request_id}'))).*
+          FROM trading.side_schedule_requests r WHERE(catalog_id,request_id)=('{catalog}','{operation}');
+        INSERT INTO trading.side_schedule_request_items SELECT catalog_id,'{request_id}',slot,schedule_id
+          FROM trading.side_schedule_request_items WHERE(catalog_id,request_id)=('{catalog}','{operation}');"""
+        return query(f"""BEGIN;{stage}{permission}{'' if runtime_setup else setup}SET LOCAL SESSION AUTHORIZATION preview_runtime;SELECT security.use_context('{token}');{setup if runtime_setup else ''}
         SELECT security.save_composed_swap('{catalog}','{request_id}',NULL,NULL,(p->>'book')::uuid,(p->>'definition')::uuid,(p->>'referenceCatalog')::uuid,(p->>'referenceRevision')::uuid,p->>'commodity',
          nullif(p->'fixed','null'::jsonb),nullif(p->'firstFloating','null'::jsonb),p->'floating',(p->>'quantity')::numeric,(p->>'coefficient')::numeric,(p->>'discounting')::boolean,
          (p->>'valuation')::timestamptz,(p->>'effective')::timestamptz,p->>'reason',p->>'implementation',p->>'memo',p->'booking','{{}}'::uuid[])

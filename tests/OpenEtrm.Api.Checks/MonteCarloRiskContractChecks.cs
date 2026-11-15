@@ -104,7 +104,7 @@ internal static class MonteCarloRiskContractChecks
         Console.WriteLine("PASS hybrid MC API: explicit exclusive modes, independent output/PV work budgets and fatal fitting/validation/fallback base changes");
         var fixture=new PpaAcceptanceFixture();var physical=fixture.Physical(volume:true);var market=fixture.Market(fixture.From.AddDays(-1));
         var nextSource=fixture.Source with{Key=new(fixture.Definitions,"second_output")};
-        var nextSide=new PowerPhysicalSide(Guid.NewGuid(),fixture.Terms(new VolumeQuantity([nextSource.Key],QuantityStage.Generated,fixture.Energy.Key)),fixture.Asset.Location);
+        var nextSide=new PowerPhysicalSide(Guid.NewGuid(),fixture.Terms(new VolumeQuantity([nextSource.Key],QuantityStage.Generated,fixture.Energy.Key)),fixture.Asset.Location,SyntheticSideCalendars.Interval(fixture.Terms(new VolumeQuantity([nextSource.Key],QuantityStage.Generated,fixture.Energy.Key)),false));
         var next=new PpaInstrument(Guid.NewGuid(),fixture.Definitions,fixture.Reference,
             physical.Memberships.SetItem(0,physical.Memberships[0] with{Side=nextSide}),physical.Discounting,physical.TermImplementation);
         var interval=fixture.Prepare(market,[physical]);

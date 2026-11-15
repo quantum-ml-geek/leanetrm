@@ -1,4 +1,5 @@
 """Economic-key retention and lookup checks on an owned synthetic installation."""
+from synthetic_side_calendars import all_dates_policy
 import json
 from uuid import uuid4
 from preview_client import PreviewClient
@@ -70,8 +71,8 @@ def run_checks(url, query, manifest, client=None):
     body = {**context, **trade_booking(), 'operationId': str(uuid4()), 'bookId': catalog['books'][0]['id'],
             'definitionRevisionId': index['definitionRevisionId'],
             'commodity': index['commodity'], 'quantity': '100', 'fixedCoefficient': '-1', 'discounting': False,
-            'fixed': {'price': '3', 'currency': index['currencyCode'], 'deliveryFrom': '2021-01-01', 'deliveryTo': '2021-02-01', 'paymentSchedule': rule},
-            'floating': {'spread': '0', 'settlement': {'mode': 'curve_target', 'index': None, 'projectionPolicy': None}, 'curve': index['curve'], 'index': index['index'], 'currency': index['currencyCode'],
+            'fixed': {'calendarPolicy': all_dates_policy(observation=False), 'price': '3', 'currency': index['currencyCode'], 'deliveryFrom': '2021-01-01', 'deliveryTo': '2021-02-01', 'paymentSchedule': rule},
+            'floating': {'calendarPolicy': all_dates_policy(observation=True), 'spread': '0', 'settlement': {'mode': 'curve_target', 'index': None, 'projectionPolicy': None}, 'curve': index['curve'], 'index': index['index'], 'currency': index['currencyCode'],
                          'deliveryFrom': '2021-01-01', 'deliveryTo': '2021-02-01',
                          'paymentSchedule': rule, 'resetFrequency': 'monthly', 'averagingMethod': 'none'}}
     plain = c.call('swaps/book', body)
@@ -87,7 +88,7 @@ def run_checks(url, query, manifest, client=None):
     assert '{catalog_id,identity_hash}' in keys, f'Floating-side identity must be unique within its catalog: {keys}'
     assert query("SELECT NOT EXISTS(SELECT 1 FROM pg_constraint WHERE conrelid='trading.swap_floating_sides'::regclass AND conname='swap_floating_economic_key');") == 't', 'The old key omits the selected settlement index.'
     floating = query("SELECT floating_side_id FROM trading.swap_instruments WHERE instrument_id='"+plain['instrumentId']+"';")
-    assert query(f"SELECT definition_version='FloatingSide_v8' AND octet_length(identity_hash)=32 AND settlement_mode='curve_target' AND settlement_index_code=index_code AND settlement_projection_policy IS NULL FROM trading.swap_floating_sides WHERE id='{floating}';") == 't'
+    assert query(f"SELECT definition_version='FloatingSide_v9' AND octet_length(identity_hash)=32 AND settlement_mode='curve_target' AND settlement_index_code=index_code AND settlement_projection_policy IS NULL FROM trading.swap_floating_sides WHERE id='{floating}';") == 't'
     spread_body={**body,'operationId':str(uuid4()),'floating':{**body['floating'],'spread':'0.2'}}
     spread_trade=c.call('swaps/book',spread_body)
     assert spread_trade['instrumentId']!=plain['instrumentId'], 'A fixed floating spread distinguishes economic sides.'

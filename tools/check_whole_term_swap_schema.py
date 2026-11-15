@@ -71,19 +71,23 @@ def run_storage_checks(query, manifest, require_retention=False):
         return [int(query(f'SELECT count(*) FROM trading.{table};')) for table in ('swap_fixed_sides','swap_floating_sides','swap_whole_term_sides','swap_side_periods','swap_period_projections','swap_instruments','publications')]
     before=counts()
     missing=deepcopy(body);del missing['scheduled']['second']['periods'][0]['floating']['settlement']
+    if require_retention:
+        # Current writers require an authorized staged request before resolving
+        # financial terms. Both raw requests must stop at that boundary; the
+        # preceding-writer fixture below separately exercises settlement admission.
+        for terms in (missing,body):
+            try:save(terms)
+            except RuntimeError as error:
+                assert 'No current schedule request authority' in str(error),str(error)
+            else:raise AssertionError('A raw booking committed without its authorized retained schedules')
+            assert counts()==before,'An unauthorized raw booking must leave no financial definition or publication'
+        print('PASS retained schedule admission: raw bookings require current staged-request authority before resolving terms and leave every publication unchanged',flush=True)
+        return
     try:save(missing)
     except RuntimeError as error:
         assert 'price_settlement_selection' in str(error),str(error)
     else:raise AssertionError('A raw booking inferred a settlement mode from its curve')
     assert counts()==before,'Missing settlement selection must leave no financial definition or publication'
-    if require_retention:
-        try:save(body)
-        except RuntimeError as error:
-            assert 'side_schedule_missing' in str(error),str(error)
-        else:raise AssertionError('A raw booking committed without its complete retained schedules')
-        assert counts()==before,'A rejected incomplete booking must leave no financial definition or publication'
-        print('PASS retained schedule admission: a raw booking without its schedules refuses at commit and rolls back every publication',flush=True)
-        return
     receipt=save(body);first=counts()
     assert first[:2]==before[:2], 'Whole-term booking must not persist independent monthly child sides'
     assert [a-b for a,b in zip(first[2:5],before[2:5])]==[2,4,2], 'One two-side contract owns four periods and two exact projections'

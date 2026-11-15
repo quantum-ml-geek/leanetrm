@@ -51,7 +51,7 @@ public sealed partial record FuturesContract
         var exchange=PhysicalExchange(context,market,selected);
         var time=next is null?ValuationTimeDependency.Independent:next.At>context.CalculationAt?
             ValuationTimeDependency.Between(context.CalculationAt,next.At):ValuationTimeDependency.Pinned;
-        var discounts=next is not null&&next.DueAt>context.CalculationAt?ImmutableArray.Create(new DiscountInput(new(Id,0,next.DueAt,Currency),context.PaymentDiscounting(Id))):[];
+        var discounts=next is not null&&next.DueAt>context.CalculationAt?ImmutableArray.Create(new DiscountInput(new(Id,0,next.DueAt,Currency){Timing=ValueTimingKind.Instant},context.PaymentDiscounting(Id))):[];
         if(next is not null&&exchange is not null)discounts=discounts.AddRange(exchange.RequiredDiscounts(context.CalculationAt)
             .Select(p=>new DiscountInput(p,selected.Physical!.Carrying!){Source=selected.Physical.Asset.Snapshot}));
         return new(Id,exchange is null?FuturesMarginValueBinding.FlatReference:FuturesPhysicalBasisValueBinding.Version,
@@ -66,7 +66,7 @@ public sealed partial record FuturesContract
         if(next is null)return ExactMoney.Parse("0",Currency);
         context.Market.Model.RequireFuturesDefinition(market.Market,market.Contract,Series,market.Quote);
         var amount=context.Inputs.ExactPrice(market.Market).Subtract(basis).ExactTimes(UnitQuantity);
-        var vm=next.DueAt>context.CalculationAt?amount.Scale(context.Inputs.Discounts([new(Id,0,next.DueAt,Currency)]).Single().DiscountFactor):amount;
+        var vm=next.DueAt>context.CalculationAt?amount.Scale(context.Inputs.Discounts([new(Id,0,next.DueAt,Currency){Timing=ValueTimingKind.Instant}]).Single().DiscountFactor):amount;
         if(PhysicalExchange(context,market,selected) is not {} exchange)return vm;
         context.Inputs.RequireSource(selected.Physical!.Asset);
         var physical=exchange.ExchangeValue(context);

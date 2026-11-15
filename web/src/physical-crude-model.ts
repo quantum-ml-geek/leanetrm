@@ -1,10 +1,11 @@
+import {displayPaymentDate} from './payment-date.js';
 import {resolvedUtcInstant as instant} from './user-time.js';
 import {amountText} from './amount-display.js';
 import {displayExactInstant} from './market-view.js';
 import type {RequestCommand} from './pending-command.js';
 export const crudeConvention='physical_crude_fixed_volume_v1';
 export type CrudeProfile={code:string;quantityBasis:string;tolerance:string;discounting:boolean;label?:string};
-export type CrudeFields={deliveryFrom:string;deliveryTo:string;quantity:string;direction:string;fixedPrice:string;considerationDirection:string;paymentAt:string;feeMode:string;handlingFee:string;handlingFeeDirection:string};
+export type CrudeFields={deliveryFrom:string;deliveryTo:string;quantity:string;direction:string;fixedPrice:string;considerationDirection:string;paymentAt:string;feeMode:string;handlingFee:string;handlingFeeDirection:string;handlingFeePaymentAt:string};
 
 // Presentation binding only: native operations validate the selected reference,
 // delivery geometry, units, price convention and all numerical behavior.
@@ -13,11 +14,12 @@ export function crudeRequest(context:Record<string,unknown>,header:Record<string
  if(!profile)throw Error('Choose an explicit contract profile.');
  if(!['none','per_unit'].includes(fields.feeMode))throw Error('Choose whether a handling fee applies.');
  if(fields.feeMode==='per_unit'&&(!fields.handlingFee||!['pay','receive'].includes(fields.handlingFeeDirection)))throw Error('Enter the fee and its independent direction.');
+ if(fields.feeMode==='per_unit'&&!fields.handlingFeePaymentAt)throw Error('Enter the fee payment date.');
  return{...context,...header,...(assignment.physical?{physical:assignment.physical}:{}),...(assignment.crudeSetupId?{crudeSetupId:assignment.crudeSetupId}:{}),convention:crudeConvention,knowledgeMode:'current',definitionRevisionId:assignment.definitionRevisionId,assignmentCode:assignment.code,
   profile:profile.code,quantityBasis:profile.quantityBasis,tolerance:profile.tolerance,discounting:profile.discounting,
   deliveryFrom:instant(fields.deliveryFrom),deliveryTo:instant(fields.deliveryTo),quantity:fields.quantity,direction:fields.direction,
   fixedPrice:fields.fixedPrice,considerationDirection:fields.considerationDirection,paymentAt:instant(fields.paymentAt),
-  handlingFee:fields.feeMode==='per_unit'?fields.handlingFee:null,handlingFeeDirection:fields.feeMode==='per_unit'?fields.handlingFeeDirection:null};
+  handlingFee:fields.feeMode==='per_unit'?fields.handlingFee:null,handlingFeeDirection:fields.feeMode==='per_unit'?fields.handlingFeeDirection:null,handlingFeePaymentAt:fields.feeMode==='per_unit'?instant(fields.handlingFeePaymentAt):null};
 }
 export function restoreCrudeCommand(value:unknown):RequestCommand|undefined{
  if(!value||typeof value!=='object'||Array.isArray(value))return;
@@ -37,8 +39,8 @@ export function crudePreview(value:CrudeValue,terms:Record<string,unknown>|undef
  return{total:`Contractual present value: ${money(value.presentValue)} ${value.currency}`,
   terms:[['Delivery window',`${displayExactInstant(value.deliveryFrom,zone)} to ${displayExactInstant(value.deliveryTo,zone)} · exclusive`],['Contract volume',`${amountText(value.quantity,'quantity')} ${value.quantityUnit}`],
    ...(terms?[['Pricing source',value.pricingSource],['Physical direction',named(physicalDirections,terms.direction)],['Consideration direction',named(cashDirections,terms.considerationDirection)],
-    ['Fixed price',`${String(terms.fixedPrice)} ${value.priceUnit}`],['Payment · '+zone,displayExactInstant(String(terms.paymentAt),zone)],
-    ['Handling fee',terms.handlingFee===null?'None':`${String(terms.handlingFee)} ${value.priceUnit} · ${named(feeDirections,terms.handlingFeeDirection)}`],['Profile',value.profileName]]:[])] as [string,string][],
+    ['Fixed price',`${String(terms.fixedPrice)} ${value.priceUnit}`],['Payment date',displayPaymentDate(String(terms.paymentAt))],
+    ['Handling fee',terms.handlingFee===null?'None':`${String(terms.handlingFee)} ${value.priceUnit} · ${named(feeDirections,terms.handlingFeeDirection)}`],...(terms.handlingFee===null?[]:[['Fee payment date',displayPaymentDate(String(terms.handlingFeePaymentAt))]]),['Profile',value.profileName]]:[])] as [string,string][],
   columns:['Side','Direction',`Signed PV · ${value.currency}`],
   sides:value.sides.map(s=>[named(sideRoles,s.role),named(sideDirections,s.direction),money(s.presentValue)])};
 }

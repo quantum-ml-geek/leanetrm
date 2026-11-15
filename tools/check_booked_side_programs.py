@@ -21,7 +21,7 @@ def append_program(catalog, request, schedule, content):
     return f"SELECT security.seal_side_schedule_program('{catalog}','{request}','{schedule}',decode('{encoded.hex()}','hex'));"
 
 
-def literal_program(header, rows, roots, grids=()):
+def literal_program(header, rows, roots, grids=(), *, version='booked_side_program_v2'):
     """Independent seven-instruction quantity × price × discount fixture."""
     operands=({}, {}, {'quantity':[0],'price':[1]}, {}, {'amount':[2],'discount':[3]},
               {'amount':[2],'discounted':[4]}, {'input':[5]})
@@ -32,7 +32,7 @@ def literal_program(header, rows, roots, grids=()):
         output['valueAt']=output['valueAt'].replace('Z','+00:00')
         normalized.append(output)
     geometry=[dict(grid,origin=grid['origin'].replace('Z','+00:00')) for grid in grids]
-    return dict(version='booked_side_program_v1',scheduleManifest=header['manifest'],family=header['family'],
+    return dict(version=version,scheduleManifest=header['manifest'],family=header['family'],
         economicIdentity=header['economicIdentity'],pricingBindingIdentity=header['pricingBindingIdentity'],
         instructions=[dict(output=row,inputs=operands[n],bindings=[],dependents=dependents[n],
                            consumers=[5] if n==3 else []) for n,row in enumerate(normalized)],
@@ -192,7 +192,10 @@ def book_native_programs(url,manifest,query):
     capacity['memberships'][1].update(role='capacity_payment')
     capacity['memberships'][1]['side']['quantity']['slots']=[dict(role='capacity_delivery',ordinal=0)]
     capacity['memberships'][1]['side']['fixedPrice'].update(quantity='test_ppa_capacity_days_quantity',price='4')
+    from synthetic_side_calendars import all_dates_policy
     virtual=profile_terms(manifest)
+    virtual['memberships'][0]['side']['calendarPolicy']=all_dates_policy(observation=True)
+    virtual['memberships'][1]['side']['calendarPolicy']=all_dates_policy(observation=False)
     virtual['memberships'][1]['side']['quantity']=deepcopy(virtual['memberships'][0]['side']['quantity'])
     virtual['memberships'][0].update(role='indexed_payment')
     virtual['memberships'][0]['side'].update(kind='indexed',location=None,
@@ -214,12 +217,12 @@ def book_native_programs(url,manifest,query):
             original=query(f"SELECT pg_get_functiondef('{signature}'::regprocedure);")
             fragment='RETURN QUERY SELECT item.slot,item.side_id,item.economic_identity,item.pricing_binding_identity;'
             assert fragment in original
-            corrupted=original.replace(fragment,"RETURN QUERY SELECT item.slot,item.side_id,item.economic_identity||'synthetic mismatch',item.pricing_binding_identity;")
+            corrupted=original.replace(fragment,"RETURN QUERY SELECT item.slot,item.side_id,left(item.economic_identity,-1)||',\"syntheticMismatch\":true}' ,item.pricing_binding_identity;")
             before=query("SELECT count(*) FROM trading.ppa_trade_revisions;")
             try:
                 query(corrupted)
                 refusal=client.call('ppa/book',body,expected=422)
-                assert refusal['code']=='side_schedule_identity'
+                assert refusal['code']=='side_schedule_identity',refusal
                 assert query("SELECT count(*) FROM trading.ppa_trade_revisions;")==before, 'Identity refusal must roll back the new trade revision'
                 assert query(f"SELECT count(*) FROM trading.ppa_trade_revisions WHERE operation_id='{body['operationId']}';")=='0'
             finally:

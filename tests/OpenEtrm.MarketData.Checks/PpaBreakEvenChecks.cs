@@ -38,20 +38,20 @@ internal static class PpaBreakEvenChecks
         Equal("certificate quantity keeps its own units",certificateProfile.Periods.First(p=>p.Slot.Role==PpaRole.CertificateDelivery).Quantity.Specification.Code,"synthetic_rec");
         var reversed=new PpaInstrument(Guid.NewGuid(),f.Definitions,f.Reference,[..physical.Memberships.Select(m=>m with{Coefficient=m.Coefficient*D("-1")})],false,PpaInstrument.Implementation);
         Equal("opposite direction",Solve(Plan(reversed)).Sensitivity.Numerator,"57680");
-        var fixedSide=new FixedSide(Guid.NewGuid(),f.Terms(f.Profile),new FlatPrice(new(D("40"),f.EnergyPrice)));
-        var floating=new FloatingSide(Guid.NewGuid(),f.Terms(f.Profile),new(f.C("synthetic_hub"),D("1"),new(default,f.EnergyPrice),null));
+        var fixedSide=new FixedSide(Guid.NewGuid(),f.Terms(f.Profile),new FlatPrice(new(D("40"),f.EnergyPrice)),SyntheticSideCalendars.Interval(f.Terms(f.Profile),false));
+        var floating=new FloatingSide(Guid.NewGuid(),f.Terms(f.Profile),new(f.C("synthetic_hub"),D("1"),new(default,f.EnergyPrice),null),SyntheticSideCalendars.Interval(f.Terms(f.Profile),true));
         var virtualPpa=new PpaInstrument(Guid.NewGuid(),f.Definitions,f.Reference,[new(slot,fixedSide,D("-1")),new(new(PpaRole.IndexedPayment),floating,D("1"))],false,PpaInstrument.Implementation);
         Equal("virtual floating root",Solve(Plan(virtualPpa)).Price.Numerator,"30");
         var negative=new PpaInstrument(Guid.NewGuid(),f.Definitions,f.Reference,[..virtualPpa.Memberships.Select(m=>m with{Coefficient=D("1")})],false,PpaInstrument.Implementation);
         Equal("negative root allowed",Solve(Plan(negative)).Price.Numerator,"-30");
         var cash=(FixedSide)physical.Memberships[1].Side;
-        var triple=new FixedSide(cash.Id,cash.Terms,new FlatPrice(new(D("40"),new PriceUnit(f.EnergyPrice.Currency,f.EnergyPrice.Quantity,D("3")))));
+        var triple=new FixedSide(cash.Id,cash.Terms,new FlatPrice(new(D("40"),new PriceUnit(f.EnergyPrice.Currency,f.EnergyPrice.Quantity,D("3")))),SyntheticSideCalendars.Interval(cash.Terms,false));
         var fractional=new PpaInstrument(Guid.NewGuid(),f.Definitions,f.Reference,[physical.Memberships[0],physical.Memberships[1] with{Side=triple}],false,PpaInstrument.Implementation);
         var frac=Solve(Plan(fractional),f.Market(f.From.AddDays(-1),energy:"62"));
         Equal("exact nonterminating root numerator",frac.Price.Numerator,"62");Equal("exact nonterminating root denominator",frac.Price.Denominator,"3");
         Equal("explicit quote",frac.Quote,"20.67");Equal("quote residual numerator",frac.QuoteResidual.Numerator,"-2884");Equal("quote residual denominator",frac.QuoteResidual.Denominator,"5");
         if(frac.ExactPriceEnterable || frac.QuoteIsExact)throw new Exception("Nonterminating root labelled exact quote");
-        var laterPhysical=new PowerPhysicalSide(physical.Memberships[0].Side.Id,f.Terms(f.Profile,20),f.Asset.Location);
+        var laterPhysical=new PowerPhysicalSide(physical.Memberships[0].Side.Id,f.Terms(f.Profile,20),f.Asset.Location,SyntheticSideCalendars.Interval(f.Terms(f.Profile,20),false));
         var discounted=new PpaInstrument(Guid.NewGuid(),f.Definitions,f.Reference,[physical.Memberships[0] with{Side=laterPhysical},physical.Memberships[1]],true,PpaInstrument.Implementation);
         Equal("distinct payment dates and exact discounting",Solve(Plan(discounted),discount:new DatedFactors()).Price.Numerator,"189");
         Equal("discounted root denominator",Solve(Plan(discounted),discount:new DatedFactors()).Price.Denominator,"4");
@@ -64,7 +64,7 @@ internal static class PpaBreakEvenChecks
             Equal("signed half-even "+mark+" "+sign,tie.Quote,quote);
             if(!tie.ExactPriceEnterable || tie.QuoteIsExact)throw new Exception("Source precision differs from quote precision");
         }
-        var hugeFloating=new FloatingSide(floating.Id,floating.Terms,new(f.C("synthetic_hub"),D("100000000000000000000000"),new(default,f.EnergyPrice),null));
+        var hugeFloating=new FloatingSide(floating.Id,floating.Terms,new(f.C("synthetic_hub"),D("100000000000000000000000"),new(default,f.EnergyPrice),null),SyntheticSideCalendars.Interval(floating.Terms,true));
         var huge=new PpaInstrument(Guid.NewGuid(),f.Definitions,f.Reference,[virtualPpa.Memberships[0],virtualPpa.Memberships[1] with{Side=hugeFloating}],false,PpaInstrument.Implementation);
         Refuse("root beyond source-price magnitude",()=>Solve(Plan(huge)),"ppa_break_even_range");
         Equal("new market context changes root",Solve(plan,f.Market(f.From.AddDays(-1),energy:"43")).Price.Numerator,"43");
@@ -72,7 +72,7 @@ internal static class PpaBreakEvenChecks
         Refuse("zero strike sensitivity",()=>Solve(Plan(f.Physical(volume:true)),forecast:f.Forecast("0")),"ppa_break_even_zero_sensitivity");
         Refuse("unknown measure",()=>Plan(physical,"net_cash"),"ppa_break_even_measure");
         Refuse("missing side",()=>PpaBreakEvenPlan.Create(physical,new(PpaRole.StrikePayment,1),coverage,D("80"),"CompletePv",2,"half_even_v1"),"ppa_break_even_side");
-        var stepped=new FixedSide(cash.Id,cash.Terms,new SteppedPrice([new(f.Month,new(D("40"),f.EnergyPrice))]));
+        var stepped=new FixedSide(cash.Id,cash.Terms,new SteppedPrice([new(f.Month,new(D("40"),f.EnergyPrice))]),SyntheticSideCalendars.Interval(cash.Terms,false));
         var unsupported=new PpaInstrument(Guid.NewGuid(),f.Definitions,f.Reference,[physical.Memberships[0],physical.Memberships[1] with{Side=stepped}],false,PpaInstrument.Implementation);
         Refuse("selected non-flat price",()=>Plan(unsupported),"ppa_break_even_side");
         Refuse("unknown rounding",()=>PpaBreakEvenPlan.Create(physical,slot,coverage,D("80"),"CompletePv",2,"implicit"),"ppa_break_even_quote");

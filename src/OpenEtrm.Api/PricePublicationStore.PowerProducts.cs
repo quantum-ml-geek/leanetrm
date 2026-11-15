@@ -38,7 +38,7 @@ internal sealed partial class PricePublicationStore
         var from = request.Capture.FromDate;
         var to = request.Capture.ThroughDate.AddDays(1); // Capture admission already checked supported date bounds.
         var holidays = PowerPreview.Holidays(read.Data, calendar, from, to);
-        var clock = PowerClock.FromRule(product.Clock, TimeZoneDatabase.Installed());
+        var clock = PublishedClocks.Resolve(read.Data,product.Clock.Code);
         var mask = IntervalBlocks.Mask(PowerPreview.Membership(request.Block), read.Metadata.Minutes, product.Peak);
         var selected = PowerHours.Compile(from, to, clock, mask, holidays, read.Metadata.Minutes);
         var quantity = PpaQuantitiesStore.Quantity(read.Data, read.Index.Unit.Quantity.Code);

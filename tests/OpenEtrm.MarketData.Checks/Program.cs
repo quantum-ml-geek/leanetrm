@@ -3,6 +3,10 @@ using System.Numerics;
 using OpenEtrm.MarketData;
 using OpenEtrm.Security;
 
+if(args is ["--calendar-policy"]){CalendarPolicyChecks.Run();RetainedPowerQuantityChecks.Run();ClockCompletionChecks.Run();PublishedTouCalendarChecks.Run();IntervalCalendarAdmissionChecks.Run();return;}
+if(args is ["--interval-calendar-admission"]){IntervalCalendarAdmissionChecks.Run();return;}
+if(args is ["--payment-date-policy"]){PaymentDatePolicyChecks.Run();return;}
+
 if(args is ["--physical-option"]){PhysicalOptionChecks.Run();return;}
 if(args is ["--cash-option-model"]){CashOptionModelChecks.Run();return;}
 if(args is ["--cash-option-binding"]){CashOptionBindingChecks.Run();return;}
@@ -560,6 +564,9 @@ passed += TypedPriceChecks.Run();
 passed += AmountUnitChecks.Run();
 passed += PilotCloseChecks.Run();
 passed += PowerQuantityChecks.Run();
+passed += RetainedPowerQuantityChecks.Run();
+passed += ClockCompletionChecks.Run();
+passed += PublishedTouCalendarChecks.Run();
 passed += PowerIntervalQuantityChecks.Run();
 passed += IntervalSeriesChecks.Run();
 passed += IntervalCurveChecks.Run();
@@ -603,6 +610,8 @@ passed += MonthlySwapChecks.Run();
 passed += IndexFixingChecks.Run();
 DeliveryIndexChecks.Run();passed++;
 passed += PaymentRuleChecks.Run();
+passed += CalendarPolicyChecks.Run();
+passed += PaymentDatePolicyChecks.Run();
 passed += IndependentSideChecks.Run();
 passed += RiskChecks.Run();
 passed += NestedScenarioChecks.Run();

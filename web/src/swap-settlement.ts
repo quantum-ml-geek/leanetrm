@@ -1,3 +1,4 @@
+import {contractDateEvidence,displayPaymentDate} from './payment-date.js';
 import {renderRegularTable} from './regular-table.js';
 import {displayInstant} from './market-view.js';
 type Api=<T>(path:string,body?:unknown)=>Promise<T>;
@@ -62,13 +63,13 @@ export function setupSwapSettlement(options:{api:Api;act:(work:()=>Promise<void>
    result.valuation.payments.map(p=>{
     const occurrence=node('div');occurrence.className='swap-settlement-stack';
     occurrence.append(node('strong',`Side ${p.membershipOrdinal+1} · ${p.deliveryFrom} to ${p.deliveryTo}, end exclusive`),node('span',`${p.state} · ${p.realized?'P&L realized':'P&L not realized'}`),
-     node('span',`Delivery completes ${displayInstant(p.completionAt,options.zone())} · payment ${displayInstant(p.paymentAt,options.zone())}`));
+     node('span',`Delivery completes ${displayInstant(p.completionAt,options.zone())} · payment ${displayPaymentDate(p.paymentAt)}`));
     return[occurrence,p.contractualAmount,p.remainingValue];}),[1,2],[0]);
   table(balances,'swap-settlement-balances',['Contribution','Determined','Outstanding'],result.balances.map(b=>{const contribution=node('div');contribution.className='swap-settlement-stack';
-   contribution.append(node('strong',`Side ${b.membershipOrdinal+1} · ${b.deliveryFrom} · ${b.ordinal===1?'original':'adjustment'}`),node('span',`Due ${displayInstant(b.dueAt,options.zone())} · applied ${b.applied}`));return[contribution,b.amount,b.outstanding];}),[1,2],[0]);
+   contribution.append(node('strong',`Side ${b.membershipOrdinal+1} · ${b.deliveryFrom} · ${b.ordinal===1?'original':'adjustment'}`),node('span',`Due ${b.ordinal===1?displayPaymentDate(b.dueAt):displayInstant(b.dueAt,options.zone())} · applied ${b.applied}`));return[contribution,b.amount,b.outstanding];}),[1,2],[0]);
   table(cashHistory,'swap-settlement-cash',['Cash movement','Signed cash'],result.cashMovements.map(p=>{const movement=node('div');movement.className='swap-settlement-stack';
    movement.append(node('strong',p.reference),node('span',`${displayInstant(p.effectiveAt,options.zone())} · ${p.recordKind==='zero_net_discharge_v1'?'Noncash zero-net discharge':'Cash movement'}`),allocationEvidence(result,p.allocations));return[movement,p.amount];}),[1],[0]);
-  const lineage=node('details'),caption=node('summary','Accepted settlement and fixing evidence'),raw=node('pre');raw.className='swap-evidence';raw.textContent=JSON.stringify(result.settlement,null,2);lineage.append(caption,raw);evidence.append(lineage);
+  const lineage=node('details'),caption=node('summary','Accepted settlement and fixing evidence'),raw=node('pre');raw.className='swap-evidence';raw.textContent=JSON.stringify(contractDateEvidence(result.settlement),null,2);lineage.append(caption,raw);evidence.append(lineage);
   const workspace=await options.api<{frames:{id:string;at:string}[]}>('workspace/navigation');
   if(version!==generation||scope!==key())return;
   offer(openingSnapshot,new Option('Choose…',''),...workspace.frames.map(f=>new Option(displayInstant(f.at,options.zone()),f.id)));

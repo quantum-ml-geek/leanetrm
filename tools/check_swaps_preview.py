@@ -1,4 +1,5 @@
 """Financial swap booking, retained history and independent side PV checks."""
+from synthetic_side_calendars import all_dates_policy
 from preview_fixture import trade_booking
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -24,8 +25,8 @@ def run_checks(url):
     def rule(days):
         return {'frequency':'monthly','rule':'days_after_period_end','days':days,'dayOfMonth':None,'dayBasis':'calendar_days','shortMonth':None,'adjustment':'unadjusted','calendar':None,'implementation':'monthly_payment_date_rules_v1'}
     body = {**context, 'operationId': str(uuid4()), **trade_booking(), 'bookId': catalog['books'][0]['id'], 'definitionRevisionId': index['definitionRevisionId'], 'commodity':index['commodity'], 'quantity': '100', 'fixedCoefficient': '-1', 'discounting': True,
-            'fixed': {'price': '3', 'currency': index['currencyCode'], 'deliveryFrom': contract['deliveryFrom'], 'deliveryTo': contract['deliveryTo'], 'paymentSchedule':rule(18)},
-            'floating': {'spread': '0', 'settlement': {'mode': 'curve_target', 'index': None, 'projectionPolicy': None}, 'curve': index['curve'], 'index': index['index'], 'currency': index['currencyCode'], 'deliveryFrom': contract['deliveryFrom'], 'deliveryTo': contract['deliveryTo'],
+            'fixed': {'calendarPolicy': all_dates_policy(observation=False), 'price': '3', 'currency': index['currencyCode'], 'deliveryFrom': contract['deliveryFrom'], 'deliveryTo': contract['deliveryTo'], 'paymentSchedule':rule(18)},
+            'floating': {'calendarPolicy': all_dates_policy(observation=True), 'spread': '0', 'settlement': {'mode': 'curve_target', 'index': None, 'projectionPolicy': None}, 'curve': index['curve'], 'index': index['index'], 'currency': index['currencyCode'], 'deliveryFrom': contract['deliveryFrom'], 'deliveryTo': contract['deliveryTo'],
                          'paymentSchedule':rule(46), 'resetFrequency':'monthly','averagingMethod':'none'}}
     unselected = {**body['floating']}; del unselected['settlement']
     check('a floating side requires an explicit settlement selection',

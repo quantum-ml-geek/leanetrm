@@ -23,13 +23,13 @@ public sealed record PowerPreviewRequest(Guid SnapshotId,string Curve,Guid Contr
 public static class PowerPreview
 {
     // A published TOU product version with its resolved clock rule.
-    public sealed record Product(string Code,string Name,int Version,ClockRule Clock,TouPeak Peak);
+    public sealed record Product(string Code,string Name,int Version,ClockRule Clock,TouPeak Peak,ReferenceKey Calendar,string HolidayTreatment);
     // Products whose clock is outside this workspace's reference data are listed as unavailable, never dropped silently.
     public sealed record ProductSet(ImmutableArray<Product> Available,ImmutableArray<TouProductVersion> Unavailable);
     public static ProductSet Products(IEnumerable<TouProductVersion> published,IReadOnlyCollection<ClockChoice> clocks)
     {
         var resolved=published.Select(v=>(Version:v,Clock:clocks.SingleOrDefault(c=>c.Reference==v.Clock))).ToArray();
-        return new([..resolved.Where(r=>r.Clock is not null).Select(r=>new Product(r.Version.Code,r.Version.Name,r.Version.Version,r.Clock!.Rule,r.Version.Peak))],[..resolved.Where(r=>r.Clock is null).Select(r=>r.Version)]);
+        return new([..resolved.Where(r=>r.Clock is not null&&r.Version.Calendar is not null&&r.Version.HolidayTreatment==PublishedTouBinding.HolidayConvention).Select(r=>new Product(r.Version.Code,r.Version.Name,r.Version.Version,r.Clock!.Rule,r.Version.Peak,r.Version.Calendar!.Value,r.Version.HolidayTreatment!))],[..resolved.Where(r=>r.Clock is null||r.Version.Calendar is null||r.Version.HolidayTreatment!=PublishedTouBinding.HolidayConvention).Select(r=>r.Version)]);
     }
     // Engine capabilities, not reference data: the supported mask blocks, grids and labels.
     internal static readonly (string Code,string Name)[] Blocks=[("all","All hours"),("peak","On-peak"),("off","Off-peak")];
@@ -46,6 +46,13 @@ public static class PowerPreview
         _=>throw new MarketDataException("tou_grid","Choose all hours, on-peak or off-peak.")
     };
     private static TimeOfUse Mask(Product p,string block,int minutes) => IntervalBlocks.Mask(Membership(block),minutes,p.Peak);
+    internal static TimeOfUse PublishedMask(Product product,string block,int minutes,string nonHolidays,string holidays)
+    {
+        var mask=Mask(product,block,minutes);
+        if(mask.NonHolidays!=nonHolidays||mask.Holidays!=holidays)
+            throw new MarketDataException("tou_product_override","The selected published TOU owns its weekly hours and holiday treatment. Publish a different product version for different hours.");
+        return mask;
+    }
     // The one explicitly bound settlement index for a contract: the curve's own index,
     // or a futures series' product terms. Anything else, a futures option included, has no index (null).
     internal static string? IndexCode(PreviewData data,JsonElement curve,MarketContract contract)
@@ -95,7 +102,7 @@ public static class PowerPreview
         var commodities=curves.Select(c=>c.commodityCode).ToHashSet(StringComparer.Ordinal);
         return new
         {
-            products=products.Select(p=>new {p.Code,p.Name,p.Version,clock=p.Clock.Code}),
+            products=products.Select(p=>new {p.Code,p.Name,p.Version,clock=p.Clock.Code,calendar=p.Calendar,p.HolidayTreatment}),
             unavailableProducts=set.Unavailable.Select(v=>new {v.Code,v.Name,v.Version,reason="Its market clock is outside this workspace's reference data."}),
             blocks=Blocks.Select(b=>new {code=b.Code,name=b.Name}),intervals=Intervals,
             hourLabels=HourLabels.Select(h=>new {code=h.Code,name=h.Name}),
@@ -158,16 +165,14 @@ public static class PowerPreview
             throw new MarketDataException("power_input","Supply the quantity, hour labels, classifications, display places and the explicit numerical policy.");
         // The hour grid remains pinned to the exact published product version.
         var product=SelectProduct(set,body.Product,body.ProductVersion);
-        // Require a known preset choice even when its grids have been edited.
-        _=Mask(product,body.Block,body.Minutes);
-        var mask=new TimeOfUse(body.Minutes,body.NonHolidays,body.Holidays);
+        var mask=PublishedMask(product,body.Block,body.Minutes,body.NonHolidays,body.Holidays);
         var terms=SelectContract(data,frame,body.Curve,body.ContractId);
         var curve=terms.Curve;var quote=terms.Quote;var quantity=terms.Energy;var contract=terms.Contract;
-        var indexDefinition=terms.Index;var calendar=terms.Calendar;var indexCode=indexDefinition.Text("code");
+        var indexDefinition=terms.Index;var calendar=CalendarDefinitions.From(data,product.Calendar);var indexCode=indexDefinition.Text("code");
         var built=data.Build(frame,body.Curve);
         var value=built.Values.SingleOrDefault(v=>v.Request.Contract.Id==body.ContractId)??throw new MarketDataException("power_contract","Choose a contract in the selected curve and market view.");
-        var holidays=Holidays(data,calendar,contract.DeliveryFrom,contract.DeliveryTo);
-        var clock=PowerClock.FromRule(product.Clock,TimeZoneDatabase.Installed());
+        var holidays=calendar.Closures(contract.DeliveryFrom,contract.DeliveryTo).ToArray();
+        var clock=PublishedClocks.Resolve(data,product.Clock.Code);
         var basis=body.QuantityBasis switch{"flat_power"=>PowerQuantityBasis.FlatPower,"total_energy"=>PowerQuantityBasis.TotalEnergy,_=>throw new MarketDataException("power_quantity","Choose total MWh or flat MW explicitly.")};
         var allocation=body.Allocation switch{null=>(PowerAllocation?)null,"flat_rate"=>PowerAllocation.FlatRate,_=>throw new MarketDataException("power_quantity","Choose an explicit supported total-energy allocation.")};
         var source=data.References["quantity_specifications"].SingleOrDefault(q=>new ReferenceKey(data.ReferenceRevision,q.Text("code"))==body.Quantity.Specification);
@@ -198,7 +203,7 @@ public static class PowerPreview
             from=contract.DeliveryFrom.ToString("yyyy-MM-dd",CultureInfo.InvariantCulture),to=contract.DeliveryTo.ToString("yyyy-MM-dd",CultureInfo.InvariantCulture),
             synthetic=true,saved=false,clock=new {clock.Id,clock.Fingerprint,rules=clock.Rules},
             pins=new {definitions=data.Definitions["revisions"][0],quote,quantity,source,curve,powerUnit,indexDefinition},
-            holidays,holidayCalendar=calendar.Text("code"),clockRule=product.Clock,mask,quantityBasis=body.QuantityBasis,body.Allocation,body.Display,
+            holidays,holidayCalendar=calendar.Key,sourceIndexCalendar=terms.Calendar.Text("code"),clockRule=product.Clock,mask,quantityBasis=body.QuantityBasis,body.Allocation,body.Display,
             quantityImplementation=PowerQuantitySchedule.Implementation,product=product.Name,productVersion=product.Version,
             days=periods.GroupBy(p=>p.OperatingDate).Select(g=>new {date=g.Key.ToString("yyyy-MM-dd",CultureInfo.InvariantCulture),
                 intervals=g.Count(),hours=new AmountFormat(18,CashTieRule.ToEven,false,true).FormatFraction(g.Sum(p=>(p.End-p.Start).Ticks),TimeSpan.TicksPerHour)}).ToArray(),

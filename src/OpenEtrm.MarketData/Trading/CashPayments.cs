@@ -20,11 +20,12 @@ public abstract record CashPaymentInstrument:Instrument
     public const string ModelVersion="cash_payment_explicit_paid_state_v2";
     public abstract ReferenceKey PaymentCurrency{get;}
     public abstract DateTimeOffset PaymentAt{get;}
+    public abstract ValueTimingKind Timing{get;}
     public override ReferenceKey Currency=>PaymentCurrency;
     public override Quantity UnitQuantity=>new(ExactDecimal.Parse("1"),PaymentCurrency);
     public override bool SupportsQuantityScaling=>true;
-    public SidePaymentKey Payment=>new(Id,0,PaymentAt,Currency);
-    public bool Due(DateTimeOffset at)=>at>=PaymentAt;
+    public SidePaymentKey Payment=>new(Id,0,PaymentAt,Currency){Timing=Timing};
+    public bool Due(DateTimeOffset at)=>Timing==ValueTimingKind.UtcPaymentDay?PaymentDatePolicy.IsDue(PaymentAt,at):at>=PaymentAt;
     protected CashPaymentInstrument(Guid id):base(id){}
 
     public override void ValidateBinding(Quantity quantity, DeliveryCoverage? coverage)
@@ -77,6 +78,7 @@ public sealed record CashPayment:CashPaymentInstrument
 {
     [IdentityField] public override ReferenceKey PaymentCurrency{get;}
     [IdentityField] public DateOnly PaymentDate{get;}
+    public override ValueTimingKind Timing=>ValueTimingKind.UtcPaymentDay;
     public override DateTimeOffset PaymentAt=>new(PaymentDate.ToDateTime(TimeOnly.MinValue),TimeSpan.Zero);
     public CashPayment(ReferenceKey currency,DateOnly paymentDate):base(ContractIdentity.CashPayment(currency,paymentDate))
     {
@@ -91,6 +93,7 @@ public sealed record TimedCashPayment:CashPaymentInstrument
 {
     [IdentityField] public override ReferenceKey PaymentCurrency{get;}
     [IdentityField] public override DateTimeOffset PaymentAt{get;}
+    public override ValueTimingKind Timing=>ValueTimingKind.Instant;
     public TimedCashPayment(ReferenceKey currency,DateTimeOffset paymentAt):base(Identity(currency,paymentAt))
     {
         PaymentCurrency=currency;PaymentAt=paymentAt;

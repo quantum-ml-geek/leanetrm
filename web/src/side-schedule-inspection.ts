@@ -1,3 +1,4 @@
+import {displayPaymentDate} from './payment-date.js';
 import {numberText,sourceLabels} from './schedule-grid.js';
 import {lifecycleLines,quantityBasisText,words as text} from './lifecycle-text.js';
 import {clearTabs,setupTabs} from './side-panel.js';
@@ -7,7 +8,7 @@ type Lifecycle={delivery:string;due:string|null;cash:string|null;economicClass:s
 export type InspectedScheduleRow={key:string;kind:string;deliveryFrom:string|null;deliveryTo:string|null;start:string|null;end:string|null;valueAt:string|null;paymentAt:string|null;
  quantity:string|null;price:string|null;amount:string|null;discountFactor:string|null;presentValue:string|null;quantityState:string|null;priceStates:string[];lifecycle:Lifecycle;paid:string|null;outstanding:string|null;accrued?:string|null;paidAt?:string|null;finalDetermination?:string|null;quantitySpecification:{code:string}|null;currency:{code:string}|null;quoteMultiplier:string|null;operatingDate:string|null};
 type Step={key:string;role:string;operation:string;kind:string;value:string|null;presence:string;deliveryFrom:string|null;deliveryTo:string|null;start:string|null;end:string|null;observationFrom:string|null;observationTo:string|null;valueAt:string|null;
- contractFrom:string|null;contractTo:string|null;fixingAt:string|null;priceStates:string[];inputs:{port:string;key:string}[];bindings:{kind:string;market?:{curve:{code:string}}|null;code?:string|null}[];lineage:{id:string}[];actualBatch?:string|null;actualRevision?:number|null;actualKnownAt?:string|null;parameters?:Record<string,string>};
+ paymentDate:string|null;contractFrom:string|null;contractTo:string|null;fixingAt:string|null;priceStates:string[];inputs:{port:string;key:string}[];bindings:{kind:string;market?:{curve:{code:string}}|null;code?:string|null}[];lineage:{id:string}[];actualBatch?:string|null;actualRevision?:number|null;actualKnownAt?:string|null;parameters?:Record<string,string>};
 type Page={side:string;manifest:string;valuationAt:string;knownAt:string;offset:number;total:number;rows:InspectedScheduleRow[]};
 type Calculation={side:string;manifest:string;contribution:string;valueBasis:string;tradeQuantityScale:string;membershipNumerator:string;membershipDenominator:string;offset:number;total:number;rows:Step[]};
 type DeliveryWindow={id:string;label:string};
@@ -34,7 +35,7 @@ function table(host:HTMLElement,headers:string[],rows:(string|HTMLElement)[][],n
  const grid=element('table'),body=element('tbody');body.append(...rows.map(values=>tableRow(values,numeric)));
  grid.append(headRow(headers),body);host.replaceChildren(grid);
 }
-const columns=['Delivery from','To · exclusive','Payment at','Quantity','Price','DF','Amount','PV','Lifecycle',''];
+const columns=['Delivery from','To · exclusive','Payment date','Quantity','Price','DF','Amount','PV','Lifecycle',''];
 // A window opens with its first rows; the rest of it, and the calculation inputs, are read in further pages the API bounds at 128.
 const pageRows=32,furtherRows=128;
 let mounted=0;
@@ -124,7 +125,7 @@ export function mountSideScheduleInspection(host:HTMLElement,o:{api:Api;position
    quantity.append(element('small',`Operational view: ${number(recorded.value)} · ${recorded.sources.map(s=>sourceLabels[s]??s).join(', ')}`),input);
   }
   return [lines(row.start===null?row.deliveryFrom??'—':instant(row.start),[text(row.kind),row.operatingDate?`Operating day: ${row.operatingDate}`:'']),
-   row.end===null?row.deliveryTo??'—':instant(row.end),instant(row.paymentAt),
+   row.end===null?row.deliveryTo??'—':instant(row.end),row.paymentAt===null?'—':displayPaymentDate(row.paymentAt),
    quantity,
    lines(number(row.price),[row.priceStates.length?'Inputs: '+row.priceStates.map(text).join(', '):'',row.quoteMultiplier?`Quote multiplier: ${row.quoteMultiplier}`:'']),
    number(row.discountFactor),lines(number(row.amount),[currency]),lines(number(row.presentValue),[currency]),lines(text(state.delivery),lifecycleLines(row,instant)),inspect];
@@ -166,7 +167,7 @@ export function mountSideScheduleInspection(host:HTMLElement,o:{api:Api;position
    const caption=element('p',`Unit Side calculation · booked quantity scale ${number(detail.tradeQuantityScale)} · signed membership ${detail.membershipNumerator}/${detail.membershipDenominator}. The schedule above shows the resulting holding values.`);
    const steps=element('div');steps.className='inspection-steps table-wrap';
    table(steps,['Step','Operation','Type','Value','Delivery from','To','Observation from','To','Value at','Contract from','To','Fixing at','Price state','Source','Inputs','Parameters'],detail.rows.map(step=>[
-    step.key,text(step.operation).replace(/^./,c=>c.toUpperCase()),text(step.kind),number(step.value),step.start===null?step.deliveryFrom??'—':instant(step.start),step.end===null?step.deliveryTo??'—':instant(step.end),step.observationFrom??'—',step.observationTo??'—',instant(step.valueAt),
+    step.key,text(step.operation).replace(/^./,c=>c.toUpperCase()),text(step.kind),number(step.value),step.start===null?step.deliveryFrom??'—':instant(step.start),step.end===null?step.deliveryTo??'—':instant(step.end),step.observationFrom??'—',step.observationTo??'—',step.paymentDate?displayPaymentDate(step.paymentDate):instant(step.valueAt),
     step.contractFrom??'—',step.contractTo??'—',instant(step.fixingAt),step.priceStates.map(text).join(', '),step.bindings.map(b=>b.market?.curve.code??b.code??text(b.kind)).join(', ')+(step.actualBatch?` · Actual batch ${step.actualBatch}, revision ${step.actualRevision??'—'}, known ${instant(step.actualKnownAt??null)}`:''),step.inputs.map(i=>`${i.port}: ${i.key}`).join(', '),Object.entries(step.parameters??{}).map(([key,value])=>`${text(key)}: ${value}`).join(', ')]),[3]);
    const before=element('button','Previous inputs'),after=element('button','Next inputs');before.type=after.type='button';before.disabled=offset===0;after.disabled=offset+detail.rows.length>=detail.total;
    before.onclick=()=>void calculation(row,period,Math.max(0,offset-pageRows));after.onclick=()=>void calculation(row,period,offset+pageRows);

@@ -69,7 +69,7 @@ internal static class CrudePositions
    WITH heads AS(SELECT DISTINCT ON(trade_id) * FROM trading.crude_trade_revisions WHERE catalog_id=$1 ORDER BY trade_id,revision DESC)
    SELECT row_to_json(x)::text FROM(
     SELECT r.*,r.instrument_id binding_id,i.definition_revision_id,i.assignment_code,i.delivery_from,i.delivery_to,
-     i.quantity_basis,i.tolerance,i.fixed_price,i.consideration_direction,i.handling_fee,i.handling_fee_direction,i.payment_at,t.request,
+     i.quantity_basis,i.tolerance,i.fixed_price,i.consideration_direction,i.handling_fee,i.handling_fee_direction,i.payment_at,i.handling_fee_payment_at,t.request,
      tr.reference_number trade_reference,ir.reference_number instrument_reference,
      f.trade_date,f.booker_id,f.booker_name,f.booker_login,f.executed_at,f.implementation booking_implementation,f.label_captured_at,
      e.name legal_entity,p.name counterparty

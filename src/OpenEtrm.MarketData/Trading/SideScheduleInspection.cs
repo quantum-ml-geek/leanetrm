@@ -60,7 +60,7 @@ public static partial class SideScheduleInspection
     string? Scaled(ScheduleValueColumn column,int index,bool apply)=>column.Presence[index]==ScheduleCellPresence.Resolved?
      ExactNumberText.Format(new SignedRatio(column.Values[index].Numerator,column.Values[index].Denominator)*(apply?scale:new(1,1))):null;
     var prices=Enum.GetValues<SchedulePriceFacts>().Where(f=>f!=SchedulePriceFacts.None&&(price.Column.States[price.Cell].Prices&f)!=0).Select(f=>f.ToString()).ToImmutableArray();
-    var due=state.Kind==ComponentKind.Payment?guard.Output.ValueAt<=evaluation.Context.ValuationAt?"Due":"NotDue":null;
+    var due=state.Kind==ComponentKind.Payment?PaymentDatePolicy.IsDue(guard.Output.ValueAt!.Value,evaluation.Context.ValuationAt)?"Due":"NotDue":null;
     rows.Add(new($"{guard.Output.Ordinal}:{cell}",guard.Output.Operation,state.Kind.ToString(),geometry.From,geometry.To,geometry.Start,geometry.End,
      guard.Output.ObservationFrom,guard.Output.ObservationTo,guard.Output.ValueAt,Scaled(quantity.Column,quantity.Cell,true),Scaled(price.Column,price.Cell,false),
      Scaled(contribution.Amount,cell,true),Scaled(discount.Column,discount.Cell,false),Scaled(contribution.PresentValue,cell,true),quantity.Column.States[quantity.Cell].Quantity?.ToString(),prices,

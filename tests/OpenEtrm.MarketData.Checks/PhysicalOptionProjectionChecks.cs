@@ -164,7 +164,7 @@ internal static class PhysicalOptionProjectionChecks
             return [..payments.Select(p=>new SidePaymentFactor(p,Factor(p.PaymentAt),original,DiscountFactorSource.Explicit))];
         }
         public ImmutableArray<SidePaymentFactor> ResolveForValuation(ImmutableArray<SidePaymentKey> payments,MarketSnapshot source,DateTimeOffset at,string? clockPolicy)=>
-            [..Resolve(payments,source).Select(p=>p with{DiscountFactor=p.DiscountFactor.DivideExact(Factor(at))})];
+            [..Resolve(payments,source).Select(p=>p with{DiscountFactor=p.DiscountFactor.DivideExact(Factor(at)),ClockRoll=new(clockPolicy!,at,p.DiscountFactor,Factor(at),[])})];
     }
     private sealed class Visible:ICurveBindingResolver
     {public CurveKey Resolve(LogicalCurveKey key,ResolvedCalculationContext context)=>throw new NotSupportedException();public void RequireVisible(CurveKey key,ResolvedCalculationContext context){}}

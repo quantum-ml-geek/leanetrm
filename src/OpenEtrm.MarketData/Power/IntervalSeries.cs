@@ -40,7 +40,7 @@ public static class IntervalSeriesGrid
             for(var i=0;i<segment.Values.Length;i++)
                 cells[next++]=(segment.Start+TimeSpan.FromTicks(step.Ticks*i),segment.Values[i]);
         foreach(var cell in cells)
-            if(!PowerHours.IsCell(clock.Zone,cell.Start,step))
+            if(!PowerHours.IsCell(clock,cell.Start,step))
                 throw new MarketDataException("interval_series_grid",$"The interval starting {cell.Start:O} is not a cell of the pinned clock.");
         Array.Sort(cells,(a,b)=>a.Start.CompareTo(b.Start));
         for(var i=1;i<cells.Length;i++)

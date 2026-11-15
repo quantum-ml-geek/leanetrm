@@ -5,8 +5,8 @@ using OpenEtrm.Shared.Numerics;
 
 namespace OpenEtrm.Api;
 
-internal sealed record ResolvedFixedSwapPeriod(QuoteSpecification Quote,Quantity UnitQuantity,UnitPrice Price,FixedSidePeriod Period);
-internal sealed record ResolvedFloatingSwapPeriod(PriceSettlementSelection? Settlement,QuoteSpecification Quote,Quantity UnitQuantity,FloatingSidePeriod Period);
+internal sealed record ResolvedFixedSwapPeriod(QuoteSpecification Quote,Quantity UnitQuantity,UnitPrice Price,FixedSidePeriod Period,SideCalendarPolicy CalendarPolicy);
+internal sealed record ResolvedFloatingSwapPeriod(PriceSettlementSelection? Settlement,QuoteSpecification Quote,Quantity UnitQuantity,FloatingSidePeriod Period,SideCalendarPolicy CalendarPolicy);
 
 // Authoring resolves parameter records. Only the resulting whole-term definition
 // is a Side, so a generated payment period never acquires an independent side ID.
@@ -18,7 +18,7 @@ internal static class SwapScheduledAssembly
         var amount=ExactDecimal.Parse(value);
         return amount==default?null:new(amount,PriceUnit.FromQuote(quote));
     }
-    internal static FixedSide Fixed(Guid id,ImmutableArray<ResolvedFixedSwapPeriod> periods,ImmutableArray<ExactRatio> quantities)
+    internal static FixedSide Fixed(Guid id,ImmutableArray<ResolvedFixedSwapPeriod> periods,ImmutableArray<ExactRatio> quantities,ScheduledPowerQuantityParameters? powerQuantity=null)
     {
         Require(periods.Length,quantities);
         if(periods.IsDefaultOrEmpty || periods.Any(p=>p is null) || periods.Any(p=>p.Quote!=periods[0].Quote || p.UnitQuantity!=periods[0].UnitQuantity))
@@ -26,16 +26,23 @@ internal static class SwapScheduledAssembly
         var prices=periods.Select(p=>p.Price).Distinct().ToArray();
         FixedPriceTerm price=prices.Length==1?new FlatPrice(prices[0]):
             new SteppedPrice([..periods.Select(p=>new PriceStep(p.Period.DeliveryFrom,p.Price))]);
-        return new(id,price,periods[0].Quote,periods[0].UnitQuantity,[..periods.Select((p,n)=>p.Period with{Allocation=quantities[n]})]);
+        RequirePolicies(periods.Select(p=>p.CalendarPolicy));
+        return new(id,price,periods[0].Quote,periods[0].UnitQuantity,[..periods.Select((p,n)=>p.Period with{Allocation=quantities[n],DeliveryCompletionAt=powerQuantity?.CompletionAt(p.Period.DeliveryTo)??p.Period.DeliveryCompletionAt})],periods[0].CalendarPolicy,powerQuantity);
     }
-    internal static FloatingSide Floating(Guid id,ImmutableArray<ResolvedFloatingSwapPeriod> periods,ImmutableArray<ExactRatio> quantities)
+    internal static FloatingSide Floating(Guid id,ImmutableArray<ResolvedFloatingSwapPeriod> periods,ImmutableArray<ExactRatio> quantities,ScheduledPowerQuantityParameters? powerQuantity=null)
     {
         Require(periods.Length,quantities);
         if(periods.IsDefaultOrEmpty || periods.Any(p=>p is null) || periods.Any(p=>p.Settlement!=periods[0].Settlement || p.Quote!=periods[0].Quote || p.UnitQuantity!=periods[0].UnitQuantity))
             throw new MarketDataException("swap_definition","Every floating period requires the same exact index, quote and external quantity basis.");
-        var resolved=periods.Select((p,n)=>p.Period with{Allocation=quantities[n]}).ToImmutableArray();
-        return periods[0].Settlement is {} settlement?new(id,settlement,periods[0].Quote,periods[0].UnitQuantity,resolved):
-            new(id,periods[0].Quote,periods[0].UnitQuantity,resolved);
+        var resolved=periods.Select((p,n)=>p.Period with{Allocation=quantities[n],DeliveryCompletionAt=powerQuantity?.CompletionAt(p.Period.DeliveryTo)??p.Period.DeliveryCompletionAt}).ToImmutableArray();
+        RequirePolicies(periods.Select(p=>p.CalendarPolicy));
+        return periods[0].Settlement is {} settlement?new(id,settlement,periods[0].Quote,periods[0].UnitQuantity,resolved,periods[0].CalendarPolicy,powerQuantity):
+            new(id,periods[0].Quote,periods[0].UnitQuantity,resolved,periods[0].CalendarPolicy,powerQuantity);
+    }
+    private static void RequirePolicies(IEnumerable<SideCalendarPolicy> policies)
+    {
+        if(policies.Select(DefinitionIdentity.For).Distinct().Count()!=1)
+            throw new MarketDataException("side_calendar_conflict","Every period must retain the whole Side's exact calendar policy.");
     }
     private static void Require(int periods,ImmutableArray<ExactRatio> quantities)
     {

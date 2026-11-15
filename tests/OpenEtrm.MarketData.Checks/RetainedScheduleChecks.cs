@@ -26,10 +26,10 @@ internal static class RetainedScheduleChecks
         var second=fixture.Swap(monthly:true,monthOrdinal:1).Fixed;
         var periods=ImmutableArray.Create(dated.Fixed.Periods[0],second.Periods[0]);
         var quote=fixture.Quote;var priceUnit=PriceUnit.FromQuote(quote);
-        var original=new FixedSide(Guid.NewGuid(),new FlatPrice(new(ExactDecimal.Parse("10"),priceUnit)),quote,dated.Fixed.UnitQuantity,periods);
+        var original=new FixedSide(Guid.NewGuid(),new FlatPrice(new(ExactDecimal.Parse("10"),priceUnit)),quote,dated.Fixed.UnitQuantity,periods,SyntheticSideCalendars.FixedPeriods(periods));
         var amended=new FixedSide(Guid.NewGuid(),new SteppedPrice([
             new(periods[0].DeliveryFrom,new(ExactDecimal.Parse("11"),priceUnit)),
-            new(periods[1].DeliveryFrom,new(ExactDecimal.Parse("10"),priceUnit))]),quote,dated.Fixed.UnitQuantity,periods);
+            new(periods[1].DeliveryFrom,new(ExactDecimal.Parse("10"),priceUnit))]),quote,dated.Fixed.UnitQuantity,periods,SyntheticSideCalendars.FixedPeriods(periods));
         var originalSecond=ScheduleDefinitionCompiler.Generate(original).Rows.Single(r=>r.Operation=="output_guard"&&r.PaymentOrdinal==1);
         var amendedSecond=ScheduleDefinitionCompiler.Generate(amended).Rows.Single(r=>r.Operation=="output_guard"&&r.PaymentOrdinal==1);
         if(originalSecond.OccurrenceKey!=amendedSecond.OccurrenceKey||originalSecond.TermsDigest!=amendedSecond.TermsDigest)
@@ -55,7 +55,7 @@ internal static class RetainedScheduleChecks
         var capacityPayment=ppaFixture.CapacityAgreement().Memberships[1].Side;
         var capacityIndex=ppaFixture.R("synthetic_capacity_index");
         var indexedCapacity=new FloatingSide(Guid.NewGuid(),capacityPayment.Terms,new(ppaFixture.C("synthetic_capacity"),
-            ExactDecimal.Parse("1"),new(default,ppaFixture.CapacityPrice),PriceSettlementSelection.CurveTarget(capacityIndex)));
+            ExactDecimal.Parse("1"),new(default,ppaFixture.CapacityPrice),PriceSettlementSelection.CurveTarget(capacityIndex)),SyntheticSideCalendars.Interval(capacityPayment.Terms,true));
         var indexedSchedule=ScheduleDefinitionCompiler.Generate(indexedCapacity);
         if(indexedSchedule.Rows.Where(row=>row.Operation=="price_lookup").Any(row=>
             !indexedSchedule.Bindings.Any(binding=>binding.Row==row.Ordinal&&binding.Kind=="index"&&binding.Reference==capacityIndex)))
@@ -78,7 +78,7 @@ internal static class RetainedScheduleChecks
         var retained=RetainedSideSchedules.Attach(instrument,definitions);
         var scope=new RetainedSideSchedules.ReadScope();var firstAttached=scope.Attach(instrument,definitions);
         var originalPayment=(FixedSide)instrument.Memberships[1].Side;
-        var otherPayment=new FixedSide(Guid.NewGuid(),originalPayment.Terms,new FlatPrice(new(ExactDecimal.Parse("42"),ppaFixture.EnergyPrice)));
+        var otherPayment=new FixedSide(Guid.NewGuid(),originalPayment.Terms,new FlatPrice(new(ExactDecimal.Parse("42"),ppaFixture.EnergyPrice)),SyntheticSideCalendars.Interval(originalPayment.Terms,false));
         var otherInstrument=new PpaInstrument(Guid.NewGuid(),ppaFixture.Definitions,ppaFixture.Reference,
             instrument.Memberships.SetItem(1,instrument.Memberships[1] with{Side=otherPayment}),false,PpaInstrument.Implementation);
         var otherDefinitions=definitions.Where(pair=>pair.Key!=originalPayment.Id).ToDictionary(pair=>pair.Key,pair=>pair.Value);
@@ -166,10 +166,10 @@ internal static class RetainedScheduleChecks
             var terms=member.Side.Terms with{Normalization=normalization,Quantity=member.Side.Terms.Quantity is VolumeQuantity?volume:member.Side.Terms.Quantity};
             Side side=member.Side switch
             {
-                PowerPhysicalSide power=>new PowerPhysicalSide(Guid.NewGuid(),terms,power.Location),
-                FixedSide fixedSide=>new FixedSide(Guid.NewGuid(),terms,fixedSide.Price),
+                PowerPhysicalSide power=>new PowerPhysicalSide(Guid.NewGuid(),terms,power.Location,SyntheticSideCalendars.Interval(terms,false)),
+                FixedSide fixedSide=>new FixedSide(Guid.NewGuid(),terms,fixedSide.Price,SyntheticSideCalendars.Interval(terms,false)),
                 CertificateDeliverySide certificate=>new CertificateDeliverySide(Guid.NewGuid(),terms,certificate.CertificateQuantity,certificate.Conversion,
-                    certificate.Eligibility,certificate.Holding,certificate.Disposition),
+                    certificate.Eligibility,certificate.Holding,certificate.Disposition,SyntheticSideCalendars.Interval(terms,false)),
                 _=>throw new Exception("Unexpected synthetic member.")
             };
             return member with{Side=side};
@@ -187,8 +187,8 @@ internal static class RetainedScheduleChecks
     {
         var terms=fixture.Terms(fixture.Profile);
         var instrument=new PpaInstrument(Guid.NewGuid(),fixture.Definitions,fixture.Reference,
-            [new(new(PpaRole.IndexedPayment),new FloatingSide(Guid.NewGuid(),terms,new(fixture.C("synthetic_energy"),ExactDecimal.Parse("1"),new(default,fixture.EnergyPrice),null)),ExactDecimal.Parse("1")),
-             new(new(PpaRole.StrikePayment),new FixedSide(Guid.NewGuid(),terms,new FlatPrice(new(ExactDecimal.Parse("40"),fixture.EnergyPrice))),ExactDecimal.Parse("-1"))],
+            [new(new(PpaRole.IndexedPayment),new FloatingSide(Guid.NewGuid(),terms,new(fixture.C("synthetic_energy"),ExactDecimal.Parse("1"),new(default,fixture.EnergyPrice),null),SyntheticSideCalendars.Interval(terms,true)),ExactDecimal.Parse("1")),
+             new(new(PpaRole.StrikePayment),new FixedSide(Guid.NewGuid(),terms,new FlatPrice(new(ExactDecimal.Parse("40"),fixture.EnergyPrice)),SyntheticSideCalendars.Interval(terms,false)),ExactDecimal.Parse("-1"))],
             false,PpaInstrument.Implementation);
         var retained=RetainedSideSchedules.Attach(instrument,instrument.Sides.ToDictionary(m=>m.Side.Id,m=>ScheduleDefinitionCompiler.Generate(m.Side)));
         var market=fixture.Market(fixture.From.AddDays(-1));var inputs=fixture.Prepare(market,[retained]);
@@ -223,8 +223,8 @@ internal static class RetainedScheduleChecks
     {
         var terms=fixture.Terms(fixture.Profile);
         var floating=new FloatingSide(Guid.NewGuid(),terms,new(fixture.C("synthetic_energy"),ExactDecimal.Parse("1"),
-            new(ExactDecimal.Parse("1"),fixture.EnergyPrice),null));
-        var fixedSide=new FixedSide(Guid.NewGuid(),terms,new FlatPrice(new(ExactDecimal.Parse("40"),fixture.EnergyPrice)));
+            new(ExactDecimal.Parse("1"),fixture.EnergyPrice),null),SyntheticSideCalendars.Interval(terms,true));
+        var fixedSide=new FixedSide(Guid.NewGuid(),terms,new FlatPrice(new(ExactDecimal.Parse("40"),fixture.EnergyPrice)),SyntheticSideCalendars.Interval(terms,false));
         var instrument=new PpaInstrument(Guid.NewGuid(),fixture.Definitions,fixture.Reference,
             [new(new(PpaRole.IndexedPayment),floating,ExactDecimal.Parse("1")),new(new(PpaRole.StrikePayment),fixedSide,ExactDecimal.Parse("-1"))],
             false,PpaInstrument.Implementation);

@@ -42,31 +42,21 @@ def run_checks(url,query,manifest,dotnet,owned_root,app_environment,psql,environ
     day_start=datetime.fromisoformat(day).replace(tzinfo=ZoneInfo('America/New_York')).astimezone(timezone.utc)
     original_actual=collector.publish('energy',day,day_start,24,60,['40']*24,1)
     held_trade,_=fixture.book_resuming(terms(manifest,first=dates['first'],last=dates['last']),first,last,book=held_book)
-    # Deliberately incomplete artifacts must refuse valuation and risk admission.
-    # Seed current terms only in this owned negative fixture, with the named
-    # artifact trigger restored before commit. This does not qualify booking or
-    # valuation of a 20-year stored graph. CloseRiskPreflightChecks independently
-    # verifies the row-scenario bound without allocating retained storage.
+    # Remove only the owned fixture's retained relationships after valid managed
+    # admission. Risk must reject the missing artifacts without partial totals.
+    # The independent managed preflight check covers the 20-year resource bound.
     large_book=str(uuid4())
-    query(f"INSERT INTO trading.books VALUES('{manifest['catalogId']}','{large_book}','d0000000-0000-0000-0000-000000000001','Synthetic admission bound',1,'2020-01-01T00:00:00Z');")
-    long_terms=terms(manifest,first='2031-11-01',last='2051-11-01')
-    for strike in ('40','41'):
+    query(f"INSERT INTO trading.books VALUES('{manifest['catalogId']}','{large_book}','d0000000-0000-0000-0000-000000000001','Synthetic missing schedule admission',1,'2020-01-01T00:00:00Z');")
+    long_terms=terms(manifest)
+    for strike in ('81','82'):
         long_terms['memberships'][1]['side']['fixedPrice']['price']=strike
-        incomplete=fixture.booking_request(long_terms,'2031-11-01T04:00:00Z','2051-11-01T04:00:00Z',book=large_book)
-        token=query("SET SESSION AUTHORIZATION preview_authenticator; SELECT security.issue_context("
-            f"'https://preview.invalid','trader','human_interactive','{manifest['tenantId']}','{manifest['workspaceId']}',NULL,'preview_runtime',60);")
-        valuation=next(frame['at'] for frame in fixture.client.call('workspace')['frames'] if frame['id']==fixture.frame)
-        payload={'action':'booked',**{key:incomplete[key] for key in ('snapshotId','tradeId','expectedRevision','bookId','boundaryAt',
-            'coverageFrom','coverageTo','quantity','reason','memo','booking','terms')},'valuationAt':valuation,'effectiveAt':valuation}
-        document=json.dumps(payload).replace("'","''")
+        incomplete,_=fixture.book_resuming(long_terms,'2031-11-02T04:00:00Z','2031-11-03T05:00:00Z',book=large_book)
         query(f"""BEGIN;
-            ALTER TABLE trading.ppa_instruments DISABLE TRIGGER retained_side_schedules;
-            SET SESSION AUTHORIZATION preview_runtime; SELECT security.use_context('{token}');
-            SELECT security.save_ppa_booking('{manifest['catalogId']}','{incomplete['operationId']}','{document}'::jsonb);
-            RESET SESSION AUTHORIZATION;
-            ALTER TABLE trading.ppa_instruments ENABLE TRIGGER retained_side_schedules;
+            ALTER TABLE trading.instrument_side_schedules DISABLE TRIGGER USER;
+            DELETE FROM trading.instrument_side_schedules WHERE instrument_id='{incomplete['bindings'][0]['instrumentId']}'::uuid;
+            ALTER TABLE trading.instrument_side_schedules ENABLE TRIGGER USER;
             COMMIT;""")
-    assert query("SELECT t.tgenabled FROM pg_trigger t WHERE t.tgrelid='trading.ppa_instruments'::regclass AND t.tgname='retained_side_schedules';")=='O'
+    assert query("SELECT bool_and(tgenabled='O') FROM pg_trigger WHERE tgrelid='trading.instrument_side_schedules'::regclass AND NOT tgisinternal;")=='t'
     incomplete_ids=set(json.loads(query(f"SELECT json_agg(trade_id) FROM trading.ppa_trade_revisions WHERE book_id='{large_book}';")))
     assert len(incomplete_ids)==2
     incomplete_preview=fixture.preview(long_terms,scope='books',ids=[large_book],expected=422)

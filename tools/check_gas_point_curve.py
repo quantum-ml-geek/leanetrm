@@ -4,6 +4,7 @@ from decimal import Decimal
 from uuid import uuid4
 from preview_client import PreviewClient,initial_frame
 from preview_fixture import gas_purchase
+from synthetic_side_calendars import side_calendar_policy
 
 def run_checks(url,query,manifest):
  c=PreviewClient(url);c.bootstrap();c.call('profile',{'profile':'editor'})
@@ -41,6 +42,7 @@ def run_checks(url,query,manifest):
  booked=c.call('gas/composition/book',body);assert c.call('gas/composition/book',body)==booked
  indexed=deepcopy(body);indexed['operationId']=str(uuid4());indexed['profile']='indexed_gas_composition_v1'
  indexed['cashSides']=[{'code':'payment','role':'indexed_consideration','direction':'pay','source':'gas','stage':'delivery','price':None,'tariffCode':None,'paymentAt':None,
+  'calendarPolicy':side_calendar_policy(body['physicalSides'][0]['calendarPolicy']['delivery']['calendar'],delivery=True,observation=True,payment=True),
   'indexed':{'index':None,'observationConvention':'point_publications_v1','paymentConvention':'next_month_day_utc_v1','paymentDay':5,'spread':'0','forecastCurve':None}}]
  projected=c.call('gas/composition/preview',indexed)
  assert Decimal(projected['sides'][1]['presentValue'])==Decimal('-6600'),projected['sides'][1]

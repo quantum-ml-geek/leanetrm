@@ -105,7 +105,7 @@ def run_checks(url, query, manifest, booked):
     before_frame=initial_frame(c.call('workspace'),'2020-12-18')
     before={**context,'snapshotId':before_frame['id']}
     terms=c.call('crude/editor',dict(context=before,tradeId=booked['tradeId']))['terms']
-    tiny=c.call('crude/book',{**terms,'operationId':str(uuid4()),'quantity':'1','fixedPrice':'0.01','handlingFee':None,'handlingFeeDirection':None})
+    tiny=c.call('crude/book',{**terms,'operationId':str(uuid4()),'quantity':'1','fixedPrice':'0.01','handlingFee':None,'handlingFeeDirection':None,'feeCalendarPolicy':None,'handlingFeePaymentAt':None})
     trade=tiny['tradeId']
     receipts=[c.call('crude/operations/receipt',command('half-receipt-'+str(n),quantity='0.5',titleTransferred=True,disposition='owned_inventory',saleTradeId=None,saleRevision=None)) for n in range(2)]
     first_half=invoice(receipts[0]['eventId'],'half-invoice-first','0')

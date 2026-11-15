@@ -11,7 +11,6 @@ export function ppaQuantityEditor(host:HTMLElement,catalog:Catalog,template:Memb
  <label data-mode="profile">Capacity specification<select data-q="capacity"></select></label>
  <label data-mode="profile">Energy specification<select data-q="energy"></select></label>
  <label data-mode="profile">Hours<select data-q="membership"></select></label>
- <label data-mode="profile">Holiday calendar<select data-q="calendar"></select></label>
  <label data-mode="profile" data-tou>TOU product · version resolved from context<select data-q="tou"></select></label>
  <label data-mode="accredited">Accredited assets<select data-q="assets" multiple size="3"></select></label>
  <label data-mode="slots">Quantity source sides<select data-q="slot" multiple size="3"></select></label></div>`;
@@ -23,7 +22,7 @@ export function ppaQuantityEditor(host:HTMLElement,catalog:Catalog,template:Memb
  const rows=(values:Record<string,unknown>[])=>values.map(r=>({value:String(r.code),label:String(r.name??friendly(String(r.code)))}));
  const enums=(key:string,values:string[])=>offer(key,values.map(value=>({value,label:friendly(value)})));
  enums('kind',template.quantityKinds);enums('stage',catalog.authoringPolicies.quantityStages);enums('membership',catalog.authoringPolicies.hourMemberships);
- offer('capacity',quantityChoices(catalog.references.quantityGroups.contract,catalog.references.units));offer('energy',quantityChoices(catalog.references.quantityGroups.energy,catalog.references.units));offer('calendar',rows(catalog.references.calendars));
+ offer('capacity',quantityChoices(catalog.references.quantityGroups.contract,catalog.references.units));offer('energy',quantityChoices(catalog.references.quantityGroups.energy,catalog.references.units));
  let retainedSlots=initial?.slots.map(s=>JSON.stringify(s));
  function refreshChoices(){const d=delivery(),selectedTou=field('tou').value;
   offer('sources',rows(catalog.definitionsMetadata.volumeSources.filter(r=>r.clock_code===d.clock&&String(r.interval_minutes)===d.cadence)));
@@ -39,11 +38,11 @@ export function ppaQuantityEditor(host:HTMLElement,catalog:Catalog,template:Memb
  const selected=(key:string)=>{const chosen=[...field(key).selectedOptions].map(o=>o.value),retained=key==='slot'?initial?.slots.map(s=>JSON.stringify(s)):key==='sources'?initial?.sources:key==='assets'?initial?.assets:undefined;return retained&&retained.length===chosen.length&&retained.every(s=>chosen.includes(s))?[...retained]:chosen;};
  function read():Quantity{const kind=value('kind'),q:Quantity={kind,sources:[],stage:null,capacity:null,energy:null,hours:null,slots:[],assets:[]};
   if(kind==='volume'){q.sources=selected('sources');if(!q.sources.length)throw Error('Select volume sources for this side.');q.stage=value('stage');}
-  else if(kind==='profile'){const membership=value('membership'),tou=membership==='all'?null:JSON.parse(value('tou'));q.capacity=value('capacity');q.energy=value('energy');q.hours={membership,calendar:value('calendar'),touProduct:tou?.[0]??null,touVersion:tou?.[1]??null};}
+  else if(kind==='profile'){const membership=value('membership'),tou=membership==='all'?null:JSON.parse(value('tou'));q.capacity=value('capacity');q.energy=value('energy');q.hours={membership,calendar:null,touProduct:tou?.[0]??null,touVersion:tou?.[1]??null};}
   else if(kind==='accredited'){q.assets=selected('assets');if(!q.assets.length)throw Error('Select accredited assets for this side.');}
   else if(kind==='slots'){q.slots=selected('slot').map(s=>JSON.parse(s));if(!q.slots.length)throw Error('Select the delivery sides supplying this quantity.');}
   else throw Error('Choose an admitted quantity source.');if(q.kind==='profile'&&initial?.hourlyProfile)q.hourlyProfile=structuredClone(initial.hourlyProfile);return q;
  }
- refreshChoices();if(initial){const values={kind:initial.kind,stage:initial.stage,capacity:initial.capacity,energy:initial.energy,membership:initial.hours?.membership,calendar:initial.hours?.calendar,tou:initial.hours?.touProduct?JSON.stringify([initial.hours.touProduct,initial.hours.touVersion]):''};for(const [key,v]of Object.entries(values))field(key).value=v??'';for(const key of ['sources','assets'] as const)for(const o of field(key).options)o.selected=initial[key].includes(o.value);}
- sync();return{read,sync,linkedSlots:()=>field('kind').value==='slots'?selected('slot').map(s=>JSON.parse(s) as Slot):[]};
+ refreshChoices();if(initial){const values={kind:initial.kind,stage:initial.stage,capacity:initial.capacity,energy:initial.energy,membership:initial.hours?.membership,tou:initial.hours?.touProduct?JSON.stringify([initial.hours.touProduct,initial.hours.touVersion]):''};for(const [key,v]of Object.entries(values))field(key).value=v??'';for(const key of ['sources','assets'] as const)for(const o of field(key).options)o.selected=initial[key].includes(o.value);}
+ sync();return{read,sync,kind:()=>field('kind').value,product:()=>field('kind').value==='profile'&&field('membership').value!=='all'?catalog.touVersions.find(r=>JSON.stringify([r.id,r.version])===field('tou').value):undefined,linkedSlots:()=>field('kind').value==='slots'?selected('slot').map(s=>JSON.parse(s) as Slot):[]};
 }

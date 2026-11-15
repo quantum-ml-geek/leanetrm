@@ -27,7 +27,12 @@ def run_checks(Client, check):
     catalog = viewer.call('power/catalog', {'snapshotId': frame['id']})
     check('the power calculation offers exactly the published products', {p['code'] for p in catalog['products']} == SEEDED)
     draft_body = {'code': 'synthetic_peak', 'name': 'Synthetic weekday peak', 'clock': clock,
-                  'peakStartHour': 8, 'peakEndHour': 20, 'peakSaturday': False}
+                  'peakStartHour': 8, 'peakEndHour': 20, 'peakSaturday': False,
+                  'calendar': pjm['calendar'], 'holidayTreatment': 'weekly_mask_explicit_closures_v1'}
+    for field in ('calendar', 'holidayTreatment'):
+        incomplete = {key: value for key, value in draft_body.items() if key != field}
+        error = editor.call('tou-products/save', incomplete, expected=400)
+        check('TOU authoring requires explicit ' + field, error['code'] == 'request_format')
     viewer.call('tou-products/save', draft_body, expected=403)
     check('readers cannot save TOU products')
     for changed, code in [({**draft_body, 'peakStartHour': 20}, 'tou_definition'), ({**draft_body, 'peakEndHour': 25}, 'tou_definition'),

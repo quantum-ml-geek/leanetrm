@@ -1,4 +1,5 @@
 """Exact party versions belong to retained trades, never reusable instruments."""
+from synthetic_side_calendars import all_dates_policy
 from uuid import uuid4
 import json
 from preview_client import PreviewClient
@@ -53,8 +54,8 @@ def run_checks(url, query, manifest, client=None):
             'implementation': 'monthly_payment_date_rules_v1'}
     swap = {**swap_context, **booking(), 'operationId': str(uuid4()), 'bookId': body['bookId'],
             'definitionRevisionId': index['definitionRevisionId'], 'commodity': index['commodity'], 'quantity': '100', 'fixedCoefficient': '-1', 'discounting': False,
-            'fixed': {'price': '3', 'currency': index['currencyCode'], 'deliveryFrom': '2021-01-01', 'deliveryTo': '2021-02-01', 'paymentSchedule': rule},
-            'floating': {'spread': '0', 'settlement': {'mode': 'curve_target', 'index': None, 'projectionPolicy': None}, 'curve': index['curve'], 'index': index['index'], 'currency': index['currencyCode'],
+            'fixed': {'calendarPolicy': all_dates_policy(observation=False), 'price': '3', 'currency': index['currencyCode'], 'deliveryFrom': '2021-01-01', 'deliveryTo': '2021-02-01', 'paymentSchedule': rule},
+            'floating': {'calendarPolicy': all_dates_policy(observation=True), 'spread': '0', 'settlement': {'mode': 'curve_target', 'index': None, 'projectionPolicy': None}, 'curve': index['curve'], 'index': index['index'], 'currency': index['currencyCode'],
                          'deliveryFrom': '2021-01-01', 'deliveryTo': '2021-02-01',
                          'paymentSchedule': rule, 'resetFrequency': 'monthly', 'averagingMethod': 'none'}}
     c.call('swaps/preview', swap); booked = c.call('swaps/book', swap)

@@ -1,4 +1,5 @@
-import {exactText,type Exact,type Reference} from './ppa-view.js';
+import {contractDateEvidence} from './payment-date.js';
+import {exactText,scheduleValueDate,type Exact,type Reference} from './ppa-view.js';
 import {palette} from './chart-view.js';
 export type Price=Exact&{unit:{currency:Reference;quantity:Reference;multiplier:string}};
 export type PricingPeriod={sideRole?:string;slot:{role:number;ordinal:number};month:string;kind:string;quantityState:string;economicClass:string;coverage:string;valueAt:string;coefficient:string;quantity:Exact&{specification:Reference};amount:Exact;presentValue:Exact|null;effectivePrice:Price|null};
@@ -40,7 +41,7 @@ function chart(host:HTMLElement,title:string,unit:string,series:Series[],numeric
  const legend=document.createElement('p');legend.className='field-help';legend.textContent=series.map(s=>s.name).join(' • ');card.append(legend);host.append(card);
 }
 function table(host:HTMLElement,headers:string[],rows:string[][]){const wrap=document.createElement('div');wrap.className='table-wrap';const t=document.createElement('table');const head=document.createElement('thead'),body=document.createElement('tbody'),tr=document.createElement('tr');for(const h of headers){const th=document.createElement('th');th.textContent=h;th.scope='col';tr.append(th);}head.append(tr);for(const row of rows){const tr=document.createElement('tr');for(const v of row){const td=document.createElement('td');td.textContent=v;tr.append(td);}body.append(tr);}t.append(head,body);wrap.append(t);host.append(wrap);}
-export function renderPricing(host:HTMLElement,p:PricingResult,quantityLabel:(r:Reference)=>string){
+export function renderPricing(host:HTMLElement,p:PricingResult,quantityLabel:(r:Reference)=>string,zone:string){
  host.replaceChildren();const title=document.createElement('h3');title.textContent=p.label;host.append(title);
  const currency=p.price.unit.currency.code.toUpperCase(),quoteUnit=`${currency} / ${quantityLabel(p.price.unit.quantity)} × ${p.price.unit.multiplier}`;
  const note=document.createElement('p');note.textContent=`Unbooked draft · ${p.quantity} MW · ${p.coverage.from} to ${p.coverage.to} exclusive. ${p.measure}: ${p.measureDefinition} All other terms and inputs held fixed. No commercial risk premium. No trade is changed.`;host.append(note);
@@ -61,7 +62,7 @@ export function renderPricing(host:HTMLElement,p:PricingResult,quantityLabel:(r:
  // A separate labelled point guarantees the exact root is visible even when the entered strike overlaps it.
  const mark=document.createElement('p');mark.className='ppa-root-marker';mark.textContent='Model break-even point: '+exactText(p.price)+' '+quoteUnit+' → 0 '+currency;host.append(mark);
  const details=document.createElement('details');const summary=document.createElement('summary');summary.textContent='Exact monthly values and classifications';details.append(summary);host.append(details);
- table(details,['Month','Side','Quantity state','Class / coverage','Quantity','Effective price','Gross amount','PV','Payment / value at'],periods.map(r=>[r.month,`${r.sideRole??r.kind} ${r.slot.ordinal}`,r.quantityState,r.economicClass+' / '+r.coverage,exactText(r.quantity)+' '+quantityLabel(r.quantity.specification),exactText(r.effectivePrice),exactText(r.amount),exactText(r.presentValue),r.valueAt]));
+ table(details,['Month','Side','Quantity state','Class / coverage','Quantity','Effective price','Gross amount','PV','Payment date / value instant'],periods.map(r=>[r.month,`${r.sideRole??r.kind} ${r.slot.ordinal}`,r.quantityState,r.economicClass+' / '+r.coverage,exactText(r.quantity)+' '+quantityLabel(r.quantity.specification),exactText(r.effectivePrice),exactText(r.amount),exactText(r.presentValue),scheduleValueDate(r,zone)]));
  table(details,['Strike point','Exact strike','Selected value'],curve.map(c=>[c.label,exactText(c.strike),exactText(c.value)]));
- const receipt=document.createElement('details'),summary2=document.createElement('summary'),pre=document.createElement('pre');summary2.textContent='Complete input receipt, assumptions and exclusions';pre.className='ppa-evidence';pre.textContent=JSON.stringify({receipt:p.receipt,assumptions:p.assumptions,exclusions:p.exclusions},null,2);receipt.append(summary2,pre);host.append(receipt);
+ const receipt=document.createElement('details'),summary2=document.createElement('summary'),pre=document.createElement('pre');summary2.textContent='Complete input receipt, assumptions and exclusions';pre.className='ppa-evidence';pre.textContent=JSON.stringify(contractDateEvidence({receipt:p.receipt,assumptions:p.assumptions,exclusions:p.exclusions}),null,2);receipt.append(summary2,pre);host.append(receipt);
 }

@@ -109,8 +109,8 @@ internal static class SeriesIndexAcceptanceChecks
             var secondDelivery=f.Delivery with{IntervalMinutes=15};
             var secondTerms=f.Terms(new VolumeQuantity([secondSource.Key],QuantityStage.Generated,f.Energy.Key)) with{Delivery=secondDelivery,
                 Schedule=new(secondDelivery,f.Clock,IntervalScheduleCadence.NativeIntervals,new(BlockMembership.All,null,[]))};
-            var physical=new PowerPhysicalSide(Guid.NewGuid(),secondTerms,f.Asset.Location);
-            var strike=new FixedSide(Guid.NewGuid(),secondTerms with{Quantity=new SlotQuantity([new(PpaRole.EnergyDelivery)]),InputPorts=[new(new(PpaRole.EnergyDelivery),f.Energy.Key,secondTerms.Schedule)]},new FlatPrice(new(D("40"),f.EnergyPrice)));
+            var physical=new PowerPhysicalSide(Guid.NewGuid(),secondTerms,f.Asset.Location,SyntheticSideCalendars.Interval(secondTerms,false));
+            var strike=new FixedSide(Guid.NewGuid(),secondTerms with{Quantity=new SlotQuantity([new(PpaRole.EnergyDelivery)]),InputPorts=[new(new(PpaRole.EnergyDelivery),f.Energy.Key,secondTerms.Schedule)]},new FlatPrice(new(D("40"),f.EnergyPrice)),SyntheticSideCalendars.Interval(secondTerms with{Quantity=new SlotQuantity([new(PpaRole.EnergyDelivery)]),InputPorts=[new(new(PpaRole.EnergyDelivery),f.Energy.Key,secondTerms.Schedule)]},false));
             var second=new PpaInstrument(Guid.NewGuid(),f.Definitions,f.Reference,[new(new(PpaRole.EnergyDelivery),physical,D("1")),new(new(PpaRole.StrikePayment),strike,D("-1"))],false,PpaInstrument.Implementation);
             var meter=new QuantitySeries(secondSource.MeteredSeries,"metered_energy",f.Source.Clock,15,f.Energy.Key,[]);
             // The first instrument populates the hourly forecast index. The second

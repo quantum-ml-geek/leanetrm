@@ -6,15 +6,20 @@ using OpenEtrm.MarketData.Risk;
 
 namespace OpenEtrm.MarketData.Trading;
 
+public enum ValueTimingKind { UtcPaymentDay = 1, Instant }
+
 public readonly record struct SidePaymentKey(Guid SideId, int Ordinal, DateTimeOffset PaymentAt, ReferenceKey Currency)
 {
+    public ValueTimingKind Timing { get; init; } = ValueTimingKind.UtcPaymentDay;
+    public bool OnPaymentDay(DateTimeOffset at)=>Timing==ValueTimingKind.UtcPaymentDay&&PaymentDatePolicy.SameDay(PaymentAt,at);
+    public bool ReachedValuationBoundary(DateTimeOffset at)=>Timing==ValueTimingKind.Instant?PaymentAt<=at:PaymentDatePolicy.IsOverdue(PaymentAt,at);
     public void RequireUndue(MarketSnapshot snapshot)
     {
         if(snapshot is null)throw new MarketDataException("side_context","An explicit valuation snapshot is required.");
-        if(SideId==Guid.Empty || Ordinal<0 || !TradingInstant.IsSupported(PaymentAt) || Currency.Revision.CatalogId==Guid.Empty ||
+        if(!Enum.IsDefined(Timing) || SideId==Guid.Empty || Ordinal<0 || !TradingInstant.IsSupported(PaymentAt) || Currency.Revision.CatalogId==Guid.Empty ||
             Currency.Revision.RevisionId==Guid.Empty || string.IsNullOrWhiteSpace(Currency.Code))
             throw new MarketDataException("side_payment_factors","Supply an exact side, ordinal, UTC value instant and currency reference.");
-        if(snapshot.ValuationAt>=PaymentAt)throw new MarketDataException("side_payment_due","A due side value requires explicit lifecycle treatment, not a discount factor.");
+        if(ReachedValuationBoundary(snapshot.ValuationAt))throw new MarketDataException("side_payment_due","An overdue side value requires explicit lifecycle treatment, not a discount factor.");
     }
 }
 public sealed record IndexPriceLookup(PriceSettlementSelection Settlement, QuoteSpecification Quote, CurveRequest Market,
@@ -39,7 +44,7 @@ public sealed record IndexPriceLookup(PriceSettlementSelection Settlement, Quote
         ProjectionInterval is not null?throw new MarketDataException("custom_projection","An explicit forecast interval requires its selected curve binding."):Market;
 }
 public enum SchedulePriceState { Fixed = 1, Projected, Actual }
-public enum DiscountFactorSource { Explicit = 1, CurrencyDefault, Undiscounted }
+public enum DiscountFactorSource { Explicit = 1, CurrencyDefault, Undiscounted, PaymentDay }
 public sealed record DiscountClockRoll(string Policy,DateTimeOffset CalculationAt,ExactDecimal SourceFactor,
     ExactDecimal AnchorFactor,ImmutableArray<ObservationKey> AnchorObservations)
 {
@@ -51,6 +56,15 @@ public sealed record SidePaymentFactor(SidePaymentKey Payment, ExactDecimal Disc
 {
     public RateDiscountDefinition? RateDefinition { get; init; }
     public DiscountClockRoll? ClockRoll {get;init;}
+    internal bool HasValidPaymentDayTerms(DateTimeOffset calculationAt)
+    {
+        if(Snapshot is null||!Enum.IsDefined(Source)||!Enum.IsDefined(Payment.Timing)||
+            ClockRoll is {} roll&&roll.CalculationAt!=calculationAt||
+            ClockRoll is null&&calculationAt!=Snapshot.ValuationAt&&RateDefinition?.Timing is null)return false;
+        var today=Payment.OnPaymentDay(calculationAt);
+        return (!today||DiscountFactor==ExactDecimal.Parse("1"))&&
+            (Source!=DiscountFactorSource.PaymentDay||today&&DiscountFactor==ExactDecimal.Parse("1")&&RateDefinition is null);
+    }
 }
 
 public sealed record DiscountInput(SidePaymentKey Payment,[property:System.Text.Json.Serialization.JsonIgnore] ISideDiscounting Provider)
@@ -93,7 +107,7 @@ public sealed class ExplicitDiscounting : ISideDiscounting
         if(source!=DiscountFactorSource.Undiscounted)
             throw new MarketDataException("discount_roll_unsupported","A scalar discount factor does not define a dated curve roll.");
         var factors=Resolve(payments,snapshot);
-        if(payments.Any(p=>p.PaymentAt<=calculationAt))throw new MarketDataException("valuation_time_event","The clock crosses a payment event.");
+        if(payments.Any(p=>p.ReachedValuationBoundary(calculationAt)))throw new MarketDataException("valuation_time_event","The clock crosses a payment event.");
         return [..factors.Select(f=>f with{ClockRoll=new(clockPolicy,calculationAt,f.DiscountFactor,ExactDecimal.Parse("1"),[])})];
     }
     public ImmutableArray<SidePaymentFactor> Resolve(SidePaymentSchedule schedule, MarketSnapshot snapshot) =>
@@ -104,7 +118,8 @@ public sealed class ExplicitDiscounting : ISideDiscounting
         if(payments.IsDefault || payments.Distinct().Count()!=payments.Length)
             throw new MarketDataException("side_payment_factors","Supply distinct exact side value keys.");
         foreach(var payment in payments)payment.RequireUndue(snapshot);
-        return payments.Select(p=>new SidePaymentFactor(p,factor,snapshot,source)).ToImmutableArray();
+        return payments.Select(p=>new SidePaymentFactor(p,p.OnPaymentDay(snapshot.ValuationAt)?ExactDecimal.Parse("1"):factor,snapshot,
+            source!=DiscountFactorSource.Undiscounted&&p.OnPaymentDay(snapshot.ValuationAt)?DiscountFactorSource.PaymentDay:source)).ToImmutableArray();
     }
 }
 
@@ -434,7 +449,7 @@ public sealed record SidePaymentSchedule : SideSchedule
     }
     private static void RequireUndue(ScheduleRow payment, MarketSnapshot snapshot)
     {
-        if (snapshot.ValuationAt >= payment.PaymentAt)
+        if (PaymentDatePolicy.IsOverdue(payment.PaymentAt,snapshot.ValuationAt))
             throw new MarketDataException("side_payment_due", "A due side payment requires explicit lifecycle state before valuation.");
     }
     public override PaymentSideValuation Evaluate(SideValuationContext context)
@@ -453,7 +468,7 @@ public sealed record SidePaymentSchedule : SideSchedule
     {
         var factors=context.Discounting.Resolve(keys,context.Snapshot);
         if (factors.IsDefault || factors.Length != keys.Length || factors.Any(f => f is null ||
-            f.DiscountFactor.CompareTo(default) <= 0 || !Enum.IsDefined(f.Source) ||
+            f.DiscountFactor.CompareTo(default) <= 0 || !Enum.IsDefined(f.Source) || !f.HasValidPaymentDayTerms(context.Snapshot.ValuationAt) ||
             f.Source == DiscountFactorSource.Undiscounted && f.DiscountFactor != ExactDecimal.Parse("1") ||
             !context.Snapshot.HasSameInputs(f.Snapshot)) || factors.Select(f => f.Payment).Distinct().Count() != factors.Length ||
             !factors.Select(f => f.Payment).ToHashSet().SetEquals(keys))
@@ -471,15 +486,15 @@ public sealed record SidePaymentSchedule : SideSchedule
             var final=state.FinalAt(n,context.Snapshot);
             var cash=final?.Evidence??new SidePaymentCash(payment,payment.Prices.Select(context.Resolve).ToImmutableArray());
             var fixedPrice=cash.Prices.All(p=>p.State!=SchedulePriceState.Projected);
-            var due=payment.PaymentAt<=context.Snapshot.ValuationAt;
-            if(due&&!fixedPrice)throw new MarketDataException("settlement_not_final","Undetermined due cash requires established final prices.");
+            var due=PaymentDatePolicy.IsOverdue(payment.PaymentAt,context.Snapshot.ValuationAt);
+            if(due&&!fixedPrice)throw new MarketDataException("settlement_not_final","Undetermined overdue cash requires established final prices.");
             var paid=state.PaidAt(final,context.Snapshot,cash.CashAmount);var outstanding=cash.CashAmount.Subtract(paid);
             var status=!fixedPrice?CashPaymentState.Projected:cash.CashAmount==zero?CashPaymentState.NoAmountDue:
                 outstanding==zero?CashPaymentState.Paid:due?paid==zero?CashPaymentState.Overdue:CashPaymentState.PartPaidOverdue:
                 paid==zero?CashPaymentState.FixedUnpaid:CashPaymentState.PartPaid;
             return(Cash:cash,Balance:new CashPaymentBalance(final?.Id,paid,outstanding,status));
         }).ToImmutableArray();
-        var keys=resolved.Where(r=>r.Cash.Plan.PaymentAt>context.Snapshot.ValuationAt&&r.Balance.Outstanding!=zero).Select(r=>r.Cash.Plan.Key).ToImmutableArray();
+        var keys=resolved.Where(r=>!PaymentDatePolicy.IsDue(r.Cash.Plan.PaymentAt,context.Snapshot.ValuationAt)&&r.Balance.Outstanding!=zero).Select(r=>r.Cash.Plan.Key).ToImmutableArray();
         var factors=ResolveFactors(context,keys);
         var rows=resolved.Select(r=>
         {

@@ -67,7 +67,7 @@ internal static partial class FuturesMarginPortfolio
             var market=FuturesExecution.Require(holding).MarketBinding;var key=new MeasureBinding(trade.Id,holding.Id);var actual=accepted[key];
             var completed=actual.History.Determinations.Select(d=>d.OccurrenceId).ToImmutableArray();
             var next=FuturesMarginSchedule.NextUnsettled(actual.History.Terms.Policy,actual.History.Terms.ExecutedAt,completed,snapshot.ValuationAt);
-            if(next is not null&&next.DueAt>snapshot.ValuationAt)pending.Add((market.Instrument.Id,new(market.Instrument.Id,0,next.DueAt,market.Instrument.Currency)));
+            if(next is not null&&next.DueAt>snapshot.ValuationAt)pending.Add((market.Instrument.Id,new(market.Instrument.Id,0,next.DueAt,market.Instrument.Currency){Timing=ValueTimingKind.Instant}));
             var binding=new FuturesMarginValueBinding(actual.History.Terms,completed,selected.VariationMargin);
             if(profiles.TryGetValue(key,out var profile))
             {

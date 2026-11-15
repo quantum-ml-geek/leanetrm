@@ -1,3 +1,4 @@
+import {displayPaymentDate} from './payment-date.js';
 import {renderDataGrid,emptyGridLayout,type GridHandle,type GridLayout} from './data-grid.js';
 import {actorTransport,PendingCommand,type RequestCommand} from './pending-command.js';
 import {askInPanel} from './side-panel.js';
@@ -102,7 +103,7 @@ export function setupLifecycle(root:HTMLElement,o:{api:Api;act:(work:()=>Promise
   if(request.action==='swap.determine'&&d.calculation&&typeof d.calculation==='object'){
    const calculation=d.calculation as Record<string,unknown>,currency=calculation.currency as {code?:string}|undefined;
    add('New contractual total',calculation.amount);add('Previous contractual total',d.previousTotal);add('New contribution',d.proposedContribution);add('Currency',currency?.code?.toUpperCase());
-   if(typeof calculation.paymentAt==='string')add('Contractual payment time',instant(calculation.paymentAt));
+   if(typeof calculation.paymentAt==='string')add('Contractual payment date',displayPaymentDate(calculation.paymentAt));
   }
   const net=request.action==='swap.net'?d.settlement as Record<string,unknown>|undefined:undefined;
   if(net){if(net.existingFact===true)add('Effect','Already recorded · no new cash or allocation');add('Net cash',net.amount);add('Gross paid',net.grossPaid);add('Gross received',net.grossReceived);add('Reverses payment',net.reversesId);}

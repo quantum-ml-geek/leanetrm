@@ -10,17 +10,23 @@ ROOT = Path(__file__).resolve().parents[1]
 CHECK_PROJECTS = (
     ('tests/OpenEtrm.MarketData.Checks/OpenEtrm.MarketData.Checks.csproj', ()),
     ('tests/OpenEtrm.MarketData.Checks/OpenEtrm.MarketData.Checks.csproj', ('--futures-options',)),
+    ('tests/OpenEtrm.MarketData.Checks/OpenEtrm.MarketData.Checks.csproj', ('--calendar-policy',)),
+    ('tests/OpenEtrm.MarketData.Checks/OpenEtrm.MarketData.Checks.csproj', ('--payment-date-policy',)),
     ('tests/OpenEtrm.Rates.Checks/OpenEtrm.Rates.Checks.csproj', ()),
     ('tests/OpenEtrm.Shared.Checks/OpenEtrm.Shared.Checks.csproj', ()),
     ('tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj', ('--context-resolution',)),
     ('tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj', ('--schedules',)),
+    ('tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj', ('--published-clock',)),
+    ('tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj', ('--calendar-authoring',)),
+    ('tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj', ('--gas-ticket',)),
     ('tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj', ('--historical-risk',)),
     ('tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj', ('--monte-carlo-risk',)),
     ('tests/OpenEtrm.MarketData.Checks/OpenEtrm.MarketData.Checks.csproj', ('--hybrid-monte-carlo-risk',)),
 )
 
 
-GROUPS = ('workspace', 'standard', 'assistant', 'trading', 'lifecycle', 'gas', 'portfolio', 'settlement', 'ppa', 'recovery')
+GROUPS = ('workspace', 'reference', 'standard', 'exchange', 'assistant', 'risk', 'trading', 'lifecycle', 'physical', 'gas',
+          'portfolio', 'settlement', 'ppa', 'recovery')
 
 
 def run_checks(pg_bin, dotnet, browser, *, group='all', run=subprocess.run):
@@ -68,6 +74,9 @@ def run_checks(pg_bin, dotnet, browser, *, group='all', run=subprocess.run):
     check('owned operating settings database',[sys.executable,'tools/check_operating_settings.py','--pg-bin',str(pg_bin)])
     check('native volatility-fit admission expiry',[sys.executable,'tools/check_vol_surface_admission_expiry.py','--pg-bin',str(pg_bin)])
     check('owned reference metadata database',[sys.executable,'tools/check_reference_editing.py','--pg-bin',str(pg_bin)])
+    check('populated payment-day program upgrade',[sys.executable,'tools/check_payment_day_upgrade.py','--pg-bin',str(pg_bin)])
+    check('calendar migration helper contracts',[sys.executable,'tools/check_calendar_upgrade.py','--pg-bin',str(pg_bin)])
+    check('native Side calendar bindings',[sys.executable,'tools/check_side_calendar_policies.py','--pg-bin',str(pg_bin)])
     check('recorded cash upgrade over existing option bookings',[sys.executable,'tools/check_recorded_cash_upgrade.py','--pg-bin',str(pg_bin)])
     # The projection-source qualifier also runs the complete native journal.
     for part in ('sources','adoption','projection_sources'):
@@ -151,7 +160,7 @@ def run_checks(pg_bin, dotnet, browser, *, group='all', run=subprocess.run):
         check(label, command, suite=suite)
 
     preview_check('integrated live calculation and browser',[*preview,'--live-calculation-check','--browser-check','--browser',str(browser)])
-    preview_check('private inactive reference intake',[*preview,'--reference-import-check'])
+    preview_check('private inactive reference intake',[*preview,'--reference-import-check'], suite='reference')
     preview_check('standard preview and browser', [*preview, '--browser-check', '--browser', str(browser)], suite='standard')
     preview_check('context read demand and grouped header', [*preview,'--context-read-check','--browser-check','--browser',str(browser)])
     preview_check('isolated party maintenance and power browser', [*preview, '--party-check', '--browser-check', '--browser', str(browser)])
@@ -160,17 +169,18 @@ def run_checks(pg_bin, dotnet, browser, *, group='all', run=subprocess.run):
     preview_check('assistant page operations, approvals and guidance', [*preview, '--assistant-workspace-check', '--browser-check', '--browser', str(browser)], suite='assistant')
     preview_check('isolated units and deal precision browser', [*preview, '--unit-check', '--browser-check', '--browser', str(browser)])
     preview_check('independent swap sides, spreads and reviewed par pricing', [*preview, '--draft-check', '--browser-check', '--browser', str(browser)], suite='trading')
+    preview_check('explicit Side calendars, native booking and retained replay',[*preview,'--side-calendar-check'],suite='trading')
     preview_check('shared booking workflow and mixed gas portfolio', [*preview, '--unified-trading-check', '--browser-check', '--browser', str(browser)], suite='trading')
-    preview_check('physical crude booking, portfolio risk, delivery cash and record corrections', [*preview, '--crude-lifecycle-check', '--browser-check', '--browser', str(browser)], suite='trading')
-    preview_check('maintained crude setup, original pricing bindings and recovery', [*preview, '--crude-setup-check', '--browser-check', '--browser', str(browser)], suite='trading')
-    preview_check('gas basis history and final facility inputs', [*preview, '--gas-basis-demo-check', '--browser-check', '--browser', str(browser)], suite='trading')
-    preview_check('manual gas scheduling, imbalance and request recovery', [*preview, '--gas-operations-check', '--browser-check', '--browser', str(browser)], suite='trading')
-    preview_check('final daily gas billing, corrections and request recovery', [*preview, '--gas-billing-check', '--browser-check', '--browser', str(browser)], suite='trading')
-    preview_check('physical gas booking, facility allocation, setup and daily quantities', [*preview, '--facility-quantity-check', '--gas-daily-quantity-check', '--gas-composition-check', '--gas-setup-check', '--browser-check', '--browser', str(browser)], suite='trading')
-    preview_check('future gas amendments, immutable revisions and ticket recovery', [*preview, '--gas-amendments-check', '--browser-check', '--browser', str(browser)], suite='trading')
-    preview_check('daily indexed gas payments, shared Side inspection and retained risk', [*preview, '--gas-indexed-check', '--browser-check', '--browser', str(browser)], suite='trading')
-    preview_check('in-term gas admission, recorded payments and the owner-only in-term load', [*preview, '--gas-in-term-check'], suite='trading')
-    preview_check('physical LNG cargo, Incoterms, upgrade, recovery and retained worker valuation', [*preview, '--lng-cargo-check', '--browser-check', '--browser', str(browser)], suite='trading')
+    preview_check('physical crude booking, portfolio risk, delivery cash and record corrections', [*preview, '--crude-lifecycle-check', '--browser-check', '--browser', str(browser)], suite='physical')
+    preview_check('maintained crude setup, original pricing bindings and recovery', [*preview, '--crude-setup-check', '--browser-check', '--browser', str(browser)], suite='physical')
+    preview_check('gas basis history and final facility inputs', [*preview, '--gas-basis-demo-check', '--browser-check', '--browser', str(browser)], suite='gas')
+    preview_check('manual gas scheduling, imbalance and request recovery', [*preview, '--gas-operations-check', '--browser-check', '--browser', str(browser)], suite='gas')
+    preview_check('final daily gas billing, corrections and request recovery', [*preview, '--gas-billing-check', '--browser-check', '--browser', str(browser)], suite='gas')
+    preview_check('physical gas booking, facility allocation, setup and daily quantities', [*preview, '--facility-quantity-check', '--gas-daily-quantity-check', '--gas-composition-check', '--gas-setup-check', '--browser-check', '--browser', str(browser)], suite='gas')
+    preview_check('future gas amendments, immutable revisions and ticket recovery', [*preview, '--gas-amendments-check', '--browser-check', '--browser', str(browser)], suite='gas')
+    preview_check('daily indexed gas payments, shared Side inspection and retained risk', [*preview, '--gas-indexed-check', '--browser-check', '--browser', str(browser)], suite='gas')
+    preview_check('in-term gas admission, recorded payments and the owner-only in-term load', [*preview, '--gas-in-term-check'], suite='gas')
+    preview_check('physical LNG cargo, Incoterms, upgrade, recovery and retained worker valuation', [*preview, '--lng-cargo-check', '--browser-check', '--browser', str(browser)], suite='physical')
     preview_check('retained graph admission and reverse-boundary independent Side reuse', [*preview, '--retained-schedule-check'], suite='trading')
     preview_check('mixed PPA and heat-rate trades, exact worker custody and browser', [*preview, '--demo-instruments-check', '--browser-check', '--browser', str(browser)], suite='trading')
     preview_check('scheduled swap settlement, delegated operations and lifecycle browser', [*preview, '--scheduled-swap-check', '--browser-check', '--browser', str(browser)], suite='settlement')
@@ -189,28 +199,28 @@ def run_checks(pg_bin, dotnet, browser, *, group='all', run=subprocess.run):
     preview_check('read-only existing-close risk and fenced workers', [*preview, '--close-risk-check'], suite='ppa')
     preview_check('renewable existing-close completion and recovery', [*preview, '--close-risk-lease-check'], suite='recovery')
     preview_check('standard futures execution policies', [*preview, '--execution-check'])
-    preview_check('shared contract-date library', [*preview, '--contract-dates-check', '--browser-check', '--browser', str(browser)])
+    preview_check('shared contract-date library', [*preview, '--contract-dates-check', '--browser-check', '--browser', str(browser)], suite='reference')
     preview_check('stored mixed portfolio valuation and swap risk', [*preview, '--swap-risk-holdings-check'], suite='portfolio')
     preview_check('generated pilot close, actual worker and immutable report', [*preview, '--pilot-close-check', '--browser-check', '--browser', str(browser)], suite='portfolio')
     preview_check('connected published portfolio and retained workers', [*preview, '--connected-portfolio-check'], suite='portfolio')
-    preview_check('custom curve graphs and editor', [*preview, '--custom-curves-check', '--browser-check', '--browser', str(browser)])
-    preview_check('contract observation curves', [*preview, '--contract-observation-curve-check', '--browser-check', '--browser', str(browser)])
-    preview_check('publication ingestion and contract pricing authoring', [*preview, '--price-authoring-check', '--browser-check', '--browser', str(browser)])
-    preview_check('market close calendar', [*preview, '--market-dates-check', '--browser-check', '--browser', str(browser)])
-    preview_check('live outputs and frozen dependencies', [*preview, '--curve-eligibility-check'])
-    preview_check('close sessions and bounded observation reads', [*preview, '--regional-closes-check'])
+    preview_check('custom curve graphs and editor', [*preview, '--custom-curves-check', '--browser-check', '--browser', str(browser)], suite='reference')
+    preview_check('contract observation curves', [*preview, '--contract-observation-curve-check', '--browser-check', '--browser', str(browser)], suite='reference')
+    preview_check('publication ingestion and contract pricing authoring', [*preview, '--price-authoring-check', '--browser-check', '--browser', str(browser)], suite='reference')
+    preview_check('market close calendar', [*preview, '--market-dates-check', '--browser-check', '--browser', str(browser)], suite='reference')
+    preview_check('live outputs and frozen dependencies', [*preview, '--curve-eligibility-check'], suite='reference')
+    preview_check('close sessions and bounded observation reads', [*preview, '--regional-closes-check'], suite='reference')
     preview_check('positions a close cannot value', [*preview, '--valuation-status-check', '--browser-check', '--browser', str(browser)], suite='portfolio')
     preview_check('Blotter commodity, swap direction, mark minus price, summaries and curve shapes', [*preview, '--desk-fields-check'], suite='portfolio')
-    preview_check('isolated exchange futures, option reference storage, option booking and browser', [*preview, '--exchange-check', '--browser-check', '--browser', str(browser)], suite='standard')
+    preview_check('isolated exchange futures, option reference storage, option booking and browser', [*preview, '--exchange-check', '--browser-check', '--browser', str(browser)], suite='exchange')
     preview_check('isolated hosted authentication and browser', [*preview, '--hosted-check', '--browser-check', '--browser', str(browser)])
     preview_check('isolated jobs and infrastructure browser', [*preview, '--jobs-check', '--browser-check', '--browser', str(browser)])
-    preview_check('additive reference demo and exact-version discounting',[*preview,'--reference-demo-check'])
-    preview_check('isolated reference metadata editor',[*preview,'--reference-check','--browser-check','--browser',str(browser)])
-    preview_check('isolated nested risk and durable workers', [*preview, '--risk-jobs-check', '--browser-check', '--browser', str(browser)], suite='assistant')
-    preview_check('Monte Carlo full-PV and hybrid VaR/ES, explicit consent, custody and graphical reports', [*preview, '--with-exchange', '--monte-carlo-risk-check', '--browser-check', '--browser', str(browser)], suite='assistant')
-    preview_check('historical full-PV VaR/ES, custody and graphical reports', [*preview, '--historical-risk-check', '--browser-check', '--browser', str(browser)], suite='assistant')
-    preview_check('parametric VaR/ES, retained history custody and graphical reports', [*preview, '--parametric-risk-check', '--browser-check', '--browser', str(browser)], suite='assistant')
-    preview_check('aligned held-factor history and graphical diagnostics', [*preview, '--factor-history-check', '--browser-check', '--browser', str(browser)], suite='assistant')
+    preview_check('additive reference demo and exact-version discounting',[*preview,'--reference-demo-check'], suite='reference')
+    preview_check('isolated reference metadata editor',[*preview,'--reference-check','--browser-check','--browser',str(browser)], suite='reference')
+    preview_check('isolated nested risk and durable workers', [*preview, '--risk-jobs-check', '--browser-check', '--browser', str(browser)], suite='risk')
+    preview_check('Monte Carlo full-PV and hybrid VaR/ES, explicit consent, custody and graphical reports', [*preview, '--with-exchange', '--monte-carlo-risk-check', '--browser-check', '--browser', str(browser)], suite='risk')
+    preview_check('historical full-PV VaR/ES, custody and graphical reports', [*preview, '--historical-risk-check', '--browser-check', '--browser', str(browser)], suite='risk')
+    preview_check('parametric VaR/ES, retained history custody and graphical reports', [*preview, '--parametric-risk-check', '--browser-check', '--browser', str(browser)], suite='risk')
+    preview_check('aligned held-factor history and graphical diagnostics', [*preview, '--factor-history-check', '--browser-check', '--browser', str(browser)], suite='risk')
     preview_check('mixed-period preview', [*preview, '--example', 'mixed-gas'])
     message = ('All synthetic verification suites passed.' if group == 'all'
                else f'Synthetic verification group {group} passed.')

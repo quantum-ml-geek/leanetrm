@@ -18,6 +18,7 @@ public sealed class CashLifecycleProjection:ILifecycleProjection
     private readonly RecordedCashValuation actual;
     private readonly ISideDiscounting? discounting;
     private readonly MarketSnapshot source;
+    private DateTimeOffset DischargeAt=>instrument.Timing==ValueTimingKind.UtcPaymentDay?PaymentDatePolicy.OverdueBoundary(instrument.PaymentAt):instrument.PaymentAt;
     public CashLifecycleProjection(AccountingPositionKey owner,CashPaymentInstrument instrument,RecordedCashValuation actual,
         ISideDiscounting? discounting,MarketSnapshot source)
     {
@@ -27,11 +28,11 @@ public sealed class CashLifecycleProjection:ILifecycleProjection
         Owner=owner;this.instrument=instrument;this.actual=actual;this.discounting=discounting;this.source=source;
         Opening=new([Portfolio(actual)],[]){KnownPayments=[..actual.KnownFlows(source).Where(p=>p.EffectiveAt>source.ValuationAt)]};
         var key=LifecycleProjectionEvent.ScopedId(owner,ContractIdentity.FromCanonical($"cash_due_projection_v1:{instrument.Id:D}"));
-        Events=instrument.PaymentAt>source.ValuationAt?[new(key,instrument.PaymentAt,[],"cash_due")]:[];
+        Events=DischargeAt>source.ValuationAt?[new(key,DischargeAt,[],"cash_due")]:[];
     }
     public LifecycleProjectionState Apply(LifecycleProjectionEvent occurrence,LifecycleProjectionState state,LifecycleProjectionContext context)
     {
-        if(occurrence.At!=instrument.PaymentAt||!Events.Contains(occurrence))
+        if(occurrence.At!=DischargeAt||!Events.Contains(occurrence))
             throw new MarketDataException("projection_cash_state","Select this exact declared cash due event.");
         if(context.Policy.CashDisposition==LifecycleProjectionPolicy.Outstanding)return state;
         var futureActual=CashAllocationBalance.ReserveFuture(ExactMoney.FromMoney(new(actual.Quantity.Amount,Currency)),

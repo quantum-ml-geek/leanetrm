@@ -1,4 +1,5 @@
 """Qualify Blotter close-out drafts against real isolated bookings and recorded settlement."""
+from synthetic_side_calendars import all_dates_policy
 import json
 from pathlib import Path
 import subprocess
@@ -54,10 +55,10 @@ def run_checks(url,query,dotnet,owned_root,environment):
     swaps=client.call('swaps/catalog',swap_context)
     index=next(i for i in swaps['indices'] if i['curve']=='base_forward')
     payment={'frequency':'monthly','rule':'days_after_period_end','days':18,'dayOfMonth':None,'dayBasis':'calendar_days','shortMonth':None,'adjustment':'unadjusted','calendar':None,'implementation':'monthly_payment_date_rules_v1'}
-    def floating(start,end):
-        return {'settlement':{'mode':'curve_target','index':None,'projectionPolicy':None},'curve':index['curve'],'index':index['index'],'currency':index['currencyCode'],
+    def floating(start,end,*,side=True):
+        return {**({'calendarPolicy':all_dates_policy(observation=True)} if side else {}),'settlement':{'mode':'curve_target','index':None,'projectionPolicy':None},'curve':index['curve'],'index':index['index'],'currency':index['currencyCode'],
                 'deliveryFrom':start,'deliveryTo':end,'paymentSchedule':payment,'resetFrequency':'monthly','averagingMethod':'none','spread':'0'}
-    def fixed(start,end):return {'price':'3','currency':index['currencyCode'],'deliveryFrom':start,'deliveryTo':end,'paymentSchedule':payment}
+    def fixed(start,end,*,side=True):return {**({'calendarPolicy':all_dates_policy(observation=False)} if side else {}),'price':'3','currency':index['currencyCode'],'deliveryFrom':start,'deliveryTo':end,'paymentSchedule':payment}
     common={**swap_context,**trade_booking(),'bookId':book,'executedAt':None,'discounting':False,'definitionRevisionId':index['definitionRevisionId'],'commodity':index['commodity']}
     swap=client.call('swaps/book',{**common,'operationId':str(uuid4()),'quantity':'100','fixedCoefficient':'-1','fixed':fixed('2021-03-01','2021-04-01'),'floating':floating('2021-03-01','2021-04-01')})['tradeId']
     # Two floating sides, the same index apart by a spread; a daily-averaged index in the separate daily bundle.
@@ -70,9 +71,9 @@ def run_checks(url,query,dotnet,owned_root,environment):
         'floating':{**floating('2021-01-01','2021-02-01'),'curve':daily['curve'],'index':daily['index'],'currency':daily['currencyCode'],'resetFrequency':'daily','averagingMethod':'arithmetic'}})['tradeId']
     amounts=['100','200','300','400']
     def side(fixed_side,total=None):
-        return {'basis':'contract_total' if total else 'period_total','quantity':index['quantityChoices'][0]['specification'],'amount':total,'allocation':'equal_periods' if total else None,
+        return {'calendarPolicy':all_dates_policy(observation=not fixed_side),'basis':'contract_total' if total else 'period_total','quantity':index['quantityChoices'][0]['specification'],'amount':total,'allocation':'equal_periods' if total else None,
                 'priceApplication':'period_average_times_quantity_v1','power':None,
-                'periods':[{'amount':None if total else amount,'fixed':fixed(*period) if fixed_side else None,'floating':None if fixed_side else floating(*period)} for period,amount in zip(PERIODS,amounts)]}
+                'periods':[{'amount':None if total else amount,'fixed':fixed(*period,side=False) if fixed_side else None,'floating':None if fixed_side else floating(*period,side=False)} for period,amount in zip(PERIODS,amounts)]}
     def scheduled_terms(total=None):
         return {**common,'operationId':str(uuid4()),'quantity':None,'fixedCoefficient':None,'fixed':None,'floating':None,'swapType':'scheduled_financial_swap','firstCoefficient':'-1',
                 'scheduled':{'implementation':'whole_term_scheduled_financial_swap_v1','first':side(True,total),'second':side(False,total)}}

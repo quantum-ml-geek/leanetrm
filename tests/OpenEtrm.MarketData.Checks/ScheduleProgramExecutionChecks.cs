@@ -54,7 +54,7 @@ internal static class ScheduleProgramExecutionChecks
         var dailyColumns=Sources(dailyProgram,dailyRequest,"base","base",(row,_,_)=>row.Operation=="discount"?(N("1"),default):
             (N(row.ObservationFrom==dailySide.DeliveryFrom?"2":"1"),State(null,RowPriceState.Projected)));
         Equal(dailyProgram.Execute(dailyRequest,"base","base",dailyColumns).PresentValue.ToExactString(),"32/31");
-        var whole=new FloatingSide(Guid.NewGuid(),original.Floating.Settlement,f.Quote,original.Floating.UnitQuantity,[original.Floating.Periods[0],next.Floating.Periods[0]]);
+        var whole=new FloatingSide(Guid.NewGuid(),original.Floating.Settlement,f.Quote,original.Floating.UnitQuantity,[original.Floating.Periods[0],next.Floating.Periods[0]],SyntheticSideCalendars.FloatingPeriods([original.Floating.Periods[0],next.Floating.Periods[0]]));
         var monthly=Load(whole);var selection=monthly.Inputs(context);
         foreach(var (id,shift,expected) in new[]{("base",0,"25"),("up",1,"26.7"),("down",-1,"23.3")})
         {
@@ -142,7 +142,7 @@ internal static class ScheduleProgramExecutionChecks
             var columns=Sources(profile,request,"base","base",(row,_,_)=>row.Operation=="discount"?(N("0.9"),default):(N("42"),State(null,RowPriceState.Projected)));
             // November has721 actual hours in the retained delivery clock.
             Equal(profile.Execute(request,"base","base",columns).PresentValue.ToExactString(),"27253.8");
-            var indexed=new FloatingSide(Guid.NewGuid(),f.Terms(f.Profile),new(f.C("synthetic_energy"),ExactDecimal.Parse("2"),new(ExactDecimal.Parse("3"),f.EnergyPrice),null));
+            var indexed=new FloatingSide(Guid.NewGuid(),f.Terms(f.Profile),new(f.C("synthetic_energy"),ExactDecimal.Parse("2"),new(ExactDecimal.Parse("3"),f.EnergyPrice),null),SyntheticSideCalendars.Interval(f.Terms(f.Profile),true));
             var floating=Load(indexed);request=floating.Inputs(context);
             columns=Sources(floating,request,"base","base",(row,_,_)=>row.Operation=="discount"?(N("0.9"),default):(N("10"),State(null,RowPriceState.Projected)));
             Equal(floating.Execute(request,"base","base",columns).PresentValue.ToExactString(),"14924.7");
@@ -245,7 +245,7 @@ internal static class ScheduleProgramExecutionChecks
         // Two cells times two payments, each2^6000; no cash rounding or cap.
         Equal(program.Execute(request,"base","base",columns).PresentValue.Numerator,(BigInteger.One<<6002).ToString());
         var market=new CommodityLookupFixture(2,monthly:true);var first=market.Swap(monthly:true,monthOrdinal:0);var second=market.Swap(monthly:true,monthOrdinal:1);
-        var floating=new FloatingSide(Guid.NewGuid(),first.Floating.Settlement,market.Quote,first.Floating.UnitQuantity,[first.Floating.Periods[0],second.Floating.Periods[0]]);
+        var floating=new FloatingSide(Guid.NewGuid(),first.Floating.Settlement,market.Quote,first.Floating.UnitQuantity,[first.Floating.Periods[0],second.Floating.Periods[0]],SyntheticSideCalendars.FloatingPeriods([first.Floating.Periods[0],second.Floating.Periods[0]]));
         var original=ScheduleDefinitionCompiler.Generate(floating);
         var expanded=new ScheduleDefinition(original.SideId,original.Family,original.EconomicIdentity,original.PricingBindingIdentity,original.SchemaVersion,original.GeneratorVersion,
             original.Rows.Select(row=>row.Operation=="quantity_literal"?row with{Parameters=row.Parameters.SetItem("numerator",magnitude.ToString()).SetItem("denominator","1")}:row).ToArray(),

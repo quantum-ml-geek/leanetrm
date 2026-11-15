@@ -355,6 +355,6 @@ internal static class LifecycleProjectionChecks
         public ImmutableArray<SidePaymentFactor> Resolve(ImmutableArray<SidePaymentKey> payments,MarketSnapshot source)=>
             [..payments.Select(p=>new SidePaymentFactor(p,Factor(p.PaymentAt),source,DiscountFactorSource.Explicit))];
         public ImmutableArray<SidePaymentFactor> ResolveForValuation(ImmutableArray<SidePaymentKey> payments,MarketSnapshot source,DateTimeOffset at,string? policy)=>
-            [..payments.Select(p=>new SidePaymentFactor(p,Factor(p.PaymentAt).DivideExact(Factor(at)),source,DiscountFactorSource.Explicit))];
+            [..payments.Select(p=>new SidePaymentFactor(p,Factor(p.PaymentAt).DivideExact(Factor(at)),source,DiscountFactorSource.Explicit){ClockRoll=new(policy!,at,Factor(p.PaymentAt),Factor(at),[])})];
     }
 }

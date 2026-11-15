@@ -137,7 +137,7 @@ WHERE(v.catalog_id,v.schedule_id,v.version)=($1,$2,$3) AND v.state='published'
         return [..(await Calendars(connection,codes,ct)).Values.OrderBy(c=>c.Reference.Code,StringComparer.Ordinal)];
     }
     // Reads exact calendar versions visible to the bound identity and context; absent ones are omitted.
-    private static async Task<Dictionary<CalendarReference,ReferenceCalendar>> Calendars(NpgsqlConnection connection,IReadOnlyCollection<CalendarReference> references,CancellationToken ct)
+    internal static async Task<Dictionary<CalendarReference,ReferenceCalendar>> Calendars(NpgsqlConnection connection,IReadOnlyCollection<CalendarReference> references,CancellationToken ct)
     {
         var result=new Dictionary<CalendarReference,ReferenceCalendar>();
         foreach(var reference in references.Distinct())

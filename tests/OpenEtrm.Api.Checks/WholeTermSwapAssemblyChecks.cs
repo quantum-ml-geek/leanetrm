@@ -23,8 +23,8 @@ internal static class WholeTermSwapAssemblyChecks
         var first=new DateOnly(2048,1,1);var second=first.AddMonths(1);
         DateTimeOffset Payment(DateOnly month)=>new(month.AddMonths(1).AddDays(10).ToDateTime(TimeOnly.MinValue,DateTimeKind.Utc));
         var periods=ImmutableArray.Create(
-            new ResolvedFixedSwapPeriod(quote,unit,new(ExactDecimal.Parse("40"),quote),new(first,second,Payment(first),ExactRatio.One,null)),
-            new ResolvedFixedSwapPeriod(quote,unit,new(ExactDecimal.Parse("50"),quote),new(second,second.AddMonths(1),Payment(second),ExactRatio.One,null)));
+            new ResolvedFixedSwapPeriod(quote,unit,new(ExactDecimal.Parse("40"),quote),new(first,second,Payment(first),ExactRatio.One,null),SyntheticSideCalendars.Dated(false)),
+            new ResolvedFixedSwapPeriod(quote,unit,new(ExactDecimal.Parse("50"),quote),new(second,second.AddMonths(1),Payment(second),ExactRatio.One,null),SyntheticSideCalendars.Dated(false)));
         var definition=new DefinitionRevision(Guid.NewGuid(),Guid.NewGuid());
         var settlement=new PriceSettlementSelection(PriceSettlementMode.Override,R("synthetic_projection_index"),R("synthetic_settlement_index"),PriceSettlementSelection.ForwardCurveNoBasis);
         ResolvedFloatingSwapPeriod Floating(DateOnly month)
@@ -34,7 +34,7 @@ internal static class WholeTermSwapAssemblyChecks
             var projection=new SwapProjection(new(new(definition,"synthetic_projection"),contract.Key),contract);
             var publication=new IndexFixing(settlement.SelectedIndex,quote.Key,month,to,fixing,new(definition,Guid.NewGuid()),R("synthetic_source"),IndexFixing.SupportedImplementation);
             return new(settlement,quote,unit,new(month,to,fixing,Payment(month),FloatingAveraging.MonthlyIndexPrice,[projection],[publication],
-                null,null,null,null,ExactRatio.One,FloatingSide.IndexedImplementation));
+                null,null,null,null,ExactRatio.One,FloatingSide.IndexedImplementation),SyntheticSideCalendars.Dated(true));
         }
         var floatingPeriods=ImmutableArray.Create(Floating(first),Floating(second));
         var floatingSide=SwapScheduledAssembly.Floating(Guid.NewGuid(),floatingPeriods,[new(1,3),new(2,3)]);
@@ -122,7 +122,7 @@ internal static class WholeTermSwapAssemblyChecks
             catch(MarketDataException error)when(error.Code=="side_schedule_identity"){return;}
             throw new Exception("Publication must refuse wrong membership, same-family economics and pricing bindings.");
         }
-        var different=new FixedSide(side.Id,new FlatPrice(new(ExactDecimal.Parse("99"),side.Price.Unit)),quote,side.UnitQuantity,side.Periods);
+        var different=new FixedSide(side.Id,new FlatPrice(new(ExactDecimal.Parse("99"),side.Price.Unit)),quote,side.UnitQuantity,side.Periods,SyntheticSideCalendars.FixedPeriods(side.Periods));
         Refuses([different,floating],[fixedProgram,floatingProgram]);
         Refuses([side,floating],[fixedProgram]);
         Refuses([side,floating],[floatingProgram with{Slot=0},fixedProgram with{Slot=1}]);

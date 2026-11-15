@@ -47,6 +47,8 @@ public abstract class PreparedValuationEnvironment
         var factor=factors[0];
         if(factor.Source==DiscountFactorSource.CurrencyDefault&&factor.RateDefinition is null)
             throw new MarketDataException("discount_curve","Currency-default discounting requires its retained rate evidence.");
+        if(!factor.HasValidPaymentDayTerms(CalculationAt))
+            throw new MarketDataException("risk_dependency","A discount factor must retain its exact calculation clock and payment timing.");
         if(factor.RateDefinition is {} definition&&(CalculationAt==selected.ValuationAt||definition.Timing is not null||definition.CurveTerms is not null))
         {
             if(definition.Timing is {} timing&&timing.CalculationAt!=CalculationAt)

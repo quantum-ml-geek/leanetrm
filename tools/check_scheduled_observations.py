@@ -1,4 +1,5 @@
 """Qualified scheduled price authoring, using independent synthetic cash oracles."""
+from synthetic_side_calendars import all_dates_policy
 from copy import deepcopy
 from datetime import date,timedelta
 from fractions import Fraction as F
@@ -14,8 +15,12 @@ def run(c,context,manifest):
     def body(index,frequency,method,schedule):
         quantity=next(q['specification'] for q in index['quantityChoices'] if q['unit']=='MMBtu (IT)')
         fixed=dict(price='3',currency=index['currencyCode'],deliveryFrom='2021-01-01',deliveryTo='2021-02-01',paymentSchedule=rule)
-        floating=dict(settlement=dict(mode='curve_target',index=None,projectionPolicy=None),curve=index['curve'],index=index['index'],currency=index['currencyCode'],deliveryFrom='2021-01-01',deliveryTo='2021-02-01',paymentSchedule=rule,resetFrequency=frequency,averagingMethod=method,spread='0',observationSchedule=schedule)
-        def side(fixed_side):return dict(basis='period_total',quantity=quantity,amount=None,allocation=None,power=None,priceApplication='period_average_times_quantity_v1',periods=[dict(amount='100',fixed=fixed if fixed_side else None,floating=None if fixed_side else floating)])
+        floating=dict(settlement=dict(mode='curve_target',index=None,projectionPolicy=None),curve=index['curve'],index=index['index'],currency=index['currencyCode'],deliveryFrom='2021-01-01',deliveryTo='2021-02-01',paymentSchedule=rule,resetFrequency=frequency,averagingMethod=method,spread='0',observationSchedule=None if schedule is None else {**schedule,'calendar':None})
+        def side(fixed_side):
+            policy=all_dates_policy(observation=not fixed_side)
+            if not fixed_side and schedule and schedule.get('calendar') is not None:
+                policy['observation']['calendar']=deepcopy(schedule['calendar'])
+            return dict(calendarPolicy=policy, basis='period_total',quantity=quantity,amount=None,allocation=None,power=None,priceApplication='period_average_times_quantity_v1',periods=[dict(amount='100',fixed=fixed if fixed_side else None,floating=None if fixed_side else floating)])
         return {**context,**trade_booking(),'operationId':str(uuid4()),'bookId':catalog['books'][0]['id'],'executedAt':None,'quantity':None,'fixedCoefficient':None,'discounting':False,'fixed':None,'floating':None,
           'definitionRevisionId':index['definitionRevisionId'],'commodity':index['commodity'],'swapType':'scheduled_financial_swap','firstCoefficient':'-1',
           'scheduled':dict(implementation='whole_term_scheduled_financial_swap_v1',first=side(True),second=side(False))}
@@ -30,13 +35,13 @@ def run(c,context,manifest):
         assert F(preview['valuation']['presentValue'])==expected,(method,preview['valuation']['presentValue'])
         saved=c.call('swaps/book',terms)
         old=c.call('swaps/editor',dict(context=context,tradeId=saved['tradeId'],revision=1))
-        assert old['state']['terms']['scheduled']['second']['periods'][0]['floating'].get('observationSchedule')==schedule
+        assert old['state']['terms']['scheduled']['second']['periods'][0]['floating'].get('observationSchedule')==(None if schedule is None else {**schedule,'calendar':None})
         amendment=deepcopy(terms);amendment.update(operationId=str(uuid4()),tradeId=saved['tradeId'],expectedRevision=1,effectiveAt=old['asOf'],reason='Synthetic future observation-preserving amendment')
         amendment['scheduled']['second']['periods'][0]['floating']['spread']='0.1'
         c.call('swaps/amend',amendment)
         current=c.call('swaps/editor',dict(context=context,tradeId=saved['tradeId'],revision=None))
         assert F(current['valuation']['presentValue'])==expected+10
-        assert current['state']['terms']['scheduled']['second']['periods'][0]['floating'].get('observationSchedule')==schedule
+        assert current['state']['terms']['scheduled']['second']['periods'][0]['floating'].get('observationSchedule')==(None if schedule is None else {**schedule,'calendar':None})
         replay=c.call('swaps/editor',dict(context=context,tradeId=saved['tradeId'],revision=1))
         assert F(replay['valuation']['presentValue'])==expected
         assert [p['tradeCashAmount'] for s in replay['valuation']['sides'] for p in s['payments']]==[p['tradeCashAmount'] for s in old['valuation']['sides'] for p in s['payments']]

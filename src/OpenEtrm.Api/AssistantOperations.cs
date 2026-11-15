@@ -169,9 +169,10 @@ internal static class AssistantOperations
         if(dictionary is not null)return new JsonObject{["type"]="object",["additionalProperties"]=Describe(dictionary.GetGenericArguments()[1],path.Add(type))};
         if(type.IsGenericType&&type.GetInterfaces().Any(i=>i.IsGenericType&&i.GetGenericTypeDefinition()==typeof(IEnumerable<>)))
             return new JsonObject{["type"]="array",["items"]=Describe(type.GetGenericArguments()[0],path)};
-        var properties=new JsonObject();
+        var properties=new JsonObject();var required=new JsonArray();
         foreach(var property in type.GetProperties().Where(p=>p.GetMethod is not null&&p.GetCustomAttribute<JsonIgnoreAttribute>() is not {Condition:JsonIgnoreCondition.Always}))
         {
+            if(property.GetCustomAttribute<JsonRequiredAttribute>() is not null)required.Add(JsonNamingPolicy.CamelCase.ConvertName(property.Name));
             if(type==typeof(GasOperationPreviewRequest)&&property.Name==nameof(GasOperationPreviewRequest.Details)){
                 var variants=new JsonObject();foreach(var entry in GasDeliveryOperationsStore.DetailTypes)variants[entry.Key]=Describe(entry.Value,path.Add(type));
                 properties["details"]=new JsonObject{["type"]="object",["discriminator"]="kind",["contracts"]=variants};
@@ -201,14 +202,27 @@ internal static class AssistantOperations
                 variants[GasLoanFeeActions.Handler]=Describe(typeof(GasLoanFeeSelection),path.Add(type));
                 variants[GasOperatorQuantityActions.Handler]=Describe(typeof(GasOperatorQuantitySelection),path.Add(type));
                 properties["selection"]=new JsonObject{["type"]="object",["discriminator"]="target.handler",["contracts"]=variants};
-            }else properties[JsonNamingPolicy.CamelCase.ConvertName(property.Name)]=Describe(property.PropertyType,path.Add(type));
+            }else
+            {
+                var name=JsonNamingPolicy.CamelCase.ConvertName(property.Name);
+                var inheritedPolicy=property.PropertyType==typeof(SideCalendarPolicyInput)&&path.Contains(typeof(SwapScheduledPeriodInput));
+                var inheritedCalendar=property.Name=="Calendar"&&(type==typeof(SwapPaymentInput)||type==typeof(SwapObservationScheduleInput)||
+                    type==typeof(SwapPowerScheduleInput)||type==typeof(PpaHoursInput)||type==typeof(PpaPaymentInput));
+                var description=inheritedPolicy||inheritedCalendar
+                    ?new JsonObject{["type"]="null",["description"]="Uses the owning Side calendar policy."}
+                    :Describe(property.PropertyType,path.Add(type));
+                if(property.GetCustomAttribute<JsonRequiredAttribute>() is null&&
+                    property.PropertyType==typeof(SideCalendarPolicyInput)&&!inheritedPolicy&&property.Name!="FeeCalendarPolicy")required.Add(name);
+                if(property.PropertyType==typeof(SideCalendarPolicyInput)&&property.Name=="FeeCalendarPolicy")
+                    description["requiredWhen"]=type==typeof(PhysicalGasTerms)?"usageFee or usageTariffCode is present":"handlingFee is present";
+                if(type==typeof(SideCalendarPolicyInput)&&property.Name==nameof(SideCalendarPolicyInput.Implementation))
+                    description["const"]=OpenEtrm.MarketData.Trading.SideCalendarPolicy.Implementation;
+                properties[name]=description;
+            }
         }
-        var result=new JsonObject{["type"]="object",["properties"]=properties,["contract"]=type.Name};
-        if(type.GetCustomAttribute<JsonUnmappedMemberHandlingAttribute>() is {UnmappedMemberHandling:JsonUnmappedMemberHandling.Disallow})
+        var result=new JsonObject{["type"]="object",["properties"]=properties,["contract"]=type.Name,["required"]=required};
+        if(type.GetCustomAttribute<JsonUnmappedMemberHandlingAttribute>()?.UnmappedMemberHandling==JsonUnmappedMemberHandling.Disallow)
             result["additionalProperties"]=false;
-        var required=type.GetProperties().Where(p=>p.GetCustomAttribute<JsonRequiredAttribute>() is not null)
-            .Select(p=>JsonNamingPolicy.CamelCase.ConvertName(p.Name)).ToArray();
-        if(required.Length!=0)result["required"]=JsonSerializer.SerializeToNode(required);
         return result;
     }
 }

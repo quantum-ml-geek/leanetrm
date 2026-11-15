@@ -6,19 +6,22 @@ namespace OpenEtrm.MarketData.Trading;
 public abstract record IntervalPhysicalSide : Side
 {
     [IdentityField]public override PpaSideTerms Terms { get; }
-    protected IntervalPhysicalSide(Guid id,PpaSideTerms terms):base(id)
-    {Terms=terms??throw PpaErrors.Error("ppa_side","side","Explicit side terms are required.");}
+    protected IntervalPhysicalSide(Guid id,PpaSideTerms terms,SideCalendarPolicy calendarPolicy):base(id,calendarPolicy)
+    {
+        Terms=terms??throw PpaErrors.Error("ppa_side","side","Explicit side terms are required.");
+        CalendarPolicy.RequireInterval(terms,false);
+    }
     public override ImmutableArray<CurveRequest> Dependencies=>throw PpaErrors.Error("ppa_context","dependencies","Prepare the exact interval inputs before declaring dependencies.");
     public override IntervalSideSchedule GenerateSchedule()=>new(this);
     public override IntervalSideValuation PV(SideValuationContext context)=>GenerateSchedule().Evaluate(context);
 }
-[EconomicDefinition("power_physical_side_v2")]
+[EconomicDefinition("power_physical_side_v3")]
 public sealed record PowerPhysicalSide:IntervalPhysicalSide
 {
     [IdentityField]public ReferenceKey Location { get; }
-    public PowerPhysicalSide(Guid id,PpaSideTerms terms,ReferenceKey location):base(id,terms){Money.RequireKey(location);Location=location;}
+    public PowerPhysicalSide(Guid id,PpaSideTerms terms,ReferenceKey location,SideCalendarPolicy calendarPolicy):base(id,terms,calendarPolicy){Money.RequireKey(location);Location=location;}
 }
-[EconomicDefinition("ppa_certificate_delivery_v2")]
+[EconomicDefinition("ppa_certificate_delivery_v3")]
 public sealed record CertificateDeliverySide:IntervalPhysicalSide
 {
     [IdentityField]public ReferenceKey CertificateQuantity { get; }
@@ -26,19 +29,19 @@ public sealed record CertificateDeliverySide:IntervalPhysicalSide
     [IdentityField]public string Eligibility { get; }
     [IdentityField]public string Holding { get; }
     [IdentityField]public string Disposition { get; }
-    public CertificateDeliverySide(Guid id,PpaSideTerms terms,ReferenceKey certificateQuantity,ExactDecimal conversion,string eligibility,string holding,string disposition):base(id,terms)
+    public CertificateDeliverySide(Guid id,PpaSideTerms terms,ReferenceKey certificateQuantity,ExactDecimal conversion,string eligibility,string holding,string disposition,SideCalendarPolicy calendarPolicy):base(id,terms,calendarPolicy)
     {
         if(conversion.CompareTo(default)<=0 || eligibility!="asset_generation_at_stage_v1" || holding!="held_at_current_vintage_mark_v1" || disposition!="none_recorded_v1" || terms.Quantity is not VolumeQuantity)
             throw PpaErrors.Error("ppa_term_unsupported","certificate","Select asset generation, positive conversion, current vintage holdings and explicit no-disposition policy.");
         Money.RequireKey(certificateQuantity);CertificateQuantity=certificateQuantity;Conversion=conversion;Eligibility=eligibility;Holding=holding;Disposition=disposition;
     }
 }
-[EconomicDefinition("ppa_capacity_delivery_v2")]
+[EconomicDefinition("ppa_capacity_delivery_v3")]
 public sealed record CapacityDeliverySide:IntervalPhysicalSide
 {
     [IdentityField]public ReferenceKey CapacityQuantity { get; }
     [IdentityField]public string Rule { get; }
-    public CapacityDeliverySide(Guid id,PpaSideTerms terms,ReferenceKey capacityQuantity,string rule):base(id,terms)
+    public CapacityDeliverySide(Guid id,PpaSideTerms terms,ReferenceKey capacityQuantity,string rule,SideCalendarPolicy calendarPolicy):base(id,terms,calendarPolicy)
     {
         if(rule!="mw_day_per_operating_day_v1" || terms.Quantity is not AccreditedQuantity)throw PpaErrors.Error("ppa_term_unsupported","capacity","Select whole-month accredited MW-day quantities explicitly.");
         Money.RequireKey(capacityQuantity);CapacityQuantity=capacityQuantity;Rule=rule;

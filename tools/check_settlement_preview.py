@@ -23,7 +23,7 @@ def prepare(manifest):
     """
     from copy import deepcopy
     result=deepcopy(manifest)
-    for at in (BOOK_AT,AMEND_AT):
+    for at in (BOOK_AT,AMEND_AT,'2020-12-10T00:00:00Z','2020-12-10T12:00:00Z','2020-12-11T00:00:00Z'):
         assert not any(frame['at']==at for frame in result['frames']), at
         result['frames'].append(dict(at=at,observationIds=[],frozenObservationIds=[],curveContracts={}))
     return result
@@ -67,6 +67,18 @@ def run_checks(url, query, manifest, dotnet, temporary, environment, *, quarter_
         bookId='d1000000-0000-0000-0000-000000000001',boundaryAt=None,
         coverageFrom='2020-11-01T04:00:00Z',coverageTo='2020-12-01T05:00:00Z',quantity='80',reason='Synthetic settlement preview',memo='',booking=trade_booking(),terms=terms)
     if quarter_only:payload.update(coverageFrom='2020-11-01T05:00:00Z',coverageTo='2020-12-01T06:00:00Z')
+    # The payment calendar is published independently of the pricing bundle.
+    independent_reference,calendar_source=str(uuid4()),str(uuid4())
+    rc=manifest['referenceCatalogId']
+    query(f"""BEGIN;
+      INSERT INTO ref_data.revisions(catalog_id,id,revision_key) VALUES('{rc}','{independent_reference}','synthetic_settlement_calendar');
+      INSERT INTO ref_data.clock_rules(catalog_id,revision_id,code,kind,fixed_offset_seconds) VALUES('{rc}','{independent_reference}','utc','fixed_offset',0);
+      INSERT INTO ref_data.calendars VALUES('{rc}','{independent_reference}','synthetic_settlement_calendar','utc',0,'2020-01-01','2053-01-01');
+      UPDATE ref_data.revisions SET state='sealed' WHERE(catalog_id,id)=('{rc}','{independent_reference}');
+      INSERT INTO market_data.revisions VALUES('{catalog}','{calendar_source}','{rc}','{independent_reference}','draft',0);
+      INSERT INTO market_data.revision_periods VALUES('{catalog}','{calendar_source}','2040-01-01','2041-01-01');
+      UPDATE market_data.revisions SET state='sealed' WHERE(catalog_id,id)=('{catalog}','{calendar_source}');COMMIT;""")
+    terms['memberships'][1]['side']['calendarPolicy']['payment']['calendar']=dict(revision=dict(catalogId=rc,revisionId=independent_reference),code='synthetic_settlement_calendar')
     booked=save('book',payload)
     assert query(f"SELECT effective_at=TIMESTAMPTZ '{BOOK_AT}' FROM trading.ppa_trade_revisions WHERE trade_id='{booked['tradeId']}' AND revision=1;")=='t'
     binding=booked['bindings'][0]
@@ -103,7 +115,7 @@ def run_checks(url, query, manifest, dotnet, temporary, environment, *, quarter_
         return client.call('settlement/ppa/preview',request,expected=expected)
     calendar_request=temporary/'settlement-calendar.json';calendar_sql=temporary/'settlement-calendar.sql'
     calendar_request.write_text(json.dumps(dict(referenceCatalogId=manifest['referenceCatalogId'],referenceRevisionId=manifest['referenceRevisionId'],
-        **{'from':'2020-11-01' if quarter_only else '2020-11-02','through':'2020-11-30'},clocks=[dict(code=clock,kind='iana',fixedOffsetSeconds=None,ianaZone=zone,tzdbVersion=installed_tzdb())])))
+        **{'from':'2020-11-01' if quarter_only else '2020-11-02','through':'2020-11-30'},clockCodes=[clock])))
     subprocess.run([str(dotnet),'src/OpenEtrm.Api/bin/Debug/net10.0/OpenEtrm.Api.dll','--render-power-days',str(calendar_request),str(calendar_sql)],env=environment,check=True,timeout=30)
     # The earlier finality suite may already have retained the first day.
     query(calendar_sql.read_text())
@@ -128,6 +140,10 @@ def run_checks(url, query, manifest, dotnet, temporary, environment, *, quarter_
         for statement in statements: runtime(statement,'editor')
     rev=revise(['12.5' if quarter_only else '50']*len(grid));publish(rev)
     started=time.monotonic();base=preview();elapsed=time.monotonic()-started;old=cutoff()
+    for at,status in [('2020-12-10T00:00:00Z','due_candidate'),('2020-12-10T12:00:00Z','due_candidate'),('2020-12-11T00:00:00Z','overdue_candidate')]:
+        dated=preview(snapshotId=authoring_frame(at))
+        check('retained independent calendar and UTC payment-day status at '+at,dated['due']['date']=='2020-12-10' and dated['due']['status']==status and dated['exactCash']==base['exactCash'])
+
     from check_indexed_settlement_preview import run_checks as indexed_checks
     indexed_checks(client,query,manifest,runtime,payload,frame,grid,cutoff,revise,publish,cadence,save)
     if quarter_only:

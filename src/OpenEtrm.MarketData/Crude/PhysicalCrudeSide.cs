@@ -83,7 +83,7 @@ public sealed record CrudeValuationAssignment
         "Select an exact grade, facility/custody point, 60 Fahrenheit standard-volume quantity and qualified monthly forward/index assignment.");
 }
 
-[EconomicDefinition("physical_crude_side_v1")]
+[EconomicDefinition("physical_crude_side_v3")]
 public sealed record PhysicalCrudeSide : Side
 {
     [IdentityField] public CrudeQuantityEquivalence? QuantityEquivalence => Assignment.QuantityEquivalence;
@@ -110,11 +110,13 @@ public sealed record PhysicalCrudeSide : Side
     private readonly Lazy<PhysicalCrudeSchedule> schedule;
 
     public PhysicalCrudeSide(Guid id, CrudeValuationAssignment assignment, DateTimeOffset deliveryFrom,
-        DateTimeOffset deliveryTo, ExactDecimal tolerance) : base(id)
+        DateTimeOffset deliveryTo, ExactDecimal tolerance,SideCalendarPolicy calendarPolicy) : base(id,calendarPolicy)
     {
         if (assignment is null) throw new MarketDataException("crude_valuation_assignment", "Select an exact crude valuation assignment.");
         if (tolerance != default) throw new MarketDataException("crude_tolerance", "This fixed-total crude profile requires explicit zero tolerance.");
         window = new(deliveryFrom, deliveryTo);
+        CalendarPolicy.RequirePurposes(true,false,false);
+        CalendarPolicy.For(CalendarPurpose.Delivery).RequireCoverage(window.DateFrom,window.DateTo);
         window.RequireCoveredBy(assignment.Projection.Contract);
         Assignment = assignment; DeliveryFrom = deliveryFrom; DeliveryTo = deliveryTo; Tolerance = tolerance;
         schedule = new(() => new(this));
@@ -185,7 +187,8 @@ public sealed record PhysicalCrudeInstrument : SidedInstrument
                 cash.Currency!=delivery.Currency || cash.UnitQuantity!=delivery.UnitQuantity) throw Invalid();
             var row=cash.Rows[0];
             if(row.DeliveryFrom!=delivery.DeliveryDateFrom || row.DeliveryTo!=delivery.DeliveryDateTo ||
-                row.AllocatedQuantity!=new ExactQuantity(1,1,delivery.Quantity.Key) || row.PaymentAt<delivery.DeliveryTo) throw Invalid();
+                (side.Periods[0].DeliveryCompletionAt??PaymentDatePolicy.Start(side.Periods[0].DeliveryTo))!=delivery.DeliveryTo ||
+                row.AllocatedQuantity!=new ExactQuantity(1,1,delivery.Quantity.Key) || PaymentDatePolicy.Date(row.PaymentAt)<PaymentDatePolicy.Date(delivery.DeliveryTo)) throw Invalid();
         }
         return fee is null ? [new(delivery,direction),new(consideration,considerationDirection)] :
             [new(delivery,direction),new(consideration,considerationDirection),new(fee,feeDirection!.Value)];

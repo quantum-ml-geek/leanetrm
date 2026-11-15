@@ -51,13 +51,13 @@ internal static class PaymentRuleChecks
         var quote=new QuoteSpecification(new(reference,"synthetic_quote"),QuoteKind.Outright,currency,unitKey,ExactDecimal.Parse("1"),ExactDecimal.Parse("0.01"),ExactDecimal.Parse("0.01"),ExactDecimal.Parse("-10000"),ExactDecimal.Parse("10000"));
         var quantity=new Quantity(ExactDecimal.Parse("1"),unitKey);
         Check("rule-backed side retains generated date and the exact originating convention",()=>{
-            var rule=Lag(0,PaymentDayBasis.CalendarDays,calendar,DateRoll.ModifiedFollowing);
-            var side=new FixedSide(Guid.NewGuid(),price,quantity,from,to,rule,FixedSide.Implementation,quote);
-            var plan=side.GenerateDatedSchedule().Payments.Single();Equal(plan.PaymentDate,"2021-01-29");
+            var rule=Lag(0,PaymentDayBasis.CalendarDays,calendar,DateRoll.Following);
+            var side=new FixedSide(Guid.NewGuid(),price,quantity,from,to,rule,FixedSide.Implementation,quote,SyntheticSideCalendars.Dated(false, rule));
+            var plan=side.GenerateDatedSchedule().Payments.Single();Equal(plan.PaymentDate,"2021-02-01");
             if(plan.PaymentConvention!=rule||plan.GeneratedDate?.Unadjusted!=new DateOnly(2021,1,31))throw new Exception("Date rule evidence was discarded");
         });
         Check("null side rules raise a structured domain error",()=>
-            Reject("payment_rule",()=>new FixedSide(Guid.NewGuid(),price,quantity,from,to,(PaymentRule)null!,FixedSide.Implementation,quote)));
+            Reject("payment_rule",()=>new FixedSide(Guid.NewGuid(),price,quantity,from,to,(PaymentRule)null!,FixedSide.Implementation,quote,SyntheticSideCalendars.Dated(false, (PaymentRule)null!))));
         Check("calendar work and generated lower date bounds remain explicit",()=>{
             Reject("payment_calendar",()=>Lag(1,PaymentDayBasis.BusinessDays,new(new(reference,"too_large"),DateSet.Create(new(1901,1,1),new(2199,1,1),[]))));
             var old=new PaymentCalendar(new(reference,"earlier"),DateSet.Create(new(1900,1,1),new(1902,1,1),[new(1900,12,31)]));

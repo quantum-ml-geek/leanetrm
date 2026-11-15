@@ -8,6 +8,8 @@ from concurrent.futures import ThreadPoolExecutor
 from uuid import uuid4
 from copy import deepcopy
 from check_reference_editing import main
+from synthetic_side_calendars import all_dates_policy,side_calendar_policy
+from lifecycle_calendar_fixture import independent_calendar,check_calendar_authority
 from close_session_fixture import sql_session
 from check_index_fixings import RULE
 from preview_fixture import catalogue_fixture, trading_fixture,trade_booking,fixture as baseline,identity
@@ -51,11 +53,12 @@ def checks(query,manifest,economic_worker=None,*,schedule_only=False):
         try:call(f"SELECT lifecycle.save_swap_profile('{catalog}',{lit(body)});")
         except RuntimeError as error:assert code in str(error),str(error)
         else:raise AssertionError('Expected '+code)
+    calendar_source,calendar_reference=independent_calendar(query,manifest)
     snapshot=str(uuid4())
     period=dict(currency='usd',deliveryFrom='2021-01-01',deliveryTo='2021-02-01',paymentSchedule=RULE)
     booking=dict(operationId=str(uuid4()),snapshotId=snapshot,bookId='d1000000-0000-0000-0000-000000000001',definitionRevisionId=manifest['revisionId'],
                  convention='independent_side_financial_swap_v2',knowledgeMode='current',quantity='100',fixedCoefficient='-1',discounting=False,commodity='test_gas',
-                 fixed=dict(**period,price='3'),floating=dict(**period,curve='base_forward',index='test_price',resetFrequency='monthly',averagingMethod='none',spread='0',
+                 fixed=dict(**period,price='3',calendarPolicy=all_dates_policy(observation=False)),floating=dict(**period,calendarPolicy=side_calendar_policy(calendar_reference,delivery=True,observation=True,payment=True),curve='base_forward',index='test_price',resetFrequency='monthly',averagingMethod='none',spread='0',
                  settlement=dict(mode='curve_target',index=None,projectionPolicy=None)),**trade_booking())
     host=query('SHOW unix_socket_directories;')
     path=Path(host)/'lifecycle-swap-check.json'
@@ -154,7 +157,13 @@ def checks(query,manifest,economic_worker=None,*,schedule_only=False):
                  effectiveAt='2021-01-20T08:00:00Z',reference='Synthetic observed cash 1',reversesId=None)
     paid_packet={**current,'action':'swap.payment','payment':payment,'context':{**current['context'],'contextId':old_payment_context,'asOf':'2021-01-20T08:00:00Z','businessDate':'2021-01-20'},
                  'expectedVersion':4,'expectedCurrentVersion':4}
-    managed(paid_packet);assert counts()=='3:1:1:4'
+    paid_result=managed(paid_packet);assert counts()=='3:1:1:4'
+    paid_request=json.loads(query(f"SELECT request FROM lifecycle.commands WHERE(catalog_id,operation_id)=('{catalog}','{paid_result['LIFECYCLE_SWAP_REVIEWED']['operationId']}');"))
+    check_calendar_authority(query,manifest,calendar_source,[
+        ('profile read',f"SELECT lifecycle.read_swap_profile('{catalog}','{booked['tradeId']}','swap.payment','{paid_request['selection']['profileId']}',1,'{old_payment_context}','2021-01-20T08:00:00Z','2021-01-20')"),
+        *[(label,f"SELECT security.admit_trading_business_source('{catalog}','{old_payment_context}','2021-01-20T08:00:00Z','2021-01-20');SELECT lifecycle.record_swap_payment_action('{catalog}',{lit(body)},clock_timestamp()+interval '30 seconds')") for label,body in (
+            ('committed payment retry',paid_request),('new payment',{**paid_request,'operationId':str(uuid4())}))]])
+    assert managed(paid_packet)['LIFECYCLE_SWAP_OUTCOME']['paymentId']==paid_result['LIFECYCLE_SWAP_OUTCOME']['paymentId']
     after_payment=call(f"SELECT security.capture_date_context('{catalog}','2021-01-21',NULL);")
     later_payment={**paid_packet,'payment':{**payment,'expectedVersion':4},'context':{**paid_packet['context'],'contextId':after_payment,'asOf':'2021-01-21T08:00:00Z','businessDate':'2021-01-21'}}
     publications=query(f"SELECT count(*) FROM trading.publications WHERE catalog_id='{catalog}';")
@@ -183,8 +192,9 @@ def checks(query,manifest,economic_worker=None,*,schedule_only=False):
         native_periods=[]
         for start,end in periods:
             terms={**(booking['fixed'] if fixed else booking['floating']),'deliveryFrom':start,'deliveryTo':end}
+            terms.pop('calendarPolicy')
             native_periods.append(dict(amount='100',fixed=terms if fixed else None,floating=None if fixed else terms))
-        return dict(basis='period_total',quantity=quantity,amount=None,allocation=None,priceApplication='period_average_times_quantity_v1',power=None,periods=native_periods)
+        return dict(calendarPolicy=all_dates_policy(observation=not fixed),basis='period_total',quantity=quantity,amount=None,allocation=None,priceApplication='period_average_times_quantity_v1',power=None,periods=native_periods)
     scheduled={**booking,'operationId':str(uuid4()),'quantity':None,'fixedCoefficient':None,'fixed':None,'floating':None,
                'swapType':'scheduled_financial_swap','firstCoefficient':'-1',
                'scheduled':dict(implementation='whole_term_scheduled_financial_swap_v1',first=side(True),second=side(False))}
@@ -209,7 +219,7 @@ def checks(query,manifest,economic_worker=None,*,schedule_only=False):
     managed(reversal);assert counts()=='3:2:2:5'
     print('PASS shared single-payment reversal: exact original choice, signed opposite amount and one restored gross balance',flush=True)
     from check_lifecycle_swap_net import checks as net_checks
-    net_checks(query,manifest,call,managed,booking,profile,policy,snapshot)
+    net_checks(query,manifest,call,managed,booking,profile,policy,snapshot,calendar_source)
     scheduled_checks(query,manifest,call,managed,booking,profile,policy,snapshot)
 
 
@@ -292,8 +302,8 @@ def scheduled_checks(query,manifest,call,managed,booking,profile,policy,snapshot
     managed(dict(snapshotId=snapshot,sourceViews=complete,bookId=booking['bookId'],context=dict(contextId=reader_context,asOf='2021-01-15T08:00:00Z',businessDate='2021-01-15',snapshotId=snapshot),target=arguments['target']))
 
     quantity=dict(revision=dict(catalogId=manifest['referenceCatalogId'],revisionId=manifest['referenceRevisionId']),code='test_gas_quantity')
-    def fixed(price):return dict(basis='period_total',quantity=quantity,amount=None,allocation=None,priceApplication='period_average_times_quantity_v1',power=None,
-        periods=[dict(amount='100',fixed={**booking['fixed'],'price':price},floating=None)])
+    def fixed(price):return dict(calendarPolicy=all_dates_policy(observation=False),basis='period_total',quantity=quantity,amount=None,allocation=None,priceApplication='period_average_times_quantity_v1',power=None,
+        periods=[dict(amount='100',fixed={**{k:v for k,v in booking['fixed'].items() if k!='calendarPolicy'},'price':price},floating=None)])
     deterministic={**booking,'operationId':str(uuid4()),'quantity':None,'fixedCoefficient':None,'fixed':None,'floating':None,'swapType':'scheduled_financial_swap','firstCoefficient':'-1',
         'scheduled':dict(implementation='whole_term_scheduled_financial_swap_v1',first=fixed('3'),second=fixed('4'))}
     before_fixed=query("SELECT count(*)::text||':'||(SELECT count(*) FROM trading.publications)::text FROM trading.swap_trade_revisions;")

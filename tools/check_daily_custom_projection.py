@@ -1,4 +1,5 @@
 """Exact daily delivery mappings through ordinary PV, risk and retained workers."""
+from synthetic_side_calendars import all_dates_policy
 from copy import deepcopy
 from fractions import Fraction
 from uuid import uuid4
@@ -40,12 +41,12 @@ def run_checks(url, manifest, query, run_worker):
     choice=next(p for p in index['customProjections'] if p['reference']['curveId']==saved['id'] and p['reference']['selection']=='exact_delivery_interval_v1')
     assert choice['reference']['position'] is None and choice['samplings']==[{'resetFrequency':'daily','averagingMethod':'arithmetic'}]
     delivery={'deliveryFrom':'2021-01-01','deliveryTo':'2021-02-01'}
-    payment={'frequency':'monthly','rule':'days_after_period_end','days':0,'dayOfMonth':None,'dayBasis':'calendar_days',
+    payment={'frequency':'monthly','rule':'days_after_period_end','days':1,'dayOfMonth':None,'dayBasis':'calendar_days',
              'shortMonth':None,'adjustment':'unadjusted','calendar':None,'implementation':'monthly_payment_date_rules_v1'}
     terms={**context,**trade_booking(),'operationId':str(uuid4()),'bookId':daily_book,'definitionRevisionId':index['definitionRevisionId'],
         'commodity':index['commodity'],'quantity':'31','fixedCoefficient':'-1','discounting':False,
-        'fixed':{'price':'0','currency':index['currencyCode'],**delivery,'paymentSchedule':payment},
-        'floating':{'spread': '0', 'settlement': {'mode': 'curve_target', 'index': None, 'projectionPolicy': None}, 'curve':index['curve'],'index':index['index'],'currency':index['currencyCode'],**delivery,'paymentSchedule':payment,
+        'fixed':{'calendarPolicy': all_dates_policy(observation=False), 'price':'0','currency':index['currencyCode'],**delivery,'paymentSchedule':payment},
+        'floating':{'calendarPolicy': all_dates_policy(observation=True), 'spread': '0', 'settlement': {'mode': 'curve_target', 'index': None, 'projectionPolicy': None}, 'curve':index['curve'],'index':index['index'],'currency':index['currencyCode'],**delivery,'paymentSchedule':payment,
                     'resetFrequency':'daily','averagingMethod':'arithmetic','customProjection':choice['reference']}}
     period_query={'settlement': {'mode': 'curve_target', 'index': None, 'projectionPolicy': None}, 'context':context,'definitionRevisionId':index['definitionRevisionId'],'commodity':index['commodity'],
                   'curve':index['curve'],'index':index['index'],'resetFrequency':'daily','averagingMethod':'arithmetic',

@@ -4,7 +4,9 @@ marks through November and one monthly hub plus basis point for December. Conven
 from datetime import date, timedelta
 from decimal import Decimal
 from uuid import uuid4
-from preview_fixture import CAT, REV, R, M, TENANT, WORKSPACE, identity, trade_booking
+from preview_fixture import CAT, REV, RCAT, RREV, R, M, TENANT, WORKSPACE, identity, trade_booking
+
+from synthetic_side_calendars import side_calendar_policy
 
 POINT = 'synthetic_gas_point_hub'
 LOCATION = 'synthetic_hub_location'
@@ -168,12 +170,13 @@ def premium_curve(publish, sources, omit=None):
 
 def trade(context, location, books, setup, curve):
     """Receive 100 MMBtu per gas day, 1 September to 31 December 2026; pay the daily index plus 0.00 on the 10th of the next month."""
+    calendar = {'revision': {'catalogId': RCAT, 'revisionId': RREV}, 'code': 'test_utc_every_day'}
     forecast = {'catalogId': CAT, 'curveId': curve['id'], 'version': curve['version'], 'outputNode': 'output', 'position': None,
                 'selection': 'containing_delivery_interval_v1', 'implementation': 'published_custom_curve_projection_v1'}
     return {**context, **trade_booking(), 'operationId': str(uuid4()), 'bookId': books[0]['id'], 'definitionRevisionId': location['definitionRevisionId'],
             'gasSetupId': setup, 'discounting': False, 'profile': 'indexed_gas_composition_v1',
             'physicalSides': [dict(code='gas', pipeline=location['pipeline'], zone=location['zone'], deliveryPoint=location['deliveryPoint'], product=location['product'],
-                                   direction='receive', deliveryFrom=str(TERM[0]), deliveryTo=str(TERM[1]), quantityBasis='per_operating_day', quantity='100', link=None, forecastCurve=forecast)],
-            'cashSides': [dict(code='payment', role='indexed_consideration', direction='pay', source='gas', stage='delivery', price=None, tariffCode=None, paymentAt=None,
+                                   direction='receive', deliveryFrom=str(TERM[0]), deliveryTo=str(TERM[1]), quantityBasis='per_operating_day', quantity='100', link=None, forecastCurve=forecast, calendarPolicy=side_calendar_policy(calendar,delivery=True,observation=False,payment=False))],
+            'cashSides': [dict(code='payment', role='indexed_consideration', direction='pay', source='gas', stage='delivery', price=None, tariffCode=None, paymentAt=None, calendarPolicy=side_calendar_policy(calendar,delivery=True,observation=True,payment=True),
                                indexed=dict(index='test_price', observationConvention='daily_published_index_v1', paymentConvention='next_month_day_utc_v1',
                                             paymentDay=10, spread='0', forecastCurve=forecast))]}

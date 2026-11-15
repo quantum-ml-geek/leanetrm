@@ -8,8 +8,8 @@ export async function run(actions){
   const token=(await(await fetch('/api/bootstrap')).json()).csrfToken;
   const post=async(path,body)=>{const r=await fetch('/api/'+path,{method:'POST',headers:{'Content-Type':'application/json','X-Preview-CSRF':token},body:JSON.stringify(body)});if(!r.ok)throw Error(await r.text());return r.json();};
   const original=JSON.parse(sessionStorage.getItem('crude-browser-original'));
-  const purchase=await post('crude/book',{...original,operationId:crypto.randomUUID(),quantity:'1000',handlingFee:null,handlingFeeDirection:null});
-  const sale=await post('crude/book',{...original,operationId:crypto.randomUUID(),direction:'deliver',considerationDirection:'receive',quantity:'600',fixedPrice:'80',handlingFee:null,handlingFeeDirection:null});
+  const purchase=await post('crude/book',{...original,operationId:crypto.randomUUID(),quantity:'1000',handlingFee:null,handlingFeeDirection:null,handlingFeePaymentAt:null,feeCalendarPolicy:null});
+  const sale=await post('crude/book',{...original,operationId:crypto.randomUUID(),direction:'deliver',considerationDirection:'receive',quantity:'600',fixedPrice:'80',handlingFee:null,handlingFeeDirection:null,handlingFeePaymentAt:null,feeCalendarPolicy:null});
   sessionStorage.setItem('inventory-browser-trades',JSON.stringify({purchase:purchase.tradeId,sale:sale.tradeId}));
   return {purchase:purchase.tradeId,sale:sale.tradeId};
  })()`);

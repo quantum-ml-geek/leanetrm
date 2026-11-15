@@ -74,6 +74,19 @@ internal static class CashLifecycleProjectionChecks
         if(deterministic.Economic.Single().ValueAtRisk!="-5"||deterministic.Economic.Single().ExpectedShortfall!="-5"||
             deterministic.MarketOnlyDiagnostic.Single().ValueAtRisk!="0"||deterministic.Economic.Single().Samples.Single().Id!="no_variable_factors")
             throw new Exception("A deterministic five-unit carry gain lost its signed point-mass risk or invented historical samples.");
+        var dated=new CashPayment(currency,PaymentDatePolicy.Date(at));var datedBinding=Guid.NewGuid();
+        var datedTrade=new Trade(Guid.NewGuid(),Guid.NewGuid(),[new(datedBinding,dated,new(ExactDecimal.Parse("16"),currency))]);
+        var datedOwner=new AccountingPositionKey(datedTrade.Id,datedBinding,datedTrade.BookId);
+        var datedState=new RecordedCashValuation(datedTrade,datedBinding,[],RecordedCashValuation.Policy,source.Knowledge.ContextId,source.Knowledge.KnownAt);
+        var datedProjection=new CashLifecycleProjection(datedOwner,dated,datedState,null,source);
+        if(datedProjection.Events.Single().At!=PaymentDatePolicy.Start(dated.PaymentDate.AddDays(1)))
+            throw new Exception("Standard cash must preserve its entire UTC payment day before hypothetical discharge.");
+        var sameDay=faceHorizon with{Closes=[new(dated.PaymentDate,at.AddHours(20),0)]};
+        var datedValue=LifecycleProjection.Prepare(f.Model(),source,sameDay,facePolicy,[datedProjection],[]).Evaluate("same_day_cash",[]).Values.Single();
+        Equal(datedValue.PeriodCash,"0");Equal(datedValue.ResidualValue,"16");
+        var nextDay=sameDay with{Closes=[new(dated.PaymentDate.AddDays(1),PaymentDatePolicy.Start(dated.PaymentDate.AddDays(1)),0)]};
+        var discharged=LifecycleProjection.Prepare(f.Model(),source,nextDay,facePolicy,[datedProjection],[]).Evaluate("next_day_cash",[]).Values.Single();
+        Equal(discharged.PeriodCash,"16");Equal(discharged.ResidualValue,"0");
         Console.WriteLine("PASS cash lifecycle: actual known payments stay fixed, projected paid/outstanding choices conserve value and overdue cash is never paid by its date");
     }
 }

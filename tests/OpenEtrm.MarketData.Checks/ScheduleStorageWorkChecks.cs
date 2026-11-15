@@ -11,7 +11,7 @@ internal static class ScheduleStorageWorkChecks
             throw new Exception("One fixed payment stores nine logical rows, nine dependencies and three named outputs.");
         var fixture = new PpaAcceptanceFixture();
         var side = new FixedSide(Guid.NewGuid(), fixture.Terms(fixture.Profile),
-            new FlatPrice(new(ExactDecimal.Parse("40"), fixture.EnergyPrice)));
+            new FlatPrice(new(ExactDecimal.Parse("40"), fixture.EnergyPrice)),SyntheticSideCalendars.Interval(fixture.Terms(fixture.Profile),false));
         work = ScheduleDefinitionCompiler.Estimate(side);
         // The synthetic DST month has721 cells. Profile, strike, amount, discount,
         // PV, guard, cell reduction and side sum are eight retained operators.

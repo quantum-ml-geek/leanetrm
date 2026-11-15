@@ -69,7 +69,7 @@ def run_checks(client, query, context, draft, weighted, booking):
         if slot == 'firstFloating':
             invalid[slot]['observationSchedule']['quantities'][0]['quantity']['value'] = '0'
         else:
-            invalid[slot]['observationSchedule']['calendar'] = None
+            invalid[slot]['calendarPolicy']['observation']['calendar'] = None
         client.call('swaps/book', invalid, expected=422)
     assert query('SELECT count(*) FROM trading.publications;') == before
     print('PASS composed observations: missing calendar or nonpositive quantity on either side fails booking atomically', flush=True)

@@ -152,7 +152,8 @@ public static class PowerHistory
     {
         var source=(await Sources(connection,request.SourceId,ct)).SingleOrDefault()??throw new PreviewDeniedException();
         if(!DateOnly.TryParseExact(request.FromDate,"yyyy-MM-dd",System.Globalization.CultureInfo.InvariantCulture,System.Globalization.DateTimeStyles.None,out var first)||!DateOnly.TryParseExact(request.ThroughDate,"yyyy-MM-dd",System.Globalization.CultureInfo.InvariantCulture,System.Globalization.DateTimeStyles.None,out var last))throw new MarketDataException("power_period","Supply exact first and last operating dates.");
-        var window=PowerImportProtocol.Window(first,last,OpenEtrm.MarketData.Power.PowerClock.FromRule(source.Clock,OpenEtrm.MarketData.Power.TimeZoneDatabase.Installed()),source.Minutes);
+        var clock=await PublishedClocks.Read(connection,new(new(source.Display.Id("reference_catalog_id"),source.Display.Id("reference_revision_id")),source.Clock.Code),ct);
+        var window=PowerImportProtocol.Window(first,last,clock,source.Minutes);
         var history=await ReadPrices(connection,request.SourceId,window[0].Start,window[^1].End,SchedulePreview.ParseAt(request.KnownAt),ct);
         var read=Response(source,history,request.SourceId);
         read["summary"]=Summarize(window,history.Rows);
