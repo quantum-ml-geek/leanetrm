@@ -9,6 +9,7 @@ using OpenEtrm.Shared.Temporal;
 namespace OpenEtrm.Api;
 
 internal sealed record AsyncReadError(string Code,string Message);
+internal sealed record AsyncReadFailure(string Operation,Guid RequestId,string ExceptionType,string? Method,string? SqlState);
 internal sealed record AsyncReadCompletion(AsyncReadRequest Request,AsyncReadPlan Plan,string State,JsonElement? Result,AsyncReadError? Error,
     Func<NpgsqlConnection,CancellationToken,Task>? Recheck=null);
 
@@ -22,6 +23,7 @@ internal sealed class AsyncReadChannel:IAsyncDisposable
     readonly object gate=new();
     readonly CancellationTokenSource lifetime;
     readonly CancellationToken stopping;
+    readonly Action<AsyncReadFailure>? reportFailure;
     readonly Channel<AsyncReadCompletion> responses=Channel.CreateBounded<AsyncReadCompletion>(new BoundedChannelOptions(MaximumActive){SingleReader=true,FullMode=BoundedChannelFullMode.Wait});
     readonly Dictionary<Guid,Pending> requests=[];
     readonly HashSet<Guid> notAdmitted=[];
@@ -31,9 +33,9 @@ internal sealed class AsyncReadChannel:IAsyncDisposable
     internal Guid Id{get;}
     internal bool Closed=>closed||stopping.IsCancellationRequested;
     internal CancellationToken Stopping=>stopping;
-    internal AsyncReadChannel(Guid id,CancellationToken applicationStopping)
+    internal AsyncReadChannel(Guid id,CancellationToken applicationStopping,Action<AsyncReadFailure>? reportFailure=null)
     {
-        Id=id;lifetime=CreateLifetime(applicationStopping);stopping=lifetime.Token;
+        Id=id;lifetime=CreateLifetime(applicationStopping);stopping=lifetime.Token;this.reportFailure=reportFailure;
     }
     sealed class Pending(string hash,CancellationTokenSource cancellation)
     {
@@ -77,8 +79,10 @@ internal sealed class AsyncReadChannel:IAsyncDisposable
             if(active>=MaximumActive)throw Refusal(429,"async_busy","This response channel already has two active reads.");
             var cancellation=CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);cancellation.CancelAfter(ReadLimit);
             var pending=new Pending(hash,cancellation);requests.Add(request.RequestId,pending);active++;
-            // Task.Run also keeps synchronous graph evaluation off the HTTP submission path.
-            pending.Work=Task.Run(()=>Evaluate(request,plan,pending));
+            // The worker owns explicit selection and authority. It must not retain
+            // the submitting HttpContext, which ASP.NET can dispose before it runs.
+            if(ExecutionContext.IsFlowSuppressed())pending.Work=Task.Run(()=>Evaluate(request,plan,pending));
+            else using(ExecutionContext.SuppressFlow())pending.Work=Task.Run(()=>Evaluate(request,plan,pending));
         }
     }
     async Task Evaluate(AsyncReadRequest request,AsyncReadPlan plan,Pending pending)
@@ -98,12 +102,24 @@ internal sealed class AsyncReadChannel:IAsyncDisposable
             });
         }
         catch(OperationCanceledException){completion=new(request,plan,"cancelled",null,new("request_cancelled","The read was cancelled or exceeded its time limit."));}
-        catch(Exception e){completion=new(request,plan,"failed",null,Error(e));}
+        catch(Exception e)
+        {
+            var error=Error(e);completion=new(request,plan,"failed",null,error);
+            if(error.Code=="async_read_failed")ReportFailure(request,e);
+        }
         lock(gate)
         {
             active--;
             if(!Closed&&!responses.Writer.TryWrite(completion))Close();
         }
+    }
+    void ReportFailure(AsyncReadRequest request,Exception error)
+    {
+        var method=error.TargetSite;
+        var diagnostic=new AsyncReadFailure(request.Operation,request.RequestId,error.GetType().FullName??error.GetType().Name,
+            method is null?null:$"{method.DeclaringType?.FullName}.{method.Name}",(error as PostgresException)?.SqlState);
+        // Diagnostic delivery must not replace the original terminal response.
+        try{reportFailure?.Invoke(diagnostic);}catch{ }
     }
     internal string Cancel(Guid requestId)
     {

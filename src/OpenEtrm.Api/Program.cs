@@ -2497,7 +2497,7 @@ Task<object> AsyncPortfolioRead(AsyncReadInput input,NpgsqlConnection connection
     PortfolioMonteCarloRequest body=>portfolioRisk.Calculate(connection,data,frame,PortfolioRiskPreview.MonteCarloRequest(body),ct),
     _=>throw AsyncReadContract.Invalid()
 };
-var asyncReads=new AsyncReads(database,app.Lifetime.ApplicationStopping,hosted is not null);
+var asyncReads=new AsyncReads(database,app.Lifetime.ApplicationStopping,hosted is not null,app.Logger);
 asyncReadServices.Add(asyncReads);asyncReads.Map(api,Session,PrepareAsyncRead);
 }
 var files=new PhysicalFileProvider(webRoot);

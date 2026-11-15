@@ -7,6 +7,13 @@ channel, request ID, operation and snapshot; completion order is independent of
 submission order. Each consuming view still validates its selected account,
 context and projection before installing a result.
 
+Workers receive explicit immutable inputs, identity and cancellation. Scheduling
+does not carry the submitting HTTP context or ambient request execution state
+into a worker. Delegated assistant invocations retain their classified ordinary
+operations and are refused at the page transport boundary. Unexpected worker
+failures keep a generic client response; server diagnostics contain only the
+operation, request ID, exception type, declaring method and optional SQL state.
+
 Existing source-admission guards record the exact market/reference coordinates
 and book identities touched by one read. This immutable evidence is scoped to
 that worker and is checked again in a fresh publication transaction. It is not

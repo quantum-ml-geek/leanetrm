@@ -6,7 +6,7 @@ namespace OpenEtrm.Api;
 
 // The workbench multiplexes named managed reads; authorization is freshly
 // checked at execution and fenced publication. Writes keep their ordinary routes.
-internal sealed class AsyncReads(PreviewDatabase database,CancellationToken stopping,bool hosted):IAsyncDisposable
+internal sealed class AsyncReads(PreviewDatabase database,CancellationToken stopping,bool hosted,ILogger logger):IAsyncDisposable
 {
     readonly object registryGate=new();
     readonly Dictionary<Guid,Owner> channels=[];
@@ -23,10 +23,11 @@ internal sealed class AsyncReads(PreviewDatabase database,CancellationToken stop
     }
     internal void Map(RouteGroupBuilder api,Func<HttpContext,PreviewSession> session,Func<PreviewSession,AsyncReadInput,AsyncReadPlan> prepare)
     {
+        PreviewSession ReadSession(HttpContext context)=>PageSession(context,session);
         api.MapPost("/async-reads/channels",async(HttpContext c)=>
         {
             var body=await Body<AsyncReadOpenRequest>(c);if(body.ClientId==Guid.Empty)throw AsyncReadContract.Invalid();
-            var current=session(c);await current.Gate.WaitAsync(c.RequestAborted);
+            var current=ReadSession(c);await current.Gate.WaitAsync(c.RequestAborted);
             try
             {
                 var profile=current.Profile??throw new PreviewDeniedException();
@@ -47,18 +48,20 @@ internal sealed class AsyncReads(PreviewDatabase database,CancellationToken stop
                     if(channels.Values.Count(o=>ReferenceEquals(o.Session,current))>=4)
                         throw AsyncReadChannel.Refusal(429,"async_session_capacity","This session already has four page response channels. Close an unused page before opening another.");
                     if(channels.Count>=64)throw AsyncReadChannel.Refusal(429,"async_channel_capacity","The response channels are at capacity.");
-                    var channel=new AsyncReadChannel(Guid.NewGuid(),stopping);
+                    var channel=new AsyncReadChannel(Guid.NewGuid(),stopping,failure=>logger.LogError(
+                        "Asynchronous read failed: operation={Operation} request={RequestId} type={ExceptionType} method={Method} sqlstate={SqlState}",
+                        failure.Operation,failure.RequestId,failure.ExceptionType,failure.Method,failure.SqlState));
                     channels.Add(channel.Id,new(channel,current,body.ClientId,profile,current.MarketContext,current.Live,hosted?current.Digest:null));
                     return Results.Ok(new {protocol=AsyncReadChannel.Protocol,channelId=channel.Id,profile,context=current.MarketContext});
                 }
             }
             finally{current.Gate.Release();}
         });
-        api.MapGet("/async-reads/events",(HttpContext c,Guid channelId)=>Serve(c,session(c),channelId));
+        api.MapGet("/async-reads/events",(HttpContext c,Guid channelId)=>Serve(c,ReadSession(c),channelId));
         api.MapPost("/async-reads",async(HttpContext c)=>
         {
             var body=await Body<AsyncReadRequest>(c);AsyncReadChannel.Validate(body);
-            var current=session(c);await current.Gate.WaitAsync(c.RequestAborted);
+            var current=ReadSession(c);await current.Gate.WaitAsync(c.RequestAborted);
             try
             {
                 var owner=Find(current,body.ChannelId);owner.RequireCurrent();
@@ -71,7 +74,7 @@ internal sealed class AsyncReads(PreviewDatabase database,CancellationToken stop
         });
         api.MapPost("/async-reads/cancel",async(HttpContext c)=>
         {
-            var body=await Body<AsyncReadCancel>(c);var current=session(c);
+            var body=await Body<AsyncReadCancel>(c);var current=ReadSession(c);
             await current.Gate.WaitAsync(c.RequestAborted);
             try
             {
@@ -80,6 +83,13 @@ internal sealed class AsyncReads(PreviewDatabase database,CancellationToken stop
             }
             finally{current.Gate.Release();}
         });
+    }
+    internal static PreviewSession PageSession(HttpContext context,Func<HttpContext,PreviewSession> session)
+    {
+        // Delegated tools use their classified ordinary operations. This page
+        // transport cannot detach and discard an invocation's authority guards.
+        if(context.Features.Get<AssistantInvocation>() is not null)throw new PreviewDeniedException();
+        return session(context);
     }
     static async Task<T> Body<T>(HttpContext c)
     {

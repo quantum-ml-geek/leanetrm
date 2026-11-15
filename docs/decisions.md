@@ -5495,6 +5495,12 @@ permission and sign-in authority before disclosure. Hosted background work uses
 an explicitly captured sign-in digest with fresh server-side validation, never
 an expired request context or a cached authorization decision.
 
+Detached workers receive only explicit immutable selection, identity and
+cancellation inputs; they do not inherit the submitting HTTP context or ambient
+request execution state. Delegated assistant invocations continue through their
+classified ordinary operations. The page response transport refuses them before
+session resolution, so detachment cannot discard delegated authority guards.
+
 Bound active work, queued requests, identities, serialized responses and channel
 lifetimes. Identical request-ID retries cannot execute twice; conflicting reuse
 is refused. Cancellation invalidates the consumer immediately while transport

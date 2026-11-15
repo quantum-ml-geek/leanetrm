@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.AspNetCore.Http;
 using OpenEtrm.Api;
 
 internal static class AsyncReadChecks
@@ -33,8 +34,73 @@ internal static class AsyncReadChecks
         if(!channel.Stopping.IsCancellationRequested)throw new Exception("Retired channels retain a safe cancelled lifetime token.");
         Refused("async_channel_unavailable",()=>channel.Submit(request,Plan(request,Work)));
         await CancellationAdmission();
+        await DetachedRequestContext();
+        DelegatedTransport();
+        await FailureDiagnostics();
         await AsyncReadVisibilityChecks.Run();
-        Console.WriteLine("PASS async reads: concurrency, normalized retries, conflicts, bounds, exact correlation, cancellation admission fence, shared cancellation drain and visibility isolation");
+        Console.WriteLine("PASS async reads: concurrency, normalized retries, bounds, correlation, cancellation admission/drain, detached request context, delegated refusal, safe diagnostics and visibility isolation");
+    }
+    static async Task FailureDiagnostics()
+    {
+        var failures=new List<AsyncReadFailure>();
+        await using var channel=new AsyncReadChannel(Guid.NewGuid(),CancellationToken.None,failures.Add);channel.Connect();
+        var request=new AsyncReadRequest(channel.Id,Guid.NewGuid(),"curve.evaluate.v1",JsonSerializer.SerializeToElement(new{snapshotId=Guid.NewGuid(),curve="synthetic"}));
+        const string detail="synthetic confidential payload";
+        channel.Submit(request,new(AsyncReadContract.Decode(request),_=>throw new InvalidOperationException(detail)));
+        using var timeout=new CancellationTokenSource(TimeSpan.FromSeconds(3));var failed=await channel.Read(timeout.Token);
+        if(failed.State!="failed"||failed.Error?.Code!="async_read_failed"||failed.Error.Message.Contains(detail,StringComparison.Ordinal))
+            throw new Exception("Unexpected worker failures must preserve the generic client refusal.");
+        if(failures.Count!=1||failures[0].Operation!=request.Operation||failures[0].RequestId!=request.RequestId||
+            failures[0].ExceptionType!=typeof(InvalidOperationException).FullName||string.IsNullOrEmpty(failures[0].Method)||
+            JsonSerializer.Serialize(failures).Contains(detail,StringComparison.Ordinal))
+            throw new Exception("Unexpected worker diagnostics must correlate the exact read using type and method without exception text or request data.");
+        var refused=request with{RequestId=Guid.NewGuid()};channel.Submit(refused,new(AsyncReadContract.Decode(refused),
+            _=>throw new OpenEtrm.MarketData.MarketDataException("synthetic_refusal","Explicit synthetic input refusal.")));
+        var known=await channel.Read(timeout.Token);
+        if(known.Error?.Code!="synthetic_refusal"||failures.Count!=1)
+            throw new Exception("Expected business refusals must keep their structured result without being logged as unexpected failures.");
+        await using var unavailableLog=new AsyncReadChannel(Guid.NewGuid(),CancellationToken.None,_=>throw new InvalidOperationException("Synthetic log failure."));unavailableLog.Connect();
+        var unlogged=request with{ChannelId=unavailableLog.Id,RequestId=Guid.NewGuid()};
+        unavailableLog.Submit(unlogged,new(AsyncReadContract.Decode(unlogged),_=>throw new InvalidOperationException(detail)));
+        if((await unavailableLog.Read(timeout.Token)).Error?.Code!="async_read_failed")
+            throw new Exception("A diagnostic sink failure must not prevent the original generic terminal response.");
+    }
+    static void DelegatedTransport()
+    {
+        var manifest=new PreviewManifest("local-synthetic-preview",Guid.NewGuid(),Guid.NewGuid(),Guid.NewGuid(),Guid.NewGuid(),
+            Guid.NewGuid(),Guid.NewGuid(),[],null,FuturesConvention:"contract_lot_execution_pnl_v2");
+        var session=new PreviewSession(manifest){Profile="trader"};var context=new DefaultHttpContext();var resolved=false;
+        PreviewSession Resolve(HttpContext c){resolved=true;return session;}
+        if(!ReferenceEquals(AsyncReads.PageSession(context,Resolve),session)||!resolved)
+            throw new Exception("The page read transport must resolve its ordinary authenticated session.");
+        context.Features.Set(new AssistantInvocation(session));resolved=false;
+        try{AsyncReads.PageSession(context,Resolve);}
+        catch(PreviewDeniedException)when(!resolved){return;}
+        throw new Exception("Delegated invocations must be refused before resolving a page session, never lose their authority constraints in detached work.");
+    }
+    static async Task DetachedRequestContext()
+    {
+        var accessor=new HttpContextAccessor();var submitting=new DefaultHttpContext();accessor.HttpContext=submitting;
+        var ambient=new AsyncLocal<string?>{Value="synthetic submission"};
+        try
+        {
+            await using var channel=new AsyncReadChannel(Guid.NewGuid(),CancellationToken.None);channel.Connect();
+            var request=new AsyncReadRequest(channel.Id,Guid.NewGuid(),"curve.evaluate.v1",JsonSerializer.SerializeToElement(new{snapshotId=Guid.NewGuid(),curve="synthetic"}));
+            var plan=new AsyncReadPlan(AsyncReadContract.Decode(request),_=>Task.FromResult(new AsyncReadOutcome(
+                new{requestContext=accessor.HttpContext is not null,ambient=ambient.Value},(_,_)=>Task.CompletedTask)));
+            channel.Submit(request,plan);
+            if(!ReferenceEquals(accessor.HttpContext,submitting)||ambient.Value!="synthetic submission")
+                throw new Exception("Scheduling a detached read must preserve the submitting request's own context.");
+            using var timeout=new CancellationTokenSource(TimeSpan.FromSeconds(3));var completed=await channel.Read(timeout.Token);
+            if(completed.State!="completed"||completed.Result is not {} result||result.GetProperty("requestContext").GetBoolean()||result.GetProperty("ambient").ValueKind!=JsonValueKind.Null)
+                throw new Exception("A detached read must not inherit the submitting HTTP context or its ambient execution state.");
+            var alreadyDetached=request with{RequestId=Guid.NewGuid()};
+            using(ExecutionContext.SuppressFlow())channel.Submit(alreadyDetached,plan);
+            var repeated=await channel.Read(timeout.Token);
+            if(repeated.State!="completed"||repeated.Result!.Value.GetProperty("requestContext").GetBoolean())
+                throw new Exception("An already detached caller must still admit and complete its explicit read.");
+        }
+        finally{accessor.HttpContext=null;}
     }
     static async Task CancellationAdmission()
     {

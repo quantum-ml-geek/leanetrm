@@ -475,7 +475,8 @@ export async function run({command,evaluate,wait,click,set,submit,persona,check,
     // The independently imported module has its own metadata map beside the
     // bundled application; initialize it from the actual authorized directory.
     (await import('/market-view.js')).setCurveNames(await(await fetch('/api/curve-names')).json());
-    window.__riskHarness=(await import('/risk-view.js')).setupRisk({api,act:work=>work().catch(error=>{if(window.__riskScopeChanged){window.__riskScopeRefused=error.message;return;}throw error;}),busy:()=>false,zone:()=> 'America/Chicago',canRun:()=>true,profile:()=> 'synthetic-risk-races',scope:()=>{if(window.__riskScopeChanged)throw Error('Synthetic selected financial context changed.');return window.__riskJobs.at(-1).request;},onDenied:()=>{},onChange:()=>{}});
+    const refused=error=>{if(window.__riskScopeChanged){window.__riskScopeRefused=error.message;return;}throw error;};
+    window.__riskHarness=(await import('/risk-view.js')).setupRisk({api,act:work=>work().catch(refused),failed:refused,busy:()=>false,zone:()=> 'America/Chicago',canRun:()=>true,profile:()=> 'synthetic-risk-races',scope:()=>{if(window.__riskScopeChanged)throw Error('Synthetic selected financial context changed.');return window.__riskJobs.at(-1).request;},onDenied:()=>{},onChange:()=>{}});
     await window.__riskHarness.open();
   })()`);
   await choose('custom');await set('#risk-factor',factor);await set('#risk-bump','0.1');await click('#risk-queue',60000);await wait('window.__riskRaceResponses.length===1');
