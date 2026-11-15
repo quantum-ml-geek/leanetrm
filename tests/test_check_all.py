@@ -17,6 +17,24 @@ from check_all import GROUPS, run_checks
 
 
 class CheckAllTests(unittest.TestCase):
+    def test_large_preview_queues_have_separate_required_partitions(self):
+        previews = {}
+        for group in GROUPS:
+            commands = []
+            run_checks(Path('/pg'), Path('/dotnet'), Path('/browser'), group=group,
+                       run=lambda command, **options: commands.append(command))
+            previews[group] = [c for c in commands if 'tools/run_preview.py' in c]
+        self.assertLessEqual(max(map(len, previews.values())), 12,
+                             'Long preview queues must be partitioned before they exceed CI limits')
+        for group, flags in (
+            ('reference', ('--price-authoring-check', '--contract-dates-check', '--custom-curves-check')),
+            ('physical', ('--gas-billing-check', '--crude-lifecycle-check', '--lng-cargo-check')),
+            ('risk', ('--risk-jobs-check', '--historical-risk-check', '--factor-history-check')),
+        ):
+            for flag in flags:
+                self.assertEqual([name for name, commands in previews.items()
+                                  if any(flag in command for command in commands)], [group], flag)
+
     def test_calendar_and_payment_contracts_and_populated_upgrade_cannot_be_omitted(self):
         commands=[]
         run_checks(Path('/stock postgres/bin'),Path('/managed sdk/dotnet'),Path('/browser executable'),run=lambda command,**options:commands.append(command))
@@ -42,9 +60,9 @@ class CheckAllTests(unittest.TestCase):
                        Path('/selected browser executable'), group='standard', run=run)
         self.assertEqual(frontend, ['/selected browser executable'])
 
-    def test_physical_gas_workflow_is_qualified_in_trading_partition(self):
+    def test_physical_gas_workflow_is_qualified_in_physical_partition(self):
         commands=[]
-        run_checks(Path('/stock postgres/bin'),Path('/managed sdk/dotnet'),Path('/browser executable'),group='trading',run=lambda command,**options:commands.append(command))
+        run_checks(Path('/stock postgres/bin'),Path('/managed sdk/dotnet'),Path('/browser executable'),group='physical',run=lambda command,**options:commands.append(command))
         gas=[c for c in commands if '--gas-daily-quantity-check' in c]
         self.assertEqual(len(gas),1)
         demo=[c for c in commands if '--gas-basis-demo-check' in c]
@@ -61,9 +79,9 @@ class CheckAllTests(unittest.TestCase):
         self.assertIn('--browser-check',indexed[0])
         self.assertIn('--browser',indexed[0])
 
-    def test_publication_and_contract_authoring_are_qualified_in_workspace_partition(self):
+    def test_publication_and_contract_authoring_are_qualified_in_reference_partition(self):
         commands=[]
-        run_checks(Path('/stock postgres/bin'),Path('/managed sdk/dotnet'),Path('/browser executable'),group='workspace',run=lambda command,**options:commands.append(command))
+        run_checks(Path('/stock postgres/bin'),Path('/managed sdk/dotnet'),Path('/browser executable'),group='reference',run=lambda command,**options:commands.append(command))
         selected=[c for c in commands if '--price-authoring-check' in c]
         self.assertEqual(len(selected),1)
         self.assertIn('--browser-check',selected[0])
@@ -71,26 +89,26 @@ class CheckAllTests(unittest.TestCase):
         for helper in ('tools/check_price_publications.py','tools/check_contract_price_terms.py'):
             self.assertTrue(any(helper in command for command in commands),helper)
 
-    def test_lng_booking_upgrade_recovery_and_worker_checks_run_in_trading_partition(self):
+    def test_lng_booking_upgrade_recovery_and_worker_checks_run_in_physical_partition(self):
         commands=[]
-        run_checks(Path('/stock postgres/bin'),Path('/managed sdk/dotnet'),Path('/browser executable'),group='trading',run=lambda command,**options:commands.append(command))
+        run_checks(Path('/stock postgres/bin'),Path('/managed sdk/dotnet'),Path('/browser executable'),group='physical',run=lambda command,**options:commands.append(command))
         cargo=[c for c in commands if '--lng-cargo-check' in c]
         self.assertEqual(len(cargo),1)
         self.assertIn('--browser-check',cargo[0])
         self.assertEqual(cargo[0][cargo[0].index('--browser')+1],'/browser executable')
 
-    def test_manual_gas_operations_and_billing_recovery_run_in_trading_partition(self):
+    def test_manual_gas_operations_and_billing_recovery_run_in_physical_partition(self):
         commands=[]
-        run_checks(Path('/stock postgres/bin'),Path('/managed sdk/dotnet'),Path('/browser executable'),group='trading',run=lambda command,**options:commands.append(command))
+        run_checks(Path('/stock postgres/bin'),Path('/managed sdk/dotnet'),Path('/browser executable'),group='physical',run=lambda command,**options:commands.append(command))
         for flag in ('--gas-operations-check','--gas-billing-check'):
             selected=[command for command in commands if flag in command]
             self.assertEqual(len(selected),1)
             self.assertIn('--browser-check',selected[0])
             self.assertEqual(selected[0][selected[0].index('--browser')+1],'/browser executable')
 
-    def test_physical_crude_lifecycle_and_recovery_are_qualified_in_trading_partition(self):
+    def test_physical_crude_lifecycle_and_recovery_are_qualified_in_physical_partition(self):
         commands=[]
-        run_checks(Path('/stock postgres/bin'),Path('/managed sdk/dotnet'),Path('/browser executable'),group='trading',run=lambda command,**options:commands.append(command))
+        run_checks(Path('/stock postgres/bin'),Path('/managed sdk/dotnet'),Path('/browser executable'),group='physical',run=lambda command,**options:commands.append(command))
         crude=[c for c in commands if '--crude-lifecycle-check' in c]
         self.assertEqual(len(crude),1)
         self.assertIn('--browser-check',crude[0])
@@ -240,9 +258,9 @@ class CheckAllTests(unittest.TestCase):
         self.assertFalse(any('--exchange-check' in command for command in previews['workspace']))
         self.assertEqual(group_of('--close-risk-check'), 'ppa')
         self.assertEqual(group_of('--assistant-check'), 'assistant')
-        self.assertEqual(group_of('--risk-jobs-check'), 'assistant')
-        self.assertEqual(group_of('--factor-history-check'), 'assistant')
-        self.assertEqual(group_of('--parametric-risk-check'), 'assistant')
+        self.assertEqual(group_of('--risk-jobs-check'), 'risk')
+        self.assertEqual(group_of('--factor-history-check'), 'risk')
+        self.assertEqual(group_of('--parametric-risk-check'), 'risk')
         self.assertEqual(group_of('--hosted-check'), 'workspace')
         for flag in ('--draft-check', '--factor-swap-check', '--index-fixing-check',
                      '--side-observation-check', '--demo-instruments-check', '--close-out-drafts-check', '--unified-trading-check'):
