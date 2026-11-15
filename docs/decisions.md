@@ -5480,3 +5480,30 @@ operation requires an existing certified source context for its stated business
 date before global fact matching; exact first-receipt recovery remains earlier
 than source reads. Native upgrade and acknowledgement checks qualify those
 boundaries, including historical snapshots and an explicitly zero original fee.
+
+## D404 · Correlated asynchronous workbench read responses
+
+Admit explicit named reads over HTTP and deliver their terminal results over one
+owned SSE channel. The main application consumes this path for curve evaluation
+and history, trade inspection, scenario Risk and statistical Risk reads. Keep a
+finite operation allowlist and share managed operations and response projections
+with ordinary HTTP. New transport must not become an arbitrary endpoint proxy.
+
+Capture immutable selections under the session gate and evaluate independent
+reads outside it. Recheck the selected account/context and current source,
+permission and sign-in authority before disclosure. Hosted background work uses
+an explicitly captured sign-in digest with fresh server-side validation, never
+an expired request context or a cached authorization decision.
+
+Bound active work, queued requests, identities, serialized responses and channel
+lifetimes. Identical request-ID retries cannot execute twice; conflicting reuse
+is refused. Cancellation invalidates the consumer immediately while transport
+capacity is released only after server termination. Disconnect rejects pending
+reads and explicit retry establishes a fresh channel. No implicit replay or
+new durable-outcome guarantee is introduced.
+
+Each screen owns read progress independently so navigation and unrelated reads
+remain usable. Preserve existing financial write identities, retained Risk job
+admission/reconciliation and progressive row streams. This decision does not
+expand numerical qualification or authorize merging or deployment; qualification
+and the pull request record the implemented operations and remaining limits.

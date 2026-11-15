@@ -5,10 +5,11 @@ import {mkdtemp,readFile,writeFile,stat} from 'node:fs/promises';
 import {dirname,join,resolve} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {promisify} from 'node:util';
+import {asyncReadProbeScript} from './async-read-probe.mjs';
 
 const execute=promisify(execFile);
 
-export const idle="document.body?.getAttribute('aria-busy')==='false'&&(!document.querySelector('#futures-page:not([hidden])')||document.querySelector('#futures-page').dataset.pricingState!=='pending')";
+export const idle="document.body?.getAttribute('aria-busy')==='false'&&!document.querySelector('#risk-history-panel[aria-busy=true],#risk-report[aria-busy=true],#workspace-risk-report[aria-busy=true],#risk-jobs-list[aria-busy=true],#risk-jobs-report[aria-busy=true]')&&(!document.querySelector('#futures-page:not([hidden])')||document.querySelector('#futures-page').dataset.pricingState!=='pending')";
 // Phone emulation widens window.innerWidth to fit overflowing content, so a page's width is
 // compared with the root element's clientWidth: the layout viewport the device width sets.
 export const fitsWidth='(document.documentElement.scrollWidth<=document.documentElement.clientWidth+1)';
@@ -215,6 +216,7 @@ export async function withOwnedBrowser(targetFile,browserPath,run){
   try{
     socket=new WebSocket(await waitForBrowserPage(directory,chrome));
     const {command,evaluate,wait,click,set,submit,abandon}=await connect(socket,errors);
+    await command('Page.enable');await command('Page.addScriptToEvaluateOnNewDocument',{source:asyncReadProbeScript});
     // Another tab of this browser, sharing its cookies and storage origin, over a debugger connection of its own.
     async function tab(targetId){
       const port=await waitForBrowserPort(directory,chrome),response=await fetch(`http://127.0.0.1:${port}`+(targetId===undefined?'/json/new?about:blank':'/json/list'),{method:targetId===undefined?'PUT':'GET'});
@@ -226,6 +228,7 @@ export async function withOwnedBrowser(targetFile,browserPath,run){
         throw Error('Browser debugger tab URL does not match the exact owned loopback port.');
       const other=new WebSocket(address.href),driver=await connect(other,errors);tabs.push({other,driver});
       await driver.command('Runtime.enable');await driver.command('Page.enable');await driver.command('Emulation.setTimezoneOverride',{timezoneId:'UTC'});
+      await driver.command('Page.addScriptToEvaluateOnNewDocument',{source:asyncReadProbeScript});
       return {...driver,async close(){driver.abandon();other.close();await fetch(`http://127.0.0.1:${port}/json/close/${created.id}`);}};
     }
     // Switching accounts reads the identity and the account's first page again, so it waits longer than a single action.

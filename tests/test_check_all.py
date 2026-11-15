@@ -37,6 +37,18 @@ AGENT_SETTINGS_BROWSER={'tools/check_agent_operating_settings.py'}
 
 
 class CheckAllTests(unittest.TestCase):
+    def test_async_workbench_checks_are_required_in_workspace_partition(self):
+        for group in GROUPS:
+            commands = []
+            run_checks(Path('/pg'), Path('/dotnet'), Path('/browser'), group=group,
+                       run=lambda command, **options: commands.append(command))
+            self.assertEqual(sum('--async-reads' in command for command in commands), 1)
+            selected = [c for c in commands if '--async-workbench-check' in c]
+            self.assertEqual(len(selected), 1 if group == 'workspace' else 0)
+            if selected:
+                self.assertIn('--browser-check', selected[0])
+                self.assertEqual(selected[0][selected[0].index('--browser')+1], '/browser')
+
     def test_large_preview_queues_have_separate_required_partitions(self):
         previews = {}
         for group in GROUPS:
@@ -281,7 +293,7 @@ class CheckAllTests(unittest.TestCase):
         self.assertEqual(executed, expected)
         schedule_commands = [c for c in commands if '--project' in c and 'Api.Checks' in c[c.index('--project') + 1]]
         self.assertEqual([c[-2:] for c in schedule_commands],
-                         [['--', flag] for flag in ('--context-resolution', '--schedules', '--published-clock', '--calendar-authoring', '--gas-ticket', '--historical-risk', '--monte-carlo-risk', '--close-risk', '--automation',
+                         [['--', flag] for flag in ('--context-resolution', '--schedules', '--async-reads', '--published-clock', '--calendar-authoring', '--gas-ticket', '--historical-risk', '--monte-carlo-risk', '--close-risk', '--automation',
                            '--live-calculation', '--reference-intake', '--preview-data', '--side-observation-compatibility',
                            '--lifecycle-actions','--economic-risk-contract','--lifecycle-schedule-contract','--gas-owned-setup',
                           '--shared-native-markets','--derivative-methods','--gas-accepted-order','--lifecycle-residual-currencies','--gas-operator-contract')])

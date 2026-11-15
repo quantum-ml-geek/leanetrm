@@ -16,6 +16,7 @@ CHECK_PROJECTS = (
     ('tests/OpenEtrm.Shared.Checks/OpenEtrm.Shared.Checks.csproj', ()),
     ('tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj', ('--context-resolution',)),
     ('tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj', ('--schedules',)),
+    ('tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj', ('--async-reads',)),
     ('tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj', ('--published-clock',)),
     ('tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj', ('--calendar-authoring',)),
     ('tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj', ('--gas-ticket',)),
@@ -163,6 +164,7 @@ def run_checks(pg_bin, dotnet, browser, *, group='all', run=subprocess.run):
     preview_check('private inactive reference intake',[*preview,'--reference-import-check'], suite='reference')
     preview_check('standard preview and browser', [*preview, '--browser-check', '--browser', str(browser)], suite='standard')
     preview_check('context read demand and grouped header', [*preview,'--context-read-check','--browser-check','--browser',str(browser)])
+    preview_check('asynchronous workbench reads', [*preview,'--async-workbench-check','--browser-check','--browser',str(browser)])
     preview_check('isolated party maintenance and power browser', [*preview, '--party-check', '--browser-check', '--browser', str(browser)])
     preview_check('isolated page-assistant administration and browser', [*preview, '--assistant-check', '--browser-check', '--browser', str(browser)], suite='assistant')
     preview_check('physical assistant context and native approvals', [*preview, '--physical-assistant-check', '--browser-check', '--browser', str(browser)], suite='assistant')

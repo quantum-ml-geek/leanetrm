@@ -252,7 +252,7 @@ public sealed partial class PreviewDatabase : IAsyncDisposable
 
     // A local context lasts leaseSeconds (at most 300); a hosted context lasts what its sign-in session issues.
     public async Task<T> WithIdentity<T>(string profile, string? permission, Func<NpgsqlConnection, CancellationToken, Task<T>> operation, CancellationToken ct, Admission admission=Admission.Shared,
-        int leaseSeconds=60)
+        int leaseSeconds=60,string? hostedDigest=null)
     {
         if(authenticator is null)throw new InvalidOperationException("This direct reader has no identity-issuing capability.");
         if (string.IsNullOrWhiteSpace(profile) || profile.Length>48) throw new PreviewDeniedException();
@@ -260,7 +260,7 @@ public sealed partial class PreviewDatabase : IAsyncDisposable
         var issuer=invocation?.ReadLimit is not null?agentAuthenticator??authenticator:authenticator;
         var source=invocation?.ReadLimit is not null?agentRuntime??runtime:runtime;
         await using var issue = issuer.CreateCommand(hostedSession is null?"SELECT security.issue_context($1,$2,$3,$4,$5,NULL,$6::name,$7)":"SELECT security.issue_hosted_context($1,$2::name)");
-        foreach (var value in hostedSession is null?new object[] { Manifest.IdentityIssuer, profile, "human_interactive", Manifest.TenantId, Manifest.WorkspaceId, runtimeLogin, leaseSeconds }:new object[]{hostedSession(),runtimeLogin})
+        foreach (var value in hostedSession is null?new object[] { Manifest.IdentityIssuer, profile, "human_interactive", Manifest.TenantId, Manifest.WorkspaceId, runtimeLogin, leaseSeconds }:new object[]{hostedDigest??hostedSession(),runtimeLogin})
             issue.Parameters.Add(new NpgsqlParameter { Value = value });
         Guid token;
         // A hosted request whose sign-in session was revoked or ended since it was authenticated (docs/ai-assistant.md §11).
@@ -401,6 +401,7 @@ public sealed partial class PreviewDatabase : IAsyncDisposable
         if(ppaBundle is null&&selectedRevision is not null)
             selectedManifest=PreviewData.ResolveBundleManifest(selectedManifest,definitions["revisions"][0]);
         PreviewData.RequireBundlePin(selectedManifest, definitions["revisions"][0]);
+        AsyncReadVisibility.Bundle(selectedManifest);
         // Reference reuse is an exact-key optimization for every source path.
         // A source with different reference pins reads its own authorized rows.
         if(sharedReferences is not null)
@@ -533,6 +534,7 @@ public sealed partial class PreviewDatabase : IAsyncDisposable
         var visible=await Rows(connection,"SELECT row_to_json(t)::text FROM(SELECT reference_catalog_id,reference_revision_id FROM market_data.revisions WHERE catalog_id=$1 AND id=$2 AND state='sealed')t",[Manifest.CatalogId,definition],ct);
         if(visible.Length!=1||visible[0].Id("reference_catalog_id")!=revision.CatalogId||visible[0].Id("reference_revision_id")!=revision.RevisionId)
             throw new MarketDataException(UnitTables.Contains(table)?"unit_catalog":"reference_catalog","The exact reference catalog is unavailable in this context.");
+        AsyncReadVisibility.Bundle(Manifest with{RevisionId=definition,ReferenceCatalogId=revision.CatalogId,ReferenceRevisionId=revision.RevisionId});
         return(revision,definition);
     }
 

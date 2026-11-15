@@ -1,7 +1,9 @@
-// Existing whole-report fault checks inspect both transports as the same workspace.
+import {asyncReadProbeScript} from './async-read-probe.mjs';
+
+// Existing whole-report fault checks inspect all transports as the same workspace.
 // Stream-specific checks use the raw frames instead of this buffering probe.
 export async function setupWorkspaceProbe(evaluate){
- await evaluate(`window.__workspaceProbe=${workspaceProbe.toString()}`);
+ await evaluate(workspaceProbeScript);
 }
 function workspaceProbe(transport,inspect){
  return async(input,init)=>{
@@ -24,4 +26,4 @@ function workspaceProbe(transport,inspect){
  };
 }
 
-export const workspaceProbeScript = `window.__workspaceProbe=${workspaceProbe.toString()};`;
+export const workspaceProbeScript = asyncReadProbeScript+`window.__workspaceProbe=${workspaceProbe.toString()};`;

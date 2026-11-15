@@ -4,7 +4,8 @@ import {setupRiskJobs} from '../dist/risk-jobs-view.js';
 
 function fixture(api){
  class Element{
-  constructor(){this.children=[];this.own='';this.dataset={};}
+  constructor(){this.children=[];this.own='';this.dataset={};this.attributes=new Map();}
+  setAttribute(name,value){this.attributes.set(name,value);}getAttribute(name){return this.attributes.get(name)??null;}
   set textContent(value){this.own=value;this.children=[];}get textContent(){return this.own+this.children.map(c=>c.textContent).join('');}
   append(...children){this.children.push(...children);}replaceChildren(...children){this.own='';this.children=children;}get rows(){return this.children;}
  }
@@ -16,6 +17,19 @@ test('reset fences a delayed job directory from the previous account',async()=>{
  let resolve;const {view,nodes}=fixture(()=>new Promise(done=>{resolve=done;}));
  const loading=view.load();view.reset();resolve([]);await loading;
  assert.equal(nodes.get('risk-jobs-list').textContent,'');
+});
+test('local refresh remains pending until its archive arrives and releases controls after failure',async()=>{
+ let finishList,failArchive;
+ const {view,nodes}=fixture(path=>new Promise((resolve,reject)=>{if(path.includes('/archive?'))failArchive=reject;else finishList=resolve;}));
+ const loading=view.load();
+ assert.equal(nodes.get('risk-jobs-list').getAttribute('aria-busy'),'true');
+ assert.equal(nodes.get('risk-jobs-refresh').disabled,true,'only the report refresh control waits');
+ finishList([]);await Promise.resolve();await Promise.resolve();
+ assert.equal(nodes.get('risk-jobs-report').getAttribute('aria-busy'),'true','the archive is part of this refresh');
+ failArchive(Error('Synthetic archive unavailable'));await assert.rejects(loading,/Synthetic archive unavailable/);
+ assert.equal(nodes.get('risk-jobs-list').getAttribute('aria-busy'),'false');
+ assert.equal(nodes.get('risk-jobs-report').getAttribute('aria-busy'),'false');
+ assert.equal(nodes.get('risk-jobs-refresh').disabled,false,'failed reads permit an explicit retry');
 });
 test('an empty authorized directory has an explicit empty state',async()=>{
  const {view,nodes}=fixture(async path=>path.includes('/archive?')?{items:[],next:null}:[]);await view.load();

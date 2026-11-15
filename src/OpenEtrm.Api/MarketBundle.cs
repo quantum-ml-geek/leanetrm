@@ -19,6 +19,7 @@ internal static class MarketBundle
         if(rows.Length!=1||rows[0].Text("state")!="sealed")throw new PreviewDeniedException();
         PreviewData.RequireBundlePin(manifest,rows[0]);
         await RequireReferenceVisibility(connection,manifest,ct);
+        AsyncReadVisibility.Bundle(manifest);
         return new(new(manifest.CatalogId,manifest.RevisionId),new(manifest.ReferenceCatalogId,manifest.ReferenceRevisionId));
     }
 
@@ -30,6 +31,7 @@ internal static class MarketBundle
         await using var reader=await command.ExecuteReaderAsync(ct);
         if(!await reader.ReadAsync(ct)||reader.IsDBNull(0)||!reader.GetBoolean(0))throw new PreviewDeniedException();
         if(reader.IsDBNull(1)||!reader.GetBoolean(1))throw Missing();
+        AsyncReadVisibility.Reference(manifest);
     }
 
     internal static async Task RequireObservationPins(NpgsqlConnection connection,PreviewManifest manifest,ImmutableArray<Guid> pins,CancellationToken ct)

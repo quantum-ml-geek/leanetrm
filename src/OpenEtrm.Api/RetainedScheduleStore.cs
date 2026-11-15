@@ -289,6 +289,7 @@ internal sealed partial class RetainedScheduleStore
         var metadata=await ReadArtifact(connection,()=>ReadRows(connection,query,
             [Catalog,instrument,(object?)context??DBNull.Value,(object?)asOf??DBNull.Value],cancellation),recoverMissing,cancellation);
         if(metadata.IsEmpty)throw new MarketDataException("side_schedule_missing","The booked instrument has no retained schedule and must be rebooked.");
+        AsyncReadVisibility.Instrument(Catalog,instrument,context,asOf,metadata.Length);
         return metadata;
     }
     // Reports may continue after an explicitly recoverable artifact refusal.

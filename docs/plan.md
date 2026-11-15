@@ -22,7 +22,7 @@ instants and exchange option expiry retain their explicit timing and rate inputs
 required purpose bindings and Side-owned rules; omission checks are mandatory
 in the verification runner.
 
-The integrated verification runner requires 183 commands, including 63 isolated
+The integrated verification runner requires 185 commands, including 64 isolated
 application previews, with domain, native database, populated-upgrade, agent and
 browser coverage. Local integration checks passed 737 managed core checks,
 88 rate checks, 1,806 frontend checks, 121 Python checks and 28 owned lifecycle
@@ -2416,3 +2416,12 @@ See [supported behavior and limits](power-curve-composition.md) and
 residual/nested calibration, subhourly graph products, an hourly profile editor,
 graph worker execution, ISO finality integration and cash/accounting remain
 separate work. An affine compiled optimization remains unmeasured.
+
+D404 adds correlated asynchronous responses to named main-workbench reads.
+Qualify exact ordinary-HTTP/SSE projection parity, mixed concurrent curve/Risk
+work, independent page progress, cancellation and late responses, account and
+historical-context changes, and hosted sign-in revalidation. Test actual VaR/ES
+configuration and retained-report consumers without replacing their explicit
+statistical method policies. Preserve progressive row delivery and retained
+command recovery. Broader operation coverage and throughput claims require
+consumer-specific qualification; a transport design alone establishes neither.

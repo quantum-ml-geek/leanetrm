@@ -9,12 +9,15 @@ namespace OpenEtrm.Api;
 // Selection never caches authority or interprets product-specific positions.
 internal static class BookScope
 {
-    internal static Task<ImmutableArray<JsonElement>> Read(NpgsqlConnection connection, Guid catalog, CancellationToken ct) =>
-        PreviewDatabase.Rows(connection,"""
+    internal static async Task<ImmutableArray<JsonElement>> Read(NpgsqlConnection connection, Guid catalog, CancellationToken ct)
+    {
+        var rows=await PreviewDatabase.Rows(connection,"""
             SELECT row_to_json(r)::text FROM(SELECT b.id,b.name,b.portfolio_id,p.name AS portfolio
             FROM trading.books b JOIN trading.portfolios p ON(p.catalog_id,p.id)=(b.catalog_id,b.portfolio_id)
             WHERE b.catalog_id=$1 ORDER BY b.name,b.id)r
             """, [catalog], ct);
+        AsyncReadVisibility.Books(catalog,rows.Select(row=>row.Id("id")));return rows;
+    }
 
     internal static void Validate(ImmutableArray<JsonElement> books, ImmutableArray<Guid> bookIds, ImmutableArray<Guid> portfolioIds)
     {

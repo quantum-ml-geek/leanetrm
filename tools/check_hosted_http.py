@@ -237,6 +237,10 @@ def run_checks(root, manifest, query, dotnet, dll, environment, browser=None, co
         api.terminate(); api.wait(timeout=10); api = start()
         restarted = client.bootstrap(); assert restarted['runId'] == installation and restarted['profile'] == first
         client.call('/api/access')
+        # This existing restart begins a fresh native sign-in rate window after the
+        # assistant/login scenarios. Keep the added sign-ins within that real limit.
+        from check_hosted_async_reads import run_checks as check_hosted_async
+        check_hosted_async(Client,provision,query,origin,ssl.create_default_context(cafile=str(cert)),password,psql,psql_environment)
         # An empty installation publishes an empty catalogue. Existing native
         # close visibility is independent of the deployment's definition revision.
         empty_catalog,empty_revision=str(uuid4()),str(uuid4())

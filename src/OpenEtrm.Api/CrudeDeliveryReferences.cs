@@ -19,6 +19,7 @@ internal sealed record CrudeDeliveryReferences(Guid CatalogId, Guid RevisionId,
             "SELECT security.reference_access($1,'ReadMarketData') AND security.reference_version_visible($1,$2)",
             revision.CatalogId, revision.RevisionId);
         if (!Equals(await authority.ExecuteScalarAsync(ct), true)) throw new PreviewDeniedException();
+        AsyncReadVisibility.ReferenceVersion(revision.CatalogId,revision.RevisionId);
 
         async Task<ImmutableArray<JsonElement>> Rows(string table) => await PreviewDatabase.Rows(connection,
             $"SELECT row_to_json(r)::text FROM ref_data.{table} r WHERE(catalog_id,revision_id)=($1,$2) ORDER BY to_jsonb(r)::text",

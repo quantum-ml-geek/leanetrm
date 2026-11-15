@@ -83,7 +83,8 @@ const string malformed="The request is incomplete or malformed.";
 // The HTTP status, code and message an API failure is reported with: as an error body, or as the error frame of a started Blotter stream.
 (int Status,string Code,string Message) Failure(Exception e,PathString apiPath,HttpContext context)=>e switch
 {
-    ToolRefusal refusal=>(422,refusal.Code,AgentTools.Text(refusal.Code)),
+    AsyncReadException refusal=>(refusal.Status,refusal.Code,refusal.Message),
+            ToolRefusal refusal=>(422,refusal.Code,AgentTools.Text(refusal.Code)),
     PostgresException p when p.SqlState=="P0001"&&p.MessageText=="catalogue_choice_changed"
         => (409,p.MessageText,"The offered product definition changed. Reload the available trade terms before booking."),
     PostgresException p when p.SqlState=="P0001"&&p.MessageText is "catalogue_context" or "catalogue_missing" or "catalogue_source" or "catalogue_publication" or "catalogue_conflict"
@@ -320,7 +321,7 @@ app.Use(async (context,next)=>
     // Authorized event streams have their own session, heartbeat and write bounds.
     using var deadline=CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted);
     var intervalRead=apiPath.StartsWithSegments("/api/ppa")||string.Equals(apiPath.Value,"/api/trading/position",StringComparison.OrdinalIgnoreCase);
-    if(!LiveContexts.Matches(context.Request.Method,apiPath)&&!TurnStream.Matches(context.Request.Method,apiPath))deadline.CancelAfter(TimeSpan.FromSeconds(intervalRead?processLimits.ExtendedRequestSeconds:processLimits.RequestSeconds));
+    if(!LiveContexts.Matches(context.Request.Method,apiPath)&&!TurnStream.Matches(context.Request.Method,apiPath)&&!AsyncReads.Matches(context.Request.Method,apiPath))deadline.CancelAfter(TimeSpan.FromSeconds(intervalRead?processLimits.ExtendedRequestSeconds:processLimits.RequestSeconds));
     context.RequestAborted=deadline.Token;
     try
     {
@@ -409,6 +410,7 @@ app.UseWhen(c=>c.Request.Method=="POST"&&c.Request.Path.Equals("/api/trading/wor
 await using var exchangeDatabase=hosted is null&&File.Exists(Path.Combine(root,"exchange-manifest.json"))?new PreviewDatabase(root,"exchange-manifest.json"):null;
 await using var calculationChanges=new CalculationChanges(database);
 await using var exchangeCalculationChanges=exchangeDatabase is null?null:new CalculationChanges(exchangeDatabase);
+var asyncReadServices=new List<AsyncReads>();
 MapPreview(app.MapGroup("/api").WithMetadata(new PreviewScope("baseline")),database,hosted is null?"openetrm_preview":"__Host-openetrm_workspace","api",calculationChanges);
 if(exchangeDatabase is not null)MapPreview(app.MapGroup("/examples/exchange/api").WithMetadata(new PreviewScope("exchange")),exchangeDatabase,"openetrm_exchange_preview","exchange",exchangeCalculationChanges!);
 app.MapGet("/api/examples",()=>new[]{new {id="baseline",name=hosted is null?"Original synthetic example":"Private pilot workspace",url="/"},new {id="exchange",name="CME & ICE futures · synthetic prices",url="/?example=exchange"}}.Where(e=>e.id=="baseline"||exchangeDatabase is not null));
@@ -444,7 +446,7 @@ api.MapGet("/bootstrap",async (HttpContext context,IAntiforgery antiforgery,bool
     try {
         var identity=hosted is null?null:HostedAuthentication.Current(context);
         if(identity is not null){if(session.Profile is not null&&session.Profile!=identity.Subject)throw new PreviewDeniedException();session.Profile=identity.Subject;}
-        object response=new {mode=database.Manifest.Mode,runId,notice=hosted is null?"Disposable synthetic workspace. Test identities are simulations, not production sign-in.":"Private pilot workspace. Financial capability is limited to the supported product conventions.",profiles=identity is null?profiles:profiles.Take(0).Append(new{id=identity.Subject,name=identity.Name,description="Signed-in account"}).ToArray(),
+        object response=new {asyncReadProtocol=AsyncReadChannel.Protocol,mode=database.Manifest.Mode,runId,notice=hosted is null?"Disposable synthetic workspace. Test identities are simulations, not production sign-in.":"Private pilot workspace. Financial capability is limited to the supported product conventions.",profiles=identity is null?profiles:profiles.Take(0).Append(new{id=identity.Subject,name=identity.Name,description="Signed-in account"}).ToArray(),
         requestDeadlines=processLimits.RequestDeadlines,processLimits=processLimits.Digest,profile=session.Profile,customProfiles=session.CustomProfiles.Select(p=>new{id=p.Key,name=p.Value}).ToArray(),csrfToken=antiforgery.GetAndStoreTokens(context).RequestToken,frames=includeFrames?session.PersistentFrames.Where(f=>f.PpaBundle is null && f.ContextId==session.MarketContext?.ContextId).OrderBy(f=>f.At).ToArray():[],
         catalogId=database.Manifest.CatalogId,tenantId=database.Manifest.TenantId,workspaceId=database.Manifest.WorkspaceId};
         if(includeAccess)
@@ -1092,16 +1094,21 @@ api.MapPost("/market/live/pause",(HttpContext c,LivePauseRequest body)=>Locked(c
     },c.RequestAborted);
     session.PauseLive(pin);return Results.Ok(new{context=pin.Context,frame=new NavigationFrame(pin.RequireFrame().Id,pin.RequireFrame().Name,pin.RequireFrame().At,pin.RequireFrame().BusinessDate)});
 }));
-object WorkspaceProjection(PreviewSession session,WorkspaceRead read,bool catalogOnly,PinnedContext? exact=null)
+object WorkspaceProjection(PreviewSession session,WorkspaceRead read,bool catalogOnly,PinnedContext? exact=null)=>CaptureWorkspaceProjection(session,exact)(read,catalogOnly);
+Func<WorkspaceRead,bool,object> CaptureWorkspaceProjection(PreviewSession session,PinnedContext? exact=null)
 {
-    var data=read.Data;
+
     var context=exact is null?session.MarketContext:exact.Context;
     var prior=exact?.Frame is {} selected&&selected.ContextId!=session.MarketContext?.ContextId?selected:null;
-    var referenceSources=read.ReferenceSources;
-    var references=read.References(catalogOnly);
-    return new {referenceSources,unitCatalog=read.Units,unitCatalogError=read.Units is null?"unit_catalog":null,referenceDisplay=read.ReferenceDisplay,unitReferenceDisplay=read.UnitReferenceDisplay,context,profile=session.Profile,example=database.Manifest.Example,futuresConvention=database.Manifest.FuturesConvention,curveNames=read.CurveNames,powerCurveCodes=PowerPreview.CurveCodes(data),definitions=data.Definitions,references,referenceScope=catalogOnly?"definition_closure":"all_visible",observations=catalogOnly?ImmutableArray<JsonElement>.Empty:data.Observations,observationScope=catalogOnly?"on_demand":"all_visible",
+    var profile=session.Profile;var frames=prior is null?session.VisibleFrames:[prior];
+    var frameCatalog=session.FrameCatalog;var initialFrameIds=prior is not null?[prior.Id]:session.InitialFrameIds.ToArray();
+    return (read,catalogOnly)=>
+    {
+        var data=read.Data;var referenceSources=read.ReferenceSources;var references=read.References(catalogOnly);
+    return new {referenceSources,unitCatalog=read.Units,unitCatalogError=read.Units is null?"unit_catalog":null,referenceDisplay=read.ReferenceDisplay,unitReferenceDisplay=read.UnitReferenceDisplay,context,profile,example=database.Manifest.Example,futuresConvention=database.Manifest.FuturesConvention,curveNames=read.CurveNames,powerCurveCodes=PowerPreview.CurveCodes(data),definitions=data.Definitions,references,referenceScope=catalogOnly?"definition_closure":"all_visible",observations=catalogOnly?ImmutableArray<JsonElement>.Empty:data.Observations,observationScope=catalogOnly?"on_demand":"all_visible",
         // Each offered frame names its recorded close; one without a close is a working snapshot (D334).
-        frames=prior is null?session.VisibleFrames:[prior],frameCatalog=session.FrameCatalog,initialFrameIds=prior is not null?[prior.Id]:session.InitialFrameIds};
+        frames,frameCatalog,initialFrameIds};
+    };
 }
 Task<IResult> Workspace(HttpContext c,bool catalogOnly)=>Locked(c,async session=>
 {
@@ -1232,21 +1239,8 @@ api.MapPost("/evaluate",(HttpContext c,BuildRequest body)=>Locked(c,async sessio
 {
     var pin=Pin(session,body.SnapshotId);
     var read=await database.WithIdentity(Profile(session),"ReadMarketData",(connection,ct)=>marketReads.Evaluate(connection,pin,body.Curve,ct,body.IncludeWorkspace,body.ContractDisplay),c.RequestAborted);
-    var result=read.Result;
-    if(pin.Context is not null || body.IncludeSources || body.IncludeWorkspace)
-    {
-        var json=System.Text.Json.Nodes.JsonNode.Parse(JsonSerializer.Serialize(result,new JsonSerializerOptions{PropertyNamingPolicy=JsonNamingPolicy.CamelCase}))!.AsObject();
-        if(pin.Context is {} view)json["context"]=JsonSerializer.SerializeToNode(view,new JsonSerializerOptions{PropertyNamingPolicy=JsonNamingPolicy.CamelCase});
-        if(body.IncludeSources)
-        {
-            json["observations"]=JsonSerializer.SerializeToNode(read.Observations);
-            json["observationScope"]="selected_frame";
-            json["inputSelection"]=JsonSerializer.SerializeToNode(read.InputSelection,new JsonSerializerOptions{PropertyNamingPolicy=JsonNamingPolicy.CamelCase});
-        }
-        if(body.IncludeWorkspace)json["workspace"]=JsonSerializer.SerializeToNode(WorkspaceProjection(session,read.Workspace??throw new InvalidOperationException("The requested workspace projection is missing."),true,pin),new JsonSerializerOptions{PropertyNamingPolicy=JsonNamingPolicy.CamelCase});
-        return Results.Ok(json);
-    }
-    return Results.Ok(result);
+    return Results.Ok(AsyncReadProjections.Curve(read,pin,body,body.IncludeWorkspace?
+        WorkspaceProjection(session,read.Workspace??throw new InvalidOperationException("The requested workspace projection is missing."),true,pin):null));
 }));
 // The same pin, identity and permission as /evaluate, for the contract prices of several curves in one read; a selected context is stated as there.
 api.MapPost("/market/curve-shapes",(HttpContext c,CurveShapesRequest body)=>Locked(c,async session=>
@@ -1274,21 +1268,7 @@ api.MapPost("/history",(HttpContext c,HistoryRequest body)=>Locked(c,async sessi
     var points=await database.WithIdentity(Profile(session),"ReadMarketData",(connection,ct)=>marketReads.History(connection,pin,[..frames],body.Curve,body.ContractId,body.SeriesId,policy,ct,
         session.Live is not null?data=>session.SelectContextAliases(data,pin.Context!):null,
         session.Live is not null?[..session.InitialFrames.SelectMany(id=>session.Frames[id].ObservationIds).Distinct()]:null),c.RequestAborted);
-    const string mode="exact_visible_close_history_with_selected_instant_v1";
-    // The chart is the points returned, one per instant (HistoryChart), or the instant where different samples remain; overlays run over
-    // the chart's points, so the pinned context and knowledge cutoff carry over, and a null value is a missing input. A conflicting series
-    // has no overlays: the requests are still checked, and the read states the conflict with its points.
-    // The cutoff read is the selected context's own; working data states that it used current knowledge.
-    var chart=HistoryChart.Of(points);
-    var read=new Dictionary<string,object?>{["mode"]=mode,["revisionPolicy"]=policy,["knowledgeCutoff"]=pin.Context?.KnownAt,
-        ["knowledgeBasis"]=pin.Context is null?"current_knowledge":"selected_context",["points"]=points,
-        ["chart"]=chart.Conflict is {} conflict?new{conflict=new{at=conflict.At,message=conflict.Message}}:new{points=chart.Points}};
-    if(body.Overlays is {} requests)
-    {
-        if(chart.Conflict is null)read["overlays"]=OpenEtrm.Shared.Analytics.Overlays.Compute(chart.OverlayInput(),requests);
-        else OpenEtrm.Shared.Analytics.Overlays.Compute([],requests);
-    }
-    return Results.Ok(read);
+    return Results.Ok(AsyncReadProjections.History(points,pin,body,policy));
 }));
 api.MapGet("/analytics/overlays",(Func<HttpContext,Task<IResult>>)(c=>Locked(c,session=>database.WithIdentity(Profile(session),"ReadMarketData",(_,_)=>
     Task.FromResult(Results.Ok(new {policy=OpenEtrm.Shared.Analytics.Overlays.Policy,overlays=OpenEtrm.Shared.Analytics.Overlays.Catalog})),c.RequestAborted))));
@@ -1427,8 +1407,23 @@ Task<IResult> TradingRead(HttpContext c,FuturesReadRequest body,Func<NpgsqlConne
     Func<NpgsqlConnection,TradingView,CancellationToken,Task>? publicationCheck=null)
 {
     TradingView? completedView=null;
-    Task<IResult> Execute(string profile,Func<TradingReadSelection> capture)=>database.WithIdentity(profile,"ReadTrades",async(connection,ct)=>
+    async Task<IResult> Execute(string profile,Func<TradingReadSelection> capture)
     {
+        var completed=await ExecuteTrading(profile,capture,body,read,c.RequestAborted,scenario,headTrade,amendmentPreview,expectedConvention,dealRisk,combinedWorkspace,publicationCheck);
+        completedView=completed.View;return Results.Ok(completed.Result);
+    }
+    if(!concurrent)return Locked(c,session=>Execute(Profile(session),()=>Capture(session,body)));
+    if(!combinedWorkspace||scenario||dealRisk||amendmentPreview||headTrade is not null||recheck is null)
+        throw new InvalidOperationException("Only the read-only combined workspace can release the session gate.");
+    return Concurrent(c,body,async(session,capture)=>(await Execute(Profile(session),capture),completedView!),recheck);
+}
+Task<(object Result,TradingView View)> ExecuteTrading(string profile,Func<TradingReadSelection> capture,FuturesReadRequest body,
+    Func<NpgsqlConnection,TradingView,CancellationToken,Task<object>> read,CancellationToken cancellation,
+    bool scenario=false,Guid? headTrade=null,bool amendmentPreview=false,string? expectedConvention=null,bool dealRisk=false,bool combinedWorkspace=false,
+    Func<NpgsqlConnection,TradingView,CancellationToken,Task>? publicationCheck=null,string? hostedDigest=null)=>
+    database.WithIdentity(profile,"ReadTrades",async(connection,ct)=>
+    {
+
         var selection=capture();
         RequireConvention(body,expectedConvention);
         if(scenario && !await PreviewDatabase.HasPermission(connection,"RunScenario",ct)||dealRisk && !await PreviewDatabase.HasPermission(connection,"RunDealRisk",ct))throw new PreviewDeniedException();
@@ -1444,7 +1439,6 @@ Task<IResult> TradingRead(HttpContext c,FuturesReadRequest body,Func<NpgsqlConne
         }
         var view=await selection.Resolve(connection,knowledgeStore,body,ct);
         var value=await read(connection,view,ct);
-        completedView=view;
         if(scenario && !await PreviewDatabase.HasPermission(connection,"RunScenario",ct)||dealRisk && !await PreviewDatabase.HasPermission(connection,"RunDealRisk",ct))throw new PreviewDeniedException();
         var response=System.Text.Json.Nodes.JsonNode.Parse(JsonSerializer.Serialize(value,tradingJson))!.AsObject();
         foreach(var json in combinedWorkspace?new[]{response["catalog"]!.AsObject(),response["blotter"]!.AsObject()}:new[]{response})
@@ -1470,13 +1464,8 @@ Task<IResult> TradingRead(HttpContext c,FuturesReadRequest body,Func<NpgsqlConne
             "SELECT security.trading_access($1,'ReadTrades') AND (NOT $2 OR security.has_permission('RunScenario')) AND (NOT $3 OR security.has_permission('RunDealRisk'))",
             database.Manifest.CatalogId,scenario,dealRisk);
         if(!Equals(await publication.ExecuteScalarAsync(ct),true))throw new PreviewDeniedException();
-        return Results.Ok(response);
-    },c.RequestAborted);
-    if(!concurrent)return Locked(c,session=>Execute(Profile(session),()=>Capture(session,body)));
-    if(!combinedWorkspace||scenario||dealRisk||amendmentPreview||headTrade is not null||recheck is null)
-        throw new InvalidOperationException("Only the read-only combined workspace can release the session gate.");
-    return Concurrent(c,body,async(session,capture)=>(await Execute(Profile(session),capture),completedView!),recheck);
-}
+        return ((object)response,view);
+    },cancellation,hostedDigest:hostedDigest);
 TradingReadSelection Capture(PreviewSession session,FuturesReadRequest body)=>TradingReadSelection.Capture(session,body,
     session.LivePin(body.SnapshotId)?.RequireFrame()??Frame(session,body.SnapshotId));
 void RequireConvention(FuturesReadRequest body,string? expected)
@@ -2379,12 +2368,144 @@ api.MapPost("/settings/ai/providers/test",(HttpContext c,TestRequest body)=>Lock
     c.Items["model_admin_attempted"]=true;
     return Results.Ok(await providerTests.Run(database,Profile(session),body,c.RequestAborted,(CancellationToken)c.Items["client_aborted"]!));
 }));
+// Each admitted operation captures immutable selection under the gate. Its
+// business read and fresh identity transaction execute only in the worker.
+AsyncReadPlan PrepareAsyncRead(PreviewSession session,AsyncReadInput input)
+{
+    var profile=Profile(session);var digest=hosted is null?null:session.Digest;
+    Task<T> AsReader<T>(string permission,Func<NpgsqlConnection,CancellationToken,Task<T>> read,CancellationToken ct)=>
+        database.WithIdentity(profile,permission,read,ct,hostedDigest:digest);
+    if(input.Body is BuildRequest curve)
+    {
+        var pin=Pin(session,curve.SnapshotId);var workspace=CaptureWorkspaceProjection(session,pin);
+        return new(input,ct=>AsReader("ReadMarketData",async(connection,t)=>
+        {
+            var read=await marketReads.Evaluate(connection,pin,curve.Curve,t,curve.IncludeWorkspace,curve.ContractDisplay);
+            var result=AsyncReadProjections.Curve(read,pin,curve,curve.IncludeWorkspace?workspace(read.Workspace??throw new InvalidOperationException("The requested workspace projection is missing."),true):null);
+            var source=read.InputSelection.Source;var observations=read.InputSelection.ObservationIds;
+            return new AsyncReadOutcome(result,async(publication,cancellation)=>
+            {
+                await pin.Bind(publication,database.Manifest.CatalogId,cancellation);
+                await MarketBundle.Require(publication,source.Apply(database.Manifest),cancellation);
+                await MarketBundle.RequireObservationPins(publication,source.Apply(database.Manifest),observations,cancellation);
+            });
+        },ct));
+    }
+    if(input.Body is HistoryRequest history)
+    {
+        if(!session.HasDiscoveredFrames)throw new AsyncReadException(409,"async_workspace_not_ready","Load workspace navigation before requesting asynchronous history.");
+        var policy=HistoryRevisionPolicy.Require(history.RevisionPolicy);var pin=Pin(session,history.SnapshotId);
+        var offered=session.MarketContext is null?session.InitialFrames.Select(id=>Frame(session,id)).Where(frame=>frame.PpaBundle is null).Concat(session.VisibleFrames.Where(frame=>frame.OriginCloseId is not null)):session.VisibleFrames;
+        ImmutableArray<InputFrame> frames=[..pin.Frame?.Close is {} pinned?offered.Where(frame=>frame.Close is null||frame.Close.Session==pinned.Session):offered];
+        var aliases=session.Live is null?null:session.CaptureContextAliases(pin.Context!);
+        ImmutableArray<Guid>? anchors=session.Live is null?null:[..session.InitialFrames.SelectMany(id=>session.Frames[id].ObservationIds).Distinct()];
+        return new(input,ct=>AsReader("ReadMarketData",async(connection,t)=>
+        {
+            var points=await marketReads.History(connection,pin,frames,history.Curve,history.ContractId,history.SeriesId,policy,t,aliases,anchors);
+            return new AsyncReadOutcome(AsyncReadProjections.History(points,pin,history,policy),
+                (publication,cancellation)=>pin.Bind(publication,database.Manifest.CatalogId,cancellation));
+        },ct));
+    }
+    if(input.Body is CurveShapesRequest shapes)
+    {
+        var pin=Pin(session,shapes.SnapshotId);
+        return new(input,ct=>AsReader("ReadMarketData",async(connection,t)=>
+        {
+            var curves=await marketReads.CurveShapes(connection,pin,shapes.Curves,t,shapes.ContractDisplay);
+            return new AsyncReadOutcome(pin.Context is {} context?new{curves,context}:(object)new{curves},
+                (publication,cancellation)=>pin.Bind(publication,database.Manifest.CatalogId,cancellation));
+        },ct));
+    }
+    if(input.Context is {} context)
+    {
+        var selection=Capture(session,context);
+        if(input.Operation=="trading.freshness.v1")return new(input,ct=>AsReader("ReadTrades",async(connection,t)=>
+        {
+            RequireConvention(context,TradingBlotter.Convention);await RequireReadAccess(connection,t);
+            TradingView? retained=null;
+            if(!selection.Working){retained=await selection.Resolve(connection,knowledgeStore,context,t);await retained.Bind(connection,database.Manifest.CatalogId,t);}
+            await MarketBundle.RequireReferenceVisibility(connection,database.Manifest,t);
+            var version=await BlotterFreshness.Read(connection,database.Manifest,context,selection,t);
+            await RequireReadAccess(connection,t);
+            return new AsyncReadOutcome(new{version},async(publication,cancellation)=>
+            {
+                if(retained is not null)await retained.Bind(publication,database.Manifest.CatalogId,cancellation);
+                await RequireReadAccess(publication,cancellation);
+            });
+        },ct));
+        var scenario=input.Permissions.Contains("RunScenario");
+        var combined=input.Body is TradingWorkspaceRequest;
+        var convention=input.Body is FuturesEditorRequest?null:input.Body is SwapEditorRequest?SwapStore.Convention:TradingBlotter.Convention;
+        Guid? head=input.Body switch{FuturesEditorRequest body=>body.TradeId,SwapEditorRequest body=>body.TradeId,_=>null};
+        Func<NpgsqlConnection,TradingView,CancellationToken,Task<object>> operation=input.Body switch
+        {
+            FuturesReadRequest=>tradeReads.Directory,
+            TradingPositionsRequest body=>(connection,view,ct)=>tradeReads.Positions(connection,view,body.BookIds,body.PortfolioIds,body.Offset,body.Limit,ct),
+            TradePositionReadRequest body=>(connection,view,ct)=>tradeReads.Position(connection,view,body,ct),
+            TradingWorkspaceRequest body=>(connection,view,ct)=>body.BookingCatalog is null or "directory" or "priced_contracts"
+                ?tradeReads.Workspace(connection,view,body.View,body.Summaries.IsDefault?[]:body.Summaries,body.BookingCatalog=="directory",ct)
+                :throw new MarketDataException("blotter_view","Choose an available booking catalog projection."),
+            FuturesBlotterRequest body=>(connection,view,ct)=>tradeReads.Blotter(connection,view,body.View,ct),
+            FuturesEditorRequest body=>(connection,view,ct)=>tradeReads.FuturesTrade(connection,view,body.TradeId,body.Revision,ct),
+            SwapEditorRequest body=>(connection,view,ct)=>tradeReads.SwapTrade(connection,view,body.TradeId,body.Revision,ct),
+            RiskScopeRequest body=>(connection,view,ct)=>tradeReads.ReadBound(connection,view,()=>RiskTradeScope.Directory(connection,database.Manifest.CatalogId,view.CalculationFrame,body,ct),ct),
+            _=>(connection,view,ct)=>tradeReads.Read(connection,view,data=>AsyncPortfolioRead(input,connection,data,view.CalculationFrame,ct),ct,
+                referenceScope:ReferenceReadScope.TradeValuation,observationScope:ObservationReadScope.ExactPins)
+        };
+        return new(input,async ct=>
+        {
+            var completed=await ExecuteTrading(profile,()=>selection,context,operation,ct,
+                scenario:scenario,headTrade:head,expectedConvention:convention,combinedWorkspace:combined,hostedDigest:digest);
+            return new AsyncReadOutcome(completed.Result,async(publication,cancellation)=>
+            {
+                await completed.View.Bind(publication,database.Manifest.CatalogId,cancellation);
+                await TradingContext.Bind(publication,database.Manifest.CatalogId,completed.View.CalculationFrame,completed.View.Context,cancellation);
+                await RequireReadAccess(publication,cancellation);
+            });
+        });
+    }
+    // Retained job status remains an ordinary authorized read. Re-read only its
+    // visibility at publication; no job is submitted, cancelled or restarted.
+    async Task<object> JobRead(NpgsqlConnection connection,CancellationToken ct)=>input.Body switch
+    {
+        AsyncReadEmpty=>await RiskJobs.List(connection,database.Manifest.CatalogId,PortfolioRiskPreview.Convention,ct),
+        AsyncReadJob job=>await RiskJobs.Read(connection,database.Manifest.CatalogId,job.Id,ct,expectedConvention:PortfolioRiskPreview.Convention),
+        AsyncReadArchive archive=>await RiskJobs.StatisticalArchive(connection,database.Manifest.CatalogId,archive.Limit,
+            archive.Before is null?null:SchedulePreview.ParseAt(archive.Before),archive.Id,archive.Method,ct),
+        _=>throw AsyncReadContract.Invalid()
+    };
+    return new(input,ct=>AsReader("RunScenario",async(connection,t)=>
+    {
+        var value=await JobRead(connection,t);var ids=AsyncReadJobs.Ids(value);
+        return new AsyncReadOutcome(value,async(publication,cancellation)=>
+        {
+            foreach(var id in ids)await RiskJobs.Read(publication,database.Manifest.CatalogId,id,cancellation,expectedConvention:PortfolioRiskPreview.Convention);
+        });
+    },ct));
+}
+Task<object> AsyncPortfolioRead(AsyncReadInput input,NpgsqlConnection connection,PreviewData data,InputFrame frame,CancellationToken ct)=>input.Body switch
+{
+    PortfolioRiskCatalogRequest body when input.Operation=="portfolio.risk.statistical.setup.v1"=>portfolioRisk.StatisticalSetup(connection,data,frame,body,ct),
+    PortfolioRiskCatalogRequest body=>portfolioRisk.Catalog(connection,data,frame,body,ct),
+    PortfolioRiskRequest body=>portfolioRisk.Calculate(connection,data,frame,body,ct),
+    PortfolioHistoryRequest body=>portfolioRisk.History(connection,data,frame,body,ct),
+    PortfolioParametricRequest body when input.Operation=="portfolio.risk.parametric.summary.v1"=>portfolioRisk.ParametricSummary(connection,data,frame,body,ct),
+    PortfolioParametricRequest body=>portfolioRisk.Calculate(connection,data,frame,PortfolioRiskPreview.StatisticalRequest(body),ct),
+    PortfolioHistoricalRequest body when input.Operation=="portfolio.risk.historical.summary.v1"=>portfolioRisk.HistoricalSummary(connection,data,frame,body,ct),
+    PortfolioHistoricalRequest body=>portfolioRisk.Calculate(connection,data,frame,PortfolioRiskPreview.HistoricalRequest(body),ct),
+    PortfolioHistoricalSampleRequest body=>portfolioRisk.HistoricalSample(connection,data,frame,body,ct),
+    PortfolioMonteCarloRequest body=>portfolioRisk.Calculate(connection,data,frame,PortfolioRiskPreview.MonteCarloRequest(body),ct),
+    _=>throw AsyncReadContract.Invalid()
+};
+var asyncReads=new AsyncReads(database,app.Lifetime.ApplicationStopping,hosted is not null);
+asyncReadServices.Add(asyncReads);asyncReads.Map(api,Session,PrepareAsyncRead);
 }
 var files=new PhysicalFileProvider(webRoot);
 app.UseDefaultFiles(new DefaultFilesOptions {FileProvider=files});
 app.UseStaticFiles(new StaticFileOptions {FileProvider=files});
 app.Lifetime.ApplicationStarted.Register(()=>Console.WriteLine($"PREVIEW_READY http://127.0.0.1:{port}"));
-await app.RunAsync();
+try{await app.RunAsync();}
+finally{foreach(var asyncReads in asyncReadServices)await asyncReads.DisposeAsync();}
 
 [System.Text.Json.Serialization.JsonUnmappedMemberHandling(System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow)]
 public sealed record AdminCreate(Guid OperationId,string? Login,string? Name,string? Kind,string[]? Roles);

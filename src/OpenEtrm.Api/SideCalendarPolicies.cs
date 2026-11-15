@@ -32,6 +32,7 @@ internal static class SideCalendarPolicies
             using var document=JsonDocument.Parse(reader.GetString(0));var row=document.RootElement;
             var key=row.GetProperty("reference");
             var calendar=Read(new(new(key.GetProperty("catalogId").GetGuid(),key.GetProperty("revisionId").GetGuid()),key.Text("code")),row);
+            AsyncReadVisibility.Calendar(calendar.Key,calendar.Publication!);
             choices.Add(new(calendar.Key,calendar.Key.Code,calendar.From,calendar.To,calendar.WeekendMask,calendar.Exceptions,calendar.Digest,calendar.Publication!));
         }
         return choices.ToImmutable();
@@ -43,6 +44,16 @@ internal static class SideCalendarPolicies
         return new(reference,DateWorkspace.Date(row.Text("coverageFrom")),DateWorkspace.Date(row.Text("coverageTo")),row.GetProperty("weekendMask").GetInt32(),
             [..row.GetProperty("exceptions").EnumerateArray().Select(day=>new CalendarException(DateWorkspace.Date(day.Text("date")),day.GetProperty("open").GetBoolean()))],
             CalendarDefinition.Implementation,new(proof.GetProperty("CatalogId").GetGuid(),proof.GetProperty("EventOrder").GetInt32(),proof.GetProperty("KnownFrom").GetDateTimeOffset()));
+    }
+    internal static async Task RequirePublication(NpgsqlConnection connection,ReferenceKey reference,CalendarPublicationProof publication,CancellationToken ct)
+    {
+        // Calendar publication has its own historical visibility contract. Reuse
+        // that native reader and retain the exact source selected by this read.
+        await using var query=ScheduleStore.Command(connection,"SELECT security.read_side_calendar($1,$2,$3)::text",
+            reference.Revision.CatalogId,reference.Revision.RevisionId,reference.Code);
+        if(await query.ExecuteScalarAsync(ct) is not string text)throw new PreviewDeniedException();
+        using var document=JsonDocument.Parse(text);
+        if(Read(reference,document.RootElement).Publication!=publication)throw new PreviewDeniedException();
     }
     // The narrow exact reader captures a certified publication proof independently
     // of the pricing reference revision. General reference visibility is unchanged.
@@ -62,7 +73,8 @@ internal static class SideCalendarPolicies
             if(await query.ExecuteScalarAsync(ct) is not string text)
                 throw new MarketDataException("calendar_reference","An exact selected calendar is unavailable under this operation's authority and historical context.");
             using var document=JsonDocument.Parse(text);
-            resolved[reference]=Read(reference,document.RootElement);
+            var calendar=Read(reference,document.RootElement);resolved[reference]=calendar;
+            AsyncReadVisibility.Calendar(reference,calendar.Publication!);
         }
         return data.WithCalendars(resolved.ToImmutable());
     }

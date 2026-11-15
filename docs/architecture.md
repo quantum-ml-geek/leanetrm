@@ -2373,6 +2373,23 @@ versions are part of schedules, valuation manifests and result identities.
 
 ## 8. Performance and result reuse
 
+D404 permits named workbench reads to use HTTP admission and correlated SSE
+responses. An explicit operation allowlist shares the existing managed business
+reads, financial context and exact response projection with ordinary HTTP.
+Admission captures immutable selections under the session gate; independent
+work executes outside that gate in separate authorized transactions. Delivery
+rechecks current account, context, permission and source visibility. Hosted
+workers carry the admitted sign-in identity explicitly and revalidate it at
+execution and publication, rather than retaining an HTTP request context.
+
+The client bounds queued and active reads and gives each consumer independent
+loading, cancellation and result state. A changed selection invalidates late
+results. Connection loss rejects pending reads; it never silently resubmits
+commands. Existing retained-job identities and uncertain-command recovery remain
+mandatory. Incremental row streams retain their own progressive contracts.
+Transport concurrency is not evidence of reduced calculation cost or a wider
+qualified numerical workload.
+
 Business pages have a target of less than one second from navigation to usable
 authorized data. Measure initial application readiness separately from subsequent
 page navigation, and include price rows, charts and populated grids rather than

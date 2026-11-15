@@ -173,6 +173,11 @@ internal static class FuturesOptionPositions
         }
         await using var permission=ScheduleStore.Command(connection,"SELECT security.trading_access($1,'ReadTrades') AND security.market_access($1,'ReadMarketData')",manifest.CatalogId);
         if(!Equals(await permission.ExecuteScalarAsync(ct),true))throw new PreviewDeniedException();
+        foreach(var item in result)
+        {
+            AsyncReadVisibility.Bundle(manifest with{RevisionId=item.Definition,ReferenceCatalogId=item.Reference.CatalogId,ReferenceRevisionId=item.Reference.RevisionId});
+            AsyncReadVisibility.ReferenceVersion(item.Head.Id("premium_reference_catalog_id"),item.Head.Id("premium_reference_revision_id"));
+        }
         return result.ToImmutable();
     }
     // A head as one selectable binding row.
