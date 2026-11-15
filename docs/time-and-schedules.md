@@ -34,7 +34,7 @@ Keep three independent conventions:
 One market can use different conventions for different products, rules and feeds.
 Do not infer a clock from the operator, location, browser or database connection.
 
-D402 gives each Side a versioned policy containing exact calendar bindings for
+D403 gives each Side a versioned policy containing exact calendar bindings for
 its owned delivery, observation/reset and payment purposes. Each purpose has one
 binding across all periods, even when its rules are all-days or unadjusted.
 Calendar capture retains coverage, the weekend mask, dated open/closed exceptions,

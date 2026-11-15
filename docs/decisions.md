@@ -5260,9 +5260,9 @@ each Blotter row and on the position a trade window reads, as `sideSchedules`,
 from the same registration that reads the schedules, so the two cannot differ;
 a row that does not say is refused. See [side schedules](side-schedules.md).
 
-## D401 · One holiday calendar per side in manual entry
+## D402 · One holiday calendar per side in manual entry
 
-Superseded by D402 for the calendar contract and authoring policy.
+Superseded by D403 for the calendar contract and authoring policy.
 
 Swap and PPA booking exposes one holiday-calendar selection per side. The chosen
 calendar supplies that side's calendar-consuming observation, quantity/delivery
@@ -5281,7 +5281,7 @@ choice. Owned PPA profiles are copied before their calendar is changed; linked
 source-side schedules remain untouched. Historical mixed-calendar contracts stay
 readable and retain their original behavior.
 
-## D402 · Explicit schedule-purpose calendars and UTC payment days
+## D403 · Explicit schedule-purpose calendars and UTC payment days
 
 Each Side requires one immutable, versioned calendar policy with concrete exact
 bindings for its applicable delivery, authored observation/reset and payment
@@ -5310,6 +5310,15 @@ a same-day correction or option cannot inherit standard cash’s nominal shortcu
 A cross-commodity quantity factor does not transfer the source Side’s delivery
 clock to the independent derived Side.
 
+The hypothetical paid-at-due lifecycle policy discharges a standard dated
+payment at the start of the following UTC date. This is an explicit valuation
+boundary, never a contractual deadline or recorded payment. It preserves
+same-day fixing, completion and unpaid value. The outstanding policy retains
+unpaid cash across that boundary. Exact-instant margin, correction, option and
+gas-carrying contracts keep their selected instant semantics. Native lifecycle
+payment, netting and committed retry admission rechecks the original Side
+calendar publication proofs independently of pricing-reference authority.
+
 There is one supported execution contract, without separate old/new behavior.
 Incompatible stored contracts require explicit review and replacement. An
 upgrade must not rewrite existing trade terms, retained bytes, manifests,
@@ -5329,7 +5338,7 @@ may reference one canonical Side definition. Agent schemas expose required
 bindings and forbid independent nested calendar choices.
 
 The mandatory domain, native database, populated-upgrade, agent and browser
-matrix passed for supported swaps, scheduled power, PPAs, gas, crude and LNG,
+matrix covers supported swaps, scheduled power, PPAs, gas, crude and LNG,
 including cash and fee Sides. Native admission independently checks retained
 programs against authored dates, quantities, units, source bindings and canonical
 identities. Browser checks include calendar locks, stale receipts, recovery and
@@ -5340,3 +5349,134 @@ Runner-contract checks and CI require every verification group.
 This is synthetic implementation qualification. Activation of an existing database
 requires its separately reviewed contract migration and application/schema release;
 no stored trade or published source version is rewritten automatically.
+
+## D401 · Shared lifecycle, ownership and economic horizon risk
+
+Owner-directed, 2026-11-13. Adopt the [shared lifecycle delivery contract](lifecycle-delivery.md).
+Product-owned pure rules compose existing Instrument/Side and native typed stores;
+common operations own authorization, review, concurrency and idempotent commits.
+Hypothetical transitions cannot be recorded as actual facts. Trading eligibility,
+curve finality, trade obligations, projection assumptions and display preferences
+remain separate explicit contracts.
+
+The first release requires futures margin/final settlement, listed futures options,
+financial swaps and physical gas; gas continues into independently valued holdings.
+Qualify owned titled gas, distinct operator entitlements/debts and commodity loans
+with return obligations. Include both shock-held and elapsed-linear price paths,
+explicit payment/cash carrying choices and complete one-session economic risk.
+This extends D387's event-crossing scope only as its new capabilities are qualified.
+
+Agent versions separate allowed delegator roles from an explicit additional
+operating role. The first settings consumer offers None or the gas lifecycle
+operator, retaining the base reader. Publish activates that role and ends older
+delegations when it changes. Actual delegator authority must independently cover
+every requested gas permission; selecting an operating role does not grant the
+user those permissions. Financial operations retain manual review and the same
+authorized native business handlers. Retained reader-only saves keep their
+original request and replay contract.
+
+Whole-book gas projection scope captures every selected original read deadline
+before base-authority work can wait. Exact source admission and its retained
+commit callback recheck the same bound after all native checks return; successor
+grants cannot renew it. Runtime and worker callers use this fixed boundary
+without receiving the underlying permission-kernel functions.
+
+Fixed loan fees remain contractual totals independent of principal quantity.
+An explicit versioned amendment preserves original cash and adds the entire
+prior-fee reversal at its old due time and the revised fee at its selected due
+time. A zero fee explicitly has no due time. Bank payments remain independent;
+removing a paid fee may leave a refund receivable but never records a refund.
+Exact first outcomes and older-fact acknowledgements preserve the current head.
+New effects require complete current source and policy admission, and the native
+publication seal permits only the declared typed fee and cash memberships.
+
+Rebuild incompatible demo configuration and synthetic business records. No legacy
+financial conversion or fallback is required. Publication remains separately approved.
+The delivery document records required contracts; tests and verification records
+establish actual implemented capability.
+
+Futures margin policies explicitly retain an official settlement curve separately
+from their mark/execution curve. Actual settlement facts are resolved by the
+instrument from captured native source observations, with exact series, source,
+finality, quotation and knowledge checks. A same-price source correction still
+restates its causal evidence. These managed contracts alone do not qualify native
+margin persistence or automation.
+
+The local native adoption increment separates policy configuration from exact
+version adoption. Stable trade/binding ownership retains the origin holding's
+effective time independently of execution basis time. Sealed occurrence sets and
+retained pricing continuity prevent later configuration appends or unqualified
+financial amendments. The trusted application owns commit admission and rechecks
+each invocation's original authority deadline after waits; deferred database
+checks are supplemental because SQL callers control constraint timing. Native
+settlement/cash execution and user/agent workflows have separate qualification
+gates, recorded in the delivery contract.
+
+The local native journal now stores product-derived determination closures and
+independent shared cash contributions. Accepted heads precede source-evidence
+qualification; missing latest evidence cannot select older economic state. Cash
+definitions are reusable currency/due economics, while ownership, quantity,
+business effectiveness and recorded payment remain membership facts. Prior-fact
+acknowledgement does not reinstate an older basis. Native journal qualification
+is distinct from the complete-book, physical-delivery, worker and actual browser
+consumers now recorded in the delivery contract.
+
+
+D401’s scheduled execution choice retains one source-derived occurrence at one
+recorded close, exact native trade/product and action-policy versions, and fresh
+certified knowledge at execution. It invokes the same managed Lifecycle registry
+for manual notice, review or automatic execution. Observed facts remain separate
+user input. Native task-scoped authority, shared command and terminal result
+seals complement transaction-owned original-deadline admission. The first
+executable baseline is bounded one-off tasks; recurring calendar enrollment is
+not implied. See [the qualified task contract](automation.md#source-derived-lifecycle-tasks)
+for the actual checked cases and remaining qualification gates.
+
+
+D401’s operator correction consumer selects the immutable
+`replay_original_settlement_publication_prefix_v1` ordering law in its typed
+command, with an explicit cash-adjustment due instant, or an explicit null due
+for an all-return group. The cashout selection object is always required. Replay uses every
+source-known settlement in original native publication order, including future
+effective rows. Later financial revisions and incoming array order never reorder
+that prefix. Saved fixing coordinates are retained; the exact final observation
+correction head is selected explicitly. Revised cumulative rounded contributions
+append only their signed differences, retaining original cash and bank facts.
+Physical corrections retain exact receipt/use identities and selected revision
+pairs. Surviving ordinary uses require explicit selection; zero withdrawal keeps
+native identities, and allocation-policy-only states retain distinct accepted
+heads. Native cashout/physical/ordinary/zero baselines and the separate physical
+whole-book value/worker consumer are qualified. Native fault checks also qualify
+exact current-read publication, complete origin enrollment, financial conflict
+receipts and original authority after the last native proof. Original operator
+commands acknowledge accepted financial snapshots without replacing their native
+identity or first outcome. Original cash membership and gross effect remain
+separate from acknowledged/current cash contributions. New native performances
+use the accepted current prefix; original cash is validated against its sealed
+birth prefix. Native continuation and actual correction forms/retries are
+qualified. Complete-book physical, ordinary-use and zero correction checks retain
+exact independent owners through ordinary PV, known-event projection, historical
+and Monte Carlo revaluation, retained reports and actual workers. The combined
+ordinary/zero scope opens at eight marked units and retains seven after its known
+loss, with no phantom zero holding. See [the gas contract](gas-owned-holdings.md).
+
+D401’s accepted-quantity continuation keeps source-known future operator cashouts
+separate from uncommitted price expectations. A completely covered remaining claim
+discharges its commodity quantity at the accepted settlement instants; exact native
+cash memberships retain their gross amounts, due times and original bank history.
+An explicit native null cash identity creates no cash owner. Cash uses its account’s
+original captured source and only unpaid future-due endpoint cash requires residual
+carrying. A later zero-quantity settlement does not extend a discharged mark’s life.
+An uncovered expectation or independent future capital requires its own qualified
+explicit contract.
+
+Original title and loan commands also acknowledge accepted quantity revisions
+without creating another holding or rewinding the financial head. Loan principal
+is independent of outstanding repayment and later fixed-fee amendments: the
+original command retains its original fee and cash terms. Exact operation retries
+remain bound to their first actor and payload. A separately authorized actor may
+acknowledge the same accepted business fact with a fresh operation. Every fresh
+operation requires an existing certified source context for its stated business
+date before global fact matching; exact first-receipt recovery remains earlier
+than source reads. Native upgrade and acknowledgement checks qualify those
+boundaries, including historical snapshots and an explicitly zero original fee.

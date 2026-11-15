@@ -1,6 +1,6 @@
 # Delivery plan and acceptance criteria
 
-D402 replaces the absolute single-calendar restriction with an explicit
+D403 replaces the absolute single-calendar restriction with an explicit
 per-purpose Side calendar policy and one UTC payment-day execution contract.
 Local managed and native checks cover exact published calendar capture, immutable
 typed bindings, retained scheduled-power generation, published TOU terms, payment
@@ -22,17 +22,45 @@ instants and exchange option expiry retain their explicit timing and rate inputs
 required purpose bindings and Side-owned rules; omission checks are mandatory
 in the verification runner.
 
-The complete mandatory synthetic matrix passed: 117 verification commands,
-including 63 isolated application previews, with domain, native database,
-populated-upgrade, agent and browser coverage. The final frontend suite passed
-1,677 checks. Native rejection probes cover altered calendar and clock captures,
-payment dates, quantities, source contracts and retained program agreement.
-Independent adversarial review findings were resolved and verified.
+The integrated verification runner requires 183 commands, including 63 isolated
+application previews, with domain, native database, populated-upgrade, agent and
+browser coverage. Local integration checks passed 737 managed core checks,
+88 rate checks, 1,806 frontend checks, 121 Python checks and 28 owned lifecycle
+browser checks. The integrated CI
+matrix must pass before publication qualification is complete. Native rejection
+probes cover altered calendar and clock captures, payment dates, quantities,
+source contracts and retained program agreement.
 
 Activation remains separate. Existing trades are unchanged; reviewed migration
 must align exact terms, typed references, identities and retained executable
 schedules. Calendar and TOU changes require explicit published versions, without
 automatic backfill. Merging and deployment remain separate steps.
+
+The current lifecycle increment follows [D401’s delivery contract](lifecycle-delivery.md).
+Its native operations, inventory continuation and economic historical/Monte Carlo
+consumers have disposable native, worker and browser qualification. Release
+checks must qualify the exact integrated commit. Incompatible synthetic demo records
+may be rebuilt; there is no legacy financial conversion layer.
+
+Native futures retain dated margin policies, complete correction closure and
+independent original/adjustment cash memberships. Listed options, financial swaps
+and qualified physical-futures delivery use the same managed action boundary.
+Owned gas, operator entitlements/debts and commodity-loan returns remain independent
+holdings. Ordinary Instrument PV and retained economic historical/Monte Carlo
+workers preserve their exact sources and surviving cash. Typed action forms,
+configured agent roles and one-off scheduling invoke those native operations.
+Original authority bounds survive waits and final admission.
+
+Source-known future cashout continuation is qualified with exact independent
+commodity/cash owners, no-rate overdue/paid endpoints and real economic workers.
+Native operator continuation, correction forms and ordinary-use/zero portfolio
+workers are qualified. Original title and loan commands acknowledge accepted
+financial snapshots without replacing native identities or independent fee terms.
+Fresh acknowledgements require an existing certified context for their stated
+business date; exact first-outcome recovery retains its receipt-first contract.
+See the [delivery contract](lifecycle-delivery.md) and
+[gas contracts and qualification](gas-owned-holdings.md) for the bounded behavior;
+no production schema activation is implied.
 
 D393 implements live curve output selection, an optional inactive-contract
 display, and explicit exact/live close capture with durable first-outcome retry.
@@ -824,7 +852,7 @@ weekday dates have synthetic monthly/daily gas and power examples.
 Each side now selects either a period-end day lag or a day of the following
 month, with explicit day basis, short-month behavior, date adjustment and exact
 calendar where consumed. Generated date-only rows retain the rule evidence.
-D402's per-purpose calendar controls require explicit published selections.
+D403's per-purpose calendar controls require explicit published selections.
 The shared-selection action expands concrete bindings; product-owned bindings
 remain locked through validation and refresh.
 New entry has commodity-filtered indices/units and separate reset-frequency and

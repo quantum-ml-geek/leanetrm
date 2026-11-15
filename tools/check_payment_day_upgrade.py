@@ -15,7 +15,7 @@ SIGNATURES = (
 
 def qualification():
     predecessor = []
-    migration_path = Path(__file__).resolve().parents[1] / 'db/migrations/0256_utc_payment_day_programs.sql'
+    migration_path = Path(__file__).resolve().parents[1] / 'db/migrations/0318_utc_payment_day_programs.sql'
 
     def before(query, migration):
         if migration == migration_path:

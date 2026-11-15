@@ -2,7 +2,7 @@
 
 For the current complete command and prerequisites, start with
 [Required tools](#required-tools). `tools/check_all.py` runs all suites by
-default; `--group workspace|reference|standard|exchange|assistant|risk|trading|physical|gas|portfolio|settlement|ppa|recovery`
+default; `--group workspace|reference|standard|exchange|assistant|risk|trading|lifecycle|physical|gas|portfolio|settlement|ppa|recovery`
 selects one CI partition. CI requires every partition and its aggregate check
 to succeed. The implementation records below retain the results and limits of
 each dated increment; older check counts are not the current suite size.
@@ -14,6 +14,66 @@ checks enforce that coverage and bound each preview queue to twelve suites.
 The standard browser and exchange-option workflows each have a dedicated partition.
 Jobs have a 90-minute limit, including preparation and shared-runner variation;
 cancellation still fails the aggregate release gate.
+
+The gas partition runs the native amendment upgrade and real application checks.
+Every partition retains fresh-checkout preparation and the shared checks; the
+required aggregate waits for all fourteen partitions. The command-union checks require
+each owned consumer exactly once across the matrix.
+
+The integrated calendar/lifecycle runner contains 183 commands: 63 shared checks,
+63 isolated application previews and 57 partition-specific native/application
+checks. Local integration checks passed 737 managed core checks, 88 rate checks,
+1,806 frontend checks and 121 Python checks. Calendar migrations 0318–0335 follow
+the lifecycle schema without changing any published predecessor migration.
+Migration 0321 checks the exact retained schedule views, including invoker
+semantics, ownership, ACLs, column grants and rewrite rules. Its parity qualifier
+preserves economic values, period order, evidence and required-child refusal
+while comparing the explicitly changed calendar authoring shape.
+
+The fixed-loan-fee consumer qualifies migration 0308 through native, managed and
+real browser paths on stock PostgreSQL 18.1 with synthetic data. The gas
+partition runs `tools/check_gas_fee_browser.py` with the selected SDK/browser and
+`tools/check_gas_fee_existing_origins.py` for the separately seeded predecessor
+schema. Thirteen deliberate producer faults include amount/date/currency/reference
+and outcome corruption, missing canonical fields, and unrelated resource effects;
+they refuse at immediate constraints and actual commit. Permission expiry during
+publication waits, final command seals and final source-helper work also refuses.
+Exact cash/bank membership oracles produce PV −2.375 after a fee amendment and
++0.475 after an explicit zero, using a selected 0.95 discount factor. Fifteen
+actual API/Chrome checks cover local-time entry, desktop/mobile review, retained
+first outcomes after a lost response and reopening with fresh explicit choices.
+The upgrade preserves every predecessor gas financial and command-receipt row.
+
+The side-observation preview checks dependency-specific read authority: revoking
+the scheduled-swap projection leaves ordinary swap terms, history and PV intact;
+revoking either observation relation still denies a swap that retains that
+observation schedule. Migration 0297 keeps the conditional invoker-function
+boundary around scheduled terms while hydrating each selected period by its exact
+keys. Its join planning setting is confined to the schedule helper. The native
+retained-swap qualifier checks predecessor parity, caller-setting restoration,
+required-child refusal and worker expiry separately.
+
+D401's local native futures increment has focused owned PostgreSQL consumers:
+`tools/check_futures_margin_sources.py`, `tools/check_futures_margin_adoption.py`
+and `tools/check_futures_margin_journal.py`. Each takes `--pg-bin`; its managed
+child uses the explicitly selected `DOTNET` executable and already-built API check
+project. The lifecycle CI partition runs all three. The journal consumer qualifies
+actual booking/adoption, causal corrections, distinct surviving cash, partial
+payment, terminal PV without an open mark, explicit future-cash discounting,
+review/source changes, original admission deadlines and immutable run membership.
+The same consumer now checks the explicit native-margin scoped portfolio,
+ordinary connected PV, exact cash provenance and retained accounting coverage.
+A wrapped-review regression fails without transaction-owned admission and passes
+with it; successor grants cannot extend its original read deadline.
+`tools/check_trading_business_date.py` qualifies explicit business-date reads and
+immutable command source admission, including read-scope restoration, source
+conflicts, forged deadlines and successor grants. Migration 0258 refuses drift in
+the exact native source helpers it updates. These checks preserve the existing
+recorded-close calendar restrictions rather than qualifying broader close sessions.
+It also inserts separate privileged synthetic contexts with inconsistent prefixes
+to prove refusal, without modifying immutable records or the database software.
+These are native/managed checks. The [remaining lifecycle gates](lifecycle-delivery.md)
+include whole-portfolio/worker, physical delivery and HTTP/agent/browser workflows.
 
 D354 adds the owned `--context-read-check --browser-check` consumer for the
 grouped header, context explanations, failed-Apply recovery and retained knowledge
@@ -2257,12 +2317,18 @@ request runs no CI; its pull request run verifies the same head. Checkout and to
 pinned to exact commits. The checks job has read-only repository access, does not
 persist checkout credentials and requires no repository secrets. The full local
 `check_all.py` command remains available. CI partitions its existing stages into
-eight groups (`check_all.py` `GROUPS`): `workspace`, `standard`, `assistant`,
-`trading`, `portfolio`, `settlement`, `ppa` and `recovery`;
-each fresh checkout repeats all shared preparation and checks (about 2.5 minutes). The union covers every full-gate stage,
-with no duplicated preview stages. Each group retains a 45-minute job deadline;
-individual command and owned-resource deadlines remain in force. The partitions
-follow measured preview durations on four October 2026 runs: shared preparation
+nine groups (`check_all.py` `GROUPS`): `workspace`, `standard`, `assistant`,
+`trading`, `lifecycle`, `portfolio`, `settlement`, `ppa` and `recovery`;
+each fresh checkout repeats all shared preparation and checks. The union covers
+every full-gate stage, with each owned qualification suite in exactly one group.
+Standard and trading have 60-minute job deadlines; the other groups have
+45 minutes. Individual command and owned-resource deadlines remain in force.
+The lifecycle group runs native margin, scheduling, delivery, ownership and
+authority qualification, including its two application browser suites. A November
+2026 trading run reached its 60-minute limit while still passing checks; these
+native stages had taken about 21 minutes before the trading previews. Separating
+them preserves the complete gate without increasing its existing deadlines.
+The original partitions followed measured preview durations on four October 2026 runs: shared preparation
 took about 2.5 minutes per group, while the scheduled swap settlement (10-15
 minutes), renewable close recovery (13-20), standard browser (8-13) and
 page-assistant (about 6) stages dominated. Those long stages run in `settlement`,

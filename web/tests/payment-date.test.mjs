@@ -28,3 +28,14 @@ test('payment editing retains an unchanged coordinate and serializes a new date 
  input.clear();await assert.rejects(input.instant(),/payment date/);
  field.value='2027-02-30';await assert.rejects(input.instant(),/payment date/);
 });
+
+test('native settlement evidence shows original dates and retains correction and actual-event instants',async()=>{
+ const {contractDateEvidence}=await import('../dist/payment-date.js');
+ const at='2027-02-05T00:00:00Z',fixing='2027-02-05T12:00:00Z',correction='2027-02-06T18:00:00Z';
+ const original={occurrences:[{contractual_due:at,completion_at:fixing}],determinations:[
+  {ordinal:1,due_at:at,evidence:{publishedAt:fixing}},{ordinal:2,due_at:correction}],payments:[{effective_at:fixing}]};
+ const saved=JSON.stringify(original),shown=contractDateEvidence(original);
+ assert.deepEqual(shown,{occurrences:[{contractual_payment_date:'Feb 5, 2027',completion_at:fixing}],determinations:[
+  {ordinal:1,due_date:'Feb 5, 2027',evidence:{publishedAt:fixing}},{ordinal:2,due_at:correction}],payments:[{effective_at:fixing}]});
+ assert.equal(JSON.stringify(original),saved);
+});

@@ -2791,3 +2791,21 @@ header>div:first-child{flex:1 1 160px}
 .side-calendar select{min-width:0;width:100%;max-width:100%}
 .side-calendar pre{white-space:pre-wrap;overflow-wrap:anywhere}
 .side-calendar button{max-width:100%;white-space:normal}
+
+:root .lifecycle-workspace{display:grid;grid-template-columns:minmax(0,1fr);gap:1rem;min-width:0}
+.lifecycle-workspace>*{min-width:0}
+.lifecycle-tools{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+.lifecycle-tools label{display:flex;align-items:center;gap:.5rem}
+.lifecycle-inactive{color:var(--text-3)}
+.lifecycle-panel:empty{display:none}
+.lifecycle-panel{padding:1.25rem;border:1px solid var(--border);border-radius:.5rem}
+.lifecycle-panel>h2{overflow-wrap:anywhere}
+.lifecycle-form{display:grid;gap:1rem}
+.lifecycle-form fieldset{border:1px solid var(--border);border-radius:.4rem;padding:1rem}
+.lifecycle-form button{justify-self:start}
+.lifecycle-review{margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--border)}
+.lifecycle-review-table{max-width:100%;overflow:auto}
+.gas-lifecycle-policy,.gas-lifecycle-fields{grid-column:1/-1;min-width:0}
+.lifecycle-review-facts{display:grid;grid-template-columns:max-content 1fr;gap:.5rem 1rem}
+.lifecycle-review-facts dd{margin:0;overflow-wrap:anywhere}
+@media(max-width:600px){.lifecycle-review-facts{grid-template-columns:minmax(0,1fr);gap:.25rem}.lifecycle-review-facts dd{margin-bottom:.5rem}}

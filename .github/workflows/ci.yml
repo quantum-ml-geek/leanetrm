@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: ["workspace", "reference", "standard", "exchange", "assistant", "risk", "trading", "physical", "gas", "portfolio", "settlement", "ppa", "recovery"]
+        group: ["workspace", "reference", "standard", "exchange", "assistant", "risk", "trading", "lifecycle", "physical", "gas", "portfolio", "settlement", "ppa", "recovery"]
     runs-on: ubuntu-24.04
     # Include preparation and numerical/browser workload variation on shared runners.
     timeout-minutes: 90

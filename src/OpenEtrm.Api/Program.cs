@@ -106,6 +106,19 @@ const string malformed="The request is incomplete or malformed.";
         => (409,p.MessageText,"The payment revision or request changed. Reload the current allocation or retry the unchanged original request."),
     PostgresException p when p.SqlState=="P0001" && p.MessageText=="cash_payment_input"
         => (422,p.MessageText,"Supply exact payment references, an explicit paid instant, signed amount and the supported cash policy."),
+    PostgresException p when p.SqlState=="P0001" && p.MessageText=="cash_payment_membership_time"
+        => (422,p.MessageText,"The payment cannot precede the recorded cash obligation. Check the payment time and its allocation."),
+    PostgresException p when p.MessageText.StartsWith("lifecycle_",StringComparison.Ordinal)
+        => (p.SqlState=="42501"?403:p.MessageText.Contains("conflict",StringComparison.Ordinal)||p.MessageText.Contains("stale",StringComparison.Ordinal)?409:422,
+            p.MessageText,LifecycleNative.Refusal(p.MessageText)),
+    PostgresException p when p.MessageText.StartsWith("gas_quantity_",StringComparison.Ordinal)
+        => (p.SqlState=="42501"?403:p.MessageText is "gas_quantity_revision" or "gas_quantity_stale_review" or "gas_quantity_conflict"?409:422,
+            p.MessageText,"Review the current physical quantity, source allocations and principal version again."),
+    MarketDataException m when m.Code is "gas_quantity_revision" or "gas_quantity_stale_review" => (409,m.Code,m.Message),
+    PostgresException p when p.MessageText.StartsWith("gas_owned_",StringComparison.Ordinal)||p.MessageText.StartsWith("gas_stock_",StringComparison.Ordinal)||
+        p.MessageText.StartsWith("gas_operator_",StringComparison.Ordinal)||p.MessageText.StartsWith("gas_loan_",StringComparison.Ordinal)
+        =>(p.SqlState=="42501"?403:p.MessageText is "gas_owned_context" or "gas_owned_preview_stale" or "gas_owned_conflict" or "gas_owned_policy_changed" or
+            "gas_owned_source_already_applied" or "gas_operator_reconciliation" or "gas_owned_reconciliation"?409:422,p.MessageText,GasOwnedOperations.Refusal(p.MessageText)),
     MarketDataException m when m.Code=="contract_materialization_conflict" => (409,m.Code,m.Message),
     PostgresException p when p.SqlState is "23503" or "23514" && (apiPath.StartsWithSegments("/api/date-schedules/contracts/materialize")||apiPath.StartsWithSegments("/api/curve-definitions/admit-contracts")) => (422,"contract_materialization","Select compatible exact reference terms and published date-list occurrences."),
     PostgresException p when apiPath.StartsWithSegments("/api/price-publications") && p.SqlState=="40001" && p.MessageText.StartsWith("publication_",StringComparison.Ordinal)
@@ -230,7 +243,7 @@ const string malformed="The request is incomplete or malformed.";
     PostgresException p when p.SqlState=="P0001" && p.MessageText=="model_admin_conflict" || p.SqlState=="23505" && context.Items.ContainsKey("model_admin_attempted")
         => (409,"model_admin_conflict","This provider, model or request changed, or its current state does not allow the change. Reload Settings › AI before repeating the change under a new request."),
     PostgresException p when p.SqlState=="P0001" && p.MessageText is "model_provider_unqualified" or "model_provider_disabled" or "model_unqualified" or "model_mapping_unconfirmed"
-        or "model_unpriced" or "test_in_progress" or "model_changed" or "model_disabled" or "agent_retired"
+        or "model_unpriced" or "test_in_progress" or "model_changed" or "model_disabled" or "agent_retired" or "agent_operating_role_conflict"
         => (409,p.MessageText,ModelCatalog.Refusal(p.MessageText)),
     PostgresException p when p.SqlState=="P0001" && p.MessageText=="agent_role_lacks_permission" => (422,p.MessageText,AgentAdministration.RoleRefusal(AgentAdministration.Lacking(p.Hint))),
     PostgresException p when p.SqlState=="P0001" && p.MessageText is "agent_not_allowed" or "grant_permission_missing" => (403,p.MessageText,AgentGrants.Refusal(p.MessageText,p.Hint)),
@@ -477,6 +490,7 @@ InputFrame Frame(PreviewSession session,Guid id)
     var frame=PpaFrame(session,id);
     return frame.PpaBundle is null?frame:throw new MarketDataException("snapshot_inputs","This exact bundle frame belongs to the bounded PPA consumer.");
 }
+LifecycleEndpoints.Map(api,database,Locked,Profile,Frame);
 async Task<SessionFramePlan> DiscoverFrames(NpgsqlConnection connection,PreviewSession session,CancellationToken ct)
 {
     if(session.Live is not null)return new([],session.FrameCatalog);
@@ -1914,8 +1928,7 @@ api.MapPost("/swaps/settlement/payment",(HttpContext c,SwapCashRequest body)=>Lo
 api.MapPost("/swaps/settlement/status",(HttpContext c,FuturesStatusRequest body)=>Locked(c,session=>database.WithIdentity(Profile(session),"ReadTrades",async(connection,ct)=>
 {
  if(body.OperationId==Guid.Empty)throw new MarketDataException("settlement_input","Supply the retained operation identity.");
- await using var command=ScheduleStore.Command(connection,"SELECT settlement_data.swap_operation_status($1,$2)::text",database.Manifest.CatalogId,body.OperationId);
- return Results.Ok(JsonSerializer.Deserialize<JsonElement>((string)(await command.ExecuteScalarAsync(ct))!));
+ return Results.Ok(await SwapSettlementStatus.Read(connection,database,body.OperationId,ct));
 },c.RequestAborted)));
 api.MapPost("/swaps/contract-observation-preview",(HttpContext c,SwapContractObservationPreviewRequest body)=>FuturesRead(c,
  body.Context??throw new MarketDataException("swap_context","Supply the selected observation context."),
@@ -2018,6 +2031,18 @@ api.MapPost("/portfolio/risk",(HttpContext c,PortfolioRiskRequest body)=>Portfol
 api.MapPost("/portfolio/risk/history",(HttpContext c,PortfolioHistoryRequest body)=>PortfolioRead(c,
     body.Scope?.Context??throw new MarketDataException("risk_context","Select the retained risk scope and context."),
     (connection,data,frame,ct)=>portfolioRisk.History(connection,data,frame,body,ct)));
+api.MapPost("/portfolio/risk/economic/sources",(HttpContext c,PortfolioEconomicSourceRequest body)=>PortfolioRead(c,
+    body.Scope?.Context??throw new MarketDataException("risk_economic_scope","Select the exact economic opening scope."),
+    (connection,data,frame,ct)=>portfolioRisk.EconomicSources(connection,data,frame,body,ct)));
+api.MapPost("/portfolio/risk/economic/cash-funding",(HttpContext c,PortfolioEconomicCashFundingRequest body)=>PortfolioRead(c,
+    body.Scope?.Context??throw new MarketDataException("risk_economic_scope","Select the exact economic opening scope."),
+    (connection,data,frame,ct)=>portfolioRisk.EconomicCashFunding(connection,data,frame,body,ct)));
+api.MapPost("/portfolio/risk/economic/setup",(HttpContext c,PortfolioRiskCatalogRequest body)=>PortfolioRead(c,
+    body.Context??throw new MarketDataException("risk_economic_scope","Select the exact economic opening scope."),
+    (connection,data,frame,ct)=>portfolioRisk.EconomicSetup(connection,data,frame,body,ct)));
+api.MapPost("/portfolio/risk/economic/history",(HttpContext c,PortfolioEconomicHistoryRequest body)=>PortfolioRead(c,
+    body.Source?.Scope?.Context??throw new MarketDataException("risk_economic_scope","Select the exact economic opening scope."),
+    (connection,data,frame,ct)=>portfolioRisk.EconomicHistory(connection,data,frame,body,ct)));
 api.MapPost("/portfolio/risk/parametric",(HttpContext c,PortfolioParametricRequest body)=>
 {
     var request=PortfolioRiskPreview.StatisticalRequest(body);
@@ -2250,7 +2275,8 @@ api.MapPost("/settings/ai/page-prompts/save",(HttpContext c,SavePagePromptReques
     database.WithIdentity(Profile(session),"ManageAssistantPrompts",async(connection,ct)=>Results.Ok(await AssistantPagePrompts.Save(connection,body,ct)),c.RequestAborted)));
 api.MapPost("/settings/ai/agents/create",(HttpContext c,CreateAgentRequest body)=>AgentCommand(c,(connection,ct)=>AgentAdministration.Create(connection,body,ct),control:true));
 api.MapPost("/settings/ai/agents/save",(HttpContext c,SaveAgentRequest body)=>AgentCommand(c,(connection,ct)=>AgentAdministration.Save(connection,body,ct)));
-api.MapPost("/settings/ai/agents/publish",(HttpContext c,AgentCommandRequest body)=>AgentCommand(c,(connection,ct)=>AgentAdministration.Publish(connection,body,ct)));
+api.MapPost("/settings/ai/agents/save-operating-role",(HttpContext c,SaveAgentOperatingRoleRequest body)=>AgentCommand(c,(connection,ct)=>AgentAdministration.SaveOperatingRole(connection,body,ct)));
+api.MapPost("/settings/ai/agents/publish",(HttpContext c,AgentCommandRequest body)=>AgentCommand(c,(connection,ct)=>AgentAdministration.Publish(connection,body,ct),control:true));
 api.MapPost("/settings/ai/agents/retire",(HttpContext c,AgentCommandRequest body)=>AgentCommand(c,(connection,ct)=>AgentAdministration.Retire(connection,body,ct),control:true));
 // Grants (§7.1, §8): the agents a user may use and the user's grants. Grant and Revoke write control tables, so like
 // Create and Retire they repeat under exclusive admission only once every check has passed; Revoke needs no UseAgents.

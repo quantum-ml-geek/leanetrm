@@ -1,0 +1,524 @@
+# Lifecycle actions
+
+The pure physical-final boundary accepts an exact version-two delivery
+configuration, computes final variation margin, and creates a separate ordinary
+delivery obligation. It creates no stock or title. Accepted physical margin
+state must retain the exact obligation, quantity, basis and atomic final
+publication; configuration windows cannot precede the final occurrence. Focused
+trajectory checks qualify these contracts. Native delivery configuration,
+acceptance, performance and principal/payment integration remain in progress.
+
+Native delivery profiles now seal the exact future contract, an explicitly
+selected owned-gas account/mark, delivery and cash windows, carrying, principal
+rounding, and correction due convention. Version-two margin policies pin this
+exact profile, with explicit null for cash settlement. Version-one cash policy
+canonical bytes remain unchanged. Profile retries and older-fact acknowledgements
+preserve the current head; a new revision requires the source to contain that
+head. The saved enrollment policy is retained evidence; actual performance also
+requires a separately configured current account action binding. No account
+binding or title is created by saving a profile. Disposable native checks qualify
+these configuration and hash boundaries; physical performance remains separate.
+
+Accepted physical final margin now creates one signed native delivery obligation
+in its publication transaction. Later accepted final corrections retain that
+owner and update the selected locked basis without creating title. Ordinary
+whole-book PV reads this residual as marked commodity value less final principal,
+with separate exact-instant physical and cash carrying inputs. Its economic
+identity includes the exact final basis; native ownership remains stable.
+Disposable native and owned managed checks cover final margin, correction,
+older-snapshot acknowledgement, independent ownership/PV and receipt recovery
+after a host frame is evicted. Evidence-backed performance, its complete
+principal trajectory, payment and projected continuation remain integration gates.
+
+Lifecycle discovery, review and execution use one managed handler registry. The
+registry dispatches a typed native target; product operations retain ownership of
+financial terms, calculations, records and corrections. A target may be a trade
+binding or a native holding. Shared commands are authorization and first-outcome
+receipts, not another financial event journal.
+
+## Selected source and authority
+
+Every reviewed action pins its certified context, business date and calculation
+instant. A host snapshot is also pinned when a product consumes its market
+inputs. Business dates come from that context rather than the display time zone
+or the UTC date of the instant. Discovery resolves this source through the same
+trading workspace selection used elsewhere in the application.
+
+Read authority is captured before source lookup and registered with the owned
+transaction. Write authority, including `RunJobs` for automatic execution, is
+captured before waits and mutable head lookup. Final admission retains the
+original deadlines, current actor/session authority and exact retained
+references. Restoring a read savepoint does not discard the source or admission
+guard. A reviewed hash identifies financial inputs; approval remains the host's
+separate exact-request authorization.
+
+Every write carries a request ID and returns its first outcome on exact replay.
+Receipt lookup precedes mutable host-frame and fresh-source lookup, so evicting a
+working frame does not prevent recovery of an accepted outcome. Replay still
+checks current authority and exact retained references.
+A new request acknowledging an identical accepted financial snapshot returns
+that accepted version and the current financial version. It neither creates
+cash nor advances the financial sequence. Changed source lineage is a new fact
+even when its rounded total is unchanged. Past accepted facts can be
+acknowledged after a later correction without rolling the current state back.
+
+## Explicit configuration
+
+Versioned action policies select manual, review or automatic operation and a
+half-open effective window. Only actions with a qualified automatic consumer
+can select automatic mode. Product profiles bind exact action-policy versions
+and product-native terms; there are no inferred financial defaults.
+
+Listed futures options select the generated future's mark curve and exact
+margin policy separately from the official expiry source. Exercise or assignment
+and margin enrollment share the causal native event and publication transaction.
+Actual future state still requires a fresh certified post-commit context.
+
+Swap profiles identify one exact trade revision, binding, membership and payment
+period. Several periods of one swap may be configured concurrently. Each has a
+stable profile ID and the native side-period occurrence ID. Native wrappers
+require the selected profile, action window and source admission before calling
+the existing settlement arithmetic and cash producer. Legacy public write
+adapters refuse with `lifecycle_configuration_required`; their native producers
+are not executable by the application runtime directly.
+
+Observed swap cash trims surrounding U+0020 spaces from a stable reference within the trade, cash
+instant and explicit reversal relationship. Re-recording the same complete fact
+at a later recording instant acknowledges the original payment. A conflicting
+amount, currency or allocation under that key requires a qualified correction
+or reversal, and does not create another payment silently.
+
+Same-trade net settlement has its own exact trade-revision profile rather than
+replacing the profiles of individual payment periods. It selects currency,
+rounding, due treatment, recognition, correction, a saved manual/review action
+policy and `explicit_same_due_swap_net_v1`. The shared net action reuses the
+existing gross-allocation calculator and native swap cash producer. It supports
+full and partial net cash, zero-net discharge and exact original reversals;
+reversal amounts and all original gross lines are derived by the backend.
+Native admission compares the complete proposed cash and lines with the closed
+selection, checks the retained source and conventions, then records one shared
+receipt. No second cash ledger or financial sequence is introduced.
+
+Discovery supplies exact original-payment choices for single reversals. The
+browser presents net allocations and their resulting balances for review, and
+retains the exact command for receipt-first retry. The native checks qualify
+old-snapshot acknowledgement after later cash, forged derived cash/line refusal,
+settings acknowledgement without rewinding the current revision, and unchanged
+allocation counts on retries. Browser checks qualify the gross-entry, reversal
+and explicit-settings forms.
+
+The net review first recognizes an already recorded complete payment in its
+selected source, including original and reversal facts whose later balances
+have changed. It shows that acknowledgement explicitly and creates no new cash
+or allocations. Conflicting cash or gross lines under the same observed key
+are refused; repeated selected lines cannot disappear through set comparison.
+
+Futures setup lists exact held and unadopted futures, source choices, dated
+margin occurrences, opening treatment and rounding policy. Saving and adoption
+reuse the existing native margin commands and their original commit admission.
+
+Every new physical futures margin policy and adoption requires the v2 contract
+with an exact saved delivery continuation. Native insert guards also cover an
+option's atomic linked-future adoption. Existing first outcomes and identical
+saved facts are acknowledged without rewriting their history; an old physical
+v1 policy cannot enroll another future. Cash-settled v1 policy hashes and first
+outcomes remain unchanged. An isolated native upgrade check qualifies those
+boundaries without disabling guards or converting accepted facts.
+
+## Historical projection inputs
+
+The knowledge-only swap reader returns all source-visible accepted
+determinations and observed payments, including future effective instants. It
+proves exact ownership, terms, contribution chains, allocations and publication
+receipts. Ordinary opening state continues to recognize facts only when their
+effective time is reached. Hypothetical projection consumes the separate typed
+history; it does not manufacture native accepted facts.
+
+The knowledge-only futures reader separately retains the complete accepted
+margin heads, every original and correction cash membership, and native payment
+revision history. Future effective facts remain inactive at the opening. The
+read verifies the held execution and exact source inputs, and preserves the
+earlier opening-read deadline through source lookup and final commit admission.
+Paid-cash allocations require an existing obligation; payment before its due
+time is supported, while an advance before ownership requires a separate asset
+contract.
+
+The option history reader retains every source-known accepted event, including
+later effective exercise or assignment. Each linked future retains its actual
+execution terms and the exact policy adopted in the same causal publication.
+Opening option lots remain unchanged until the event's effective instant. The
+source read registers its original deadline and exact origin reference guard
+before source admission; hypothetical futures margin is a separate projection
+state.
+
+Native option history binds an unbound read to the exact admitted market and
+trading source, rejects a conflicting bound source, and rechecks the original
+source admission before returning. The complete-source profile permits at most
+4,096 events, 65,536 repeated policy occurrences and 16 MiB of native source
+JSON. It refuses an oversized complete scope rather than omitting events or
+policy rows.
+
+Option operation status can recover an actor's previously accepted booking or
+event. It takes the native publication fence before reporting an absent outcome,
+then rechecks current authority and the exact retained references. It dispatches
+no financial action and discloses no other actor's command receipt.
+
+## Qualification
+
+The disposable PostgreSQL checks exercise actual managed booking and source
+selection, policy/profile writes, the shared owned action coordinator, native
+financial producers, exact replay and same-fact acknowledgement. They cover
+option exercise with atomic generated-future adoption, historical option source
+isolation, original read-grant expiry under a successor grant, swap source
+corrections, unchanged-price changed lineage, observed-payment conflicts,
+knowledge-only future cash and determinations, and independently configured
+multi-period swaps. The checks also verify that legacy native write entry points
+are unavailable to the runtime.
+
+Browser, whole-portfolio economic risk, automatic host dispatch, gas continuation
+and physical-futures delivery have separate integration checks. This document
+does not claim those consumers are qualified by the action checks alone.
+
+Earlier swap settlement forms now retain their settlement, cash and P&L reads,
+while new actions open the shared Lifecycle workspace. Requests retained by the
+previous forms can only query their exact actor-owned native receipt. A missing
+outcome is checked behind the publication fence before explicit dismissal; the
+status read also retains its original authority through owned commit. Disposable
+native concurrency and authority checks and actual browser checks qualify this
+recovery boundary. Booking and amendment remain separate operations.
+
+Interactive physical admission follows the exact selected policy, including an
+option's saved linked-future policy, before any inventory exists. Native and
+owned managed boundaries retain the original gas deadline through receipt waits,
+source reads and commit, alongside current authorization and exact references.
+Protected worker read wrappers retain their scope checks; their private source
+readers capture gas authority before base admission waits.
+
+Discovery fixes its optional read permissions at entry. A gas grant acquired
+while resolving the source becomes usable on a new read. This read keeps its
+original permission set; optional gas data and physical-futures offers stay
+excluded, and configured physical option actions identify the missing access.
+Disposable native checks cover initial deadlines, fresh successor requests,
+ordered permission revocation and delayed discovery without inventory.
+
+A confirmed financial-source receipt invalidates current Blotter inputs and Risk
+setup separately from unsaved edits. The owned request is cleared before view
+refresh callbacks: a display/read failure after acceptance cannot turn the
+financial effect into an unconfirmed request. Callback continuation rechecks the
+same actor and view generation. Explicit historical Blotter reads, captured Risk
+reports and original unconfirmed risk submissions retain their selected inputs;
+a new calculation requires refreshed source preparation.
+
+Swap action discovery and review name the exact retained side and delivery
+interval. Determination review displays the backend contractual total, prior
+amount, new contribution, currency and due instant before execution. Observed
+payments and net settlements show their corresponding accepted evidence.
+
+The owned shared-swap browser qualifier runs against the actual API and native
+database. Its 25 checks cover determination, observed payment, original-payment
+reversal, partial netting, zero-net discharge, both net reversals, lost responses
+and exact receipt-first recovery after reload, current Risk invalidation, retained
+P&L reads and narrow layouts. Reload reselects the same actor and read context;
+it never regenerates the retained financial request. Reusing a scheduled side
+retains both independent memberships even when they share one payment-template
+identifier. Discovery, review and the grid keep each exact saved profile
+distinct, and recorded gross obligations remain separate when their values
+offset.
+
+Scheduled swap actions retain the explicitly selected recorded close as primary.
+The exact retained side programs and published custom-source closure must be
+covered by its source matrix; an omitted definition refuses enrolment. Managed
+settlement and retained Editor, Blotter and P&L readers resolve each native row's
+exact definition and reference version before materializing its terms. Deployment
+catalogue choices do not replace this financial source. Disposable checks execute
+an actual task with primary B and independent price source A, refuse omitted A
+without a job or command, and reconcile all four retained views to the independent
+50-value oracle. Existing fixed-only swap composition remains explicitly
+unsupported rather than acquiring a guessed floating source.
+
+Instruction review uses the selected trading prefix, certified knowledge cutoff
+and effective instant. A visible opposite instruction or different effective
+time refuses; an identical immutable instruction can acknowledge its original
+event under a new command or evidence key. The receipt identifies both the
+current command and acknowledged command without another financial event.
+Native execution retains its current-head and real recording-cutoff checks.
+The disposable qualifier seeds separate synthetic rights before sealing: seven
+historical expiry cases, an unprocessed expired right in ordinary Blotter/risk,
+and a contrary-enabled right with a genuinely open future cutoff. It checks
+stable receipts, same-fact acknowledgements, historical prefix/effective fences,
+closed/unknown cutoffs and private helper upgrade drift without rewriting
+accepted reference rows or changing the system clock.
+
+## Physical option model qualification
+
+The bounded pure `physical_futures_option_reference_strategy_v1` model selects
+the quoted-reference calibration, frozen quoted asset-minus-futures basis,
+reference American stopping strategy and explicit intrinsic fallback strategy.
+It reuses the selected CRR or strike-centred reference tree and its stopping
+decisions. The native A expiry rule, threshold and selected contrary instruction
+govern terminal exercise; a negative physical continuation does not change that
+rule or become zero.
+
+At a stopping node the generated future's pending VM uses the next eligible
+saved occurrence's due factor. The physical exchange uses its separately
+declared asset and principal carrying factors. These are root values and are
+rolled back with the selected tree probabilities once. The result reports the
+vanilla reference, contractual VM, delivery continuation and total separately.
+The quoted vanilla calibrates the reference process; it does not calibrate the
+composite value. An intrinsic fallback explicitly exercises positive intrinsic
+immediately and otherwise holds a flat reference to the contractual terminal
+decision. Its calibration residual remains a reference-mark diagnostic and does
+not create a financial cash flow.
+
+Independent pure checks cover signed basis, negative continuation, distinct
+carrying dates, the exact saved VM due, native terminal decisions and the
+zero-basis/carry-compatible collapse under both selected numerical policies.
+Native source admission, full economic worker replay and UI selection are
+separate qualification gates. This pure model does
+not establish an accepted exercise, margin determination, title or payment.
+
+Model price-step metadata resolves after the original financial declaration's
+clock and input admission. A clock child retains those financial terms and
+updates only its model resolution, using the same selected discount provider as
+PV. Price-only child scenarios retain the existing inherited resolution policy.
+An independent nonflat rate-curve check starts with unit expiry discount and
+rolls to a conditional discount below one: the selected strike-centred model
+then declares its positive price step while retaining its source calibration.
+Expired/pinned clocks, substituted discount sources and undeclared metadata
+discount reads remain refused.
+
+An optional selected-model restriction declares static derivatives unqualified.
+The shared exact-bump and multi-step derivative operations refuse that scope;
+portfolio parametric, historical-comparison and quadratic/hybrid consumers use
+the same guard. Ordinary PV, named/joint full PV scenarios and full-revaluation
+historical or Monte Carlo paths remain available. Existing declarations retain
+their established derivative contract and unchanged wire shape when this field
+is absent. This capability does not infer a derivative or substitute a zero.
+
+The ordinary unit/portfolio consumer selects this model per exact held option
+binding. Its pricing scope is separate from accepted lifecycle state, so two
+holdings of one option definition may retain different terminal selections while
+another explicitly uses the vanilla reference measure. The optional pricing
+scope is omitted from legacy scope JSON. Position-subset preparation retains
+only its own selected pricing inputs.
+
+The consumer requires the exact native underlying lot/multiplier and delivery
+policy, the automatic rule, the captured asset graph and explicit reference,
+margin and physical carrying providers. A foreign asset provider receives its
+original admitted source. Independent ordinary PV checks cover separate A/B
+shocks, signed nonunit holdings, negative basis, distinct expiry/margin/delivery
+discounts and mixed selected/vanilla scopes. The total rounds once to the option
+working scale before the multiplier; its displayed contractual and delivery
+parts retain any resulting numerical difference as `working_scale_rounding`,
+never as cash. Generic frozen-clock children are explicitly pinned; economic
+projections redeclare their supported inputs at their own event clock. The native
+adapter and full-application checks below qualify source assembly, economic
+workers and explicit UI model selection for this bounded consumer.
+
+The pure horizon engine also accepts an explicit currency accumulation map,
+separate from product residual discounting. Each partition covers exactly the
+currencies of its prepared components, including paths with no cash; portfolio
+partitions must agree on both the exact native curve and its original captured
+source. Nominal accumulation requires an empty map. The legacy absent-map
+profile retains its existing source-local behavior and rejects ambiguous curve
+identities. Signed rational checks use independently selected funding and
+residual factors and retain the original provider snapshots. The v2 API selects
+each exact full-reference currency, original snapshot, native mapping and rate
+definition. Rate-only sources remain in the complete original input matrix and
+job observation custody without creating a holding, price factor or dummy graph.
+The existing supplemental graph requirement remains in force for every price
+input. Native checks refuse substituted parameters, tenor series, conventions,
+mappings, omitted sources and a fabricated rate-only price axis. Historical and
+Monte Carlo workers reproduce the complete interactive result, including an
+independent signed rational cash oracle, with no financial writes. Original
+authority expiry still refuses a source read under a live successor grant.
+The authorized funding metadata operation shares product assembly with the
+financial consumer and derives the complete component currency set before
+funding is selected. It offers only native mappings whose tenors have complete,
+visible, unfrozen final inputs in the original source matrix. An unpinned curve
+does not block an eligible curve; no eligible curves produce an empty choice
+set under the same original read deadline. Effective instants are separate
+presentation fields. The metadata request cannot contain a financial funding
+selection. UI controls remain a separate qualification gate.
+
+Retained scheduled-swap reads share exact invoker relational projections for
+their native period inputs. They preserve the predecessor's complete JSON and
+required-child visibility or refusal behavior. Worker SELECT policies follow
+D282: full current authorization and its original minimum authority cutoff are
+resolved once per SQL statement, with that cutoff checked on every row. A
+revocation, cancellation or lease change is visible on the next statement or
+cursor close; protected readers, writes and publication checks retain their
+current guards. No transaction authorization cache is introduced. Stock-database
+checks cover hidden schedule children, same-protocol statement invalidation,
+mid-query original-grant expiry despite a successor grant, and the original
+29-position dated-observation worker under its unchanged five-second input
+read deadline. Historical and Monte Carlo jobs, delegated financial actions,
+native ledger corrections and exact replay also pass the complete swap flow.
+
+The pure accepted-physical adapter can compose a complete array of native
+parents through one shared quantity engine. It retains each future, delivery,
+stock and principal owner, including an already active partial delivery with no
+synthetic opening future. Opening quantity reconciles accepted past performance;
+source-known future receipts and identified dispatches activate once. Parent
+order does not select the primary source or change component identity. Each
+parent retains its own declared principal carrying source; already-due cash
+requires no unused rate input. Past memberships open as ordinary outstanding
+cash, while future memberships activate at their original effective instant,
+even when the contractual due date has already passed.
+
+Independent checks cover a long receipt supplying a short delivery through one
+stock state, partial active obligations, past and future principal, overdue
+claims, unchanged wealth and stock-price exposure. Missing or duplicate parents,
+substituted receipt instruments and changed supply reservations refuse before
+projection. The current native future consumer has one binding per trade; a
+component with multiple future bindings of one trade requires a separately
+qualified cash-lineage route and is refused. Native/API assembly remains a
+separate qualification gate for this expanded pure consumer.
+
+Principal carrying is required for an effective unpaid claim before due at the
+opening or selected horizon. A fully paid claim or a membership not yet effective
+at that endpoint introduces no unused discount input; every supplied provider
+still matches the exact saved carrying and source. Connected projected operator
+receipts retain their original economic owner and exact declared stock binding,
+including an independently captured inventory source. Unknown bindings and books
+do not acquire a route through that association.
+
+A final-price correction keeps its original business instant while reconciling
+every source-known performance, including later-effective titles. The complete
+principal prefix is bounded by publication and knowledge receipts; its recording
+context does not redate those performances or their cash memberships.
+
+Physical mark metadata uses one shared managed validator. Both native contracts
+must belong to their exact selected curves and retain compatible full price
+units, source definitions and delivery profile references. Same-deliverable
+meaning additionally requires equal contractual delivery periods, commodity and
+location; an explicitly selected proxy may retain a separately dated mark.
+Checks cover the native two-source proxy PV and historical/Monte Carlo workers,
+a compatible quote on a nonmember curve, a contradictory same-deliverable
+selection and a positive same-deliverable metadata candidate. Profile admission
+and each ordinary or projected consumer remain separate qualification gates.
+
+The selected physical-option binding also retains the qualified underlying
+futures market and its explicit eligibility interval. It does not reconstruct a
+trading start from the margin window or manufacture a linked future. Ordinary
+source assembly uses the existing native execution-policy resolver when public
+first-trading metadata is unknown. The same retained binding enters margin-policy
+validation and pricing identity; a missing or not-yet-eligible selection refuses.
+
+Ordinary physical option value now accepts an explicit
+`physical_futures_option_reference_value_v1` selection for each live native
+physical-underlying option binding. The closed selection retains all five model
+choices and the delivery-mark interpretation. Its calibrated reference request,
+saved future mark, official expiry and margin source must identify the same exact
+native curve and contract. A separate official index requires another qualified
+relationship and is refused by this valuation law. Ambiguous vanilla reference
+calibration remains unavailable;
+this version does not select a calibration curve from lifecycle settings.
+Legacy policies omit the physical selection and retain their original JSON and
+reference valuation.
+
+The ordinary adapter retains the exact option source, adopted delivery profile,
+independently captured asset source, physical/principal carrying and saved VM due
+schedule. It supports PV, named full-PV scenarios, historical and Monte Carlo
+revaluation; unqualified static derivatives refuse explicitly. Owned native
+checks compare complete cold interactive and worker reports, retain the selected
+model and both original sources, and verify that workers create no financial
+facts. Setup offers exact live binding choices without calibration or pricing;
+missing profiles, source selections and ambiguous calibration have explicit
+unavailability messages. User selections remain blank.
+
+The fixed physical-valuation permission boundary captures Gas authority before
+waits and rechecks that original deadline at commit. The protected option-history
+guard separately retains its original source and native-history cutoffs and
+checks their minimum after all source verification. Native checks cover an
+unbound worker, an actual foreign option in the same book, changed revision,
+expired original cutoffs, and a prepublished successor grant. The runtime-only
+origin guard keeps its existing ACL.
+
+The ordinary risk entry captures that permission before its knowledge and book
+lookups. A native blocked-book counterexample verifies that a successor grant
+cannot renew the operation while those initial queries wait.
+
+In the selected option contract, delivery-mark interpretation also applies to
+each exact accepted native child. Economic assembly must revalidate that meaning
+against the child's own adopted profile and original captured sources; the
+current expiry profile cannot replace them. The pure economic continuation now
+keeps the remaining right and each accepted future under independent native
+owners. Each child's activation requires its exact certified parent event;
+child cash and residuals are not also valued by the option. Fully closed rights
+stop demanding the current expiry profile's hypothetical future and mark inputs.
+Native instruction events update the surviving right using the latest active
+publication, preserving the source reader's nondecreasing effective chronology.
+
+Hypothetical exercise retains the selected saved-next-margin funding and
+unfixed physical exchange, advancing the exact occurrence prefix at each reset.
+Independent signed A/B checks reconcile 56,000 as 18,000 funded VM plus 38,000
+delivery value, before and after reset, with distinct physical/principal carrying
+and no transfer gain. An early full exercise test uses the child's own later
+asset profile after the parent's unused mark expires. Native API checks retain
+the child's independently adopted original asset source, refuse its omission or
+graph substitution, and replay complete historical/Monte Carlo reports through
+read-only workers. The real application selection flow remains a separate gate.
+
+The pure cash-option reference strategy is separately selected as
+`cash_futures_option_reference_strategy_v1`. Its quoted vanilla calibrates the
+reference process and stopping rule; signed exercised value is carried to the
+first eligible saved cash-future margin due. Both native schedule versions are
+admitted for cash when delivery is absent. A source-instant inception VM due
+is explicitly nominal and does not request a discount factor. It has no asset
+mark, gas terms or physical principal. Calibration, intrinsic stopping and saved-next-due funding
+are explicit policy fields. Native automatic and contrary terminal decisions
+remain distinct from the reference tree's earlier stopping decisions.
+
+Operation-owned pricing bindings select this law per real held option, separate
+from accepted exercise and margin state. Independent checks retain vanilla
+20,000 alongside funded 19,000 for two 10,000-unit contracts at A=3, K=2 and a
+.95 saved-due factor. Signed, solved CRR/LR and contrary-exercise checks cover
+negative terminal payoffs. A common-due economic check preserves 19,000 before
+and after margin reset, with no transfer gain or physical terms. Full-PV
+named scenarios are admitted; static derivatives remain explicitly unqualified.
+The API selects this law through the closed
+`cash_futures_option_reference_value_v1` container and its exact
+trade/binding/model rows. Full native economic valuation requires the selected
+typed binding; the explicitly named vanilla diagnostic keeps its existing law.
+Cash and physical option selections have separate backend metadata groups.
+Missing source profiles remain visible as unavailable choices rather than a
+financial fallback. A cash-only selection reads no gas or asset graph and needs
+no Gas authority. Its protected worker history guard retains the exact native
+owner, original source/history deadlines and selected consumer versions.
+
+Native checks compare ordinary selected PV and its original calibration receipt
+against economic opening under solved near-the-money, nonflat intraday inputs.
+Selected reference calibration and the native premium's carrying provider stay
+unchanged; funded VM and physical carrying keep their separately declared
+providers. A reused cash definition retains independent carrying for an
+unselected owner. Following-day valuation and historical/Monte Carlo workers
+retain the original calibration and complete source proof. An accepted native
+exercise followed by daily VM checks the exact independent future owner and
+funded amount before, at and after both event boundaries, without fabricated
+cash or a duplicated option continuation. Ordinary and economic worker reports
+match their captured interactive reports without financial writes.
+
+The full-application valuation qualifier records a native primary/secondary close
+and selects one unfinished physical future plus two live physical options. A
+separate run selects two cash options without Gas authority or an asset source.
+Both use the actual per-binding setup, opaque model choices, complete source
+preparation and guided historical full revaluation. A real worker retains the
+exact selected policies and source; reloading opens its completed report and
+model/event explanation. Native financial and observation counts stay unchanged.
+The qualifier uses disposable owned processes and databases, and checks retain
+the original authority and loading bounds.
+
+Selected cash and physical option reports retain the server's explanation of
+reference stopping and the held event policy. Reopened jobs display that same
+plain text; reports without these selections keep their existing transport.
+
+Reference stopping is the selected valuation assumption. The persisted economic
+Hold/event policy keeps the actual right until a certified native event or its
+explicit expiry transition; a tree decision never fabricates an early exercise.
+A separate check places a daily margin before expiry: foregoing the modeled
+immediate exercise changes held-right value from 19,000 to 16,000 as the next
+eligible .8 due replaces .95. The resulting -3,000 is model/time/held-decision
+P&L, with no cash. At the expiry boundary the remaining right and its cash-future
+continuation both retain 16,000. No across-time conservation is claimed when
+modeled stopping and the held decision differ.

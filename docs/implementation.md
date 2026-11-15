@@ -1,6 +1,6 @@
 # Current implementation record
 
-## Explicit Side calendars and payment days (D402)
+## Explicit Side calendars and payment days (D403)
 
 Supported swaps, scheduled power, PPAs, physical gas, crude and LNG now require
 one immutable Side calendar policy with exact per-purpose bindings. Managed
@@ -24,12 +24,12 @@ populated-upgrade, agent and browser checks are mandatory in the runner and CI.
 Independent adversarial review findings were resolved with verified fixes.
 These checks used stock PostgreSQL 18 and disposable synthetic resources.
 
-Migrations 0256–0273 preserve stored rows, retained bytes, invoices and completed
+Migrations 0318–0335 preserve stored rows, retained bytes, invoices and completed
 command outcomes. There is one supported execution contract: incompatible stored
 trades need reviewed migration of their terms, exact relationships, identities
 and retained programs. Existing application databases were not modified. Merge,
 contract migration and deployment remain separate steps. See
-[the decision](decisions.md#d402--explicit-schedule-purpose-calendars-and-utc-payment-days)
+[the decision](decisions.md#d403--explicit-schedule-purpose-calendars-and-utc-payment-days)
 and [the time contract](time-and-schedules.md).
 
 D391 adds [contract observation terms](custom-curves.md#contract-observation-terms-d391)
@@ -229,7 +229,7 @@ blocks and classifications, rate convention labels) from the validating backend,
 refused unless its declared tzdb release equals the installed release. Economic
 power choices (curve, period, product, hours, interval) start unselected.
 
-D402 adds exact published calendar and clock capture for Side-owned schedules
+D403 adds exact published calendar and clock capture for Side-owned schedules
 and published TOUs. Their readers preserve captured coverage, overrides and
 clock transitions, and authorize calendar sources independently of the pricing
 reference revision. This does not extend the older general date-schedule reader
@@ -2029,7 +2029,7 @@ rolling kernel; database admission independently validates the generated result.
 
 Actual valued plans retain their rule/calendar evidence and generated
 unadjusted/final dates. Payment dates display as dates and never shift with user
-time zone. Under D402's explicit `utc_payment_day_v1` policy, standard cash is
+time zone. Under D403's explicit `utc_payment_day_v1` policy, standard cash is
 due on its UTC payment date, becomes overdue on a later UTC date and remains
 valued while unpaid on that date. A later same-day fixing retains projection and
 risk until its qualified publication is available. Correction due instants and

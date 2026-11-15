@@ -27,14 +27,17 @@ DO $calendar_upgrade$DECLARE expected jsonb;helper pg_proc;actual_acl jsonb;expe
 ,{"acl":["openetrm_security_owner=X/openetrm_security_owner"],"owner":"openetrm_security_owner","config":["search_path=pg_catalog"],"strict":false,"definer":true,"parallel":"u","leakproof":false,"signature":"security.side_schedule_request_authority(uuid,uuid)","definition":"e4700244f2b0b99268195fd2832900a8be269ce8ed7d09ad6b3f036a36ed1033","volatility":"v"}
 ,{"acl":["openetrm_security_owner=X/openetrm_security_owner"],"owner":"openetrm_security_owner","config":["search_path=pg_catalog"],"strict":false,"definer":true,"parallel":"u","leakproof":false,"signature":"security.swap_observation_rows(uuid,uuid,uuid,uuid,text,text,date,date,text,jsonb)","definition":"82ebaca7c363c73cbb69c63b577491ee097e8930bb50ce40a9448ff97cd3d1d1","volatility":"v"}
 ,{"acl":["openetrm_security_owner=X/openetrm_security_owner"],"owner":"openetrm_security_owner","config":["search_path=pg_catalog"],"strict":false,"definer":true,"parallel":"u","leakproof":false,"signature":"security.swap_payment_date(uuid,uuid,date,date,jsonb)","definition":"d2f5a79c979acd5354fc5940fbc66717986744cbcdc36ac5737b135ad2092546","volatility":"v"}
-,{"acl":["openetrm_risk_worker=X/openetrm_security_owner","openetrm_runtime=X/openetrm_security_owner","openetrm_security_owner=X/openetrm_security_owner"],"owner":"openetrm_security_owner","config":["search_path=pg_catalog"],"strict":false,"definer":false,"parallel":"u","leakproof":false,"signature":"trading.indexed_whole_term_swap_period_input(uuid,uuid,integer)","definition":"859d8621d813d960a7ce754af369ed6aa0aa6dc87c71ca2707a7f92045bd4994","volatility":"s"}
+,{"acl":["openetrm_risk_worker=X/openetrm_security_owner","openetrm_runtime=X/openetrm_security_owner","openetrm_security_owner=X/openetrm_security_owner"],"owner":"openetrm_security_owner","config":["search_path=pg_catalog"],"strict":false,"definer":false,"parallel":"u","leakproof":false,"signature":"trading.indexed_whole_term_swap_period_input(uuid,uuid,integer)","definition":"84c930510497c38b811324492c5b86a2f07f9a3d6627d82822eb88bc8ee07b9e","volatility":"s"}
 ,{"acl":["openetrm_risk_worker=X/openetrm_security_owner","openetrm_runtime=X/openetrm_security_owner","openetrm_security_owner=X/openetrm_security_owner"],"owner":"openetrm_security_owner","config":["search_path=pg_catalog","jit=off","join_collapse_limit=1"],"strict":false,"definer":false,"parallel":"u","leakproof":false,"signature":"trading.read_swap_revisions(uuid,uuid,boolean,uuid[])","definition":"1875a3a5ac8503fa2631eaaf5fe56baeeda8580e47f0011a00fd16734c399569","volatility":"s"}
 ,{"acl":["openetrm_risk_worker=X/openetrm_security_owner","openetrm_runtime=X/openetrm_security_owner","openetrm_security_owner=X/openetrm_security_owner"],"owner":"openetrm_security_owner","config":["search_path=pg_catalog","jit=off","join_collapse_limit=1"],"strict":false,"definer":false,"parallel":"u","leakproof":false,"signature":"trading.read_swap_revisions(uuid,uuid,boolean,uuid[],uuid[])","definition":"1e92823e9a21085745f3d46ecb510b56f25b55f173987c88e8740d8b706dba39","volatility":"s"}
-,{"acl":["openetrm_risk_worker=X/@migration_owner","openetrm_runtime=X/@migration_owner","openetrm_security_owner=X/@migration_owner","@migration_owner=X/@migration_owner"],"owner":"@migration_owner","config":["search_path=pg_catalog"],"strict":false,"definer":false,"parallel":"u","leakproof":false,"signature":"trading.scheduled_swap_terms(uuid,uuid,integer,uuid)","definition":"dc33fda72fcd8d46f7d4dd8e3c584c1e62b67f749d589e22ccd7d7f751b248af","volatility":"s"}
+,{"acl":["openetrm_risk_worker=X/@migration_owner","openetrm_runtime=X/@migration_owner","openetrm_security_owner=X/@migration_owner","@migration_owner=X/@migration_owner"],"owner":"@migration_owner","config":["search_path=pg_catalog","join_collapse_limit=8"],"strict":false,"definer":false,"parallel":"u","leakproof":false,"signature":"trading.scheduled_swap_terms(uuid,uuid,integer,uuid)","definition":"37a70e6c3465cc2bbcd73e8b61751e6ecbf5a2c2b76d494e2eb28d823769d736","volatility":"s"}
 ,{"acl":["openetrm_security_owner=X/openetrm_security_owner"],"owner":"openetrm_security_owner","config":["search_path=pg_catalog"],"strict":false,"definer":false,"parallel":"u","leakproof":false,"signature":"trading.stamp_whole_term_swap_identity()","definition":"46521631d13fbde275d12d1a6d19bd9afc934938ef273438196b6d5e1252267c","volatility":"v"}
 ,{"acl":["openetrm_risk_worker=X/openetrm_security_owner","openetrm_runtime=X/openetrm_security_owner","openetrm_security_owner=X/openetrm_security_owner"],"owner":"openetrm_security_owner","config":["search_path=pg_catalog"],"strict":false,"definer":false,"parallel":"u","leakproof":false,"signature":"trading.swap_observation_terms(uuid,uuid[])","definition":"bf409661c9635a7e821f584e178610112f4630aae66a0ffb3cb2729b28d56277","volatility":"s"}
 ,{"acl":["openetrm_risk_worker=X/openetrm_security_owner","openetrm_runtime=X/openetrm_security_owner","openetrm_security_owner=X/openetrm_security_owner"],"owner":"openetrm_security_owner","config":["search_path=pg_catalog"],"strict":false,"definer":false,"parallel":"u","leakproof":false,"signature":"trading.swap_revision_terms(uuid,uuid,integer)","definition":"60641aec50f5d08aec64f5bd2936a7ad62ef9b0d2cbb971ecdeecc688a9a540a","volatility":"s"}
-,{"acl":["openetrm_risk_worker=X/openetrm_security_owner","openetrm_runtime=X/openetrm_security_owner","openetrm_security_owner=X/openetrm_security_owner"],"owner":"openetrm_security_owner","config":["search_path=pg_catalog"],"strict":false,"definer":false,"parallel":"u","leakproof":false,"signature":"trading.whole_term_swap_period_input(uuid,uuid,integer)","definition":"f0f02d4d4647b670e1a5937930dc564922687b4d9e1391213c504726686f2db8","volatility":"s"}]
+,{"acl":["openetrm_risk_worker=X/openetrm_security_owner","openetrm_runtime=X/openetrm_security_owner","openetrm_security_owner=X/openetrm_security_owner"],"owner":"openetrm_security_owner","config":["search_path=pg_catalog"],"strict":false,"definer":false,"parallel":"u","leakproof":false,"signature":"trading.whole_term_swap_period_input(uuid,uuid,integer)","definition":"5504acd202eb28b9ac9c02cd066d33172186f2ad2c6d51a0778c5c061e784a62","volatility":"s"}
+,{"acl":["openetrm_security_owner=X/openetrm_security_owner"],"owner":"openetrm_security_owner","config":["search_path=pg_catalog"],"strict":false,"definer":true,"parallel":"u","leakproof":false,"signature":"security.require_swap_metadata_references(uuid,uuid)","definition":"c6634cfbd6e2017f9898076c6bd7d6f110e621149f29bd1277de5c6054942d5f","volatility":"v"}
+,{"acl":["openetrm_security_owner=X/openetrm_security_owner"],"owner":"openetrm_security_owner","config":["search_path=pg_catalog"],"strict":false,"definer":true,"parallel":"u","leakproof":false,"signature":"security.side_calendar_proofs_visible(uuid,uuid,uuid)","definition":"1ac5d76ef39132f98b83fc496a7b4c59dad4d73efd29479b41803becc635edbc","volatility":"v"}
+,{"acl":["openetrm_risk_worker=X/openetrm_security_owner","openetrm_runtime=X/openetrm_security_owner","openetrm_security_owner=X/openetrm_security_owner"],"owner":"openetrm_security_owner","config":["search_path=pg_catalog"],"strict":false,"definer":false,"parallel":"u","leakproof":false,"signature":"trading.require_retained_swap_period(jsonb,boolean)","definition":"ab7c6088ec114a9cb7aaca0aff7cc7fc450fd27838ea09eec16bb8cad26f399e","volatility":"i"}]
 $calendar_helpers$::jsonb) LOOP
   SELECT * INTO helper FROM pg_proc WHERE oid=to_regprocedure(expected->>'signature');
   SELECT jsonb_agg(x::text ORDER BY x::text) INTO actual_acl FROM unnest(coalesce(helper.proacl,acldefault('f',helper.proowner))) x;
@@ -48,6 +51,26 @@ $calendar_helpers$::jsonb) LOOP
    actual_acl IS DISTINCT FROM expected_acl THEN RAISE EXCEPTION 'calendar_contract_upgrade: unexpected helper %',expected->>'signature';END IF;
  END LOOP;
 END$calendar_upgrade$;
+
+-- The retained hydration readers now consume invoker views. Their exact
+-- definitions and authority boundaries are part of this upgrade contract.
+DO $calendar_views$DECLARE expected jsonb;view_row pg_class;actual_acl jsonb;BEGIN
+ FOR expected IN SELECT value FROM jsonb_array_elements($view_contracts$
+[{"acl":["openetrm_risk_worker=r/openetrm_security_owner","openetrm_runtime=r/openetrm_security_owner","openetrm_security_owner=arwdDxt/openetrm_security_owner"],"kind":"v","name":"trading.scheduled_swap_term_projection","owner":"openetrm_security_owner","options":["security_invoker=true"],"definition":"9dadde7dde28a2aeffadb0970de6af0710f2b7e2c744517093078a8372834705"},{"acl":["openetrm_risk_worker=r/openetrm_security_owner","openetrm_runtime=r/openetrm_security_owner","openetrm_security_owner=arwdDxt/openetrm_security_owner"],"kind":"v","name":"trading.swap_period_input_projection","owner":"openetrm_security_owner","options":["security_invoker=true"],"definition":"e21cfc5d5f96de9a5aa17de61435e6cbe855927ecbc24e06c3db7c4a509d9d3e"}]
+$view_contracts$::jsonb) LOOP
+  SELECT * INTO view_row FROM pg_class WHERE oid=to_regclass(expected->>'name');
+  SELECT jsonb_agg(x::text ORDER BY x::text) INTO actual_acl FROM unnest(coalesce(view_row.relacl,acldefault('r',view_row.relowner))) x;
+  IF view_row.oid IS NULL OR view_row.relkind<>'v' OR view_row.relpersistence<>'p' OR view_row.relhastriggers
+   OR pg_get_userbyid(view_row.relowner) IS DISTINCT FROM expected->>'owner'
+   OR to_jsonb(view_row.reloptions) IS DISTINCT FROM expected->'options' OR actual_acl IS DISTINCT FROM expected->'acl'
+   OR encode(sha256(convert_to(pg_get_viewdef(view_row.oid),'UTF8')),'hex') IS DISTINCT FROM expected->>'definition'
+   OR EXISTS(SELECT 1 FROM pg_attribute a WHERE a.attrelid=view_row.oid AND a.attacl IS NOT NULL)
+   OR(SELECT count(*) FROM pg_rewrite r WHERE r.ev_class=view_row.oid)<>1
+   OR NOT EXISTS(SELECT 1 FROM pg_rewrite r WHERE r.ev_class=view_row.oid AND r.rulename='_RETURN' AND r.ev_type='1' AND r.is_instead AND r.ev_enabled='O')
+  THEN RAISE EXCEPTION 'calendar_contract_upgrade: unexpected helper %',expected->>'name';END IF;
+ END LOOP;
+END$calendar_views$;
+
 
 
 
@@ -397,27 +420,47 @@ DO $$DECLARE signature regprocedure;source text;BEGIN
  END LOOP;
 END$$;
 
-DO $$DECLARE signature regprocedure;source text;marker text;item record;BEGIN
- source=pg_get_functiondef('trading.scheduled_swap_terms(uuid,uuid,integer,uuid)'::regprocedure);
- marker='jsonb_build_object(''basis'',a.basis';
+DO $$DECLARE source text;marker text;item record;BEGIN
+ source=pg_get_viewdef('trading.scheduled_swap_term_projection'::regclass);
+ marker='jsonb_build_object(''basis'', a.basis';
  IF strpos(source,marker)=0 THEN RAISE EXCEPTION 'side_calendar_read_predecessor';END IF;
- source=replace(source,marker,'jsonb_build_object(''calendarPolicy'',security.side_calendar_policy_document(catalog,selected.side_id),''basis'',a.basis');
- marker='CASE WHEN a.calendar_code IS NULL THEN NULL ELSE jsonb_build_object(''revision'',jsonb_build_object(''catalogId'',a.reference_catalog_id,''revisionId'',a.reference_revision_id),''code'',a.calendar_code) END';
+ source=replace(source,marker,'jsonb_build_object(''calendarPolicy'', security.side_calendar_policy_document(selected.catalog_id,selected.side_id),''basis'', a.basis');
+ marker=$match$CASE
+                        WHEN (a.calendar_code IS NULL) THEN NULL::jsonb
+                        ELSE jsonb_build_object('revision', jsonb_build_object('catalogId', a.reference_catalog_id, 'revisionId', a.reference_revision_id), 'code', a.calendar_code)
+                    END$match$;
  IF strpos(source,marker)=0 THEN RAISE EXCEPTION 'side_calendar_read_predecessor';END IF;
- EXECUTE replace(source,marker,'NULL');
- FOREACH signature IN ARRAY ARRAY['trading.whole_term_swap_period_input(uuid,uuid,integer)'::regprocedure,
-  'trading.indexed_whole_term_swap_period_input(uuid,uuid,integer)'::regprocedure] LOOP
-  source=pg_get_functiondef(signature);
-  IF strpos(source,'''calendar'',r.calendar_code')=0 THEN RAISE EXCEPTION 'side_calendar_read_predecessor';END IF;
-  source=replace(source,'''calendar'',r.calendar_code','''calendar'',NULL');
-  source=replace(source,'CASE WHEN o.calendar_code IS NULL THEN NULL ELSE jsonb_build_object(''revision'',jsonb_build_object(''catalogId'',o.reference_catalog_id,''revisionId'',o.reference_revision_id),''code'',o.calendar_code) END','NULL');
-  EXECUTE source;
- END LOOP;
+ EXECUTE 'CREATE OR REPLACE VIEW trading.scheduled_swap_term_projection WITH(security_invoker=true) AS '||replace(source,marker,'NULL::jsonb');
+ source=pg_get_viewdef('trading.swap_period_input_projection'::regclass);
+ IF strpos(source,'''calendar'', r.calendar_code')=0 THEN RAISE EXCEPTION 'side_calendar_read_predecessor';END IF;
+ source=replace(source,'''calendar'', r.calendar_code','''calendar'', NULL::text');
+ -- Both indexed and generic period inputs project the same owned observation
+ -- policy. Only those exact scalar expressions change; protected joins remain.
+ source=regexp_replace(source,
+  $match$CASE\s+WHEN \(o.calendar_code IS NULL\) THEN NULL::jsonb\s+ELSE jsonb_build_object\('revision', jsonb_build_object\('catalogId', o.reference_catalog_id, 'revisionId', o.reference_revision_id\), 'code', o.calendar_code\)\s+END$match$,
+  'NULL::jsonb','g');
+ IF strpos(source,'''code'', o.calendar_code')<>0 THEN RAISE EXCEPTION 'side_calendar_read_predecessor';END IF;
+ EXECUTE 'CREATE OR REPLACE VIEW trading.swap_period_input_projection WITH(security_invoker=true) AS '||source;
  FOR item IN SELECT conname,pg_get_constraintdef(oid) AS definition FROM pg_constraint
   WHERE conrelid='trading.swap_quantity_authoring'::regclass AND contype='c' AND pg_get_constraintdef(oid) LIKE '%calendar_code IS NOT NULL%' LOOP
   EXECUTE format('ALTER TABLE trading.swap_quantity_authoring DROP CONSTRAINT %I',item.conname);
   EXECUTE format('ALTER TABLE trading.swap_quantity_authoring ADD CONSTRAINT %I %s NOT VALID',item.conname,replace(item.definition,'calendar_code IS NOT NULL','calendar_code IS NULL'));
  END LOOP;
+END$$;
+
+-- Lifecycle determination, payment, netting and committed retry all use this
+-- private metadata gate. Recheck retained calendar proofs without reselecting
+-- publications or broadening reference-catalog visibility.
+DO $$DECLARE source text;marker text;BEGIN
+ source=pg_get_functiondef('security.require_swap_metadata_references(uuid,uuid)'::regprocedure);
+ marker=E'END LOOP;\nEND';
+ IF strpos(source,marker)=0 THEN RAISE EXCEPTION 'side_calendar_read_predecessor';END IF;
+ EXECUTE replace(source,marker,$patch$END LOOP;
+ IF EXISTS(SELECT 1 FROM trading.instrument_side_schedules m
+  WHERE(m.catalog_id,m.instrument_id)=(catalog,instrument)
+   AND security.side_calendar_proofs_visible(catalog,m.schedule_id,NULL) IS NOT TRUE)
+ THEN RAISE EXCEPTION 'side_calendar_denied' USING ERRCODE='42501';END IF;
+END$patch$);
 END$$;
 
 COMMIT;

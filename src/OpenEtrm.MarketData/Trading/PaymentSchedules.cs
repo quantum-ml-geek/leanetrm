@@ -60,14 +60,20 @@ public sealed record SidePaymentFactor(SidePaymentKey Payment, ExactDecimal Disc
     {
         if(Snapshot is null||!Enum.IsDefined(Source)||!Enum.IsDefined(Payment.Timing)||
             ClockRoll is {} roll&&roll.CalculationAt!=calculationAt||
-            ClockRoll is null&&calculationAt!=Snapshot.ValuationAt)return false;
+            ClockRoll is null&&calculationAt!=Snapshot.ValuationAt&&RateDefinition?.Timing is null)return false;
         var today=Payment.OnPaymentDay(calculationAt);
         return (!today||DiscountFactor==ExactDecimal.Parse("1"))&&
             (Source!=DiscountFactorSource.PaymentDay||today&&DiscountFactor==ExactDecimal.Parse("1")&&RateDefinition is null);
     }
 }
 
-public sealed record DiscountInput(SidePaymentKey Payment,[property:System.Text.Json.Serialization.JsonIgnore] ISideDiscounting Provider);
+public sealed record DiscountInput(SidePaymentKey Payment,[property:System.Text.Json.Serialization.JsonIgnore] ISideDiscounting Provider)
+{
+    [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public MarketSnapshot? Source{get;init;}
+    internal bool SameSource(DiscountInput other)=>Source is null?other.Source is null:Source.HasSameInputs(other.Source);
+    internal int SourceHash()=>Source is null?0:HashCode.Combine(Source.Id,Source.Definitions,Source.ValuationAt,Source.MarketCutoff,Source.SelectionPolicy,Source.Knowledge);
+}
 
 public interface ISideDiscounting
 {

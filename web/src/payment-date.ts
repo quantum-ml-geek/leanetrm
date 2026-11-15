@@ -31,7 +31,8 @@ export function contractDateEvidence(value:unknown):unknown{
  if(value===null||typeof value!=='object')return value;
  const record=value as Record<string,unknown>;
  return Object.fromEntries(Object.entries(record).map(([key,item])=>{
-  const payment=key==='paymentAt'||key==='PaymentAt'||key==='valueAt'&&record.kind==='Payment';
-  return payment?[key==='PaymentAt'?'PaymentDate':'paymentDate',item===null?null:displayPaymentDate(String(item))]:[key,contractDateEvidence(item)];
+  const dateKey=key==='PaymentAt'?'PaymentDate':key==='paymentAt'||key==='valueAt'&&record.kind==='Payment'?'paymentDate':
+   key==='contractual_due'?'contractual_payment_date':key==='due_at'&&record.ordinal===1?'due_date':undefined;
+  return dateKey?[dateKey,item===null?null:displayPaymentDate(String(item))]:[key,contractDateEvidence(item)];
  }));
 }
