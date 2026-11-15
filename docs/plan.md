@@ -1,5 +1,31 @@
 # Delivery plan and acceptance criteria
 
+The current lifecycle increment follows [D401’s delivery contract](lifecycle-delivery.md).
+Its native operations, inventory continuation and economic historical/Monte Carlo
+consumers have disposable native, worker and browser qualification. Release
+checks must qualify the exact integrated commit. Incompatible synthetic demo records
+may be rebuilt; there is no legacy financial conversion layer.
+
+Native futures retain dated margin policies, complete correction closure and
+independent original/adjustment cash memberships. Listed options, financial swaps
+and qualified physical-futures delivery use the same managed action boundary.
+Owned gas, operator entitlements/debts and commodity-loan returns remain independent
+holdings. Ordinary Instrument PV and retained economic historical/Monte Carlo
+workers preserve their exact sources and surviving cash. Typed action forms,
+configured agent roles and one-off scheduling invoke those native operations.
+Original authority bounds survive waits and final admission.
+
+Source-known future cashout continuation is qualified with exact independent
+commodity/cash owners, no-rate overdue/paid endpoints and real economic workers.
+Native operator continuation, correction forms and ordinary-use/zero portfolio
+workers are qualified. Original title and loan commands acknowledge accepted
+financial snapshots without replacing native identities or independent fee terms.
+Fresh acknowledgements require an existing certified context for their stated
+business date; exact first-outcome recovery retains its receipt-first contract.
+See the [delivery contract](lifecycle-delivery.md) and
+[gas contracts and qualification](gas-owned-holdings.md) for the bounded behavior;
+no production schema activation is implied.
+
 D393 implements live curve output selection, an optional inactive-contract
 display, and explicit exact/live close capture with durable first-outcome retry.
 The selection uses the chosen close, retains explicit frozen dependencies and

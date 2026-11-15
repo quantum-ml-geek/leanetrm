@@ -1,5 +1,13 @@
 # Architecture and domain contracts
 
+D401 selects [shared lifecycle delivery](lifecycle-delivery.md): operation-specific
+eligibility, native lifecycle coordination, gas ownership/entitlements/borrowing
+and event-aware economic risk. Its delivery gates distinguish implementation from
+qualification; it does not make the capabilities below complete by declaration.
+The qualified native, managed, browser and retained-worker consumers are recorded
+in that contract and [economic projection](lifecycle-projection.md). Local
+qualification does not authorize publication, a database reset or schema activation.
+
 D397 adds authorized, versioned current listings for close conventions. Retiring
 a convention removes it from discovery and new authoring; exact retained closes
 and accepted command outcomes remain readable under their existing authority.
@@ -10,8 +18,10 @@ The [valuation context and scenario layers](valuation-context-layers.md) separat
 certified source selection from calculation time. The initial local implementation
 extends Instrument/Side PV, immutable scenarios and dependency-based reuse to
 forward clock changes, dated discount roll and calibrated series IV. Source
-certificates and recorded facts remain fixed. General source composition, event
-projections and non-price worker requests remain later scope.
+certificates and recorded facts remain fixed. D401 adds declared native lifecycle
+events and retained economic historical/Monte Carlo workers under its separately
+qualified product contracts. Broader non-price axes and event-aware parametric
+risk remain separate scope.
 
 The framework trading P&L report is in implementation. Its agreed remaining-value,
 paid-cash, generic scenario and Run → Save contracts and current boundaries are
@@ -880,8 +890,12 @@ records the qualified boundaries. The bounded synthetic futures slice implements
 immutable shared futures contracts, independent trade/pricing bindings and typed execution
 P&L. Latest-head futures booking amendments append immutable versioned trade states;
 earlier revisions are read-only and shared definitions remain unchanged.
-Futures PV, other lifecycle transitions and the wider trading abstractions
-here remain design; fixed/floating swap PV has a bounded managed implementation.
+Execution P&L remains its own bounded diagnostic. D401's separately selected native
+margin and full physical-value profiles qualify accepted futures PV, variation
+margin, final settlement and connected gas ownership; they do not turn the
+execution-value diagnostic into a lifecycle measure. Fixed/floating swap PV also
+has a bounded managed implementation. Wider unqualified product compositions
+remain design.
 
 The preview retains immutable `trading.booking_facts`: exact original human
 workspace membership, captured booker name/login/version, server persistence
@@ -1834,8 +1848,10 @@ applies holding bases/quantities and returns values by binding and currency.
 Book-only detail compiles exact net quantities and costs by book/unit once, then
 applies scenario unit values to those groups. Detailed output retains independent
 holding results. The generic risk calculator only compares these returned values.
-Full futures settlement PV, variation margin and lifecycle transitions remain
-unsupported; execution P&L does not substitute for those measures.
+The legacy execution-P&L profile does not value accepted margin, settlement cash
+or physical delivery. Those measures use D401's explicitly selected native-margin
+or full physical-value profiles, exact accepted state and independently owned cash
+and gas holdings. Execution P&L never substitutes for them.
 
 Each instrument also implements the common `MarketFactors(context)` method.
 Its immutable `QuoteFactor` results identify exact dated series/use, contract,
@@ -2077,9 +2093,13 @@ volatility, rates and any other inputs explicitly and reprices under shared
 scenarios. Premium-style versus daily-margin settlement is contractual; it cannot
 be inferred from the underlying being a future. The implemented listed-option
 pricer and lifecycle are limited to premium paid up front, American exercise into
-the underlying future and an implied volatility held under futures shocks; volatility
-as a shockable factor, margined premium and other exercise or settlement styles are
-not implemented.
+the underlying future and an implied volatility held under futures shocks. D401's
+selected cash and physical reference-strategy models additionally value that
+future's explicit funding and delivery terms. They preserve the original source
+calibration and premium carrying; a separate held-right policy projects accepted
+native events and contractual expiry, not the pricing tree's early stopping
+decisions. Volatility as a shockable factor, margined premium and other exercise
+or settlement styles are not implemented.
 
 ### 5.4 Future option sides with instrument-supplied inputs
 

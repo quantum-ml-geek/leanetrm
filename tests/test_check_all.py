@@ -15,10 +15,67 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'tools'))
 from check_all import GROUPS, run_checks
 
+LIFECYCLE_NATIVE={f'tools/{name}.py' for name in (
+    'check_lifecycle_actions','check_lifecycle_swaps','check_futures_physical_delivery','check_futures_delivery_settings',
+    'check_selected_physical_authority','check_physical_delivery_authority','check_physical_margin_qualification',
+    'check_lifecycle_option_scheduling','check_lifecycle_option_expiries',
+    'check_lifecycle_scheduling','check_lifecycle_scheduled_bookings',
+    'check_gas_source_ancestors','check_gas_physical_known','check_gas_cashout_projection','check_gas_accepted_projection','check_gas_quantity_reconciliation',
+    'check_gas_quantity_reconciliation_batches','check_gas_mixed_quantity_reconciliation','check_gas_lifecycle_agents','check_gas_mixed_quantity_browser','check_gas_owned_quantity_choices','check_physical_option_value','check_cash_accumulation','check_gas_principal_carrying',
+    'check_risk_fit_authority','check_lifecycle_browser','check_retained_swap_schedule_reads')}
+GAS_AMENDMENTS={f'tools/{name}.py' for name in (
+    'check_gas_fee_existing_origins','check_gas_fee_browser','check_gas_loan_quantity_browser',
+    'check_gas_loan_quantity_reconciliation','check_gas_owned_fact_acknowledgements','check_gas_owned_title_acknowledgements','check_gas_read_authority','check_gas_operator_quantity_browser',
+    'check_gas_operator_existing_origins','check_gas_operator_upgrade','check_gas_operator_native_upgrade')}
+LIFECYCLE_PORTFOLIO={f'tools/{name}.py' for name in (
+    'check_lifecycle_risk_jobs','check_lifecycle_risk_scope','check_lifecycle_final_scope',
+    'check_lifecycle_projection_horizon','check_lifecycle_swap_worker','check_lifecycle_future_worker',
+    'check_lifecycle_economic_browser','check_physical_futures_value','check_gas_projection_scope',
+    'check_gas_operator_physical_value','check_gas_operator_ordinary_value','check_gas_known_cashout')}
+OPTION_VALUE_APPS={'tools/check_lifecycle_valuation_browser.py'}
+AGENT_SETTINGS_BROWSER={'tools/check_agent_operating_settings.py'}
+
 
 class CheckAllTests(unittest.TestCase):
     def setUp(self):
         self.enterContext(redirect_stdout(io.StringIO()))
+
+    def test_gas_amendment_checks_run_once_with_selected_tools(self):
+        expected=GAS_AMENDMENTS
+        for group in GROUPS:
+            selected=[]
+            def run(command,**options):
+                helpers=expected.intersection(command)
+                if not helpers:return
+                helper=helpers.pop();selected.append(helper)
+                self.assertEqual(command[command.index('--pg-bin')+1],'/stock pg')
+                self.assertEqual(options['env']['DOTNET'],'/selected sdk')
+                if helper.endswith('browser.py'):
+                    self.assertEqual(command[command.index('--dotnet')+1],'/selected sdk')
+                    self.assertEqual(command[command.index('--browser')+1],'/selected browser')
+                    self.assertIn('--no-build',command)
+            run_checks(Path('/stock pg'),Path('/selected sdk'),Path('/selected browser'),group=group,run=run)
+            self.assertEqual(set(selected),expected if group=='gas' else set())
+            self.assertEqual(len(selected),len(expected) if group=='gas' else 0)
+
+    def test_gas_amendments_have_a_required_separate_partition(self):
+        self.assertIn('gas',GROUPS)
+
+    def test_operator_value_workers_use_selected_resources_once_in_portfolio(self):
+        expected={'tools/check_gas_operator_physical_value.py','tools/check_gas_operator_ordinary_value.py','tools/check_gas_known_cashout.py'}
+        for group in GROUPS:
+            selected=[]
+            def run(command,**options):
+                helpers=expected.intersection(command)
+                if not helpers:return
+                selected.append(helpers.pop())
+                self.assertEqual(command[command.index('--pg-bin')+1],'/stock pg')
+                self.assertEqual(command[command.index('--dotnet')+1],'/selected sdk')
+                self.assertEqual(options['env']['DOTNET'],'/selected sdk')
+                self.assertIn('--no-build',command)
+            run_checks(Path('/stock pg'),Path('/selected sdk'),Path('/selected browser'),group=group,run=run)
+            self.assertEqual(set(selected),expected if group=='portfolio' else set())
+            self.assertEqual(len(selected),len(expected) if group=='portfolio' else 0)
 
     def test_frontend_widget_checks_use_the_explicit_browser_on_every_platform(self):
         frontend = []
@@ -96,6 +153,83 @@ class CheckAllTests(unittest.TestCase):
         restores = [c for c in commands if 'restore' in c and c[c.index('restore') + 1] == market]
         self.assertEqual(len(restores), 1)
 
+    def test_native_margin_consumers_use_selected_sdk_in_lifecycle_partition(self):
+        helpers={f'tools/check_futures_margin_{name}.py' for name in ('sources','adoption','projection_sources')}|{'tools/check_trading_business_date.py'}
+        for group in ('lifecycle','trading','standard'):
+            selected=[]
+            def run(command,**options):
+                if helpers.intersection(command):
+                    self.assertEqual(options['env']['DOTNET'],'/selected sdk/dotnet')
+                    selected.append(command)
+            with patch.dict(os.environ,{'DOTNET':'/unrelated sdk/dotnet'}):
+                run_checks(Path('/pg'),Path('/selected sdk/dotnet'),Path('/browser'),group=group,run=run)
+            self.assertEqual({value for command in selected for value in command if value in helpers},helpers if group=='lifecycle' else set())
+            self.assertEqual(len(selected),4 if group=='lifecycle' else 0)
+
+    def test_native_lifecycle_consumers_run_once_in_lifecycle_with_the_selected_sdk(self):
+        for group in ('lifecycle','trading','standard'):
+            selected=[]
+            def run(command,**options):
+                if LIFECYCLE_NATIVE.intersection(command):
+                    self.assertEqual(options['env']['DOTNET'],'/selected sdk/dotnet')
+                    self.assertEqual(command[command.index('--pg-bin')+1],'/stock pg')
+                    selected.append(command)
+            with patch.dict(os.environ,{'DOTNET':'/unrelated sdk/dotnet'}):
+                run_checks(Path('/stock pg'),Path('/selected sdk/dotnet'),Path('/browser'),group=group,run=run)
+            actual=[value for command in selected for value in command if value in LIFECYCLE_NATIVE]
+            self.assertEqual(set(actual),LIFECYCLE_NATIVE if group=='lifecycle' else set())
+            self.assertEqual(len(actual),len(LIFECYCLE_NATIVE) if group=='lifecycle' else 0)
+
+    def test_each_option_model_is_qualified_once_in_lifecycle_with_selected_tools(self):
+        helper='tools/check_lifecycle_valuation_browser.py'
+        for group in GROUPS:
+            selected=[]
+            def run(command,**options):
+                if helper in command:
+                    self.assertEqual(options['env']['DOTNET'],'/selected sdk')
+                    selected.append(command)
+            run_checks(Path('/stock pg'),Path('/selected sdk'),Path('/selected browser'),group=group,run=run)
+            self.assertEqual(len(selected),2 if group=='lifecycle' else 0)
+            if selected:
+                self.assertEqual({command[command.index('--kind')+1] for command in selected},{'physical','cash'})
+                for command in selected:
+                    self.assertEqual(command[command.index('--pg-bin')+1],'/stock pg')
+                    self.assertEqual(command[command.index('--dotnet')+1],'/selected sdk')
+                    self.assertEqual(command[command.index('--browser')+1],'/selected browser')
+                    self.assertIn('--no-build',command)
+
+    def test_normal_agent_settings_and_gas_approval_run_once_in_assistant_with_selected_tools(self):
+        for group in ('assistant','standard','trading'):
+            commands=[]
+            run_checks(Path('/stock pg'),Path('/selected sdk'),Path('/selected browser'),group=group,
+                run=lambda command,**options:commands.append(command))
+            selected=[command for command in commands if 'tools/check_agent_operating_settings.py' in command]
+            self.assertEqual(len(selected),1 if group=='assistant' else 0)
+            for command in selected:
+                self.assertEqual(command[command.index('--pg-bin')+1],'/stock pg')
+                self.assertEqual(command[command.index('--dotnet')+1],'/selected sdk')
+                self.assertEqual(command[command.index('--browser')+1],'/selected browser')
+                self.assertIn('--no-build',command)
+
+    def test_economic_workers_and_real_browsers_keep_selected_tools_and_partitions(self):
+        browsers={'tools/check_gas_mixed_quantity_browser.py':'lifecycle','tools/check_lifecycle_browser.py':'lifecycle','tools/check_lifecycle_economic_browser.py':'portfolio'}
+        for group in ('portfolio','lifecycle','trading','standard'):
+            selected=[]
+            def run(command,**options):
+                if LIFECYCLE_PORTFOLIO.intersection(command):selected.append(command)
+                for helper,partition in browsers.items():
+                    if helper not in command:continue
+                    self.assertEqual(group,partition)
+                    self.assertEqual(command[command.index('--dotnet')+1],'/selected sdk')
+                    self.assertEqual(command[command.index('--browser')+1],'/selected browser')
+                    self.assertIn('--no-build',command)
+                    self.assertEqual(options['env']['OPENETRM_CHECK_BROWSER'],'/selected browser')
+            with patch.dict(os.environ,{'OPENETRM_CHECK_BROWSER':'/unrelated browser'}):
+                run_checks(Path('/pg'),Path('/selected sdk'),Path('/selected browser'),group=group,run=run)
+            actual=[value for command in selected for value in command if value in LIFECYCLE_PORTFOLIO]
+            self.assertEqual(set(actual),LIFECYCLE_PORTFOLIO if group=='portfolio' else set())
+            self.assertEqual(len(actual),len(LIFECYCLE_PORTFOLIO) if group=='portfolio' else 0)
+
     def test_every_executable_check_project_is_restored_and_run(self):
         expected = {
             str(project.relative_to(ROOT))
@@ -119,7 +253,9 @@ class CheckAllTests(unittest.TestCase):
         schedule_commands = [c for c in commands if '--project' in c and 'Api.Checks' in c[c.index('--project') + 1]]
         self.assertEqual([c[-2:] for c in schedule_commands],
                          [['--', flag] for flag in ('--context-resolution', '--schedules', '--historical-risk', '--monte-carlo-risk', '--close-risk', '--automation',
-                           '--live-calculation', '--reference-intake', '--preview-data', '--side-observation-compatibility')])
+                           '--live-calculation', '--reference-intake', '--preview-data', '--side-observation-compatibility',
+                           '--lifecycle-actions','--economic-risk-contract','--lifecycle-schedule-contract','--gas-owned-setup',
+                          '--shared-native-markets','--derivative-methods','--gas-accepted-order','--lifecycle-residual-currencies','--gas-operator-contract')])
         self.assertTrue(any('--historical-risk-check' in c and '--browser-check' in c for c in commands))
         self.assertTrue(any('--monte-carlo-risk-check' in c and '--with-exchange' in c and '--browser-check' in c for c in commands))
         self.assertTrue(any('--reference-import-check' in c for c in commands))
@@ -200,18 +336,22 @@ class CheckAllTests(unittest.TestCase):
         complete = commands('all')
         groups = {name: commands(name) for name in GROUPS}
         self.assertEqual(set().union(*(set(value) for value in groups.values())), set(complete))
+        margin={f'tools/check_futures_margin_{part}.py' for part in ('sources','adoption','projection_sources')}|{'tools/check_trading_business_date.py'}
+        def shared(command):
+            return 'tools/run_preview.py' not in command and not (margin|LIFECYCLE_NATIVE|GAS_AMENDMENTS|LIFECYCLE_PORTFOLIO|OPTION_VALUE_APPS|AGENT_SETTINGS_BROWSER).intersection(command)
         for name, selected in groups.items():
             with self.subTest(group=name):
                 # Each group starts from a clean checkout, including restores,
                 # managed/frontend builds and all shared verification contracts.
-                self.assertEqual([c for c in selected if 'tools/run_preview.py' not in c],
-                                 [c for c in complete if 'tools/run_preview.py' not in c])
+                self.assertEqual([c for c in selected if shared(c)],
+                                 [c for c in complete if shared(c)])
                 self.assertEqual(selected, [c for c in complete if c in selected])
         previews = {name: [c for c in value if 'tools/run_preview.py' in c]
                     for name, value in groups.items()}
-        every_preview = [c for value in previews.values() for c in value]
-        self.assertEqual(len(every_preview), len(set(every_preview)))
-        self.assertTrue(all(previews.values()), 'every CI job must run at least one preview')
+        owned = {name: [c for c in value if not shared(c)] for name, value in groups.items()}
+        every_owned = [c for value in owned.values() for c in value]
+        self.assertEqual(len(every_owned), len(set(every_owned)), 'owned suites run in exactly one group')
+        self.assertTrue(all(owned.values()), 'every CI job must run an owned qualification suite')
 
         def group_of(flag):
             return next(name for name, value in previews.items() if any(flag in c for c in value))
@@ -252,7 +392,8 @@ class CheckAllTests(unittest.TestCase):
                 with self.subTest(group=group, failure=type(failure).__name__):
                     output = io.StringIO()
                     def run(command, **options):
-                        if 'tools/run_preview.py' in command:
+                        required = 'tools/check_lifecycle_actions.py' if group == 'lifecycle' else 'tools/check_gas_fee_existing_origins.py' if group=='gas' else 'tools/run_preview.py'
+                        if required in command:
                             raise failure
                     with redirect_stdout(output), self.assertRaises(type(failure)):
                         run_checks(Path('/pg'), Path('/dotnet'), Path('/browser'), group=group, run=run)
