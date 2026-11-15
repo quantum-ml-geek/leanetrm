@@ -132,6 +132,50 @@ test('active abort rejects promptly but holds its server slot until the correlat
   source.emit('response',h.result(h.requests[2]));source.emit('response',h.result(h.requests[1]));await Promise.all([second,third]);h.client.close();
 });
 
+test('a matching server non-admission fence releases a cancelled submission without awaiting an impossible event',async()=>{
+  const cancelReply=deferred(),h=harness({cancelReply,maxActive:1,cancellationTimeoutMs:25}),abort=new AbortController();
+  const first=h.client.read('curve.evaluate.v1',curveBody(),{signal:abort.signal}),second=h.client.read('curve.evaluate.v1',curveBody());
+  first.catch(()=>{});second.catch(()=>{});
+  try{
+    const source=await h.ready(),original=h.requests[0];abort.abort();await assert.rejects(first,{name:'AbortError'});await flush();
+    assert.equal(h.requests.length,1,'local abort alone cannot release possible server work');
+    cancelReply.resolve({...h.cancellations[0],state:'not_admitted'});await flush();
+    assert.equal(h.requests.length,2,'the server fenced the original identity before admission, so queued work can execute');
+    original.ack.reject(new DOMException('The original submission was aborted.','AbortError'));
+    source.emit('response',h.result(h.requests[1]));await second;
+    await new Promise(resolve=>setTimeout(resolve,40));assert.equal(source.closed,false,'the impossible-terminal timeout must be removed');
+    assert.equal(h.requests.length,2,'the abandoned read is never replayed');
+  }finally{h.client.close();}
+});
+
+test('a non-admission receipt with different request or channel identity cannot release an occupied slot',async()=>{
+  for(const field of ['channelId','requestId']){
+    const cancelReply=deferred(),h=harness({cancelReply,maxActive:1}),abort=new AbortController();
+    const first=h.client.read('curve.evaluate.v1',curveBody(),{signal:abort.signal}),second=h.client.read('curve.evaluate.v1',curveBody());
+    first.catch(()=>{});second.catch(()=>{});
+    try{
+      const source=await h.ready();abort.abort();await assert.rejects(first,{name:'AbortError'});await flush();
+      const refused=assert.rejects(second,{code:'async_read_protocol'});
+      cancelReply.resolve({...h.cancellations[0],[field]:snapshotId,state:'not_admitted'});await refused;
+      assert.equal(source.closed,true);assert.equal(h.requests.length,1);
+    }finally{h.client.close();}
+  }
+});
+
+test('a late non-admission receipt after reset cannot affect the new channel',async()=>{
+  const cancelReply=deferred(),h=harness({cancelReply,maxActive:1}),abort=new AbortController();
+  const first=h.client.read('curve.evaluate.v1',curveBody(),{signal:abort.signal});first.catch(()=>{});
+  let next,last;
+  try{
+    await h.ready();abort.abort();await assert.rejects(first,{name:'AbortError'});await flush();h.client.reset();
+    next=h.client.read('curve.evaluate.v1',curveBody());last=h.client.read('curve.evaluate.v1',curveBody());next.catch(()=>{});last.catch(()=>{});
+    const source=await h.ready();cancelReply.resolve({...h.cancellations[0],state:'not_admitted'});await flush();
+    assert.equal(source.closed,false);assert.equal(h.requests.length,2,'the new channel still has only its one active read');
+    source.emit('response',h.result(h.requests[1]));await next;await flush();
+    source.emit('response',h.result(h.requests[2]));await last;
+  }finally{h.client.close();}
+});
+
 test('queued and immediately aborted reads never send a command',async()=>{
   const h=harness(),abort=new AbortController(),queuedAbort=new AbortController();abort.abort();
   await assert.rejects(h.client.read('curve.evaluate.v1',curveBody(),{signal:abort.signal}),{name:'AbortError'});assert.equal(h.channels.length,0);

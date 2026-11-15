@@ -26,8 +26,8 @@ export async function run({command,evaluate,wait,click,set,persona,check,idle,ur
     caching:false,tools:['read_current_page','read_trades','navigate'],allowedRoles:['trader'],limits:{toolSteps:8,inputTokens:200000,outputTokens:2048,elapsedSeconds:120,readSeconds:15,retries:2,historyTurns:20},grantDays:28});
   const guide=await side.call('settings/ai/agents/publish',{operationId:crypto.randomUUID(),agentId:saved.id,expectedVersion:saved.version});
 
-  // Each window records the API paths and bodies it sends.
-  const recorder="window.__reads=[];window.__streams=[];{const send=window.fetch;window.fetch=async(...args)=>{window.__reads.push({path:String(args[0]).replace('/api/trading/workspace/stream','/api/trading/workspace'),body:args[1]?.body?JSON.parse(args[1].body):null});return send(...args);};const Native=window.EventSource;window.EventSource=class extends Native{constructor(...args){super(...args);window.__streams.push(this);}};}";
+  // Each window records the API paths and bodies it sends and its assistant conversation streams.
+  const recorder="window.__reads=[];window.__streams=[];{const send=window.fetch;window.fetch=async(...args)=>{window.__reads.push({path:String(args[0]).replace('/api/trading/workspace/stream','/api/trading/workspace'),body:args[1]?.body?JSON.parse(args[1].body):null});return send(...args);};const Native=window.EventSource;window.EventSource=class extends Native{constructor(...args){super(...args);const path=new URL(String(args[0]),location.href).pathname;if(path.startsWith('/api/assistant/conversations/')&&path.endsWith('/events'))window.__streams.push(this);}};}";
   await command('Runtime.enable');await command('Page.enable');await command('Emulation.setDeviceMetricsOverride',{width:1440,height:1050,deviceScaleFactor:1,mobile:false});
   await command('Page.addScriptToEvaluateOnNewDocument',{source:recorder});
   await command('Page.navigate',{url:url+'/'});await wait(idle,30000);await persona('trader');

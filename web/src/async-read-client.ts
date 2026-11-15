@@ -25,7 +25,7 @@ export type AsyncReadClientOptions={
 };
 export type AsyncReadOptions={signal?:AbortSignal;onAccepted?:()=>void};
 export class AsyncReadError extends Error{
-  constructor(readonly code:string,message:string){super(message);this.name='AsyncReadError';}
+  constructor(readonly code:string,message:string,readonly source:'client'|'server'='client'){super(message);this.name='AsyncReadError';}
 }
 const uuid=(value:unknown):value is string=>typeof value==='string'&&/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(value)&&value!=='00000000-0000-0000-0000-000000000000';
 /** Only these named business reads use the response channel. Commands retain their existing HTTP contract. */
@@ -117,11 +117,21 @@ export function createAsyncReadClient(options:AsyncReadClientOptions){
     if(!pending.sent||!current.id)return;
     const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),connectionTimeoutMs);cancellations.set(controller,timer);
     void Promise.resolve().then(()=>options.post(root+'async-reads/cancel',{channelId:current.id,requestId:pending.id},controller.signal))
+      .then(receipt=>{
+        if(!active(current)||controller.signal.aborted||!record(receipt)||receipt.state!=='not_admitted')return;
+        if(receipt.channelId!==current.id||receipt.requestId!==pending.id){stop(current,protocolError(),'disconnected');return;}
+        const retired=current.retired.get(pending.id);
+        if(!retired?.abandoned||!current.active.has(pending.id))return;
+        // The server has fenced this identity against future admission. No SSE
+        // terminal can exist, and this receipt cannot release another read.
+        clearTimeout(retired.timer);retired.timer=undefined;current.active.delete(pending.id);pump(current);
+      })
       .catch(()=>{}).finally(()=>{clearTimeout(timer);cancellations.delete(controller);});
   }
   function abandon(current:Channel,pending:Pending,error:Error){
     if(!active(current)||!current.pending.has(pending.id))return;
-    // A sent cancellation keeps its server slot until the terminal response, even though the caller stops waiting now.
+    // A sent cancellation keeps its slot until a terminal response or explicit
+    // non-admission fence, even though the caller stops waiting now.
     settle(current,pending,undefined,error,true,pending.sent);cancelServer(current,pending);pump(current);
   }
   function makeChannel(identity:string,pending=new Map<string,Pending>()):Channel{
@@ -182,7 +192,7 @@ export function createAsyncReadClient(options:AsyncReadClientOptions){
         settle(current,pending,result,undefined);
       }else{
         if(result!=null||(error!=null&&(!record(error)||!text(error.code)||!text(error.message)))||(value.state==='failed'&&error==null))throw protocolError();
-        const failure=record(error)?new AsyncReadError(error.code as string,error.message as string):cancelled();
+        const failure=record(error)?new AsyncReadError(error.code as string,error.message as string,value.state==='failed'?'server':'client'):cancelled();
         if(value.state==='cancelled')failure.name='AbortError';settle(current,pending,undefined,failure);
       }
       pump(current);

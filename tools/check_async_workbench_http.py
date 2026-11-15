@@ -124,6 +124,15 @@ def run_checks(url, query, psql, environment, manifest):
             ack=c.call('async-reads',request,expected=202,timeout=5)
             assert ack=={'channelId':request['channelId'],'requestId':request['requestId'],'state':'accepted'}
             return request
+        cancelled={'channelId':channel,'requestId':str(uuid4()),'operation':'curve.evaluate.v1','body':curve}
+        cancellation={key:cancelled[key] for key in ('channelId','requestId')}
+        receipt=c.call('async-reads/cancel',cancellation)
+        check('cancellation before admission fences the exact request identity',
+              receipt=={**cancellation,'state':'not_admitted'} and c.call('async-reads/cancel',cancellation)==receipt)
+        refused=c.call('async-reads',cancelled,expected=409)
+        independent=submit('curve.evaluate.v1',curve);completed=stream.event('response')
+        check('delayed cancelled submissions cannot execute or interrupt independent reads',refused['code']=='async_request_cancelled' and
+              completed['requestId']==independent['requestId'] and completed['state']=='completed' and completed['result']==expected['curve.evaluate.v1'])
         failures=[]
         for operation,path,body in cases:
             if operation=='portfolio.risk.archive.v1':body={'method':'statistical','limit':10,'before':None,'id':None}

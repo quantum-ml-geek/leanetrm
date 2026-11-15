@@ -19,7 +19,7 @@ type Trade={tradeId:string;bookId:string;tradeReference:string;product:string;av
 type TradePage={trades:Trade[];selectedTrades:Trade[];total:number;allAvailable:boolean;nextOffset:number|null;contextId:string;snapshotId:string;maxSelectedTrades:number};
 type Directory={kind:string;asOf:string;context:{contextId:string;knownAt:string};books:{id:string;name:string;portfolio_id:string;portfolio:string}[]};
 type Options={api:<T>(path:string,body?:unknown,signal?:AbortSignal)=>Promise<T>;act:(work:()=>Promise<void>)=>Promise<void>;busy:()=>boolean;zone:()=>string;
- identity:()=>string;canRun:()=>boolean;instant:(value:string)=>string;source:()=>Source;convention:()=>string|null;frames:()=>{id:string;at:string;label:string;session:string|null}[];changed:()=>void;view:(view:RiskView)=>void};
+ failed?:(error:unknown)=>void;failureCleared?:()=>void;identity:()=>string;canRun:()=>boolean;instant:(value:string)=>string;source:()=>Source;convention:()=>string|null;frames:()=>{id:string;at:string;label:string;session:string|null}[];changed:()=>void;view:(view:RiskView)=>void};
 /** Risk owns its setup and report, while using the same editor, request contracts and result widget as the Blotter. */
 export function setupRiskWorkspace(o:Options){
  const get=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id) as T;
@@ -89,7 +89,7 @@ export function setupRiskWorkspace(o:Options){
    get('risk-workspace-context-note').textContent='Event-aware report: its captured opening source, knowledge cutoff and common horizon are shown below.';
    o.view('risk');get<HTMLButtonElement>('risk-workspace-export').disabled=o.busy()||!economic?.canDownload();
   }});
- engine=setupRisk({api:reportApi,act:o.act,busy:o.busy,zone:o.zone,profile:o.identity,canRun:o.canRun,prefix,onDenied:reset,onChange:changed,ranNow:()=>{if(!host.hidden&&(view==='risk-var'||view==='risk-scenarios'))o.view('risk');},edited:o.changed,scope:requestScope});
+ engine=setupRisk({api:reportApi,act:o.act,busy:o.busy,failed:o.failed,failureCleared:o.failureCleared,zone:o.zone,profile:o.identity,canRun:o.canRun,prefix,onDenied:reset,onChange:changed,ranNow:()=>{if(!host.hidden&&(view==='risk-var'||view==='risk-scenarios'))o.view('risk');},edited:o.changed,scope:requestScope});
  history=setupFactorHistory({api:o.api,act:o.act,busy:o.busy,identity:o.identity,scope:requestScope,instant:o.instant,unconfirmed:()=>!!engine?.unconfirmed()||!!economic?.unconfirmed()||unreadRecovery,async calculate(request,metadata,queued,signal){
   const version=epoch,startedView=view;
   if(unreadRecovery)throw Error('Inspect Reports and runs before resolving the unreadable retained submission.');

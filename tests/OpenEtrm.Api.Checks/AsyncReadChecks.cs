@@ -32,8 +32,28 @@ internal static class AsyncReadChecks
         drain.SetResult();await Task.WhenAll(firstDisposal,secondDisposal);
         if(!channel.Stopping.IsCancellationRequested)throw new Exception("Retired channels retain a safe cancelled lifetime token.");
         Refused("async_channel_unavailable",()=>channel.Submit(request,Plan(request,Work)));
+        await CancellationAdmission();
         await AsyncReadVisibilityChecks.Run();
-        Console.WriteLine("PASS async reads: concurrency, normalized retries, conflicts, bounds, exact correlation, shared cancellation drain and visibility isolation");
+        Console.WriteLine("PASS async reads: concurrency, normalized retries, conflicts, bounds, exact correlation, cancellation admission fence, shared cancellation drain and visibility isolation");
+    }
+    static async Task CancellationAdmission()
+    {
+        await using var channel=new AsyncReadChannel(Guid.NewGuid(),CancellationToken.None);channel.Connect();
+        var request=new AsyncReadRequest(channel.Id,Guid.NewGuid(),"curve.evaluate.v1",JsonSerializer.SerializeToElement(new{snapshotId=Guid.NewGuid(),curve="synthetic"}));
+        var calls=0;var entered=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        AsyncReadPlan Plan(AsyncReadRequest selected)=>new(AsyncReadContract.Decode(selected),async ct=>
+        {Interlocked.Increment(ref calls);entered.TrySetResult();await Task.Delay(Timeout.Infinite,ct);return new(new{},(_,_)=>Task.CompletedTask);});
+        if(channel.Cancel(request.RequestId)!="not_admitted"||channel.Cancel(request.RequestId)!="not_admitted")
+            throw new Exception("Cancellation before HTTP admission must return an idempotent promise that the request cannot execute later.");
+        Refused("async_request_cancelled",()=>channel.Submit(request,Plan(request)));
+        if(calls!=0)throw new Exception("A delayed submit must never execute after confirmed non-admission cancellation.");
+        var admitted=request with{RequestId=Guid.NewGuid()};channel.Submit(admitted,Plan(admitted));await entered.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        if(channel.Cancel(admitted.RequestId)!="cancellation_requested")throw new Exception("An admitted worker must retain its slot until its terminal response.");
+        using var timeout=new CancellationTokenSource(TimeSpan.FromSeconds(3));var terminal=await channel.Read(timeout.Token);
+        if(terminal.State!="cancelled"||terminal.Request.RequestId!=admitted.RequestId||calls!=1)throw new Exception("Admitted cancellation must produce one exact terminal response.");
+        for(var n=2;n<AsyncReadChannel.MaximumRequests;n++)channel.Cancel(Guid.NewGuid());
+        Refused("async_channel_limit",()=>channel.Cancel(Guid.NewGuid()));
+        Refused("async_channel_limit",()=>channel.Submit(request with{RequestId=Guid.NewGuid()},Plan(request)));
     }
     static void Refused(string code,Action action){try{action();}catch(AsyncReadException error)when(error.Code==code){return;}throw new Exception("Expected async refusal "+code);}
 }

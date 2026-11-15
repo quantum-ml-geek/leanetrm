@@ -21,7 +21,7 @@ so a later filtered page cannot authorize an older, broader response.
 | `POST /api/async-reads/channels` | Open with `{clientId}` and return `async_reads_v1`, channel ID and bound profile/context. An explicit new opening replaces and drains that client's previous channel. |
 | `GET /api/async-reads/events?channelId=…` | Emit `ready` then correlated terminal `response` events. Same-page admission and session cookies are required. |
 | `POST /api/async-reads` | Submit `{channelId, requestId, operation, body}`. HTTP 202 acknowledges admission; only SSE delivers the read result. |
-| `POST /api/async-reads/cancel` | Request cancellation with channel and request identities. |
+| `POST /api/async-reads/cancel` | Submit `{channelId, requestId}`. The receipt repeats both IDs and reports `cancellation_requested` for admitted work or `not_admitted` after fencing an unadmitted ID against future submission. |
 
 POST requests use the existing CSRF and origin contracts. The exchange example
 uses its own API prefix and session scope. Neither arbitrary URLs nor financial
@@ -47,7 +47,8 @@ There are at most four channels per session and 64 per API scope.
 
 The channel admits two active reads, with a client queue of at most 32 additional
 reads. Requests carry explicit business inputs. The server retains at most 128
-request identities per channel; the client renews a drained channel before
+identities per channel, including admitted requests and cancellations received
+before admission; the client renews a drained channel before
 submitting further requests. Request and serialized-result caps are 32 KiB and
 16 MiB. A channel lasts five minutes and uses periodic authorization checks and
 heartbeat writes. Work cancellation is cooperative: synchronous graph evaluation
@@ -57,9 +58,14 @@ reference/calendar coordinates, 4,096 original book identities and 4,096 retaine
 instrument authority proofs.
 
 Changing a selection rejects the old consumer immediately. A submitted
-cancellation keeps its execution slot until a terminal server response, preventing
-a burst of replacement reads from exceeding the execution bound. Disconnect
-rejects pending reads. A subsequent explicit request establishes a new channel;
+cancellation keeps its execution slot until a terminal server response or an
+exact matching `not_admitted` receipt. The latter reserves that ID atomically:
+even a delayed submission cannot execute and receives `409 async_request_cancelled`.
+Repeated cancellation of that ID returns the same receipt. An unknown cancellation
+at the identity limit is refused without promising non-admission. This prevents
+a burst of replacement reads from exceeding the execution bound while allowing
+an aborted HTTP submission that never reached admission to release its slot.
+Disconnect rejects pending reads. A subsequent explicit request establishes a new channel;
 there is no silent replay or durable delivery guarantee.
 
 Financial commands retain their existing request identities, transaction ordering

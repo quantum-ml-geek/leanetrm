@@ -24,6 +24,7 @@ internal sealed class AsyncReadChannel:IAsyncDisposable
     readonly CancellationToken stopping;
     readonly Channel<AsyncReadCompletion> responses=Channel.CreateBounded<AsyncReadCompletion>(new BoundedChannelOptions(MaximumActive){SingleReader=true,FullMode=BoundedChannelFullMode.Wait});
     readonly Dictionary<Guid,Pending> requests=[];
+    readonly HashSet<Guid> notAdmitted=[];
     bool connected,closed;
     Task? disposal;
     int active;
@@ -66,12 +67,13 @@ internal sealed class AsyncReadChannel:IAsyncDisposable
         {
             RequireOpen();
             if(!connected)throw Refusal(409,"async_channel_not_ready","Connect the response stream before submitting reads.");
+            if(notAdmitted.Contains(request.RequestId))throw Refusal(409,"async_request_cancelled","This request was cancelled before admission and cannot execute.");
             if(requests.TryGetValue(request.RequestId,out var prior))
             {
                 if(prior.Hash!=hash)throw Refusal(409,"async_request_conflict","This request identity already names different inputs.");
                 return;
             }
-            if(requests.Count>=MaximumRequests)throw Refusal(429,"async_channel_limit","Open a fresh response channel after this channel's requests complete.");
+            RequireIdentityCapacity();
             if(active>=MaximumActive)throw Refusal(429,"async_busy","This response channel already has two active reads.");
             var cancellation=CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);cancellation.CancelAfter(ReadLimit);
             var pending=new Pending(hash,cancellation);requests.Add(request.RequestId,pending);active++;
@@ -103,14 +105,26 @@ internal sealed class AsyncReadChannel:IAsyncDisposable
             if(!Closed&&!responses.Writer.TryWrite(completion))Close();
         }
     }
-    internal void Cancel(Guid requestId)
+    internal string Cancel(Guid requestId)
     {
         lock(gate)
         {
             RequireOpen();
-            if(!requests.TryGetValue(requestId,out var pending))throw Refusal(404,"async_request_missing","This response channel has no such request.");
-            pending.Cancellation.Cancel();
+            if(requestId==Guid.Empty)throw AsyncReadContract.Invalid();
+            if(requests.TryGetValue(requestId,out var pending))
+            {
+                pending.Cancellation.Cancel();return "cancellation_requested";
+            }
+            // A cancelled HTTP submission may never arrive, or may arrive after
+            // this cancellation. Reserve its identity before promising no work.
+            if(!notAdmitted.Contains(requestId)){RequireIdentityCapacity();notAdmitted.Add(requestId);}
+            return "not_admitted";
         }
+    }
+    void RequireIdentityCapacity()
+    {
+        if(requests.Count+notAdmitted.Count>=MaximumRequests)
+            throw Refusal(429,"async_channel_limit","Open a fresh response channel after this channel's requests complete.");
     }
     internal async Task<AsyncReadCompletion> Read(CancellationToken ct)=>await responses.Reader.ReadAsync(ct);
     internal ChannelReader<AsyncReadCompletion> Responses=>responses.Reader;

@@ -40,7 +40,7 @@ export async function run({command,evaluate,wait,click,set,submit,persona,check,
   await wait(`(()=>{const rows=[...document.querySelectorAll('#desk-positions .tabulator-row:not(.tabulator-group)')].filter(r=>r.getClientRects().length);return rows.length===1&&rows[0].textContent.includes(${JSON.stringify(reference)});})()`);
   await click('#desk-positions .tabulator-row:not(.tabulator-group)');await wait("document.querySelector('#position-details')?.getAttribute('aria-label')==='Position details'&&"+idle);
  }
- async function amend(){await click('#side-panel-amend');await wait(ticket);await wait(idle);}
+ async function amend(){await click('#position-details-tabs-terms');await wait("(()=>{const button=document.querySelector('#side-panel-amend');return button&&!button.hidden&&!button.disabled&&button.getClientRects().length>0;})()");await click('#side-panel-amend');await wait(ticket);await wait(idle);}
  async function reopenBooked(){
  const reference=await evaluate(`(async()=>{const token=(await(await fetch('/api/bootstrap')).json()).csrfToken,b=window.scheduledBooking;const r=await fetch('/api/swaps/editor',{method:'POST',headers:{'Content-Type':'application/json','X-Preview-CSRF':token},body:JSON.stringify({context:{snapshotId:b.request.snapshotId,knowledgeMode:'current',convention:b.request.convention},tradeId:b.result.tradeId,revision:null})});if(!r.ok)throw Error(await r.text());return(await r.json()).state.tradeReference;})()`);
  if(await evaluate("document.querySelector('#position-details')?.hidden===false&&!document.querySelector('#position-details-head .side-panel-reference')?.textContent.includes("+JSON.stringify(reference)+")"))await closePanel(false);

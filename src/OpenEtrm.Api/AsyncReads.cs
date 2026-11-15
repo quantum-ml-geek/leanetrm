@@ -75,8 +75,8 @@ internal sealed class AsyncReads(PreviewDatabase database,CancellationToken stop
             await current.Gate.WaitAsync(c.RequestAborted);
             try
             {
-                var owner=Find(current,body.ChannelId);owner.RequireCurrent();owner.Channel.Cancel(body.RequestId);
-                return Results.Ok(new {channelId=body.ChannelId,requestId=body.RequestId,state="cancellation_requested"});
+                var owner=Find(current,body.ChannelId);owner.RequireCurrent();var state=owner.Channel.Cancel(body.RequestId);
+                return Results.Ok(new {channelId=body.ChannelId,requestId=body.RequestId,state});
             }
             finally{current.Gate.Release();}
         });

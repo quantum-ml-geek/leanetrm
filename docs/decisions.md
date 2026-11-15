@@ -5498,7 +5498,11 @@ an expired request context or a cached authorization decision.
 Bound active work, queued requests, identities, serialized responses and channel
 lifetimes. Identical request-ID retries cannot execute twice; conflicting reuse
 is refused. Cancellation invalidates the consumer immediately while transport
-capacity is released only after server termination. Disconnect rejects pending
+capacity is released only after server termination or an exact non-admission
+receipt. A cancellation that precedes admission atomically reserves its request
+ID against all later submissions on that channel; admitted requests and these
+reserved IDs share the 128-identity bound. This receipt never substitutes for
+termination of an admitted worker. Disconnect rejects pending
 reads and explicit retry establishes a fresh channel. No implicit replay or
 new durable-outcome guarantee is introduced.
 

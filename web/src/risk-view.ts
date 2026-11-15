@@ -111,7 +111,7 @@ function setupText(setup:RunSetup|undefined):string{
  * shows change, however it changed: an action, a part that finished on the report's own timer, or a reset.
  */
 export function setupRisk(options:{api:Api;act:(work:()=>Promise<void>)=>Promise<void>;busy:()=>boolean;zone:()=>string;canRun:()=>boolean;profile:()=>string;
-  scope:()=>Scope;onDenied:()=>void;onChange:()=>void;ranNow?:()=>void;edited?:()=>void;prefix?:string}){
+  scope:()=>Scope;onDenied:()=>void;onChange:()=>void;failed?:(error:unknown)=>void;failureCleared?:()=>void;ranNow?:()=>void;edited?:()=>void;prefix?:string}){
   const prefix=options.prefix??'';
   const get=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(prefix+id) as T;
   const root=get('risk-report'),shelf=root.parentElement!,form=get<HTMLFormElement>('risk-form');
@@ -447,10 +447,12 @@ export function setupRisk(options:{api:Api;act:(work:()=>Promise<void>)=>Promise
     // The history lists what was queued: a run queued in parts as one run. A part whose submission has no known outcome is left to Reconcile.
     if(version===generation)await readHistory(version);
   }
-  form.onsubmit=event=>{event.preventDefault();if(options.busy()||run?.making)return;const queued=(event as SubmitEvent).submitter?.id===prefix+'risk-queue';const work=async()=>{
-    const plan=requests();
+  form.onsubmit=event=>{event.preventDefault();if(options.busy()||run?.making)return;const queued=(event as SubmitEvent).submitter?.id===prefix+'risk-queue';let readVersion=generation;const work=async()=>{
+    // Commit the focused control's native change event before consuming its edits.
+    const focused=document.activeElement;if(focused instanceof HTMLElement&&form.contains(focused))focused.blur();
+    readVersion=generation;const plan=requests();
     if(queued&&plan.parts.length>catalog!.limits.maxParts)throw Error(`A queued run takes at most ${catalog!.limits.maxParts} parts of ${catalog!.limits.maxHoldingsBumps} shocks. Choose fewer, or run it now.`);
-    forgetRun();const version=++generation;
+    forgetRun();const version=readVersion=++generation;
     // What was run is no longer an edit: the run answers it, and the setup it was carried over in is the run's.
     edits.clear();get('risk-carried').hidden=true;
     const current:Run={key:++runs,queued,making:!queued,parts:plan.parts.map(request=>({request})),context:catalog!.context,asOf:catalog!.asOf,setup:plan.setup,choices:choicesNow(),
@@ -463,7 +465,10 @@ export function setupRisk(options:{api:Api;act:(work:()=>Promise<void>)=>Promise
     finally{if(plan.sizes&&current.parts.some(p=>p.report||p.job))storeSizes(plan.sizes);}
   };
   if(queued)void options.act(work);
-  else void work().catch(error=>{get('risk-progress').textContent=failure(error,'The risk calculation could not be read. Retry when ready.');sync();});
+  else{
+    const owner=options.profile();options.failureCleared?.();
+    void work().catch(error=>{if(readVersion!==generation||owner!==options.profile())return;get('risk-progress').textContent=failure(error,'The risk calculation could not be read. Retry when ready.');if(root.checkVisibility())options.failed?.(error);sync();});
+  }
   };
 
   // --- jobs --------------------------------------------------------------------------------------------------------------------

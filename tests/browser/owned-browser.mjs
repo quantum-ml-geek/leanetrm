@@ -241,6 +241,9 @@ export async function withOwnedBrowser(targetFile,browserPath,run){
       await run({command,evaluate,wait,click,set,submit,persona,check,shot,idle,fitsWidth,errors,url:url.origin,provider:target.provider,tab,fixture:target.lifecycle??target.ppa??target.closeOut??target.facility,gasAmendment:target.gasAmendment,lifecycleSwapBooks:target.lifecycleSwapBooks});
       if(errors.length)throw Error('Uncaught browser exceptions: '+JSON.stringify(errors));
       return passed;
+    }catch(error){
+      console.error('Owned browser failure state',await evaluate(`(()=>{const text=id=>document.getElementById(id)?.textContent?.slice(0,1200),shown=id=>{const n=document.getElementById(id);return n?{hidden:n.hidden,mode:n.dataset.mode,state:n.dataset.readState}:null;};return {busy:document.body?.getAttribute('aria-busy'),pending:[...document.querySelectorAll('[aria-busy=true]')].map(n=>n.id).slice(0,20),error:text('error'),notice:text('notice'),status:text('status'),pricing:{...document.getElementById('futures-page')?.dataset},details:shown('position-details'),detailHead:text('position-details-head'),detailView:text('position-details-view'),detailForm:text('position-details-form'),detailPrompt:text('position-details-prompt'),desk:text('blotter-load'),probe:window.__asyncReadProbeErrors??[],browserErrors:${JSON.stringify(errors)}};})()`).catch(failure=>({unavailable:failure.message})));
+      throw error;
     }finally{abandon();for(const {other,driver} of tabs){driver.abandon();other.close();}}
   }catch(error){primaryError=error;throw error;}
   finally{
