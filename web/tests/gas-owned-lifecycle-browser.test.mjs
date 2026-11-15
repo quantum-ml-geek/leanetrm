@@ -3,6 +3,23 @@ import assert from 'node:assert/strict';
 import {browserAvailable,withBrowserPage,browserTestTimeout} from './browser-page.mjs';
 const page='<div id="gas-form"></div>';
 import {fixture,batchFixture} from './gas-owned-fixture.mjs';
+test('mobile lifecycle panels wrap valid business references and contain nested choices',{skip:!browserAvailable,timeout:browserTestTimeout},()=>{
+ const account='synthetic_'.padEnd(64,'a'),source='synthetic_'.padEnd(128,'b');
+ const heading='Correct operator quantity or cashout · '+account+' / '+source;
+ return withBrowserPage('<meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/app.css"><main style="margin-left:0"><section class="lifecycle-workspace"><section class="lifecycle-panel"><h2>'+heading+'</h2><form id="gas-form" class="lifecycle-form"></form></section></section></main>',async(evaluate,command)=>{
+  await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
+  await evaluate(`(async()=>{${batchFixture}addMember('a');})()`);
+  for(let i=0;i<50&&!await evaluate("!!document.querySelector('[name=observedPerformance]')");i++)await new Promise(r=>setTimeout(r,20));
+  await evaluate(`fillMember('a');for(const option of document.querySelectorAll('option[value]'))if(option.value)option.textContent=${JSON.stringify(source)}+' · '+option.textContent;`);
+  const geometry=()=>evaluate(`(()=>{const width=document.documentElement.clientWidth,panel=document.querySelector('.lifecycle-panel').getBoundingClientRect(),heading=document.querySelector('h2');return{width,scroll:document.documentElement.scrollWidth,heading:{text:heading.textContent,width:heading.clientWidth,scroll:heading.scrollWidth},outside:[...document.querySelectorAll('fieldset,input,select,button')].filter(n=>{const r=n.getBoundingClientRect();return n.getClientRects().length&&(r.left<panel.left||r.right>panel.right+1);}).map(n=>({tag:n.tagName,name:n.getAttribute('name'),right:n.getBoundingClientRect().right}))};})()`);
+  const mobile=await geometry();
+  assert.ok(mobile.scroll<=mobile.width+1,JSON.stringify(mobile));
+  assert.equal(mobile.heading.text,heading);assert.ok(mobile.heading.scroll<=mobile.heading.width+1,'The complete reference must wrap without clipping.');assert.deepEqual(mobile.outside,[]);
+  assert.equal(await evaluate("document.querySelectorAll('[data-gas-entry]').length"),2);
+  await command('Emulation.setDeviceMetricsOverride',{width:1440,height:1100,deviceScaleFactor:1,mobile:false});
+  const desktop=await geometry();assert.ok(desktop.scroll<=desktop.width+1,JSON.stringify(desktop));assert.deepEqual(desktop.outside,[]);
+ });
+});
 test('linked correction rows lazy-read exact sources and keep stock-use revisions scoped to their performance',{skip:!browserAvailable,timeout:browserTestTimeout},()=>withBrowserPage(page,async evaluate=>{
  await evaluate(`(async()=>{${batchFixture}addMember('a');})()`);await new Promise(r=>setTimeout(r,30));
  await evaluate("addMember('b')");await new Promise(r=>setTimeout(r,30));

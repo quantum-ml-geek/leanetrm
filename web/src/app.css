@@ -2769,6 +2769,7 @@ header>div:first-child{flex:1 1 160px}
 .lifecycle-inactive{color:var(--text-3)}
 .lifecycle-panel:empty{display:none}
 .lifecycle-panel{padding:1.25rem;border:1px solid var(--border);border-radius:.5rem}
+.lifecycle-panel>h2{overflow-wrap:anywhere}
 .lifecycle-form{display:grid;gap:1rem}
 .lifecycle-form fieldset{border:1px solid var(--border);border-radius:.4rem;padding:1rem}
 .lifecycle-form button{justify-self:start}
