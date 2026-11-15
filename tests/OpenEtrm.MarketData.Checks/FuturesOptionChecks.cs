@@ -901,7 +901,7 @@ internal static partial class FuturesOptionChecks
     // A synthetic two-curve market with fixed identities, so serialized results
     // can be compared across runs and hosts: one NG-style future and a direct
     // daily-settlement curve over four option series on it.
-    private sealed class OptionMarket
+    internal sealed class OptionMarket
     {
         public static Guid G(int n) => Guid.Parse($"00000000-0000-0000-0000-{n:000000000000}");
         public readonly DefinitionRevision Revision = new(G(901), G(902));
@@ -947,7 +947,7 @@ internal static partial class FuturesOptionChecks
         public FuturesOptionInstrument Option(int contract) => new(Series(contract));
         public CurveModel Model(ObservationRole optionRole = ObservationRole.DailySettlement,
             ObservationRole futuresRole = ObservationRole.DailySettlement, string optionIncrement = Tick,
-            ConstituentExpiryRule optionExpiry = ConstituentExpiryRule.RequireLive)
+            ConstituentExpiryRule optionExpiry = ConstituentExpiryRule.RequireLive,FuturesSeriesSpecification? underlying=null)
         {
             var options = Options.Select(o => new MarketContract(K(o.Contract), ContractKind.FutureOption, new(2041, 1, 1), new(2041, 2, 1),
                 Expiry, R(SeriesCode(o.Contract)))).ToArray();
@@ -961,7 +961,7 @@ internal static partial class FuturesOptionChecks
                 [FuturesQuote, Quote("on_quote", optionIncrement)], [futures, .. options],
                 [Direct("ng", R("ng_quote"), [K(1)], futuresRole),
                  Direct("on_settle", R("on_quote"), [.. options.Select(o => o.Key)], optionRole) with { ConstituentExpiry = optionExpiry }],
-                [Underlying], [],
+                [underlying??Underlying], [],
                 [new(S(1), K(1), R("ng_quote"), null), .. Options.Select(o => new MarketSeries(S(o.Contract), K(o.Contract), R("on_quote"), null))]);
         }
         public MarketSnapshot Snapshot(ObservationRole futuresRole = ObservationRole.DailySettlement)
