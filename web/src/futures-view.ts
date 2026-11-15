@@ -864,13 +864,15 @@ export function setupFutures(options:{tickets:ProductTickets;api:Api;stream:(bod
     const run=risk.current(),key=resultsKey(run);
     if(key===''){if(inline!==undefined||preparing!==undefined){inline=undefined;preparing=undefined;showInline();}else renderRisk();return;}
     if(key===inline?.key||key===preparing){renderRisk();return;}
+    const started=generation,scope=whereAmI();
+    const current=()=>preparing===key&&started===generation&&scope!==undefined&&scope===whereAmI()&&!get('futures-page').hidden;
     preparing=key;renderRisk();
     inlineResults(run!,key).then(next=>{
-      if(preparing!==key)return;
+      if(!current())return;
       preparing=undefined;inline=next;
       if(next.state==='shown'&&lensFor!==next.run){lensFor=next.run;lens='risk';}
       showInline();
-    },()=>{if(preparing===key){preparing=undefined;clear();}});
+    },()=>{if(current()){preparing=undefined;clear();}});
   }
   // Draws the desk again for the results it shows inline: the lens, the change chart, the tile, the run bar and the panel's Risk tab.
   function showInline(){
