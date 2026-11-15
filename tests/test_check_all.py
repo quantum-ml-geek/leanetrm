@@ -28,7 +28,8 @@ class CheckAllTests(unittest.TestCase):
                              'Long preview queues must be partitioned before they exceed CI limits')
         for group, flags in (
             ('reference', ('--price-authoring-check', '--contract-dates-check', '--custom-curves-check')),
-            ('physical', ('--gas-billing-check', '--crude-lifecycle-check', '--lng-cargo-check')),
+            ('physical', ('--crude-lifecycle-check', '--lng-cargo-check')),
+            ('gas', ('--gas-billing-check', '--gas-in-term-check', '--gas-indexed-check')),
             ('risk', ('--risk-jobs-check', '--historical-risk-check', '--factor-history-check')),
         ):
             for flag in flags:
@@ -60,9 +61,9 @@ class CheckAllTests(unittest.TestCase):
                        Path('/selected browser executable'), group='standard', run=run)
         self.assertEqual(frontend, ['/selected browser executable'])
 
-    def test_physical_gas_workflow_is_qualified_in_physical_partition(self):
+    def test_physical_gas_workflow_is_qualified_in_gas_partition(self):
         commands=[]
-        run_checks(Path('/stock postgres/bin'),Path('/managed sdk/dotnet'),Path('/browser executable'),group='physical',run=lambda command,**options:commands.append(command))
+        run_checks(Path('/stock postgres/bin'),Path('/managed sdk/dotnet'),Path('/browser executable'),group='gas',run=lambda command,**options:commands.append(command))
         gas=[c for c in commands if '--gas-daily-quantity-check' in c]
         self.assertEqual(len(gas),1)
         demo=[c for c in commands if '--gas-basis-demo-check' in c]
@@ -97,9 +98,9 @@ class CheckAllTests(unittest.TestCase):
         self.assertIn('--browser-check',cargo[0])
         self.assertEqual(cargo[0][cargo[0].index('--browser')+1],'/browser executable')
 
-    def test_manual_gas_operations_and_billing_recovery_run_in_physical_partition(self):
+    def test_manual_gas_operations_and_billing_recovery_run_in_gas_partition(self):
         commands=[]
-        run_checks(Path('/stock postgres/bin'),Path('/managed sdk/dotnet'),Path('/browser executable'),group='physical',run=lambda command,**options:commands.append(command))
+        run_checks(Path('/stock postgres/bin'),Path('/managed sdk/dotnet'),Path('/browser executable'),group='gas',run=lambda command,**options:commands.append(command))
         for flag in ('--gas-operations-check','--gas-billing-check'):
             selected=[command for command in commands if flag in command]
             self.assertEqual(len(selected),1)

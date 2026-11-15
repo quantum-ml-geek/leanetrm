@@ -2,12 +2,12 @@
 
 For the current complete command and prerequisites, start with
 [Required tools](#required-tools). `tools/check_all.py` runs all suites by
-default; `--group workspace|reference|standard|assistant|risk|trading|physical|portfolio|settlement|ppa|recovery`
+default; `--group workspace|reference|standard|assistant|risk|trading|physical|gas|portfolio|settlement|ppa|recovery`
 selects one CI partition. CI requires every partition and its aggregate check
 to succeed. The implementation records below retain the results and limits of
 each dated increment; older check counts are not the current suite size.
 
-The reference-data, physical-trading and statistical-risk previews have separate
+The reference-data, crude/LNG, gas and statistical-risk previews have separate
 required partitions. Each job keeps locked preparation and the shared domain and
 upgrade checks; the union contains every preview exactly once. Runner-contract
 checks enforce that coverage and bound each preview queue to twelve suites.
