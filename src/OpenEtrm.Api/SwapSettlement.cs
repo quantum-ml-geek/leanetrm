@@ -307,9 +307,14 @@ public sealed partial class SwapStore
             request.DuePolicy!="swap_due_nominal_v1"||request.RecognitionPolicy!="swap_completed_period_trading_pnl_v1")
             throw Error("settlement_bridge","Select explicit financial-swap scopes, due/recognition policies and the unchanged-contract bridge.");
         var books=await BookScope.Read(connection,manifest.CatalogId,ct);BookScope.Validate(books,request.BookIds,[]);
-        var allRows=await Rows(connection,null,ct);
-        var heads=allRows.GroupBy(r=>r.Id("trade_id")).Select(g=>g.MaxBy(r=>r.Number("revision"))!).ToArray();
-        var rows=heads.Where(r=>(request.TradeIds.IsEmpty||request.TradeIds.Contains(r.Id("trade_id")))&&(request.BookIds.IsEmpty||request.BookIds.Contains(r.Id("book_id"))));
+        // Select authoritative heads before hydration. The native latest-row
+        // fence refuses a hidden required child instead of revealing an older
+        // revision. Keep book membership until reconciliation can detect moves.
+        var selected=request.TradeIds.IsEmpty?null:request.TradeIds.ToImmutableHashSet();
+        var heads=await Rows(connection,null,ct,latestBooks:[],trades:selected);
+        var rows=heads.Where(r=>request.BookIds.IsEmpty||request.BookIds.Contains(r.Id("book_id"))).ToArray();
+        var allRows=request.ContractChanges==SwapContractBridge.Policy&&rows.Length>0?
+            await Rows(connection,null,ct,trades:rows.Select(r=>r.Id("trade_id")).ToImmutableHashSet()):[];
         var results=ImmutableArray.CreateBuilder<SwapPnlHolding>();
         foreach(var row in rows)
         {

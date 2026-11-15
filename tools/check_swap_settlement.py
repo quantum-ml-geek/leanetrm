@@ -30,6 +30,35 @@ def check_stated_sides(c,context,trade,expected):
     assert read['valuation'] is None and read.get('memberships')==expected,read.get('memberships')
 
 
+def check_pnl_scope(c,query,body,context,at):
+    """Exact selected trades are independent; a hidden head cannot reveal older terms."""
+    selected=c.call('swaps/book',{**deepcopy(body),'operationId':str(uuid4())})
+    unrelated=deepcopy(body);unrelated['operationId']=str(uuid4())
+    unrelated['scheduled']['first']['periods'][0]['fixed']['price']='4'
+    other=c.call('swaps/book',unrelated)
+    amended=deepcopy(body);amended.update(operationId=str(uuid4()),tradeId=selected['tradeId'],expectedRevision=1,
+        effectiveAt=at,reason='Synthetic selected P&L head')
+    amended['scheduled']['first']['periods'][1]['amount']='211'
+    assert c.call('swaps/amend',amended)['revision']==2
+    request=dict(opening=context,closing=context,tradeIds=[selected['tradeId']],bookIds=[],
+        contractChanges='reject_contract_changes_v1',duePolicy='swap_due_nominal_v1',recognitionPolicy='swap_completed_period_trading_pnl_v1')
+    expected=c.call('swaps/settlement/pnl',request)['report']
+    assert len(expected['trades'])==1 and expected['trades'][0]['tradeId']==selected['tradeId']
+    assert F(expected['trades'][0]['bridge']['economicPnl'])==0
+    for trade,revision,status in [(other['tradeId'],1,200),(selected['tradeId'],2,403)]:
+        instrument=query(f"SELECT instrument_id FROM trading.swap_trade_revisions WHERE trade_id='{trade}' AND revision={revision};").strip()
+        query(f"CREATE POLICY synthetic_pnl_hidden_head ON trading.swap_instruments AS RESTRICTIVE FOR SELECT TO openetrm_runtime USING(instrument_id<>'{instrument}'::uuid);")
+        try:
+            result=c.call('swaps/settlement/pnl',request,expected=status)
+            if status==200:
+                assert result['report']==expected
+                assert c.call('swaps/settlement/pnl',{**request,'tradeIds':[selected['tradeId'],other['tradeId']]},expected=403)['code']=='access_denied'
+            else:assert result['code']=='access_denied',result
+        finally:query('DROP POLICY synthetic_pnl_hidden_head ON trading.swap_instruments;')
+    assert c.call('swaps/settlement/pnl',request)['report']==expected
+    print('PASS selected P&L ignores an unrelated hidden instrument and refuses a hidden latest head without falling back to older terms',flush=True)
+
+
 def run_foundation(c,query,url,body,before,after,before_at,currency):
     terms=deepcopy(body);terms['operationId']=str(uuid4())
     booked=c.call('swaps/book',terms)

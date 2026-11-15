@@ -17,14 +17,15 @@ negotiated correction due instants and exchange expiry retain instant semantics.
 Crude consideration and fee dates stay independent through invoice aging; gas
 and LNG dates survive booking, billing and retained replay.
 
-The complete synthetic matrix passed all 117 verification commands, including
-63 isolated application previews. The final frontend suite passed 1,677 checks
-and the Python runner/release contract suite passed 112. Domain, native database,
-populated-upgrade, agent and browser checks are mandatory in the runner and CI.
-Independent adversarial review findings were resolved with verified fixes.
-These checks used stock PostgreSQL 18 and disposable synthetic resources.
+The integrated calendar/lifecycle runner requires 183 commands, including 63
+isolated application previews across fourteen CI partitions. Local checks passed
+737 managed core checks, 88 rate checks, 1,806 frontend checks and 121 Python
+checks. Domain, native database, populated-upgrade, agent and browser checks are
+mandatory in the runner and CI. Independent adversarial review findings were
+resolved with verified fixes. These checks use stock PostgreSQL 18 and disposable
+synthetic resources; the required aggregate CI result gates publication readiness.
 
-Migrations 0318–0335 preserve stored rows, retained bytes, invoices and completed
+Migrations 0318–0337 preserve stored rows, retained bytes, invoices and completed
 command outcomes. There is one supported execution contract: incompatible stored
 trades need reviewed migration of their terms, exact relationships, identities
 and retained programs. Existing application databases were not modified. Merge,

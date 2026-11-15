@@ -73,18 +73,24 @@ public sealed partial class PreviewDatabase
             SELECT r.ordinal,coalesce(s.rows,'[]'::jsonb)::text,coalesce(c.visible,0)=jsonb_array_length(r.pins)
             FROM requested r LEFT JOIN completeness c ON c.ordinal=r.ordinal LEFT JOIN samples s ON s.ordinal=r.ordinal ORDER BY r.ordinal
             """:seriesIds is not null?"""
-            WITH requested AS MATERIALIZED(SELECT * FROM jsonb_to_recordset($3::jsonb)r(ordinal integer,pins jsonb)),
-            visible_pins AS MATERIALIZED(
-                SELECT r.ordinal,o.id,o.observed_at,o.received_at,
-                    CASE WHEN o.series_id=ANY($4::uuid[]) THEN to_jsonb(o) END AS sample
-                FROM requested r CROSS JOIN LATERAL security.read_observation_pins($1,$2,
-                    ARRAY(SELECT jsonb_array_elements_text(r.pins)::uuid))o
-            ),
-            samples AS(SELECT ordinal,count(*) AS visible,
-                jsonb_agg(sample ORDER BY observed_at,received_at,id) FILTER(WHERE sample IS NOT NULL) AS rows
-                FROM visible_pins GROUP BY ordinal)
-            SELECT r.ordinal,coalesce(s.rows,'[]'::jsonb)::text,coalesce(s.visible,0)=jsonb_array_length(r.pins)
-            FROM requested r LEFT JOIN samples s ON s.ordinal=r.ordinal ORDER BY r.ordinal
+            -- Complete and return each frame before reading later frames. All
+            -- pins remain authorized even when only some series are consumed.
+            SELECT r.ordinal,(
+                WITH anchors AS MATERIALIZED(
+                    SELECT ARRAY(SELECT jsonb_array_elements_text(r.pins)::uuid) AS ids
+                )
+                SELECT jsonb_build_object('rows',coalesce(
+                    jsonb_agg(to_jsonb(o) ORDER BY o.observed_at,o.received_at,o.id)
+                        FILTER(WHERE o.series_id=ANY($4::uuid[])),'[]'::jsonb),
+                    'complete',count(*)=jsonb_array_length(r.pins))
+                FROM anchors a CROSS JOIN LATERAL(
+                    SELECT * FROM security.read_observation_pins($1,$2,a.ids) OFFSET 0
+                )o
+            )::text
+            FROM(
+                SELECT * FROM jsonb_to_recordset($3::jsonb)r(ordinal integer,pins jsonb)
+                ORDER BY r.ordinal OFFSET 0
+            )r ORDER BY r.ordinal
             """:"""
             -- Sort the small request rows before evaluating their correlated payloads.
             -- The barrier keeps a payload sort from buffering every frame before the first read.
@@ -105,7 +111,7 @@ public sealed partial class PreviewDatabase
         object[] parameters=seriesIds is not null?
             [metadata.DefinitionRevision.CatalogId,metadata.DefinitionRevision.RevisionId,requests,seriesIds!.Value.ToArray()]:
             [metadata.DefinitionRevision.CatalogId,metadata.DefinitionRevision.RevisionId,requests];
-        var payloadColumns=scope==ObservationReadScope.FactHistory||seriesIds is not null?3:2;
+        var payloadColumns=scope==ObservationReadScope.FactHistory?3:2;
         if(scope==ObservationReadScope.ExactPins)
         {
             DateTimeOffset until;
@@ -129,9 +135,16 @@ public sealed partial class PreviewDatabase
             ct.ThrowIfCancellationRequested();
             if(scope==ObservationReadScope.ExactPins&&!reader.GetBoolean(payloadColumns))throw new PreviewDeniedException();
             using var json=JsonDocument.Parse(reader.GetString(1));
-            var rows=json.RootElement.EnumerateArray().Select(row=>ReferenceJson.PreserveNumericLexemes(row.GetRawText())).ToImmutableArray();
+            var payload=json.RootElement;
+            var complete=payloadColumns<3||reader.GetBoolean(2);
+            if(scope==ObservationReadScope.ExactPins&&seriesIds is not null)
+            {
+                complete=payload.GetProperty("complete").GetBoolean();
+                payload=payload.GetProperty("rows");
+            }
+            var rows=payload.EnumerateArray().Select(row=>ReferenceJson.PreserveNumericLexemes(row.GetRawText())).ToImmutableArray();
             Interlocked.Add(ref observationRowsRead,rows.Length);
-            yield return metadata.WithObservations(rows,payloadColumns<3||reader.GetBoolean(2));
+            yield return metadata.WithObservations(rows,complete);
         }
     }
 }

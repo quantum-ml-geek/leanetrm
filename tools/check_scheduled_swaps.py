@@ -113,6 +113,9 @@ def run_checks(url,query=None,manifest=None,*,run_worker):
     body={**context,'operationId':str(uuid4()),'bookId':catalog['books'][0]['id'],'executedAt':None,'quantity':None,'fixedCoefficient':None,'discounting':False,'fixed':None,'floating':None,
           'definitionRevisionId':index['definitionRevisionId'],'commodity':index['commodity'],'swapType':'scheduled_financial_swap','firstCoefficient':'-1',
           'scheduled':dict(implementation='whole_term_scheduled_financial_swap_v1',first=side(True,['100','200']),second=side(False,['150','100'])),**trade_booking()}
+    if query:
+        from check_swap_settlement import check_pnl_scope
+        check_pnl_scope(c,query,body,context,f['at'])
     missing_selection=deepcopy(body);del missing_selection['scheduled']['second']['periods'][1]['floating']['settlement']
     assert c.call('swaps/preview',missing_selection,expected=400)['code']=='request_format'
     null_selection=deepcopy(body);null_selection['scheduled']['second']['periods'][1]['floating']['settlement']=None

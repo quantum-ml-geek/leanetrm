@@ -253,6 +253,51 @@ def run_checks(query, manifest):
     side = query(f"SELECT side_id FROM trading.side_schedules WHERE id='{schedule}';")
     assert query(f"SELECT count(*) FROM trading.side_calendar_bindings WHERE side_id='{side}';") == '3'
     assert query(f"SELECT count(*) FROM trading.side_calendar_bindings WHERE side_id='{side}' AND applicable;") == '2'
+    # Two purposes share one exact publication. Its visibility work must not
+    # grow with unrelated publications or repeat the same authority lookup.
+    query("""CREATE FUNCTION security.synthetic_calendar_visibility(catalog uuid,schedule uuid) RETURNS boolean
+      LANGUAGE sql VOLATILE SECURITY DEFINER SET search_path=pg_catalog AS
+      'SELECT security.side_calendar_proofs_visible(catalog,schedule,NULL)';
+      ALTER FUNCTION security.synthetic_calendar_visibility(uuid,uuid) OWNER TO openetrm_security_owner;
+      REVOKE ALL ON FUNCTION security.synthetic_calendar_visibility(uuid,uuid) FROM PUBLIC;
+      GRANT EXECUTE ON FUNCTION security.synthetic_calendar_visibility(uuid,uuid) TO preview_runtime;""")
+    try:
+        token=query(f"SET SESSION AUTHORIZATION preview_authenticator;SELECT security.issue_context('https://preview.invalid','trader','human_interactive','{manifest['tenantId']}','{manifest['workspaceId']}',NULL,'preview_runtime',60);")
+        work=query(f"""SET track_functions='all';SET SESSION AUTHORIZATION preview_runtime;BEGIN;
+          SELECT security.use_context('{token}');
+          SELECT security.synthetic_calendar_visibility('{catalog}','{schedule}');
+          SELECT jsonb_object_agg(funcname,calls) FROM pg_stat_xact_user_functions
+           WHERE schemaname='security' AND funcname IN('side_calendar_cutoff','reference_access','market_access');ROLLBACK;""").splitlines()
+        assert work[-2]=='t',work
+        counts=json.loads(work[-1])
+        assert counts=={'side_calendar_cutoff':1,'reference_access':1,'market_access':1},counts
+        errors=[];results=[]
+        holder=Thread(target=blocking_query,args=("SET application_name='synthetic_proof_holder';BEGIN;LOCK TABLE market_data.market_knowledge_receipts IN ACCESS EXCLUSIVE MODE;SELECT pg_sleep(4);COMMIT;",))
+        holder.start();deadline=time.monotonic()+3
+        while query("SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE application_name='synthetic_proof_holder' AND wait_event='PgSleep');")!='t':
+            if time.monotonic()>deadline:raise AssertionError('The synthetic proof relation lock was not acquired')
+            time.sleep(.02)
+        reader=None
+        def read_proof():
+            try:
+                results.append(query(f"SET application_name='synthetic_proof_reader';SET SESSION AUTHORIZATION preview_runtime;BEGIN;SELECT security.use_context('{token}');SELECT security.synthetic_calendar_visibility('{catalog}','{schedule}');COMMIT;"))
+            except RuntimeError as error:errors.append(str(error))
+        try:
+            query(f"UPDATE security.role_grants SET granted_to=clock_timestamp()+interval '2 seconds' WHERE id IN({ids});")
+            reader=Thread(target=read_proof);reader.start();deadline=time.monotonic()+2
+            while query("SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE application_name='synthetic_proof_reader' AND wait_event='relation');")!='t':
+                if time.monotonic()>deadline:raise AssertionError('The calendar proof reader did not wait on the receipt relation')
+                time.sleep(.02)
+            reader.join(6);holder.join(6)
+            assert not reader.is_alive() and not holder.is_alive()
+            assert not errors and results==['f'],(errors,results)
+        finally:
+            if reader is not None:reader.join(8)
+            holder.join(8)
+            query(';'.join(f"UPDATE security.role_grants SET granted_to='{g['until']}' WHERE id='{g['id']}'" for g in grants)+';')
+        assert runtime(f"SELECT security.synthetic_calendar_visibility('{catalog}','{schedule}');")=='t'
+    finally:query('DROP FUNCTION security.synthetic_calendar_visibility(uuid,uuid);')
+    print('PASS calendar proof visibility resolves one cutoff and checks each distinct retained publication once and refuses authority expired during a proof wait',flush=True)
     assert query("SELECT count(*) FROM pg_constraint WHERE conrelid='trading.side_calendar_bindings'::regclass AND contype='f' AND confrelid='ref_data.calendars'::regclass;") == '1'
     assert runtime(f"SELECT count(*) FROM trading.side_calendar_bindings WHERE side_id='{side}';") == '0', 'Staging is not published business data.'
     query(f"DO $$BEGIN BEGIN UPDATE trading.side_calendar_bindings SET applicable=false WHERE side_id='{side}';"

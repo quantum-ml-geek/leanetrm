@@ -5,6 +5,16 @@ from assistant_context import check_guard, migration_body
 
 # Installed consumers, kept separately from the migration guard documents.
 REQUIRED_SIGNATURES = {
+    '0337': {
+        'trading.scheduled_swap_terms(uuid,uuid,integer,uuid)',
+        'security.side_calendar_policy_document(uuid,uuid)',
+    },
+    '0336': {
+        'security.side_calendar_proofs_visible(uuid,uuid,uuid)',
+        'security.side_calendar_cutoff(uuid,uuid)',
+        'security.reference_access(uuid,text)',
+        'security.market_access(uuid,text)',
+    },
     '0335': {
         'security.side_payment_provenance(uuid,uuid,uuid,date,date)',
         'ref_data.clock_boundary(uuid,uuid,text,date)',
@@ -170,6 +180,7 @@ def run_checks(query, migration):
         signature='trading.swap_revision_terms(uuid,uuid,integer)'
         change=f"DO $test$DECLARE source text=pg_get_functiondef('{signature}'::regprocedure);BEGIN IF strpos(source,'selected_revision integer DEFAULT NULL::integer')=0 THEN RAISE EXCEPTION 'Synthetic default fixture changed';END IF;EXECUTE replace(source,'selected_revision integer DEFAULT NULL::integer','selected_revision integer DEFAULT 1');END$test$;"
         check_guard(query,migration.read_text(),'0321','calendar_contract_upgrade',[(change,signature)])
+    if migration.name[:4] in ('0321','0337'):
         for view in ('trading.scheduled_swap_term_projection','trading.swap_period_input_projection'):
             changes=[(sql,view) for sql in (
                 f'ALTER VIEW {view} SET(security_invoker=false);',
@@ -183,7 +194,7 @@ def run_checks(query, migration):
                 f"UPDATE pg_rewrite SET ev_enabled='D' WHERE ev_class='{view}'::regclass;",
                 f"DO $$DECLARE d text=pg_get_viewdef('{view}'::regclass);BEGIN EXECUTE 'CREATE OR REPLACE VIEW {view} WITH(security_invoker=true) AS '||replace(d,'''calendar''','''synthetic_drift''');END$$;",
             )]
-            check_guard(query,migration.read_text(),'0321','calendar_contract_upgrade',changes)
+            check_guard(query,migration.read_text(),migration.name[:4],'calendar_contract_upgrade',changes)
     owned=[d['signature'] for d in dependencies if d['owner']=='@migration_owner']
     for owner in ('Synthetic Calendar Owner', 'select') if owned else ():
         quoted='"'+owner+'"'

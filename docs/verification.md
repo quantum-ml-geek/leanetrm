@@ -23,12 +23,28 @@ each owned consumer exactly once across the matrix.
 The integrated calendar/lifecycle runner contains 183 commands: 63 shared checks,
 63 isolated application previews and 57 partition-specific native/application
 checks. Local integration checks passed 737 managed core checks, 88 rate checks,
-1,806 frontend checks and 121 Python checks. Calendar migrations 0318–0335 follow
+1,806 frontend checks and 121 Python checks. Calendar migrations 0318–0337 follow
 the lifecycle schema without changing any published predecessor migration.
 Migration 0321 checks the exact retained schedule views, including invoker
 semantics, ownership, ACLs, column grants and rewrite rules. Its parity qualifier
 preserves economic values, period order, evidence and required-child refusal
 while comparing the explicitly changed calendar authoring shape.
+
+Migration 0336 resolves a calendar visibility cutoff once and checks each distinct
+retained publication once per invocation. Native checks independently count that
+work, refuse authority that expires during a proof-relation lock wait, and reject
+helper definition or privilege drift. The proof retains its exact publication
+transaction, sealed reference states and original knowledge boundary.
+Series-filtered exact observation frames stream in order while checking every
+original pin, including pins outside the requested series. Native checks cover
+partial and empty payloads, unavailable pins, later-frame faults and authority
+expiry. Selected-trade P&L checks refuse a hidden latest head and remain unchanged
+when an unrelated instrument is hidden.
+Migration 0337 selects the exact scheduled trade revision before Side aggregation.
+Its work check requires two Side calendar reads for one two-Side trade and none
+for an absent revision. Native parity retains amounts, dates, evidence, ordering,
+required-child refusal and caller settings. Both runtime and worker checks retain
+the invoker view's table and all five consumed-column permissions.
 
 The fixed-loan-fee consumer qualifies migration 0308 through native, managed and
 real browser paths on stock PostgreSQL 18.1 with synthetic data. The gas

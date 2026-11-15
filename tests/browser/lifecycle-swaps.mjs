@@ -60,7 +60,9 @@ export async function swapLifecycleFixture(driver,name,{net=false,shared=false}=
   await evaluate(`[...document.querySelectorAll('#desk-positions .tabulator-row[data-row-key]')].find(r=>r.dataset.rowKey.startsWith(${q(selected.tradeId+':')})).click()`);await wait('!document.querySelector("#position-details").hidden&&'+idle);
   await click('#position-details-tabs-terms');await wait('!!document.querySelector("#side-panel-settlement")&&'+idle);await click('#side-panel-settlement');await wait('!document.querySelector("#swap-settlement").hidden&&'+idle);
  }
- async function lifecycle(){await click('#nav-lifecycle');await wait(`document.querySelector(${q(root)})?.hidden===false&&document.querySelector(${q(root+' [data-lifecycle="rows"] .table-search')})&&${idle}`,60000);
+ async function lifecycle(){
+  try{await wait(`(()=>{const button=document.querySelector('#nav-lifecycle');if(!(${idle})||button.disabled)return false;button.click();return true;})()`);await wait(`document.querySelector(${q(root)})?.hidden===false&&document.querySelector(${q(root+' [data-lifecycle="rows"] .table-search')})&&${idle}`,60000);}
+  catch(error){throw Error(error.message+' · observed '+JSON.stringify(await evaluate("({busy:document.body.getAttribute('aria-busy'),pageHidden:document.querySelector('#lifecycle-page').hidden,navigationDisabled:document.querySelector('#nav-lifecycle').disabled,error:document.querySelector('#error').textContent,notice:document.querySelector('#notice').textContent,lifecycle:document.querySelector('#lifecycle-page').textContent.slice(0,1500)})")));}
   await set(root+' [data-lifecycle="rows"] .table-search',selected.reference);await wait(idle);
  }
  async function action(code,membership=0){await lifecycle();const occurrence=code==='swap.net'?null:await evaluate(`window.__swapFixture.occurrences.find(o=>o.membership_ordinal===${membership}).occurrence_id`),profile=code==='swap.net'?null:await evaluate(`window.__swapFixture.profiles.find(p=>p.action===${q(code)}&&p.membership===${membership}).id`);

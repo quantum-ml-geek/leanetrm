@@ -135,8 +135,46 @@ def child_visibility_checks(query,manifest,prepared=False):
     assert booked['tradeId']in actual
 
 
-def projection_parity(query,manifest,as_of,require_observations=True):
+def selected_view_authority(query,read,role):
+    view='trading.scheduled_swap_term_projection'
+    columns=['catalog_id','trade_id','revision','instrument_id','scheduled_data']
+    baseline=read()
+    query(f'REVOKE SELECT ON {view} FROM {role};')
+    try:
+        for allowed in ([],columns,*(columns[:i]+columns[i+1:] for i in range(len(columns)))):
+            if allowed:query(f"GRANT SELECT({','.join(allowed)}) ON {view} TO {role};")
+            try:
+                try:actual=read()
+                except RuntimeError as error:
+                    assert len(allowed)<len(columns) and 'permission denied' in str(error),str(error)
+                else:assert len(allowed)==len(columns) and actual==baseline,(role,allowed)
+            finally:
+                if allowed:query(f"REVOKE SELECT({','.join(allowed)}) ON {view} FROM {role};")
+    finally:query(f'GRANT SELECT ON {view} TO {role};')
+    print(f'PASS selected scheduled terms preserve current view and all five column permissions for {role}',flush=True)
+
+
+def selected_term_work(query,manifest,as_of):
     catalog,tenant,workspace=(manifest[k]for k in('catalogId','tenantId','workspaceId'))
+    selected=json.loads(query(f"SELECT jsonb_build_object('trade',r.trade_id,'revision',r.revision,'instrument',r.instrument_id) FROM trading.swap_trade_revisions r JOIN trading.swap_instruments i ON(i.catalog_id,i.instrument_id)=(r.catalog_id,r.instrument_id) WHERE r.catalog_id='{catalog}' AND i.scheduled_first_id IS NOT NULL ORDER BY r.trade_id,r.revision LIMIT 1;"))
+    for revision,expected_calls in ((selected['revision'],2),(2147483647,0)):
+        token=query("SET SESSION AUTHORIZATION preview_authenticator;SELECT security.issue_context("
+            f"'https://preview.invalid','trader','human_interactive','{tenant}','{workspace}',NULL,'preview_runtime',60);")
+        result=query(rf"""SET track_functions='all';SET SESSION AUTHORIZATION preview_runtime;BEGIN;
+          SELECT security.use_context('{token}');
+          SELECT security.capture_date_context('{catalog}','{as_of[:10]}',NULL) AS context \gset
+          SELECT security.use_market_context('{catalog}',:'context');SELECT security.use_trading_context('{catalog}','{as_of}');
+          SELECT trading.scheduled_swap_terms('{catalog}','{selected['trade']}',{revision},'{selected['instrument']}') IS NOT NULL;
+          SELECT coalesce(sum(calls),0) FROM pg_stat_xact_user_functions WHERE schemaname='security' AND funcname='side_calendar_policy_document';ROLLBACK;""").splitlines()
+        assert result[-2]==('t' if expected_calls else 'f') and int(result[-1])==expected_calls,result[-2:]
+    print('PASS exact scheduled-term selection renders only its two Sides and does no calendar work for an absent revision',flush=True)
+
+
+def projection_parity(query,manifest,as_of,require_observations=True):
+    selected_term_work(query,manifest,as_of)
+    catalog,tenant,workspace=(manifest[k]for k in('catalogId','tenantId','workspaceId'))
+    authored=json.loads(query(f"SELECT coalesce(jsonb_agg(jsonb_build_object('trade',trade_id,'revision',revision,'terms',request->'body'->'scheduled')),'[]'::jsonb) FROM trading.swap_trade_revisions WHERE catalog_id='{catalog}' AND request->'body'->'scheduled' IS NOT NULL;"))
+    policies={(row['trade'],row['revision']):row['terms'] for row in authored}
     def runtime(sql):
         token=query("SET SESSION AUTHORIZATION preview_authenticator;SELECT security.issue_context("
             f"'https://preview.invalid','trader','human_interactive','{tenant}','{workspace}',NULL,'preview_runtime',60);")
@@ -151,7 +189,7 @@ def projection_parity(query,manifest,as_of,require_observations=True):
                 for slot in ('first','second'):
                     side=row['scheduled_data']['terms'][slot]
                     if side is None:continue
-                    expected=all_dates_policy(observation=slot=='second')
+                    expected=policies[(row['trade_id'],row['revision'])][slot]['calendarPolicy']
                     if view=='trading.swap_revision_projection':
                         assert side['calendarPolicy']==expected,'The exact authored synthetic calendar policy changed'
                         continue
@@ -177,6 +215,8 @@ def projection_parity(query,manifest,as_of,require_observations=True):
     assert read(old)==read(new) and read(new)[0]=='value'
     expected=json.loads(read(new)[1])
     assert any(row['scheduled_data'] is not None for row in expected)
+    selected=next(row for row in expected if row['scheduled_data'] is not None)
+    selected_view_authority(query,lambda:runtime(bind+f"SELECT trading.scheduled_swap_terms('{catalog}','{selected['trade_id']}',{selected['revision']},'{selected['instrument_id']}');"),'openetrm_runtime')
     scoped=runtime(bind+'SET LOCAL join_collapse_limit=1;'
         f"SELECT coalesce(jsonb_agg(to_jsonb(r) ORDER BY r.trade_id,r.revision),'[]'::jsonb) FROM {new} r;"
         "SELECT current_setting('join_collapse_limit');").splitlines()
@@ -210,6 +250,8 @@ def worker_policy_checks(query,manifest,request,frame,submit):
         assert claimed['jobId']==job['jobId'],claimed
         return job['jobId'],claimed['leaseToken']
     read=f"SELECT count(*)FROM trading.books WHERE catalog_id='{catalog}';"
+    job,lease=start('scheduled_view_permission')
+    selected_view_authority(query,lambda:work(f"BEGIN;SELECT risk.bind('{job}','{lease}');SELECT trading.scheduled_swap_terms('{catalog}',NULL,NULL,NULL) IS NULL;ROLLBACK;").splitlines()[-1],'openetrm_risk_worker')
     for label,change in(
         ('cancel',lambda job:f"UPDATE risk.jobs SET state='cancellation_requested' WHERE id='{job}';"),
         ('lease',lambda job:f"UPDATE risk.jobs SET lease_expires_at=clock_timestamp()-interval '1 second'WHERE id='{job}';"),
