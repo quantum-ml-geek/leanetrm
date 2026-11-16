@@ -480,6 +480,136 @@ without an assertion failure. Other verification groups retain 45 minutes. All g
 and release dependencies remain unchanged; this is CI capacity, not a pricing or
 production-runtime limit.
 
+## Option strategy viewer (D409)
+
+Runs on 16 November 2026 at the branch head, after merging master with the
+option analytics (D408) and the operating-facility work (D412) in it, with
+synthetic data, on the local machine (macOS 26.6
+arm64 with 14 logical processors, .NET 10.0.13, Node 24.22.0), from Debug builds. It
+has no PostgreSQL, so the database-backed exchange check ran in a disposable
+PostgreSQL 18 cluster in a container on a separate two-CPU Linux host, from a
+Debug build, on the tree before the operating-facility work was merged in.
+Neither machine runs the browser suites under `tests/browser`. The pull
+request's CI ran them on an earlier tree of this branch, before master's D407
+was merged in: its exchange group passed, with the Options suite's 32 checks,
+the Strategy step among them.
+
+| Run | Where | Result |
+| --- | --- | --- |
+| MarketData checks `--option-strategies` | local | exit 0, 24 PASS |
+| MarketData checks `--option-sensitivities`, `--vol-surface`, `--futures-options` | local | exit 0; 8, 19 and 68 PASS |
+| Api checks `--schedules` (with the option request, position and strategy request checks) | local | exit 0, 436 PASS |
+| Api checks `--async-read-contracts`, `--assistant-workspace` | local | exit 0; 1 and 21 PASS |
+| `npm test --prefix web` | local | 1,935 pass |
+| `python3 -m unittest tests.test_ci_impact tests.test_check_all tests.test_migration_identity tests.test_ci_dependencies tests.test_public_routes` | local | 69 OK |
+| `run_preview.py --check --exchange-check` | container | exit 0, 368 PASS |
+
+What the local checks cover:
+
+- **Payoff at expiry.** Thirteen cases worked by hand at a multiplier of
+  10,000: a long call, a long straddle, a short put (its loss bounded by a
+  futures price of zero), a call spread, an iron condor, a butterfly, a risk
+  reversal for no premium (a breakeven range), a ratio spread (an unbounded
+  loss), a breakeven that is not a terminating decimal, a payoff that is zero
+  from a price upward, one that only touches zero at a strike, one that is
+  zero at a futures price of zero, and a put bought for nothing. Each states
+  the net premium, both extremes with their bounds and the breakevens; the
+  curve is checked at price points, at a strike between them and with a strike
+  below them all. The independent review also compared 200,000 random leg sets
+  with a separate rational calculation and found no difference; that
+  comparison is not a check in the repository.
+- **Dated curves.** Bought calls and sold puts of the option fixture, at three
+  futures prices, two instants and a volatility shift, against direct tree
+  prices of each leg at that price, instant and volatility; the unshifted
+  curve at the valuation instant against the legs' base values; a refusal when
+  a leg is valued at intrinsic or did not calibrate, and `scenario_volatility`
+  when the largest shift a request may state leaves no volatility; an instant
+  at the legs' instruction cutoff, too many prices and a missing portfolio
+  each failing as an error and not as a refusal; and two runs from the same
+  inputs agreeing.
+- **Requests.** Without a database: a complete request, 30 incomplete or
+  unoffered ones each refused with its code, a request at every limit accepted
+  and one beyond each refused, the asynchronous channel admitting the same
+  typed request and nothing less, the setup's offer drawn from a stored
+  surface alone (templates, range, days on a clock up to before the cutoff,
+  a clock the host cannot count on, policies that an analysis accepts back),
+  and a strategy's figures as its legs' scaled and added.
+- **Web.** The view model and chart options as unit tests, and the Strategy
+  view drawn in a headless browser over stubbed reads: the setup's offers, a
+  template analysed with the offered policies sent back, a leg from the chain,
+  a stale analysis, a refusal that keeps the legs, refused dated curves, a
+  replaced analysis cancelled and its answer dropped, the keyboard's focus
+  kept when the legs are redrawn, an answer leaving a number being typed
+  alone, and another product chosen while an analysis is awaited.
+
+Measured here through the scenario layers, for the limits a request states
+(`MarketData checks --option-strategy-workload <points> <curves>`, two legs on
+two unique series of the option fixture, a volatility shift on every sample,
+one thread):
+
+| Build | Points | Curves | Scenarios | Tree prices | Elapsed | Per tree price | Allocated |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Release | 21 | 2 | 42 | 88 | 3.2 s | 36 ms | 3.9 GB |
+| Release | 41 | 3 | 123 | 252 | 9.1 s | 36 ms | 11.1 GB |
+| Debug | 21 | 2 | 42 | 88 | 5.3 s | 60 ms | 3.9 GB |
+
+A tree price is one 400-step tree in 30-digit decimal arithmetic and allocates
+about 44 MB as it runs. A request at every limit (4 legs, 41 points, 3 curves)
+is about 500 tree prices for its curves (492 scenario prices and one base
+price per leg for each set) and about 68 for its sensitivities, beyond
+calibration: of the order of 20 s of one thread in Release here, spread over
+the curve sets and the sensitivities, which run side by side. That is why the
+analysis is an asynchronous read and why the limits are no higher. These are
+observations on one machine, not a performance qualification; CI's runners
+have been about half as fast per thread.
+
+The exchange run is of
+the tree before master's operating-facility migrations 0342 and 0343 were
+merged in; they follow the option analytics migration 0341, and this change
+adds no migration. It had master's migrations 0339 and 0340 applied before
+0341; an earlier run, before those were merged in, also passed (exit 0, 363
+PASS).
+
+The exchange run covers, against the exchange example with its surface fitted
+at a working snapshot: the setup offering the seven templates at the series'
+settlements, a price range, the days before the cutoff on the surface's clock
+and the policies; a straddle analysed over HTTP with its exact premium, largest
+loss, unbounded profit and two breakevens; each leg's volatility equal to the
+stored surface's and its delta within 0.02 of it; the strategy's value as its
+legs' scaled and added; the dated curve at the valuation instant never below
+the payoff at expiry; a volatility shift raising that curve and leaving the
+payoff alone; eleven requests beyond a limit or outside the offer each refused
+with its code; a leg valued at intrinsic said on its row with the dated curves
+refused and the payoff still stated; and no surface revision stored.
+
+Measured in that run for one analysis (2 legs, 11 points, 1 curve): 22
+calibration and 64 valuation tree prices in 4.2 s on the two-CPU host (4.5 s
+in the earlier run).
+
+The first exchange run stopped at the first analysis, exit 1 with 296 PASS: the
+read resolved the product's market source without the view's own market data,
+which a working snapshot refuses `market_inputs`. No local check could see
+that. The script's own first draft also compared a count with `len()`, which
+the independent review found by reading before any run.
+
+Not run, because the host's container cannot start the browser; it runs in the
+pull request's CI:
+
+- The Strategy step of `tests/browser/options.mjs`, which runs the analysis in
+  the application over the asynchronous read channel. Every expression of the
+  suite compiles, and the Strategy checks as the suite composes them hold
+  against the view drawn over stubbed reads; neither is a run against the
+  application.
+
+Not covered: no check compares the analysis over the asynchronous channel with
+the same analysis over ordinary HTTP value for value, as the workbench
+qualification does for its reads; the browser step is to exercise the channel
+and the exchange check exercised the ordinary route. No check runs the setup or the analysis at
+a recorded close or a retained context over HTTP (the example's frames are
+working snapshots; the close's clock rule is covered without a database), none
+asserts the refusal of a reader without Read trades (the endpoints are wired
+as the positions read is), and none times an analysis in the application.
+
 ## Option analytics and the Options page (D408)
 
 Runs on 15 November 2026 at the branch head, with synthetic data. The local
