@@ -1,6 +1,7 @@
 """Shared asynchronous workbench reads in the launcher-owned synthetic database."""
 import http.client
 import json
+import threading
 import time
 from urllib.parse import urlsplit
 from uuid import uuid4
@@ -223,4 +224,66 @@ def run_checks(url, query, psql, environment, manifest):
         stream.close()
         for grant in saved:
             query(f"UPDATE security.role_grants SET granted_to='{grant['until']}'::timestamptz WHERE id='{grant['id']}';")
+    # The ordinary routes of the covered reads execute outside the session gate (docs/async-reads.md).
+    LOCK='LOCK market_data.observations IN ACCESS EXCLUSIVE MODE'
+    def tab():
+        """Another connection of the same session, so requests overlap as a page's do."""
+        other=PreviewClient(url);other.session=c.session;other.token=c.token
+        for cookie in c.jar:other.jar.set_cookie(cookie)
+        return other
+    def background(path,body,expected=200):
+        result={}
+        def work():
+            try:result['value']=tab().call(path,body,expected=expected)
+            except Exception as error:result['error']=repr(error)
+        thread=threading.Thread(target=work);thread.start()
+        return thread,result
+    def beside():
+        thread,held=background('portfolio/risk',risk);waiting(1)
+        started=time.monotonic();c.call('access',timeout=5)
+        return thread,held,time.monotonic()-started
+    thread,held,elapsed=holding(psql,environment,LOCK,beside);thread.join(timeout=20)
+    check('an ordinary request proceeds beside an ordinary read that waits in the database',elapsed<2 and
+          financial_response('portfolio.risk.calculate.v1',held.get('value'))==financial_response('portfolio.risk.calculate.v1',expected['portfolio.risk.calculate.v1']))
+    def three():
+        reads=[background('evaluate',curve) for _ in range(3)];waiting(2);time.sleep(.3);waiting(2)
+        return reads
+    reads=holding(psql,environment,LOCK,three)
+    for thread,_ in reads:thread.join(timeout=20)
+    check('a third ordinary read of one session waits for a slot, then completes',all(read.get('value')==expected['curve.evaluate.v1'] for _,read in reads))
+    def switched():
+        thread,held=background('portfolio/risk',risk,expected=403);waiting(1)
+        c.call('profile',{'profile':'viewer'},timeout=5)
+        return thread,held
+    thread,held=holding(psql,environment,LOCK,switched);thread.join(timeout=20)
+    check('a profile switch during an ordinary read refuses its answer',(held.get('value') or {}).get('code')=='access_denied')
+    c.call('profile',{'profile':'risk'})
+    saved=json.loads(query(f"SELECT json_agg(json_build_object('id',id,'until',granted_to)) FROM security.role_grants WHERE principal_id={principal};"))
+    try:
+        def expires_ordinary():
+            query(f"UPDATE security.role_grants SET granted_to=clock_timestamp()+interval '2 seconds' WHERE principal_id={principal};")
+            thread,held=background('portfolio/risk',risk,expected=403);waiting(1)
+            deadline=time.monotonic()+5
+            while query(f"SELECT bool_and(granted_to<clock_timestamp()) FROM security.role_grants WHERE principal_id={principal};")!='t':
+                assert time.monotonic()<deadline,'The owned Risk role did not expire'
+                time.sleep(.025)
+            return thread,held
+        thread,held=holding(psql,environment,LOCK,expires_ordinary);thread.join(timeout=20)
+        check('Risk authority expiring during an ordinary read prevents its answer',(held.get('value') or {}).get('code')=='access_denied')
+    finally:
+        for grant in saved:
+            query(f"UPDATE security.role_grants SET granted_to='{grant['until']}'::timestamptz WHERE id='{grant['id']}';")
+    # History prepares an ordinary session itself; the response channel still refuses an unprepared one.
+    def unprepared():
+        fresh=PreviewClient(url);boot=fresh.bootstrap();fresh.call('profile',{'profile':'risk'})
+        at=next(f for f in boot['frames'] if f['at'].startswith('2020-12-18'))
+        body={'snapshotId':at['id'],'curve':'local_power','includeSources':False,'includeWorkspace':False,'contractDisplay':curve['contractDisplay']}
+        contract=fresh.call('evaluate',body)['points'][0]['contractId']
+        return fresh,{'snapshotId':at['id'],'curve':'local_power','contractId':contract,'revisionPolicy':'exact_snapshot_pins_v1'}
+    fresh,history_read=unprepared()
+    check('ordinary history discovers its session frames',len(fresh.call('history',history_read)['points'])>0)
+    fresh,history_read=unprepared()
+    owned=fresh.call('async-reads/channels',{'clientId':str(uuid4())})['channelId']
+    refused=fresh.call('async-reads',{'channelId':owned,'requestId':str(uuid4()),'operation':'curve.history.v1','body':history_read},expected=409)
+    check('the response channel refuses history before its session is prepared',refused['code']=='async_workspace_not_ready')
     print(f'{passed} asynchronous workbench HTTP checks passed.',flush=True)
