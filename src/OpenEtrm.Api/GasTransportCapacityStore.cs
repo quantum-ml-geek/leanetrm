@@ -198,10 +198,14 @@ public sealed partial class GasTransportCapacityStore(PreviewDatabase database)
     private static JsonElement Receipt(Guid operation,JsonElement command,JsonElement outcome)=>Json(new{operationId=operation,entitlementId=command.Id("entitlementId"),kind=command.Text("kind"),outcome});
     public async Task<JsonElement> Status(NpgsqlConnection c,FacilityStatusRequest request,CancellationToken ct)
     {
-        await Capture(c,null,ct);await RequireOwner(c,request.OwnerId,ct);if(request.OperationId==Guid.Empty)throw Invalid();
-        var value=await Outcome(c,request.OperationId,ct);if(!value.GetProperty("found").GetBoolean())return value;
+        if(request.OperationId==Guid.Empty)throw Invalid();
+        // Native status captures both conditional write candidates before its
+        // first scope/publication wait. Keep that original bound through owner
+        // resolution, including the base-only deadline for an absent receipt.
+        var value=await Outcome(c,request.OperationId,ct);
         var admission=StatusAdmission(Catalog,value);
         database.RegisterCommitAdmission(c,admission);await admission.RequireCommit(c,ct);
+        await RequireOwner(c,request.OwnerId,ct);if(!value.GetProperty("found").GetBoolean())return value;
         return Json(new{operationId=request.OperationId,entitlementId=value.Id("entitlementId"),kind=value.Text("kind"),outcome=value.GetProperty("outcome"),
             command=GasTransportCapacityCommands.Normalize(request.OperationId,value.GetProperty("command")),effectiveAt=TradingInstant.Parse(value.Text("effectiveAt"),"gas_transport_capacity_context")});
     }
@@ -209,7 +213,10 @@ public sealed partial class GasTransportCapacityStore(PreviewDatabase database)
     {
         try
         {
-            var kind=status.Text("kind");if(kind is not("define" or "plan"))throw Source();
+            var absent=false;
+            if(status.TryGetProperty("found",out var found))
+            {if(found.ValueKind is not(JsonValueKind.True or JsonValueKind.False))throw Source();absent=!found.GetBoolean();}
+            string? kind=absent?null:status.Text("kind");if(!absent&&kind is not("define" or "plan"))throw Source();
             return new(catalog,kind,TradingInstant.Parse(status.Text("authorityUntil"),"gas_transport_capacity_source"));
         }
         catch(Exception error)when(error is KeyNotFoundException or InvalidOperationException or FormatException or ArgumentException){throw Source();}

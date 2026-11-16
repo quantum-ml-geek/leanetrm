@@ -29,6 +29,11 @@ internal static class GasTransportCapacitySourceChecks
         var admission=GasTransportCapacityStore.StatusAdmission(id,recovery);
         if(admission.Catalog!=id||admission.Kind!="plan"||admission.Until!=originalUntil)
             throw new Exception("Status recovery renewed the original native kind deadline before managed final publication.");
+        var absent=GasTransportCapacityStore.StatusAdmission(id,JsonSerializer.SerializeToElement(new{found=false,authorityUntil=originalUntil}));
+        if(absent.Catalog!=id||absent.Kind is not null||absent.Until!=originalUntil)
+            throw new Exception("An absent receipt must retain its original base read deadline through owner lookup and commit, without requiring a write grant.");
+        Reject(()=>GasTransportCapacityStore.StatusAdmission(id,JsonSerializer.SerializeToElement(new{found=false})),"gas_transport_capacity_source");
+        Reject(()=>GasTransportCapacityStore.StatusAdmission(id,JsonSerializer.SerializeToElement(new{found="false",authorityUntil=originalUntil})),"gas_transport_capacity_source");
         Reject(()=>GasTransportCapacityStore.StatusAdmission(id,JsonSerializer.SerializeToElement(new{kind="plan"})),"gas_transport_capacity_source");
         Reject(()=>GasTransportCapacityStore.StatusAdmission(id,JsonSerializer.SerializeToElement(new{kind="unknown",authorityUntil=originalUntil})),"gas_transport_capacity_source");
         var request=new{context=new FacilityQuantityContext("2032-03-14","current",null,FacilityQuantityStore.Convention),ownerId="synthetic actor",operationId=Guid.NewGuid(),

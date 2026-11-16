@@ -95,7 +95,64 @@ def authority(f, rejected):
         assert f.call("SELECT security.has_permission('ConfigureGasServices');")=='t'
         assert q(f"SELECT count(*) FROM trading.gas_transport_capacity_commands WHERE(catalog_id,operation_id)=('{f.catalog}','{pending_operation}');")=='0'
     finally:restore()
+    scope_entry_waits(f,rejected)
     print('PASS original producer and status conditional deadlines survive real publication waits and active successor grants; a fresh authorized recovery retains the accepted outcome.',flush=True)
+
+
+def scope_entry_waits(f,rejected):
+    """Conditional admission precedes a supported initial scope-table wait."""
+    q,manifest=f.query,f.manifest
+    role=q("SELECT id FROM security.roles WHERE code='trader';")
+    actor=q("SELECT principal_id FROM security.identity_bindings WHERE subject='trader';")
+    operation=str(uuid4())
+    original=f.record(f.definition('synthetic_entry_scope_recovery'),operation=operation)
+    # Absence is a read even when neither possible write permission is present.
+    q(f"DELETE FROM security.role_permissions WHERE role_id='{role}' AND permission IN('ConfigureGasServices','RecordGasOperations');")
+    try:
+        before=q(f"SELECT max(publication_order) FROM trading.publications WHERE catalog_id='{f.catalog}';")
+        absence=json.loads(f.call(f"SELECT security.gas_transport_capacity_status('{f.catalog}','{uuid4()}')::text;"))
+        assert not absence['found'] and absence['authorityUntil']
+        assert q(f"SELECT max(publication_order) FROM trading.publications WHERE catalog_id='{f.catalog}';")==before
+    finally:
+        q(f"INSERT INTO security.role_permissions VALUES('{role}','ConfigureGasServices'),('{role}','RecordGasOperations');")
+    for mode in ('status','record','status_missing','record_missing'):
+        source=f.capture()
+        temporary,first,successor=[str(uuid4()) for _ in range(3)]
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            blocker=pool.submit(q,"SET application_name='synthetic_capacity_entry_scope';BEGIN;LOCK TABLE security.market_catalog_scopes IN ACCESS EXCLUSIVE MODE;SELECT pg_sleep(8);COMMIT;")
+            until=time.monotonic()+5
+            while q("SELECT count(*) FROM pg_stat_activity WHERE application_name='synthetic_capacity_entry_scope' AND wait_event='PgSleep';")!='1':
+                assert time.monotonic()<until
+                time.sleep(.02)
+            original_grant='' if mode.endswith('_missing') else (
+                f"INSERT INTO security.role_grants VALUES('{first}','{actor}','{temporary}','{manifest['tenantId']}','{manifest['workspaceId']}',clock_timestamp()-interval '1 second',clock_timestamp()+interval '3 seconds',false);")
+            q(f"BEGIN;DELETE FROM security.role_permissions WHERE(role_id,permission)=('{role}','ConfigureGasServices');"
+                f"INSERT INTO security.roles VALUES('{temporary}','synthetic_capacity_entry_{temporary[:8]}','Synthetic capacity entry expiry');"
+                f"INSERT INTO security.role_permissions VALUES('{temporary}','ConfigureGasServices');"
+                +original_grant+
+                f"INSERT INTO security.role_grants VALUES('{successor}','{actor}','{temporary}','{manifest['tenantId']}','{manifest['workspaceId']}',clock_timestamp()+interval '5 seconds',clock_timestamp()+interval '30 seconds',false);COMMIT;")
+            generation=q('SELECT generation FROM security.epoch;')
+            try:
+                # The scope-table lock leaves grant tables free. Missing entry
+                # authority is -infinity; a later grant cannot promote it.
+                if mode.endswith('_missing'):
+                    assert f.call("SELECT security.authority_until('ConfigureGasServices')='-infinity'::timestamptz;")=='t'
+                else:
+                    assert f.call("SELECT security.has_permission('ConfigureGasServices');")=='t'
+                if mode.startswith('status'):
+                    rejected(lambda:f.call(f"SELECT security.gas_transport_capacity_status('{f.catalog}','{operation}');"),'gas_transport_capacity_denied')
+                else:
+                    rejected(lambda:f.record(f.definition('synthetic_entry_scope_write'),context=source),'gas_transport_capacity_denied')
+                blocker.result(timeout=15)
+                assert q('SELECT generation FROM security.epoch;')==generation
+                assert f.call("SELECT security.has_permission('ConfigureGasServices');")=='t'
+            finally:
+                blocker.result(timeout=15)
+                q(f"BEGIN;DELETE FROM security.role_grants WHERE id IN('{first}','{successor}');DELETE FROM security.role_permissions WHERE role_id='{temporary}';DELETE FROM security.roles WHERE id='{temporary}';"
+                    f"INSERT INTO security.role_permissions VALUES('{role}','ConfigureGasServices');COMMIT;")
+    recovered=json.loads(f.call(f"SELECT security.gas_transport_capacity_status('{f.catalog}','{operation}')::text;"))
+    assert recovered['found'] and recovered['outcome']==original
+    print('PASS initial scope waits preserve expired or missing original conditional producer/status authority with active successor grants and unchanged epoch; absent recovery retains base authority only.',flush=True)
 
 
 def directory_scope(f,rejected):

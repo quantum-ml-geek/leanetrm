@@ -154,12 +154,16 @@ DO $$DECLARE name text;BEGIN
 END$$;
 
 CREATE FUNCTION security.gas_transport_capacity_authority(catalog uuid,kind text) RETURNS timestamptz LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog AS $$
-DECLARE deadline timestamptz;permission text;BEGIN
- deadline=least(security.authority_until('ReadMarketData'),security.authority_until('ReadTrades'),security.authority_until('ReadGasOperations'));
+DECLARE deadline timestamptz;permission text;write_until timestamptz;BEGIN
  IF kind IS NOT NULL THEN
   permission=CASE kind WHEN 'define' THEN 'ConfigureGasServices' WHEN 'plan' THEN 'RecordGasOperations' ELSE NULL END;
+  IF permission IS NULL THEN RAISE EXCEPTION 'gas_transport_capacity_denied' USING ERRCODE='42501';END IF;
+  write_until=security.authority_until(permission);
+ END IF;
+ deadline=least(security.authority_until('ReadMarketData'),security.authority_until('ReadTrades'),security.authority_until('ReadGasOperations'));
+ IF kind IS NOT NULL THEN
   IF permission IS NULL OR security.trading_access(catalog,permission) IS NOT TRUE THEN RAISE EXCEPTION 'gas_transport_capacity_denied' USING ERRCODE='42501';END IF;
-  deadline=least(deadline,security.authority_until(permission));
+  deadline=least(deadline,write_until);
  END IF;
  IF security.market_access(catalog,'ReadMarketData') IS NOT TRUE OR security.trading_access(catalog,'ReadTrades') IS NOT TRUE
   OR security.trading_access(catalog,'ReadGasOperations') IS NOT TRUE OR deadline IS NULL OR clock_timestamp()>=deadline
@@ -477,8 +481,8 @@ END$$;
 
 CREATE FUNCTION security.gas_transport_capacity_status(catalog uuid,operation uuid) RETURNS jsonb LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog SET TimeZone='UTC' AS $$
 DECLARE deadline timestamptz;configure_until timestamptz;record_until timestamptz;prior trading.gas_transport_capacity_commands;actor uuid;selected_until timestamptz;BEGIN
- deadline=security.gas_transport_capacity_authority(catalog,NULL);
  configure_until=security.authority_until('ConfigureGasServices');record_until=security.authority_until('RecordGasOperations');
+ deadline=security.gas_transport_capacity_authority(catalog,NULL);
  SELECT actor_id INTO STRICT actor FROM security.request_contexts q WHERE q.backend_pid=pg_backend_pid() AND q.transaction_id=pg_current_xact_id_if_assigned() AND q.runtime_login=session_user;
  PERFORM pg_advisory_xact_lock(730849102);
  SELECT * INTO prior FROM trading.gas_transport_capacity_commands c WHERE(c.catalog_id,c.operation_id)=(catalog,operation);
