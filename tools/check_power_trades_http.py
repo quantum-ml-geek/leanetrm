@@ -50,6 +50,7 @@ def run_checks(client, query, manifest, plan, *, other_plans=()):
     assert fact['instrumentType']=='operating_right' and fact['bookedQuantity']=='1'
     holding=client.call('trading/position',dict(context=context,tradeId=saved['tradeId'],bindingId=saved['bindingId'],revision=1,instrumentType='operating_right'))['holding']
     assert Fraction(holding['presentValue'])==610 and holding['sideSchedules']
+    upgrade_positions=[dict(kind='battery',request=request,saved=saved,value=610)]
     for kind,physical_plan,expected_value,expected_gross in other_plans:
         other=deepcopy(request)
         other.update(operationId=str(uuid4()),reason='Synthetic '+kind+' operating-right contract',plan=deepcopy(physical_plan))
@@ -70,6 +71,15 @@ def run_checks(client, query, manifest, plan, *, other_plans=()):
         ordinary=client.call('trading/position',dict(context=context,tradeId=receipt['tradeId'],bindingId=receipt['bindingId'],revision=1,instrumentType='operating_right'))['holding']
         assert Fraction(ordinary['presentValue'])==expected_value and ordinary['sideSchedules'] is True
         print('PASS '+kind+' operating trade HTTP: native booking, exact replay/reopening, independent retained gross Sides and ordinary position PV',flush=True)
+        upgrade_positions.append(dict(kind=kind,request=other,saved=receipt,value=expected_value))
+    from check_operating_populated_upgrade import run_checks as check_populated_upgrade
+    check_populated_upgrade(query,manifest,upgrade_positions)
+    for position in upgrade_positions:
+        receipt=position['saved'];exact=dict(snapshotId=frame,tradeId=receipt['tradeId'])
+        assert client.call(route+'get',exact)['terms']==position['request']
+        assert fraction(client.call(route+'valuation',exact)['valuation']['value'])==position['value']
+        assert client.call(route+'book',position['request'])==receipt
+    print('PASS committed operating upgrade HTTP: original commands reopen, value and replay with preserved native programs',flush=True)
     risk=client.call('portfolio/risk/catalog',dict(context=context,bookIds=[request['bookId']],portfolioIds=[],tradeIds=[saved['tradeId']]))
     assert any(m['measure']=='operating_contractual_present_value' for m in risk['measures'])
     future_context=dict(snapshotId=frame,convention='contract_lot_execution_pnl_v2',knowledgeMode='current')

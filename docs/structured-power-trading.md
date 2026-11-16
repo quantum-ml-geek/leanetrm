@@ -79,6 +79,7 @@ production capacity:
 | Frontend | 1,961 checks pass, including actual Chrome component checks for independent Side entry, repeated sources, presets, allowed kinds and review invalidation. |
 | Native storage | The complete 349-migration chain and native workflows pass on stock PostgreSQL 16.14 and 18.1, including malformed composition, exact source quantities, label parity, replay and current authority. |
 | Saved trading HTTP | Five independent Sides reopen at `550.7`; an explicit sixth repeated-source membership gives `532.6`. All six native Side pages and calculation details pass. Legacy/v2 booking, expiry refusal, REC forwards and inventory remain green. |
+| Populated operating upgrade | On PostgreSQL 16.14 and 18.1, exact predecessor helpers reproduce saved battery, thermal toll and solar quantities and admit their retained programs. Committed migration-body application preserves 30 history/program/relationship sets; original API commands reopen, reprice and replay unchanged. |
 | Live API-backed browser | 27 checks pass: 15 facility/plan checks and 12 saved trading/REC checks. The run removes its owned disposable resources. |
 | Repository | 142 Python checks pass. |
 
@@ -86,6 +87,27 @@ These results do not authorize deployment, schema activation or operations on an
 existing database. Installation-specific populated upgrade and release checks
 remain separate gates; no optimizer, pooled resource operation or new physical/
 cash lifecycle is qualified by Side assembly.
+
+### Populated operating upgrade compatibility
+
+The owned API workflow books legacy battery, thermal toll and solar agreements
+before exercising migration 0349 over their populated state. It restores the
+tracked predecessor functions and constraints, verifies all four function
+contracts against the migration's complete metadata guards, and uses the
+predecessor quantity kernel and schedule admission to
+validate the original plans and retained records. Original request outcomes must
+also replay under the predecessor contract.
+
+The migration body is committed before the subsequent API reads. Complete-row
+digests cover 30 native history, identity, request, program and relationship sets,
+including executable bytes and command hashes. The original trades reopen and
+reprice at their independent values of 610, 760 and 500, with unchanged first
+outcomes. Separate rolled-back probes detect altered helper metadata and a
+corrupted synthetic fuel quantity without changing retained history.
+
+This checks populated function/constraint and retained-record compatibility in a
+disposable fixture. It does not exercise deployment bookkeeping, backup/restore
+or an installation's migration runner, and it changes no migration journal.
 
 ## Operating-right booking
 
