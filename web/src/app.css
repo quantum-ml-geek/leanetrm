@@ -2849,3 +2849,14 @@ header>div:first-child{flex:1 1 160px}
 .options-position-subtotal td{font-weight:600}.options-position-total td,.options-position-total th{border-top:2px solid var(--border-strong);font-weight:650}
 .options-position-table td.options-missing-figure{color:var(--text-3)}
 .options-position-calibrate{padding:2px 10px;font-size:12px}
+/* The term structure (vol-surface-view.ts): the fitted level at the money by expiry, over a card per expiry. */
+.vol-term{grid-column:1/-1}
+.vol-term .vol-chart{height:200px}
+.vol-expiry-strip{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,200px),1fr));gap:10px;margin-top:10px}
+.vol-expiry-card{display:grid;gap:2px;align-content:start;text-align:left;white-space:normal;padding:10px 12px;border-radius:10px;font-weight:400;background:var(--surface-2);color:var(--text);border:1px solid var(--border)}
+.vol-expiry-card:hover{border-color:var(--border-strong);background:var(--surface)}
+.vol-expiry-card[aria-pressed=true]{background:var(--accent-soft);border-color:var(--accent)}
+.vol-expiry-name{font-size:12px;color:var(--text-2)}
+.vol-expiry-level{font-size:18px;font-weight:650;font-variant-numeric:tabular-nums}
+.vol-expiry-facts,.vol-expiry-gap{font-size:12px;color:var(--text-3);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.vol-expiry-gap{color:var(--warn)}

@@ -214,6 +214,22 @@ export async function run({command,evaluate,wait,click,set,persona,check,idle,fi
 
   // The heat map: one row per expiry and one column per strike of the backend's axis, each split into a call and a put half.
   const chart=selector=>`(await import('/vendor/echarts.js')).getInstanceByDom(document.querySelector(${q(selector)}))`;
+  // The term structure: the fitted level at the money by expiry, as stored, with a gap where an expiry is not fitted, and a card
+  // per expiry that brings its smile into view.
+  const live=fitted.surface.expiries.filter(e=>e.status!=='option_expired');
+  await check('the term structure plots each fitted expiry\'s stored level and leaves a gap at an expiry that is not fitted',
+   `(async()=>{const o=${chart('#vol-term .vol-chart')}.getOption(),data=o.series[0].data,stored=${q(live.map(e=>e.status==='fitted'?e.parameters.a:null))};
+    return o.series[0].type==='line'&&o.series[0].connectNulls===false&&data.length===stored.length&&data.every((v,i)=>stored[i]===null?v===null:Math.abs(v-Number(stored[i])*100)<1e-9);})()`,
+   `(async()=>${chart('#vol-term .vol-chart')}.getOption().series[0].data)()`);
+  await check('each expiry has a card with its level in volatility points, or why it is not fitted',
+   `(cards=>cards.length===${live.length}&&cards.every((card,i)=>card.dataset.expiry===${q(live.map(e=>e.expiryAt))}[i]&&
+     (${q(live.map(e=>e.status))}[i]==='fitted'?asPoints(card.querySelector('.vol-expiry-level').textContent.replace(/ vol pts$/,''),${q(live.map(e=>e.parameters?.a??'0'))}[i])
+      :/Not fitted/.test(card.textContent)&&!card.querySelector('.vol-expiry-level'))))([...document.querySelectorAll('#vol-expiry-strip .vol-expiry-card')])`.replace('(cards=>',`(()=>{${inPage}return (cards=>`).replace(/\)$/,')})()'),
+   "[...document.querySelectorAll('#vol-expiry-strip .vol-expiry-card')].map(c=>c.textContent)");
+  await click(`#vol-expiry-strip .vol-expiry-card[data-expiry="${live.at(-1).expiryAt}"]`);
+  await check('choosing an expiry\'s card marks it and its smile is on the page',
+   `document.querySelectorAll('#vol-expiry-strip .vol-expiry-card[aria-pressed=true]').length===1&&document.querySelector('#vol-expiry-strip [aria-pressed=true]').dataset.expiry===${q(live.at(-1).expiryAt)}&&
+    !!document.querySelector('#vol-smiles .vol-smile[data-expiry="${live.at(-1).expiryAt}"]')`);
   const heat=chart('#vol-heatmap .vol-chart');
   await check('the heat map has one row per expiry and one column per strike axis value',
    `(async()=>{const o=${heat}.getOption(),strikes=o.xAxis.find(a=>a.id==='strikes').data,rows=o.yAxis[0].data;

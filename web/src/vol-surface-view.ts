@@ -8,6 +8,7 @@ import {libraryEntries,reach,type Here,type LibrarySurface} from './vol-surface-
 import {surfaceLink,type SurfaceLink} from './vol-surface-link.js';
 import {drawSurface3d,levelRange} from './vol-surface-3d.js';
 import {richCheapColour,richCheapTone,volTheme} from './vol-surface-theme.js';
+import {termPoints,type TermPoint} from './vol-term-structure.js';
 
 // Vol surfaces (Markets): a library of the option products and the closes each is calibrated at, and the chosen product's stored
 // volatility surface at the selected close, fitted by a job on the risk queue, shown as a rich/cheap heat map, a rotatable 3D
@@ -213,7 +214,6 @@ function smile(host:HTMLElement,expiry:SurfaceExpiry,members:SurfaceSeries[],ext
  };
 }
 
-/** The page's view of the header's As of frame and the moves it offers, which the app owns. */
 const longDay=(date:string)=>new Intl.DateTimeFormat('en',{weekday:'short',month:'short',day:'numeric',year:'numeric',timeZone:'UTC'}).format(new Date(date+'T00:00:00Z'));
 const longInstant=(at:string,zone:string)=>new Intl.DateTimeFormat('en',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit',timeZone:zone}).format(new Date(at));
 /** How a page's hero names where it reads: a recorded close by its session and business day, a working snapshot by its instant. */
@@ -222,6 +222,33 @@ export function hereHeading(here:Here|undefined,sessionName:(code:string)=>strin
  return here.close?{kind:'Close',title:`${sessionName(here.close.session)} · ${longDay(here.close.businessDate)}`}:{kind:'Working snapshot',title:longInstant(here.at,zone)};
 }
 
+// The term structure: each fitted expiry's level at the money as one point of a line, broken where an expiry is not fitted.
+// A point chooses its expiry; the expiry of the linked series is the one emphasised.
+function termLine(host:HTMLElement,term:TermPoint[],label:(expiryAt:string)=>string,expiryOf:(code:string)=>string|undefined,choose:(expiryAt:string)=>void):View{
+ const colors=volTheme(host),axis={axisLine:{lineStyle:{color:colors.border}},axisTick:{show:false},splitLine:{lineStyle:{color:colors.border,type:'dashed'}}};
+ const tip=(p:{dataIndex:number})=>{const point=term[p.dataIndex];if(!point||point.level===null)return '';
+  return `<b>${escape(label(point.expiryAt))}</b><br>Level ${points(point.level)} vol pts · slope ${points(point.slope!,true)}`;};
+ const {chart,dispose}=mount(host,chart=>chart.setOption({
+  textStyle:{fontFamily:colors.font},animation:false,
+  tooltip:{trigger:'item',className:'vol-tooltip',confine:true,backgroundColor:colors.surface,borderColor:colors.border,textStyle:{color:colors.text,fontSize:12},formatter:tip},
+  grid:{left:44,right:16,top:14,bottom:28},
+  xAxis:{...axis,type:'category',data:term.map(p=>label(p.expiryAt)),splitLine:{show:false},axisLabel:{color:colors.text3,fontSize:10,hideOverlap:true}},
+  yAxis:{...axis,type:'value',scale:true,axisLabel:{color:colors.text3,fontSize:10}},
+  series:[{id:'level',type:'line',connectNulls:false,data:term.map(p=>p.level===null?null:plotNumber(p.level)*100),symbol:'circle',symbolSize:9,
+   lineStyle:{color:colors.accent,width:2},itemStyle:{color:colors.accent,borderColor:colors.surface,borderWidth:2},emphasis:{scale:1.6,itemStyle:{borderColor:colors.text,borderWidth:2}}}],
+ },{notMerge:true}));
+ chart.on('click',event=>{const point=term[(event as {dataIndex:number}).dataIndex];if(point)choose(point.expiryAt);});
+ return {
+  highlight(code){
+   chart.dispatchAction({type:'downplay'});
+   const dataIndex=code===null?-1:term.findIndex(p=>p.expiryAt===expiryOf(code)&&p.level!==null);
+   if(dataIndex>=0)chart.dispatchAction({type:'highlight',seriesIndex:0,dataIndex});
+  },
+  dispose,
+ };
+}
+
+/** The page's view of the header's As of frame and the moves it offers, which the app owns. */
 export type VolSurfaceFrames={
  /** Where the page reads: the header's As of close, or working snapshot, and its instant. */
  here():Here;
@@ -301,8 +328,13 @@ export function setupVolSurfaces(o:{api:Api;context:()=>FuturesReadRequest;histo
   item(el('span','vol-key-join'),'Straight panels between expiries: a visual join, not a fit, shaded by volatility level',levelScale),
   item('Stalks: from the fitted smile to the market’s implied volatility,',el('span','vol-key-rich'),'rich above,',el('span','vol-key-cheap'),'cheap below'));
  surface3d.append(head3d,canvasHost,legend3d);
+ // The term structure: the fitted level at the money by expiry, and a card per expiry that opens its smile below.
+ const term=el('section','vol-card vol-term');term.id='vol-term';
+ const termHead=el('div','vol-card-head');termHead.append(el('h3',undefined,'Term structure'),el('span','vol-3d-hint','Fitted volatility at the money, by expiry'));
+ const termChart=el('div','vol-chart'),strip=el('div','vol-expiry-strip');strip.id='vol-expiry-strip';
+ term.append(termHead,termChart,strip);
  const smiles=el('section','vol-smiles');smiles.id='vol-smiles';
- const views=el('div','vol-views');views.append(heat,readout,surface3d,smiles);
+ const views=el('div','vol-views');views.append(heat,readout,surface3d,term,smiles);
  detail.append(placeholder,productHead,status,closes,missing,views);
  root.replaceChildren(hero,error,shelf,detail);
 
@@ -334,7 +366,7 @@ export function setupVolSurfaces(o:{api:Api;context:()=>FuturesReadRequest;histo
  }
  function clearViews(){
   for(const view of drawn)view.dispose();view3d?.dispose();drawn=[];view3d=undefined;cells=[];drawnFor=undefined;drawnRevision='';link.set(null);
-  smiles.replaceChildren();scale.replaceChildren();canvasHost.replaceChildren();levelScale.replaceChildren();renderReadout(null);
+  smiles.replaceChildren();strip.replaceChildren();scale.replaceChildren();canvasHost.replaceChildren();levelScale.replaceChildren();renderReadout(null);
  }
  function stop(){clearTimeout(timer);timer=undefined;}
  const selectedDefinition=()=>definitionRevisionId??publishedDefinition;
@@ -582,6 +614,22 @@ export function setupVolSurfaces(o:{api:Api;context:()=>FuturesReadRequest;histo
    levelScale.append(el('span','vol-scale-end',points(levels.low)),el('span','vol-3d-level-bar'),el('span','vol-scale-end',`${points(levels.high)} vol pts`));
    view3d=drawSurface3d(canvas,surface,link,expiryLabel);
   }else canvasHost.append(el('p','vol-gap','No expiry is fitted at this date, so there is no surface to draw.'));
+  // Choosing an expiry, on the term structure or its card, brings its smile into view.
+  const chooseExpiry=(expiryAt:string)=>{
+   for(const card of strip.querySelectorAll<HTMLElement>('.vol-expiry-card'))card.setAttribute('aria-pressed',String(card.dataset.expiry===expiryAt));
+   [...smiles.querySelectorAll<HTMLElement>('.vol-smile')].find(card=>card.dataset.expiry===expiryAt)?.scrollIntoView({block:'nearest',behavior:'smooth'});
+  };
+  const structure=termPoints(surface),labelAt=(expiryAt:string)=>expiryLabel(surface.expiries.find(e=>e.expiryAt===expiryAt)!);
+  drawn.push(termLine(termChart,structure,labelAt,code=>surface.series.find(s=>s.series.code===code)?.series.expiryAt,chooseExpiry));
+  strip.replaceChildren(...structure.map(point=>{
+   const card=button('vol-expiry-card','');card.dataset.expiry=point.expiryAt;card.dataset.status=point.status;card.setAttribute('aria-pressed','false');
+   card.append(el('span','vol-expiry-name',labelAt(point.expiryAt)));
+   if(point.level===null)card.append(el('span','vol-expiry-gap',`Not fitted: ${expiryReason(point.status)}`));
+   else card.append(el('span','vol-expiry-level',`${points(point.level)} vol pts`),
+    el('span','vol-expiry-facts',`Slope ${points(point.slope!,true)} · ${point.points} fit points${point.rmsResidual===null?'':` · RMS ${points(point.rmsResidual)}`}`));
+   card.onclick=()=>chooseExpiry(point.expiryAt);
+   return card;
+  }));
   for(const expiry of surface.expiries){
    const members=surface.series.filter(s=>s.series.expiryAt===expiry.expiryAt),card=el('article','vol-card vol-smile');card.dataset.expiry=expiry.expiryAt;
    const head=el('header','vol-smile-head'),title=el('h4',undefined,expiryLabel(expiry)),sub=el('p','vol-smile-sub',`${expiry.underlyingCode}${expiry.futures===null?' · no futures settlement':` · futures ${trimmed(expiry.futures)}`}`);
