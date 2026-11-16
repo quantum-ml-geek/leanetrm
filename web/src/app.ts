@@ -1403,7 +1403,7 @@ const openVolSurface=(product:string,definitionRevisionId:string,series?:string)
 const optionChains=setupOptions({api,zone:()=>prefs.timeZone,context:optionContext,frames:{here:frameHere,sessionName:code=>closeSessionNames.get(code)??code},
  openSurface:(product,definitionRevisionId,series)=>void openVolSurface(product,definitionRevisionId,series),
  book:series=>void leaving(async()=>{
-  if(contextDirty)await applyContext();await setPage('futures');await futures.load();
+  if(contextDirty)await applyContext();await setPage('futures');await futures.loadEntry();
   optionTicket.request(series);try{await futures.openProduct('options');}finally{optionTicket.request(null);}
  },contextDirty?'discards':'page')});
 // A series on its surface links to its row in the chain of its expiry.
