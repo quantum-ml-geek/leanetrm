@@ -9,7 +9,7 @@ DO $page$
 DECLARE helper pg_proc;definition text;before text:='''physical_power'');';
 BEGIN
  SELECT * INTO STRICT helper FROM pg_proc WHERE oid='assistant.is_prompt_page(text)'::regprocedure;
- IF encode(sha256(convert_to(helper.prosrc,'UTF8')),'hex')<>'160263b917664ae1cfbee1b6fbf7c06555d761fe50f71df7be592b27666d097a'
+ IF encode(sha256(convert_to(helper.prosrc,'UTF8')),'hex')<>'e9887c63aefb57c00edf71713fa53e24702d0732b16819fd3770d8d0edc93acc'
   OR helper.proowner<>'openetrm_security_owner'::regrole OR helper.prosecdef OR helper.provolatile<>'i'
   OR helper.proisstrict OR helper.proleakproof OR helper.proparallel<>'u'
   OR helper.proconfig IS DISTINCT FROM ARRAY['search_path=pg_catalog']

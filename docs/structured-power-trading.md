@@ -93,7 +93,7 @@ delivery capacity described below.
 
 ## Evidence-backed inventory
 
-Migration 0340 adds the current manual inventory consumer, not an external
+Migration 0341 adds the current manual inventory consumer, not an external
 registry client. Accounts bind exact books, legal entities and registry account
 references. Destinations bind exact counterparty versions and registry accounts.
 Registry, product, class, program, eligibility assignment, evidence source and
