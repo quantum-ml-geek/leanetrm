@@ -9,6 +9,7 @@ public sealed record IntervalScheduleWindow(DeliveryInterval Interval):ScheduleD
 public abstract record ScheduleQuantityReference;
 public sealed record ContractualScheduleQuantity(ExactQuantity Amount) : ScheduleQuantityReference;
 public sealed record IntervalScheduleQuantity(PpaQuantity Source, DeliveryInterval Interval) : ScheduleQuantityReference;
+public sealed record OperatingScheduleQuantity(OperatingQuantityTerm Source,DeliveryInterval Interval):ScheduleQuantityReference;
 
 public abstract record IntervalSchedulePrice;
 public sealed record FixedIntervalSchedulePrice(FixedPriceTerm Term) : IntervalSchedulePrice;

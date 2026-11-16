@@ -84,6 +84,10 @@ const string malformed="The request is incomplete or malformed.";
 (int Status,string Code,string Message) Failure(Exception e,PathString apiPath,HttpContext context)=>e switch
 {
     AsyncReadException refusal=>(refusal.Status,refusal.Code,refusal.Message),
+    PostgresException p when p.SqlState=="P0001" && p.MessageText is "power_facility_request_conflict" or "power_facility_revision_conflict"
+        => (409,p.MessageText,"This facility or request changed. Reload its exact version or recover the original save outcome."),
+    PostgresException p when p.SqlState=="P0001" && p.MessageText.StartsWith("power_facility_",StringComparison.Ordinal)
+        => (422,p.MessageText,"Choose an available exact facility version and compatible operating parameters under the selected context."),
             ToolRefusal refusal=>(422,refusal.Code,AgentTools.Text(refusal.Code)),
     PostgresException p when p.SqlState=="P0001"&&p.MessageText=="catalogue_choice_changed"
         => (409,p.MessageText,"The offered product definition changed. Reload the available trade terms before booking."),
@@ -618,6 +622,62 @@ api.MapPost("/units/convert",(HttpContext c,UnitConvertRequest body)=>Locked(c,s
 },c.RequestAborted)));
 api.MapPost("/amounts/display",(HttpContext c,System.Collections.Immutable.ImmutableArray<DisplayNumberRequest> body)=>Locked(c,session=>
     database.WithIdentity(Profile(session),null,(_,_)=>Task.FromResult<IResult>(Results.Ok(UnitOperations.Display(body))),c.RequestAborted)));
+var powerFacilities=new PhysicalOperatingFacilityStore(database.Manifest.CatalogId);
+// Capture current knowledge once per read, or bind the exact retained context. Authoring
+// stays in current control state; the facility store certifies its committed revision.
+Task<IResult> PhysicalPowerOperation(HttpContext c,Guid snapshotId,string permission,bool authoring,
+    Func<NpgsqlConnection,PreviewData,InputFrame,ScheduleContext?,bool,CancellationToken,Task<IResult>> work)=>Locked(c,session=>
+    database.WithIdentity(Profile(session),permission,async(connection,ct)=>
+    {
+        if(!await PreviewDatabase.HasPermission(connection,"ReadPhysical",ct)||!await PreviewDatabase.HasPermission(connection,"ReadMarketData",ct))
+            throw new PreviewDeniedException();
+        var pin=Pin(session,snapshotId);var frame=pin.RequireFrame();var current=pin.Context is null;
+        ScheduleContext? context=null;
+        await pin.Bind(connection,database.Manifest.CatalogId,ct);
+        if(authoring)
+        {
+            if(pin.Context is not null)throw new MarketDataException("historical_read_only","Return to working data before changing operating facilities.");
+        }
+        else
+        {
+            var view=pin.Context is {} retained?TradingView.Retained(frame,retained):
+                await TradingView.Capture(connection,new KnowledgeStore(database.Manifest.CatalogId),frame,ct);
+            context=view.Context;
+            if(pin.Context is null)await view.Bind(connection,database.Manifest.CatalogId,ct);
+            frame=view.CalculationFrame;
+        }
+        var data=await MarketInputSelection.Root(database,connection,frame,ct,
+            referenceScope:ReferenceReadScope.AllVisible,includeCalendarDays:true);
+        var result=await work(connection,data,frame,context,current,ct);
+        if(!await PreviewDatabase.HasPermission(connection,"ReadPhysical",ct)||!await PreviewDatabase.HasPermission(connection,"ReadMarketData",ct))
+            throw new PreviewDeniedException();
+        return result;
+    },c.RequestAborted));
+api.MapPost("/physical/power-facilities/catalog",(HttpContext c,PhysicalPowerCatalogRequest body)=>
+    PhysicalPowerOperation(c,body.SnapshotId,"ReadPhysical",false,async(connection,data,_,_,current,ct)=>
+        Results.Ok(StructuredPowerPreview.Catalog(data,current&&await PreviewDatabase.HasPermission(connection,"ManagePhysicalSetup",ct),
+            await PreviewDatabase.HasPermission(connection,"RunScenario",ct)))));
+api.MapPost("/physical/power-facilities/list",(HttpContext c,PhysicalPowerListRequest body)=>
+    PhysicalPowerOperation(c,body.SnapshotId,"ReadPhysical",false,async(connection,_,frame,context,_,ct)=>
+        Results.Ok(await powerFacilities.List(connection,context!.ContextId!.Value,frame.At,frame.Time.Date,body.SelectionPolicy,ct))));
+api.MapPost("/physical/power-facilities/get",(HttpContext c,PhysicalPowerGetRequest body)=>
+    PhysicalPowerOperation(c,body.SnapshotId,"ReadPhysical",false,async(connection,_,frame,context,_,ct)=>
+        Results.Ok(await powerFacilities.ReadExact(connection,body.FacilityId,body.Version,context!.ContextId!.Value,frame.At,frame.Time.Date,ct))));
+api.MapPost("/physical/power-facilities/save",(HttpContext c,PhysicalPowerSaveRequest body)=>
+    PhysicalPowerOperation(c,body.SnapshotId,"ManagePhysicalSetup",true,async(connection,data,_,_,_,ct)=>
+        Results.Ok(await powerFacilities.Save(connection,data,new(body.RequestId,body.ExpectedVersion,body.Facility),ct))));
+api.MapPost("/physical/power-facilities/status",(HttpContext c,PhysicalPowerStatusRequest body)=>Locked(c,session=>
+    database.WithIdentity(Profile(session),"ManagePhysicalSetup",async(connection,ct)=>
+    {
+        if(Pin(session).Context is not null)throw new MarketDataException("historical_read_only","Recover facility save outcomes from current working data.");
+        return Results.Ok(await powerFacilities.RequestStatus(connection,body.RequestId,ct));
+    },c.RequestAborted)));
+api.MapPost("/physical/power-facilities/preview",(HttpContext c,StructuredPowerPreviewRequest body)=>
+    PhysicalPowerOperation(c,body.SnapshotId,"RunScenario",false,async(connection,data,frame,context,_,ct)=>
+    {
+        var facility=await powerFacilities.ReadExact(connection,body.FacilityId,body.FacilityVersion,context!.ContextId!.Value,frame.At,frame.Time.Date,ct);
+        return Results.Ok(StructuredPowerPreview.Calculate(data,frame,facility,SchedulePreview.ParseAt(context.KnownAt),body));
+    }));
 api.MapGet("/power-imports",(Func<HttpContext,Task<IResult>>)(c=>PowerOperation(c,"ReadMarketData",async(_,connection,ct)=>Results.Ok(await PowerHistory.Catalog(connection,ct)))));
 api.MapPost("/power-imports/period",(HttpContext c,PowerHistoryPeriodRequest body)=>PowerOperation(c,"ReadMarketData",async(_,connection,ct)=>Results.Ok(await PowerHistory.Period(connection,body,ct))));
 api.MapPost("/power-imports/history",(HttpContext c,PowerHistoryRequest body)=>PowerOperation(c,"ReadMarketData",async(_,connection,ct)=>Results.Ok(await PowerHistory.Read(connection,body,ct))));
