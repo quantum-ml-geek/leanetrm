@@ -5698,3 +5698,24 @@ and [wire boundary](gas-transport-capacity-api.md).
 loss, transit, asset linepack, financial booking or any valuation. Those
 consumers require their own explicit qualified policies and complete current
 authority. See [Transport implementation status](gas-transport.md).
+
+## D411 · Retained routes over exclusive exact capacity-plan sources
+
+**Status:** locally qualified operating consumer; integrated release remains open.
+
+**Requirement.** Compose a complete chosen route from exact admitted capacity
+claims, conserve its declared fuel/loss/timing and split/merge quantities, and
+prevent source corrections from duplicating logical route membership.
+
+**Decision.** Use immutable exact graph/law definitions and append route-plan or
+own-membership-release facts. Each selected complete capacity-plan stream is
+exclusively linked through its first and current exact headers; every current
+claim is mapped once. Source changes make current assessment unavailable until
+explicit re-adoption. New assertions retain complete capacity version/generation
+as source value. Numerical policy, source authority, original deadlines and D238
+apply at managed and native boundaries.
+
+**Boundaries.** The first profile has exact same-pipeline-point handoffs, one
+uniform claim per segment, no node storage and no inferred interconnects. It does
+not establish physical performance, title, cash, financial Transport value or
+broader assignment rights. See the [route contract](gas-transport-routes.md).

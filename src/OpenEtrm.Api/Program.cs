@@ -142,6 +142,14 @@ const string malformed="The request is incomplete or malformed.";
         => (422,p.MessageText,"The complete retained schedule requires compatible exact references, typed operations and an immutable validated manifest."),
     PostgresException p when p.SqlState=="P0001" && p.MessageText is "settlement_version_conflict" or "settlement_operation_conflict" => (409,p.MessageText,"Reconcile the original operation or reload the settlement version."),
     MarketDataException m when m.Code is "facility_quantity_conflict" or "facility_quantity_owner_changed" => (409,m.Code,m.Message),
+    MarketDataException m when m.Code is "gas_transport_route_stale" or "gas_transport_route_conflict" or "gas_transport_route_owner_changed" or "gas_transport_route_context" or "gas_transport_route_source" => (409,m.Code,m.Message),
+    PostgresException p when apiPath.StartsWithSegments("/api/gas/transport/routes")&&p.SqlState is "23503" or "23514" or "22P02" or "22003" or "22001" or "22008"
+        =>(422,"gas_transport_route_input",GasTransportRouteStore.Refusal("gas_transport_route_input")),
+    PostgresException p when apiPath.StartsWithSegments("/api/gas/transport/routes")&&p.SqlState=="23505"
+        =>(409,"gas_transport_route_conflict",GasTransportRouteStore.Refusal("gas_transport_route_conflict")),
+    PostgresException p when p.MessageText.StartsWith("gas_transport_route_",StringComparison.Ordinal)
+        =>(p.SqlState=="42501"?403:p.MessageText is "gas_transport_route_stale" or "gas_transport_route_conflict" or "gas_transport_route_context" or "gas_transport_route_source"?409:422,
+            p.MessageText,GasTransportRouteStore.Refusal(p.MessageText)),
     MarketDataException m when m.Code is "gas_transport_capacity_stale" or "gas_transport_capacity_conflict" or "gas_transport_capacity_owner_changed" or "gas_transport_capacity_context" or "gas_transport_capacity_source" => (409,m.Code,m.Message),
     PostgresException p when apiPath.StartsWithSegments("/api/gas/transport/capacity")&&p.SqlState is "23503" or "23514" or "22P02" or "22003" or "22001" or "22008"
         =>(422,"gas_transport_capacity_input",GasTransportCapacityStore.Refusal("gas_transport_capacity_input")),
@@ -1698,6 +1706,17 @@ foreach(var configureGasService in new[]{true,false}){
 var gasDaily=new GasDailyQuantities(database);
 var facilityQuantities=new FacilityQuantityStore(database);
 var storageFacilities=new StorageFacilityStore(database);
+var transportRoutes=new GasTransportRouteStore(database);
+api.MapPost("/gas/transport/routes/directory",(HttpContext c,FacilityDirectoryRequest body)=>Locked(c,session=>
+ database.WithIdentity(Profile(session),"ReadGasOperations",async(connection,ct)=>Results.Ok(await transportRoutes.Directory(connection,body,session.MarketContext,ct)),c.RequestAborted)));
+api.MapPost("/gas/transport/routes/read",(HttpContext c,GasTransportRouteReadRequest body)=>Locked(c,session=>
+ database.WithIdentity(Profile(session),"ReadGasOperations",async(connection,ct)=>Results.Ok(await transportRoutes.Read(connection,body,session.MarketContext,ct)),c.RequestAborted)));
+api.MapPost("/gas/transport/routes/status",(HttpContext c,FacilityStatusRequest body)=>Locked(c,session=>
+ database.WithIdentity(Profile(session),"ReadGasOperations",async(connection,ct)=>Results.Ok(await transportRoutes.Status(connection,body,ct)),c.RequestAborted)));
+api.MapPost("/gas/transport/routes/preview",(HttpContext c,GasTransportRouteWriteRequest body)=>Locked(c,session=>
+ database.WithIdentity(Profile(session),GasTransportRouteStore.Permission(body.Command),async(connection,ct)=>Results.Ok(await transportRoutes.Preview(connection,body,session.MarketContext,ct)),c.RequestAborted)));
+api.MapPost("/gas/transport/routes/record",(HttpContext c,GasTransportRouteWriteRequest body)=>Locked(c,session=>
+ database.WithIdentity(Profile(session),GasTransportRouteStore.Permission(body.Command),async(connection,ct)=>Results.Ok(await transportRoutes.Record(connection,body,session.MarketContext,ct)),c.RequestAborted)));
 var transportCapacity=new GasTransportCapacityStore(database);
 api.MapPost("/gas/transport/capacity/directory",(HttpContext c,FacilityDirectoryRequest body)=>Locked(c,session=>
  database.WithIdentity(Profile(session),"ReadGasOperations",async(connection,ct)=>Results.Ok(await transportCapacity.Directory(connection,body,session.MarketContext,ct)),c.RequestAborted)));

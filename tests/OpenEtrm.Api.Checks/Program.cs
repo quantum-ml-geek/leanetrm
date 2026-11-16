@@ -8,6 +8,10 @@ if(args is ["--storage-facility-adapters"]){StorageFacilityAdapterChecks.Run();r
 if(args is ["--gas-transport-capacity-adapters"]){GasTransportCapacityAdapterChecks.Run();return;}
 if(args is ["--operational-business-context"]){OperationalBusinessContextChecks.Run();return;}
 if(args is ["--gas-transport-capacity-source"]){GasTransportCapacitySourceChecks.Run();return;}
+if(args is ["--gas-transport-route-adapters"]){GasTransportRouteAdapterChecks.Run();return;}
+if(args is ["--gas-transport-route-source"]){GasTransportRouteSourceChecks.Run();return;}
+if(args is ["--gas-transport-route-native",var routeFixture]){await GasTransportRouteNativeChecks.Run(routeFixture);return;}
+if(args is ["--gas-transport-route-metadata"]){GasTransportRouteMetadataChecks.Run();GasTransportRoutePresentationChecks.Run();return;}
 if(args is ["--gas-transport-capacity-metadata"]){GasTransportCapacityMetadataChecks.Run();GasTransportCapacityPresentationChecks.Run();return;}
 if(args is ["--gas-transport-capacity-normalize",var transportInput,var transportOutput]){GasTransportCapacityPacket.Normalize(transportInput,transportOutput);return;}
 if(args is ["--storage-facility-setup"]){StorageFacilityMetadataChecks.Run();return;}
@@ -228,6 +232,10 @@ if (args is ["--schedules"])
     GasTransportCapacityAdapterChecks.Run();
     OperationalBusinessContextChecks.Run();
     GasTransportCapacitySourceChecks.Run();
+    GasTransportRouteAdapterChecks.Run();
+    GasTransportRouteSourceChecks.Run();
+    GasTransportRouteMetadataChecks.Run();
+    GasTransportRoutePresentationChecks.Run();
     GasTransportCapacityMetadataChecks.Run();
     GasTransportCapacityPresentationChecks.Run();
     StorageFacilityMetadataChecks.Run();

@@ -7,31 +7,31 @@ import type {FacilityContext} from './facility-quantities-view.js';
 
 type Api=<T>(path:string,body?:unknown)=>Promise<T>;
 type Section='definitions'|'activity'|'all';
-export type OperationProtocol={kind:'facility'|'transport';path:'facilities/operations'|'gas/transport/capacity';scopeKey:'facilityId'|'entitlementId';listKey:'facilities'|'entitlements';data:'facility-ops'|'transport-capacity';commandData:'facilityCommand'|'transportCommand';storage:string;configurationPermission:'ConfigureFacilityLimits'|'ConfigureGasServices';label:string;plural:string;configurationHeading:string;operationsHeading:string;boundary:string};
+export type OperationProtocol={kind:'facility'|'transport'|'route';path:'facilities/operations'|'gas/transport/capacity'|'gas/transport/routes';scopeKey:'facilityId'|'entitlementId'|'routeId';listKey:'facilities'|'entitlements'|'routes';data:'facility-ops'|'transport-capacity'|'transport-routes';commandData:'facilityCommand'|'transportCommand'|'routeCommand';storage:string;configurationPermission:'ConfigureFacilityLimits'|'ConfigureGasServices';label:string;plural:string;configurationHeading:string;operationsHeading:string;boundary:string};
 type Form={label:string;permission:string;base:Record<string,unknown>;fields:OperationField[]};
 type Inspection={overviewSections:{label:string;values:{label:string;value:string}[]}[];tables:{label:string;columns:string[];rows:string[][];instantColumns?:number[]}[]};
 type Context={contextId:string;effectiveOn:string;knownAt:string};
 type Resource={id:string;label:string;versionId?:string;revision:number};
-type View=Inspection&{ownerId:string;context:Context;at:string;facilityId?:string;facilities?:Resource[];entitlements?:Resource[];entitlementId?:string;hasMore?:boolean;forms:Record<string,Form>;configuration:Record<string,Form>;canRecord:boolean;canConfigure:boolean;historical:boolean;allocationLinks?:{ledgerId:string;label:string}[];sourceSearch?:string;sourceChoicesTruncated?:boolean};
-type Preview=Inspection&{ownerId:string;context:Context;operationId:string;facilityId?:string;entitlementId?:string;kind:string;command:Record<string,unknown>;effectiveAt:string};
-type Outcome={found?:true;operationId:string;facilityId?:string;entitlementId?:string;kind:string;outcome:Record<string,unknown>;command?:Record<string,unknown>;effectiveAt?:string};
+type View=Inspection&{ownerId:string;context:Context;at:string;facilityId?:string;facilities?:Resource[];entitlements?:Resource[];entitlementId?:string;routes?:Resource[];routeId?:string;hasMore?:boolean;forms:Record<string,Form>;configuration:Record<string,Form>;canRecord:boolean;canConfigure:boolean;historical:boolean;allocationLinks?:{ledgerId:string;label:string}[];sourceSearch?:string;sourceChoicesTruncated?:boolean};
+type Preview=Inspection&{ownerId:string;context:Context;operationId:string;facilityId?:string;entitlementId?:string;routeId?:string;kind:string;command:Record<string,unknown>;effectiveAt:string};
+type Outcome={found?:true;operationId:string;facilityId?:string;entitlementId?:string;routeId?:string;kind:string;outcome:Record<string,unknown>;command?:Record<string,unknown>;effectiveAt?:string};
 export type DescribedOperationsOptions={api:Api;act:(work:()=>Promise<void>)=>Promise<void>;busy:()=>boolean;pendingElsewhere?:()=>boolean;zone:()=>string;identity:()=>string;context:()=>FacilityContext;permission:(name:string)=>boolean;changed:()=>void;openAllocations?:(ledgerId:string)=>Promise<void>};
 const node=<K extends keyof HTMLElementTagNameMap>(tag:K,text?:string)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;return n;};
 const canonical=(value:unknown):string=>JSON.stringify(value,(_key,item)=>item&&typeof item==='object'&&!Array.isArray(item)?Object.fromEntries(Object.entries(item).sort(([a],[b])=>a.localeCompare(b))):item);
 
-/** The two installed operating consumers share described entry and retained
+/** The installed operating consumers share described entry and retained
  * commands. Native operations own every quantity, policy and assessment. */
 export function setupDescribedOperations(root:HTMLElement,o:DescribedOperationsOptions,p:OperationProtocol){
- const physical=p.kind==='facility',noun=physical?'facility':'transport capacity',scope=(value:{facilityId?:string;entitlementId?:string})=>value[p.scopeKey];
+ const physical=p.kind==='facility',noun=physical?'facility':p.kind==='route'?'transport route':'transport capacity',scope=(value:{facilityId?:string;entitlementId?:string;routeId?:string})=>value[p.scopeKey];
  root.classList.add('facility-operations');
- root.innerHTML=`<div class="card"><div class="card-heading"><h2 data-${p.data}="heading">${p.configurationHeading}</h2><button data-${p.data}="refresh" type="button" class="secondary">Refresh</button></div><p data-${p.data}="context" class="field-help"></p><label>${p.label}<select data-${p.data}="${physical?'facility':'entitlement'}"><option value="">New ${noun} definition</option></select></label><p class="field-help">${p.boundary}</p></div>
+ root.innerHTML=`<div class="card"><div class="card-heading"><h2 data-${p.data}="heading">${p.configurationHeading}</h2><button data-${p.data}="refresh" type="button" class="secondary">Refresh</button></div><p data-${p.data}="context" class="field-help"></p><label>${p.label}<select data-${p.data}="${physical?'facility':p.kind==='route'?'route':'entitlement'}"><option value="">New ${noun} definition</option></select></label><p class="field-help">${p.boundary}</p></div>
  <div data-${p.data}="pending" class="operations-recovery" hidden><p data-${p.data}="pending-text" role="status"></p><button data-${p.data}="status" type="button">Check original request status</button><button data-${p.data}="retry" type="button" class="secondary">Retry original request</button><button data-${p.data}="dismiss" type="button" class="secondary" disabled>Dismiss checked request</button></div>
  ${physical?`<form data-${p.data}="source-search" class="card" hidden><label>Find reported flow<input data-${p.data}="source-query" type="search" maxlength="200" placeholder="Pipeline, point, operating date or source identity"></label><button type="submit" class="secondary">Find reported flow</button><p data-${p.data}="source-hint" class="field-help" role="status"></p></form>`:''}
  <p data-${p.data}="message" role="status"></p><section data-${p.data}="inspection"></section><div data-${p.data}="actions" class="actions"></div><form data-${p.data}="editor" class="card" hidden></form><section data-${p.data}="review-host"></section>`;
  const get=<T extends HTMLElement>(name:string)=>root.querySelector<T>(`[data-${p.data}="${name}"]`)!;
- const select=get<HTMLSelectElement>(physical?'facility':'entitlement'),form=get<HTMLFormElement>('editor');
+ const select=get<HTMLSelectElement>(physical?'facility':p.kind==='route'?'route':'entitlement'),form=get<HTMLFormElement>('editor');
  const searchForm=physical?get<HTMLFormElement>('source-search'):undefined,searchInput=physical?get<HTMLInputElement>('source-query'):undefined;
- const pending=new PendingCommand(code=>!!code&&((physical?/^(storage_facility_|facility_operation_|facility_quantity_|temporal_)/:/^(gas_transport_capacity_|temporal_)/).test(code)||['access_denied','historical_read_only','request_format','revision_conflict'].includes(code)));
+ const pending=new PendingCommand(code=>!!code&&((physical?/^(storage_facility_|facility_operation_|facility_quantity_|temporal_)/:p.kind==='route'?/^(gas_transport_route_|temporal_)/:/^(gas_transport_capacity_|temporal_)/).test(code)||['access_denied','historical_read_only','request_format','revision_conflict'].includes(code)));
  const transport=actorTransport<RequestCommand>(()=>p.storage+o.identity(),()=>sessionStorage);
  let section:Section=physical?'definitions':'all',selected='',sourceSearch='',queryScope='',actor='',generation=0,draftVersion=0,reading=false,dirty=false;
  let directory:View|undefined,view:View|undefined,definition:Form|undefined,editor:ReturnType<typeof mountOperationFields>|undefined;
@@ -58,7 +58,7 @@ export function setupDescribedOperations(root:HTMLElement,o:DescribedOperationsO
    if(!Array.isArray(instants)||instants.some(column=>!Number.isSafeInteger(column)||column<0||column>=table.columns.length))throw Error('The '+noun+' table time columns are incomplete.');
    const card=node('section'),grid=node('div');card.className='card';grid.className='table-wrap';card.append(node('h3',table.label),grid);host.append(card);
    const displayRows=table.rows.map(row=>row.map((value,column)=>instants.includes(column)&&value!==''?displayExactInstant(value,o.zone()):value));
-   renderRegularTable(grid,(physical?'facility-operations':'transport-capacity')+'-'+index,stamp()+selected,table.columns,table.rows,[],o.busy,{displayRows});
+   renderRegularTable(grid,(physical?'facility-operations':p.data)+'-'+index,stamp()+selected,table.columns,table.rows,[],o.busy,{displayRows});
   }
  }
  function drawInspection(){

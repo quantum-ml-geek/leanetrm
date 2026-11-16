@@ -176,6 +176,9 @@ def run_checks(pg_bin, dotnet, browser, *, group='all', run=subprocess.run):
         '--gas-transport-capacity-metadata','--operational-business-context'):
         check('managed Transport capacity '+flag,[str(dotnet),'run','--no-restore','--project',
             'tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj','--',flag],suite='managed')
+    for flag in ('--gas-transport-route-adapters','--gas-transport-route-source','--gas-transport-route-metadata'):
+        check('managed chosen Transport route '+flag,[str(dotnet),'run','--no-restore','--project',
+            'tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj','--',flag],suite='managed')
     for helper in ('check_storage_facility','check_storage_facility_upgrade'):
         check(helper,[sys.executable,f'tools/{helper}.py','--pg-bin',str(pg_bin)],suite='physical')
     check('physical facility authoring and measured activity in the application',
@@ -185,6 +188,11 @@ def run_checks(pg_bin, dotnet, browser, *, group='all', run=subprocess.run):
         check(helper,[sys.executable,f'tools/{helper}.py','--pg-bin',str(pg_bin)],suite='physical')
     check('commercial Transport capacity operations in the application',
         [sys.executable,'tools/check_gas_transport_capacity_browser.py','--pg-bin',str(pg_bin),'--dotnet',str(dotnet),
+         '--browser',str(browser),'--no-build'],suite='physical')
+    for helper in ('check_gas_transport_route','check_gas_transport_route_upgrade'):
+        check(helper,[sys.executable,f'tools/{helper}.py','--pg-bin',str(pg_bin)],suite='physical')
+    check('retained chosen Transport routes in the application',
+        [sys.executable,'tools/check_gas_transport_route_browser.py','--pg-bin',str(pg_bin),'--dotnet',str(dotnet),
          '--browser',str(browser),'--no-build'],suite='physical')
     for kind in ('physical','cash'):
         check('native '+kind+' option models in the application',[sys.executable,'tools/check_lifecycle_valuation_browser.py',

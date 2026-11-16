@@ -1,5 +1,11 @@
 # Architecture and domain contracts
 
+D411 adds locally qualified [retained chosen routes](gas-transport-routes.md)
+over exact native capacity claims and exclusive logical source-plan memberships.
+Managed/native, populated-upgrade and actual browser checks qualify persisted
+route adoption and release. Integrated release, physical performance and financial
+value remain separate.
+
 D410 adds [commercial Transport capacity operations](gas-transport-capacity-operations.md)
 over independent exact entitlement, capacity-version and chosen-plan identities.
 Shared gross limits, explicit empty release and retained source/authority

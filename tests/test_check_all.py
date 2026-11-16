@@ -39,9 +39,39 @@ OPTION_VALUE_APPS={'tools/check_lifecycle_valuation_browser.py'}
 AGENT_SETTINGS_BROWSER={'tools/check_agent_operating_settings.py'}
 STORAGE_FACILITY={f'tools/{name}.py' for name in ('check_storage_facility','check_storage_facility_upgrade','check_storage_facility_browser')}
 TRANSPORT_CAPACITY={f'tools/{name}.py' for name in ('check_gas_transport_capacity','check_gas_transport_capacity_upgrade','check_gas_transport_capacity_browser')}
+TRANSPORT_ROUTE={f'tools/{name}.py' for name in ('check_gas_transport_route','check_gas_transport_route_upgrade','check_gas_transport_route_browser')}
 
 
 class CheckAllTests(unittest.TestCase):
+    def test_chosen_route_native_upgrade_and_browser_are_required_with_the_selected_tools(self):
+        for group in ALL_GROUPS:
+            commands=[]
+            def run(command,**options):
+                commands.append(command)
+                for helper in TRANSPORT_ROUTE.intersection(command):
+                    self.assertEqual(command[command.index('--pg-bin')+1],'/stock pg')
+                    self.assertEqual(options['env']['DOTNET'],'/selected sdk')
+                    self.assertIn(['/selected sdk','build','tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj','--no-restore'],commands)
+                    if helper.endswith('_browser.py'):
+                        self.assertEqual(command[command.index('--dotnet')+1],'/selected sdk')
+                        self.assertEqual(command[command.index('--browser')+1],'/selected browser')
+                        self.assertIn('--no-build',command)
+            with redirect_stdout(io.StringIO()):
+                run_checks(Path('/stock pg'),Path('/selected sdk'),Path('/selected browser'),group=group,run=run)
+            selected=[part for command in commands for part in command if part in TRANSPORT_ROUTE]
+            self.assertEqual(set(selected),TRANSPORT_ROUTE if group=='physical' else set())
+            self.assertEqual(len(selected),len(TRANSPORT_ROUTE) if group=='physical' else 0)
+
+    def test_chosen_route_managed_contracts_are_required_once(self):
+        flags={'--gas-transport-route-adapters','--gas-transport-route-source','--gas-transport-route-metadata'}
+        for group in ALL_GROUPS:
+            selected=[]
+            with redirect_stdout(io.StringIO()):
+                run_checks(Path('/pg'),Path('/sdk'),Path('/browser'),group=group,
+                    run=lambda command,**options:selected.extend(flags.intersection(command)))
+            self.assertEqual(set(selected),flags if group=='managed' else set())
+            self.assertEqual(len(selected),len(flags) if group=='managed' else 0)
+
     def test_transport_capacity_native_upgrade_and_browser_require_physical_partition_and_built_api(self):
         api='tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj'
         for group in ALL_GROUPS:
@@ -448,6 +478,7 @@ class CheckAllTests(unittest.TestCase):
                        '--cash-payment-status','--gas-instant-ingress','--lifecycle-context-ingress',
                            '--gas-transport-capacity-adapters','--gas-transport-capacity-source',
                            '--gas-transport-capacity-metadata','--operational-business-context',
+                           '--gas-transport-route-adapters','--gas-transport-route-source','--gas-transport-route-metadata',
                            '--lifecycle-actions','--economic-risk-contract','--lifecycle-schedule-contract','--gas-owned-setup',
                           '--shared-native-markets','--derivative-methods','--gas-accepted-order','--lifecycle-residual-currencies','--gas-operator-contract')])
         self.assertTrue(any('--historical-risk-check' in c and '--browser-check' in c for c in commands))
