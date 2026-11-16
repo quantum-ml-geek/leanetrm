@@ -484,8 +484,8 @@ production-runtime limit.
 ## Option strategy viewer (D408)
 
 Runs on 16 November 2026 at the branch head, after merging the option analytics
-branch with master in it, with synthetic data, on the local machine (Apple M4
-Pro, 14 cores, macOS 26.6, .NET 10.0.13, Node 24.22.0), from Debug builds. It
+branch with master in it, with synthetic data, on the local machine (macOS 26.6
+arm64 with 14 logical processors, .NET 10.0.13, Node 24.22.0), from Debug builds. It
 has no PostgreSQL, so nothing that needs a database ran here.
 
 | Run | Where | Result |
