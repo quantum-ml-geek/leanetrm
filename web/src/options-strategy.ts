@@ -29,7 +29,7 @@ export type StrategyAnalysis={product:string;expiryAt:string;valuationAt:string;
  expiry:{rule:string;netPremium:{amount:string;direction:'debit'|'credit'|'none'};maximumProfit:Extreme;maximumLoss:Extreme;breakevens:Breakeven[];curve:CurvePoint[]};
  dated:{state:'valued'|'refused';reason:string|null;message:string|null;curves:{at:string;points:(CurvePoint&{value:string})[]}[]};
  strategy:{value:Figure;delta:Figure;gamma:Figure;vega:Figure;theta:Figure;dayTo:string|null};
- policies:{sensitivities:{policy:string};expiryRule:string};limits:StrategyLimits;work:{calibrationTreePrices:number;valuationTreePrices:number;curveSets:number;elapsedMs:number}};
+ policies:{sensitivities:{policy:string};expiryRule:string};limits:StrategyLimits;work:{calibrationTreePrices:number;valuationTreePrices:number;treePrices:number;curveSets:number;elapsedMs:number}};
 
 /** What a person has chosen for one analysis: the legs and the scenario controls, as text where they type it. */
 export type StrategyChoice={legs:StrategyLeg[];lower:string;upper:string;points:number;instants:string[];volatilityShiftPoints:string};
@@ -116,23 +116,27 @@ export function sensitivityTiles(analysis:StrategyAnalysis):Tile[]{
   tile('Vega',strategy.vega,`${currency} per volatility point`,2),tile('Theta',strategy.theta,`${currency} for one day`,2)];
 }
 
-export type ChartCurve={id:string;name:string;kind:'expiry'|'dated';points:[number,number][]};
+/** A drawn point: where it is plotted, and the price and profit and loss as text for a readout to state exactly. */
+export type ChartPoint={x:number;y:number;price:string;profitAndLoss:string};
+export type ChartCurve={id:string;name:string;kind:'expiry'|'dated';points:ChartPoint[]};
 export type ChartMark={kind:'futures'|'breakeven';price:number;label:string};
 export type StrategyChart={currency:string;curves:ChartCurve[];marks:ChartMark[]};
 /**
  * The profit-and-loss chart: the expiry payoff through every point the backend states, with each breakeven inside the
  * range added at zero so the gain and loss fills meet the axis there, then one curve per dated instant. Numbers are for
- * plotting only.
+ * plotting only; a readout states the text beside them.
  */
 export function strategyChart(analysis:StrategyAnalysis,instantLabel:(at:string)=>string):StrategyChart{
- const stated=analysis.expiry.curve.map(p=>[Number(p.price),Number(p.profitAndLoss)] as [number,number]);
- const [low,high]=[stated[0][0],stated[stated.length-1][0]];
+ const point=(p:CurvePoint):ChartPoint=>({x:Number(p.price),y:Number(p.profitAndLoss),price:trimmed(p.price),profitAndLoss:p.profitAndLoss});
+ const stated=analysis.expiry.curve.map(point);
+ const [low,high]=[stated[0].x,stated[stated.length-1].x];
  const within=(value:string)=>Number(value)>low&&Number(value)<high;
- const crossings=analysis.expiry.breakevens.flatMap(b=>b.upper!==null&&b.upper!==b.lower?[b.lower,b.upper]:[b.lower]).filter(within).map(value=>[Number(value),0] as [number,number]);
- const expiry=[...stated,...crossings.filter(([x])=>!stated.some(([at])=>at===x))].sort((a,b)=>a[0]-b[0]);
+ const crossings=analysis.expiry.breakevens.flatMap(b=>b.upper!==null&&b.upper!==b.lower?[b.lower,b.upper]:[b.lower]).filter(within)
+  .map(value=>({x:Number(value),y:0,price:price(value),profitAndLoss:'0'}));
+ const expiry=[...stated,...crossings.filter(({x})=>!stated.some(at=>at.x===x))].sort((a,b)=>a.x-b.x);
  const marks:ChartMark[]=analysis.expiry.breakevens.flatMap(b=>b.upper!==null&&b.upper!==b.lower?[b.lower,b.upper]:[b.lower]).filter(value=>Number(value)>=low&&Number(value)<=high)
   .map(value=>({kind:'breakeven' as const,price:Number(value),label:`Breakeven ${price(value)}`}));
  if(analysis.futures!==null&&Number(analysis.futures)>=low&&Number(analysis.futures)<=high)marks.unshift({kind:'futures',price:Number(analysis.futures),label:`Futures ${price(analysis.futures)}`});
  return {currency:analysis.currency,marks,curves:[{id:'expiry',name:'At expiry',kind:'expiry',points:expiry},
-  ...analysis.dated.curves.map(curve=>({id:curve.at,name:instantLabel(curve.at),kind:'dated' as const,points:curve.points.map(p=>[Number(p.price),Number(p.profitAndLoss)] as [number,number])}))]};
+  ...analysis.dated.curves.map(curve=>({id:curve.at,name:instantLabel(curve.at),kind:'dated' as const,points:curve.points.map(point)}))]};
 }

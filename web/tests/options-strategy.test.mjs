@@ -20,7 +20,7 @@ const analysis={product:'synthetic_on',expiryAt:expiry,valuationAt:at,underlying
   curve:[{price:'2.9',profitAndLoss:'-600'},{price:'3',profitAndLoss:'-1600'},{price:'3.1',profitAndLoss:'-600'},{price:'3.2',profitAndLoss:'400'}]},
  dated:{state:'valued',reason:null,message:null,curves:[{at,points:[{price:'2.9',value:'1750.5',profitAndLoss:'150.5'},{price:'3',value:'1600',profitAndLoss:'0'},{price:'3.1',value:'1760',profitAndLoss:'160'},{price:'3.2',value:'2400',profitAndLoss:'800'}]}]},
  strategy:{value:figure('1600'),delta:figure('460.000000000000000000'),gamma:figure('39759.1066'),vega:figure(null,'incomplete'),theta:figure('-82.4'),dayTo:later},
- policies:{sensitivities:{policy:'option_sensitivities_layers_v1'},expiryRule:'option_expiry_exercise_value_v1'},limits,work:{calibrationTreePrices:60,valuationTreePrices:120,curveSets:4,elapsedMs:900}};
+ policies:{sensitivities:{policy:'option_sensitivities_layers_v1'},expiryRule:'option_expiry_exercise_value_v1'},limits,work:{calibrationTreePrices:60,valuationTreePrices:120,treePrices:180,curveSets:4,elapsedMs:900}};
 
 test('a template gives its legs with the settlements the backend offers as entry prices, and a refused template gives its reason',()=>{
  assert.deepEqual(templateLegs(straddle),[{series:'c3',right:'call',strike:'3.000',side:'buy',lots:'1',entryPrice:'0.08'},{series:'p3',right:'put',strike:'3.000',side:'buy',lots:'1',entryPrice:''}]);
@@ -83,8 +83,11 @@ test('the chart draws the stated payoff through its breakevens, one curve per da
  const chart=strategyChart(analysis,instant=>instant===at?'Valuation':'Later');
  assert.deepEqual(chart.curves.map(c=>[c.id,c.name,c.kind]),[['expiry','At expiry','expiry'],[at,'Valuation','dated']]);
  // 3.16 lies between the stated points at 3.1 and 3.2 and joins the line at zero; 2.84 lies below the range and does not.
- assert.deepEqual(chart.curves[0].points,[[2.9,-600],[3,-1600],[3.1,-600],[3.16,0],[3.2,400]]);
- assert.deepEqual(chart.curves[1].points,[[2.9,150.5],[3,0],[3.1,160],[3.2,800]]);
+ assert.deepEqual(chart.curves[0].points.map(p=>[p.x,p.y]),[[2.9,-600],[3,-1600],[3.1,-600],[3.16,0],[3.2,400]]);
+ assert.deepEqual(chart.curves[1].points.map(p=>[p.x,p.y]),[[2.9,150.5],[3,0],[3.1,160],[3.2,800]]);
+ // Each point keeps the stated text beside the number it is plotted at.
+ assert.deepEqual(chart.curves[1].points[0],{x:2.9,y:150.5,price:'2.9',profitAndLoss:'150.5'});
+ assert.deepEqual(chart.curves[0].points[3],{x:3.16,y:0,price:'3.16',profitAndLoss:'0'});
  assert.deepEqual(chart.marks,[{kind:'futures',price:3.01,label:'Futures 3.01'},{kind:'breakeven',price:3.16,label:'Breakeven 3.16'}]);
  assert.equal(chart.currency,'USD');
  assert.deepEqual(strategyChart({...analysis,futures:null,dated:{...analysis.dated,curves:[]}},String).marks.map(m=>m.kind),['breakeven']);
@@ -102,7 +105,11 @@ test('the chart options use the theme: a solid expiry line filled gain above zer
  const marks=series('expiry').markLine.data;
  assert.deepEqual(marks.map(m=>m.xAxis??('y'+m.yAxis)),['y0',3.01,3.16]);assert.equal(marks[1].name,'Futures 3.01');
  assert.equal(options.tooltip.trigger,'axis');assert.equal(options.tooltip.axisPointer.type,'cross');
- assert.equal(options.tooltip.formatter([{seriesName:'At expiry',value:[3.2,400],marker:''},{seriesName:'Valuation',value:[3.2,-12.5],marker:''}]),
-  'At expiry at 3.2: <b>+400.00</b> USD<br>Valuation at 3.2: <b>-12.50</b> USD');
+ assert.deepEqual(series('expiry').data.at(-1),{value:[3.2,400],price:'3.2',profitAndLoss:'400'});assert.deepEqual(series(at).data[0],{value:[2.9,150.5],price:'2.9',profitAndLoss:'150.5'});
+ // The readout states the backend's text, rounded half to even as the analysis card rounds it, whatever its size.
+ assert.equal(options.tooltip.formatter([{seriesName:'At expiry',data:{price:'3.2',profitAndLoss:'400'},marker:''},{seriesName:'Valuation',data:{price:'3.2',profitAndLoss:'-12.505'},marker:''},
+  {seriesName:'<Later>',data:{price:'3.083333',profitAndLoss:'1234567890123456789012.125'},marker:''},{seriesName:'Flat',data:{price:'3.16',profitAndLoss:'0'},marker:''}]),
+  'At expiry at 3.2: <b>+400.00</b> USD<br>Valuation at 3.2: <b>-12.50</b> USD<br>&lt;Later&gt; at 3.083333: <b>+1,234,567,890,123,456,789,012.12</b> USD<br>Flat at 3.16: <b>0.00</b> USD');
+ assert.equal(options.yAxis.axisLabel.formatter(1500),'+1,500');assert.equal(options.yAxis.axisLabel.formatter(-1e22),'-10,000,000,000,000,000,000,000');assert.equal(options.yAxis.axisLabel.formatter(0),'0');
  assert.deepEqual([options.xAxis.min,options.xAxis.max],[2.9,3.2]);
 });

@@ -10,7 +10,7 @@ import {decimalText,hereHeading,volModel,type FuturesReadRequest,type SurfaceExp
 // surface, the booked option positions with those series' figures scaled to the lots held, and a strategy of legs on one
 // expiry with its payoff. Every settlement, volatility, sensitivity, sum, payoff and breakeven is the backend's; the page
 // chooses what to show and formats it. A product with no surface at this close shows that, never another close's figures.
-type Api=<T>(path:string,body?:unknown)=>Promise<T>;
+type Api=<T>(path:string,body?:unknown,signal?:AbortSignal)=>Promise<T>;
 type Job={state:string}|null;
 type SurfaceRead={definitionRevisionId:string;snapshotId:string;model:string;state:'fitted'|'notFitted';job:Job;surface:VolSurfaceResult|null};
 type ProductPage={definitionRevisionId:string;rows:Record<string,string|number|null>[];hasMore:boolean};
@@ -33,8 +33,8 @@ const trimmed=(value:string)=>value.includes('.')?value.replace(/0+$/,'').replac
  * The Options page. `refresh` reads the option products and booked option positions at the context and the chosen product's
  * stored surface; `open` shows a product's chain at an expiry and series, as a link from its surface does; `reset` clears
  * what an earlier context showed. `openSurface` opens the product's volatility surface, where a close is calibrated;
- * `book` opens the option ticket on a series. A strategy's legs are kept per product and expiry while the page is open;
- * its analysis is read again after the context is.
+ * `book` opens the option ticket on a series. A strategy's legs are kept per product and expiry until the context changes;
+ * what its setup offered and its analysis are dropped whenever the page is read again.
  */
 export function setupOptions(o:{api:Api;context:()=>FuturesReadRequest;zone:()=>string;frames:Pick<VolSurfaceFrames,'here'|'sessionName'>;
  openSurface:(product:string,definitionRevisionId:string,series?:string)=>void;book:(series:string)=>void}){
@@ -223,8 +223,23 @@ export function setupOptions(o:{api:Api;context:()=>FuturesReadRequest;zone:()=>
   return found;
  }
  const waiting=(s:Strategy)=>s.busy!==0&&s.busy===strategyRead;
- // A change to the choice leaves the last analysis on show, marked as no longer the choice's, and drops any answer still awaited.
- function changed(edit:(s:Strategy)=>void){const s=strategy();edit(s);if(s.analysis)s.stale=true;s.message='';if(s.setup){strategyRead++;s.busy=0;}}
+ // A strategy read that another replaces, or that nobody waits for any more, is cancelled and its answer dropped.
+ let strategyAbort:AbortController|undefined;
+ function supersede(){strategyRead++;strategyAbort?.abort();strategyAbort=undefined;}
+ function begin(s:Strategy){supersede();s.busy=strategyRead;const control=strategyAbort=new AbortController();return {number:strategyRead,signal:control.signal};}
+ // A read that has answered has nothing left to cancel.
+ function ended(s:Strategy,number:number,signal:AbortSignal){if(s.busy===number)s.busy=0;if(strategyAbort?.signal===signal)strategyAbort=undefined;}
+ // A change to the choice leaves the last analysis on show, marked as no longer the choice's, and cancels any answer still awaited.
+ function changed(edit:(s:Strategy)=>void){const s=strategy();edit(s);if(s.analysis)s.stale=true;s.message='';if(s.setup){supersede();s.busy=0;}}
+ // The strategy's controls are rebuilt when its legs, curves or templates change. Whichever had the keyboard's focus keeps
+ // it by its name; one that is gone hands it to the Analyse button, or to the first template when there is nothing to analyse.
+ function keepingFocus(draw:()=>void){
+  const held=document.activeElement instanceof HTMLElement&&strategyHost.contains(document.activeElement)?document.activeElement.dataset.focus:undefined;
+  draw();
+  if(held===undefined||strategyHost.contains(document.activeElement))return;
+  const again=[...strategyHost.querySelectorAll<HTMLElement>('[data-focus]')].find(node=>node.dataset.focus===held&&!(node as HTMLButtonElement).disabled);
+  (again??(analyseButton.disabled?templateBar.querySelector<HTMLElement>('button'):analyseButton))?.focus();
+ }
  const said=(cause:unknown)=>`${messageOf(cause)}${codeOf(cause)&&!messageOf(cause).includes(codeOf(cause)!)?` (${codeOf(cause)})`:''}`;
 
  const field=(label:string,control:HTMLElement)=>{const wrap=el('label','options-strategy-field');wrap.append(el('span',undefined,label),control);return wrap;};
@@ -240,6 +255,7 @@ export function setupOptions(o:{api:Api;context:()=>FuturesReadRequest;zone:()=>
  lower.onchange=()=>{changed(s=>s.choice.lower=lower.value.trim());renderStatus();};upper.onchange=()=>{changed(s=>s.choice.upper=upper.value.trim());renderStatus();};
  shift.onchange=()=>{changed(s=>s.choice.volatilityShiftPoints=shift.value.trim());renderStatus();};
  points.onchange=()=>{changed(s=>s.choice.points=Number(points.value));renderStatus();};
+ addCurve.dataset.focus='add-curve';analyseButton.dataset.focus='analyse';clearButton.dataset.focus='clear';
  addCurve.onchange=()=>{const at=addCurve.value;if(at){changed(s=>s.choice.instants.push(at));renderStrategy();}};
  analyseButton.onclick=()=>void analyse();clearButton.onclick=()=>{changed(s=>s.choice.legs=[]);renderStrategy();};
 
@@ -252,55 +268,64 @@ export function setupOptions(o:{api:Api;context:()=>FuturesReadRequest;zone:()=>
   analyseButton.disabled=busy||!s.choice.legs.length;clearButton.disabled=!s.choice.legs.length;
  }
  async function readSetup(){
-  const s=strategy(),number=++strategyRead;s.busy=number;renderStatus();
+  const s=strategy(),{number,signal}=begin(s);renderStatus();
   try{
-   const setup=await o.api<StrategySetup>('options/strategy/setup',{context:o.context(),product,model:volModel,expiryAt,definitionRevisionId:definition});
+   const setup=await o.api<StrategySetup>('options/strategy/setup',{context:o.context(),product,model:volModel,expiryAt,definitionRevisionId:definition},signal);
    if(number!==strategyRead)return;
    if(setup.product!==product||setup.model!==volModel||Date.parse(setup.expiryAt)!==Date.parse(expiryAt))
     throw Error('The strategy setup read does not match the selected product, model and expiry. Refresh and try again.');
    s.setup=setup;if(setup.offered)s.choice={...offeredChoice(setup.offered),legs:s.choice.legs};
   }catch(cause){if(number===strategyRead)s.message=said(cause);}
-  finally{if(s.busy===number)s.busy=0;if(number===strategyRead&&view==='strategy'&&!broken)renderStrategy();}
+  finally{ended(s,number,signal);if(number===strategyRead&&onShow(s))renderStrategy();}
  }
+ // The strategy is the one drawn: its product's surface is in view and the Strategy view is chosen.
+ const onShow=(s:Strategy)=>view==='strategy'&&!broken&&shown?.state==='fitted'&&s===strategy();
  async function analyse(){
   const s=strategy();if(!s.setup?.offered)return;
   const problem=choiceProblem(s.choice,s.setup.limits);
   if(problem){s.message=problem;renderStatus();return;}
-  const number=++strategyRead;s.busy=number;s.message='';renderStatus();
+  const {number,signal}=begin(s);s.message='';renderStatus();
   try{
    const body=analysisRequest(o.context(),s.setup,s.choice,definition);
-   const answer=await o.api<StrategyAnalysis>('options/strategy/analyze',body);
+   const answer=await o.api<StrategyAnalysis>('options/strategy/analyze',body,signal);
    if(number!==strategyRead)return;
    if(answer.product!==body.product||Date.parse(answer.expiryAt)!==Date.parse(body.expiryAt)||answer.legs.length!==body.legs.length||answer.legs.some((leg,n)=>leg.series!==body.legs[n].series)||
     answer.request.prices.points!==body.prices.points||answer.request.instants.length!==body.instants.length)
     throw Error('The strategy analysis does not match the legs and scenario that were sent. Analyse again.');
    s.analysis=answer;s.stale=false;
   }catch(cause){if(number===strategyRead)s.message=said(cause);}
-  finally{if(s.busy===number)s.busy=0;if(number===strategyRead&&view==='strategy'&&!broken)renderStrategy();}
+  // An answer redraws what it states and leaves the legs and controls a person may be typing in as they are.
+  finally{ended(s,number,signal);if(number===strategyRead&&onShow(s)){renderFigures(s);renderResults(s);renderStatus();}}
+ }
+ // Each leg's analysed volatility and delta, beside the leg it was analysed for.
+ function renderFigures(s:Strategy){
+  const figures=s.analysis?legFigures(s.analysis):new Map<string,{impliedVolatility:Cell;delta:Cell}>();
+  for(const td of legHost.querySelectorAll<HTMLTableCellElement>('td.options-leg-figure')){
+   const stated=figures.get(td.parentElement!.dataset.series!)?.[td.dataset.figure as 'impliedVolatility'|'delta'];
+   td.textContent=stated?.text??'—';td.title=stated?.missing?strategyReason(stated.missing):'';td.classList.toggle('options-missing-figure',!!stated?.missing);
+  }
  }
  function renderLegs(s:Strategy){
   const table=el('table','options-strategy-legs'),head=el('tr'),top=el('thead'),body=el('tbody');table.id='options-strategy-legs';
   for(const [name,numeric] of [['Side',false],['Lots',true],['Series',false],['Entry price',true],['IV',true],['Delta',true],['',false]] as const){
    const th=el('th',numeric?'numeric':undefined,name);th.scope='col';head.append(th);}
   top.append(head);
-  const figures=s.analysis?legFigures(s.analysis):new Map<string,{impliedVolatility:Cell;delta:Cell}>();
   s.choice.legs.forEach((leg:StrategyLeg,n)=>{
    const tr=el('tr');tr.dataset.series=leg.series;tr.dataset.side=leg.side;
-   const flip=button('options-leg-side',leg.side==='buy'?'Buy':'Sell');flip.dataset.side=leg.side;flip.title='Change between buy and sell';
+   const flip=button('options-leg-side',leg.side==='buy'?'Buy':'Sell');flip.dataset.side=leg.side;flip.title='Change between buy and sell';flip.dataset.focus=`side:${leg.series}`;
    flip.onclick=()=>{changed(()=>leg.side=leg.side==='buy'?'sell':'buy');renderStrategy();};
    const lots=input('options-leg-lots-'+n,'numeric'),entry=input('options-leg-entry-'+n,'decimal');
+   lots.dataset.focus=`lots:${leg.series}`;entry.dataset.focus=`entry:${leg.series}`;
    lots.className='options-leg-lots';lots.value=leg.lots;lots.setAttribute('aria-label',`Lots of ${leg.series}`);lots.onchange=()=>{changed(()=>leg.lots=lots.value.trim());renderStatus();};
    entry.className='options-leg-entry';entry.value=leg.entryPrice;entry.setAttribute('aria-label',`Entry price of ${leg.series}`);entry.onchange=()=>{changed(()=>leg.entryPrice=entry.value.trim());renderStatus();};
    const name=el('td');name.append(el('span','options-leg-name',`${trimmed(leg.strike)} ${leg.right}`),' ',el('code','vol-card-code',leg.series));
-   const remove=button('secondary options-leg-remove','Remove');remove.setAttribute('aria-label',`Remove ${leg.series}`);remove.onclick=()=>{changed(c=>c.choice.legs.splice(n,1));renderStrategy();};
-   const figure=(stated:Cell|undefined)=>{
-    const td=el('td','numeric options-leg-figure',stated?.text??'—');if(stated?.missing){td.title=strategyReason(stated.missing);td.classList.add('options-missing-figure');}return td;
-   };
-   const cells=[el('td'),el('td','numeric'),name,el('td','numeric'),figure(figures.get(leg.series)?.impliedVolatility),figure(figures.get(leg.series)?.delta),el('td')];
+   const remove=button('secondary options-leg-remove','Remove');remove.dataset.focus=`remove:${leg.series}`;remove.setAttribute('aria-label',`Remove ${leg.series}`);remove.onclick=()=>{changed(c=>c.choice.legs.splice(n,1));renderStrategy();};
+   const figure=(measure:string)=>{const td=el('td','numeric options-leg-figure');td.dataset.figure=measure;return td;};
+   const cells=[el('td'),el('td','numeric'),name,el('td','numeric'),figure('impliedVolatility'),figure('delta'),el('td')];
    cells[0].append(flip);cells[1].append(lots);cells[3].append(entry);cells[6].append(remove);tr.append(...cells);body.append(tr);
   });
   if(!s.choice.legs.length){const tr=el('tr'),td=el('td','options-strategy-empty','No legs yet. Choose a template, or add a call or a put from the chain.');td.colSpan=7;tr.append(td);body.append(tr);}
-  table.append(top,body);legHost.replaceChildren(table);
+  table.append(top,body);legHost.replaceChildren(table);renderFigures(s);
  }
  function renderResults(s:Strategy){
   const analysis=s.analysis;
@@ -327,17 +352,22 @@ export function setupOptions(o:{api:Api;context:()=>FuturesReadRequest;zone:()=>
   strategyBasis.textContent=publicText(`At expiry an option in the money is exercised and worth its intrinsic value (${analysis.expiry.rule}); the payoff is stated over futures prices from zero upward. `+
    `Dated curves and sensitivities value the legs with the option model at each futures price, instant and volatility shift${analysis.strategy.dayTo?`; theta is for the day to ${instant(analysis.strategy.dayTo)}`:''}`+
    `${clock?`, with days counted on the ${clock.zone} clock`:''}. Sensitivities are the option model’s own (${analysis.policies.sensitivities.policy}); Risk reports keep theirs. `+
-   `This analysis priced ${analysis.work.calibrationTreePrices+analysis.work.valuationTreePrices} trees. It books and stores nothing.`);
+   `This analysis priced ${analysis.work.treePrices} trees. It books and stores nothing.`);
  }
- function renderStrategy(){
+ function renderStrategy(){keepingFocus(drawStrategy);}
+ function drawStrategy(){
   const expiry=renderExpiries(),s=strategy(),offer=s.setup?.offered;
   for(const node of [templateBar,legHost,controls,results,strategyBasis])node.hidden=!expiry||!offer;
   if(!expiry){strategyHost.dataset.state='empty';strategyMessage.textContent='Every listed expiry of this product has passed.';return;}
   if(!s.setup){if(!waiting(s)&&!s.message)void readSetup();else renderStatus();return;}
   if(!offer){strategyHost.dataset.state='empty';strategyMessage.textContent='This expiry has no surface at this close, so no strategy is offered.';return;}
   templateBar.replaceChildren(el('span','options-templates-label','Templates'),...(s.setup.templates??[]).map(template=>{
-   const chip=button('options-template',template.name);chip.dataset.template=template.id;
-   if(template.refusal){chip.disabled=true;chip.title=template.refusal.message;}
+   const chip=button('options-template',template.name);chip.dataset.template=template.id;chip.dataset.focus=`template:${template.id}`;
+   // A template the expiry cannot place stays reachable, so that choosing it says why.
+   if(template.refusal){
+    const why=template.refusal.message;chip.setAttribute('aria-disabled','true');chip.title=why;
+    chip.onclick=()=>{s.message=`${template.name} is not offered at this expiry. ${why}`;renderStatus();};
+   }
    else chip.onclick=()=>{changed(c=>c.choice.legs=templateLegs(template));renderStrategy();void analyse();};
    return chip;
   }));
@@ -345,12 +375,14 @@ export function setupOptions(o:{api:Api;context:()=>FuturesReadRequest;zone:()=>
   lower.value=s.choice.lower;upper.value=s.choice.upper;shift.value=s.choice.volatilityShiftPoints;
   points.replaceChildren(...offer.pointCounts.map(count=>new Option(String(count),String(count))));points.value=String(s.choice.points);
   curves.replaceChildren(...s.choice.instants.map(at=>{
-   const chip=button('options-strategy-curve',`${Date.parse(at)===Date.parse(offer.instants[0]??'')?'Valuation · ':''}${instant(at)} ✕`);chip.dataset.instant=at;
+   const chip=button('options-strategy-curve',`${Date.parse(at)===Date.parse(offer.instants[0]??'')?'Valuation · ':''}${instant(at)} ✕`);chip.dataset.instant=at;chip.dataset.focus=`curve:${at}`;
    chip.setAttribute('aria-label',`Remove the curve at ${instant(at)}`);chip.onclick=()=>{changed(c=>c.choice.instants=c.choice.instants.filter(i=>i!==at));renderStrategy();};
    return chip;
   }));
   if(!s.choice.instants.length)curves.append(el('span','options-position-note','None: the payoff at expiry only'));
   addCurve.replaceChildren(new Option('Add a date…',''),...offer.instants.filter(at=>!s.choice.instants.includes(at)).map(at=>new Option(instant(at),at)));
+  // An offer that could not list every date before the legs' cutoff says so where the dates are chosen.
+  if(!offer.instantsComplete){const more=new Option('Later dates are not listed','');more.disabled=true;addCurve.append(more);}
   addCurve.disabled=s.choice.instants.length>=s.setup.limits.curves;addCurve.title=addCurve.disabled?`At most ${s.setup.limits.curves} dated curves`:'';
   renderResults(s);renderStatus();
  }
@@ -380,7 +412,7 @@ export function setupOptions(o:{api:Api;context:()=>FuturesReadRequest;zone:()=>
 
  // Each read is numbered: an answer to a read that a newer one replaced is dropped.
  async function readProduct(){
-  const number=++generation;shown=undefined;broken=false;render();
+  const number=++generation;shown=undefined;broken=false;supersede();render();
   if(!product)return;
   try{
    const context=o.context();
@@ -394,7 +426,7 @@ export function setupOptions(o:{api:Api;context:()=>FuturesReadRequest;zone:()=>
  async function refresh(){
   const number=++generation;broken=false;showHere();root.dataset.state='loading';error.hidden=true;
   // What a strategy was offered and how it analysed belong to the context that was read; its legs are the person's.
-  strategyRead++;for(const kept of strategies.values()){kept.setup=undefined;kept.analysis=undefined;kept.stale=false;kept.busy=0;kept.message='';}
+  supersede();for(const kept of strategies.values()){kept.setup=undefined;kept.analysis=undefined;kept.stale=false;kept.busy=0;kept.message='';}
   try{
    const context=o.context(),params=new URLSearchParams({table:'futures_option_products',snapshotId:context.snapshotId,offset:'0',search:''});
    const [page,held]=await Promise.all([o.api<ProductPage>('reference/catalog?'+params),o.api<OptionPositionsRead>('options/positions',{context,model:volModel})]);
@@ -408,7 +440,7 @@ export function setupOptions(o:{api:Api;context:()=>FuturesReadRequest;zone:()=>
   await readProduct();
  }
  function holdings(read:OptionPositionsRead){held=new Map(read.held.map(h=>[h.series,h.openLots]));}
- function reset(){generation++;strategyRead++;strategies.clear();broken=false;products=[];definition=undefined;shown=undefined;positions=undefined;held=new Map();productBar.replaceChildren();render();}
+ function reset(){generation++;supersede();strategies.clear();broken=false;products=[];definition=undefined;shown=undefined;positions=undefined;held=new Map();productBar.replaceChildren();render();}
  chainView.onclick=()=>{view='chain';render();};positionsView.onclick=()=>{view='positions';render();};
  // Opening the strategy asks again for a setup that could not be read.
  strategyView.onclick=()=>{view='strategy';if(product&&expiryAt&&!strategy().setup)strategy().message='';render();};
@@ -416,7 +448,7 @@ export function setupOptions(o:{api:Api;context:()=>FuturesReadRequest;zone:()=>
   refresh,
   /** Shows a product's chain, at an expiry and with a series selected where they are named. */
   async open(code:string,expiry?:string,series?:string){product=code;expiryAt=expiry??'';selected=series??'';await refresh();},
-  leave(){generation++;strategyRead++;},
+  leave(){generation++;supersede();},
   reset
  };
 }

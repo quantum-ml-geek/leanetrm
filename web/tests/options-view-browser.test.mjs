@@ -44,17 +44,18 @@ const setup=`
   dated:refuseDated?{state:'refused',reason:'option_at_intrinsic',message:'A leg is valued at intrinsic and has no volatility, so the strategy has no dated curve.',curves:[]}:
    {state:'valued',reason:null,message:null,curves:body.instants.map(instant=>({at:instant,points:[{price:'2.6',value:'4400',profitAndLoss:'1060'},{price:'3',value:'3340',profitAndLoss:'0'},{price:'3.4',value:'4500',profitAndLoss:'1160'}]}))},
   strategy:{value:figure('3340'),delta:figure('460'),gamma:figure('39759.1'),vega:figure(null,'incomplete'),theta:figure('-82.4'),dayTo:nextDay},
-  policies:{sensitivities:{policy:'option_sensitivities_layers_v1'},expiryRule:'option_expiry_exercise_value_v1'},limits,work:{calibrationTreePrices:60,valuationTreePrices:120,curveSets:4,elapsedMs:900}});
- const analyses=[];let refuseDated=false,refuseAnalysis=false,holdAnalysis=null;
+  policies:{sensitivities:{policy:'option_sensitivities_layers_v1'},expiryRule:'option_expiry_exercise_value_v1'},limits,work:{calibrationTreePrices:60,valuationTreePrices:120,treePrices:180,curveSets:4,elapsedMs:900}});
+ const analyses=[],signals=[],unhandled=[];let refuseDated=false,refuseAnalysis=false,holdAnalysis=null;
+ addEventListener('unhandledrejection',event=>unhandled.push(String(event.reason)));
  const calls=[],opened=[],booked=[];let fitted=true,failPositions=false;
- const api=async(path,body)=>{
+ const api=async(path,body,signal)=>{
   calls.push(path.split('?')[0]);
   if(path.startsWith('reference/catalog'))return {definitionRevisionId:'definition-a',rows:[{code:'synthetic_on',name:'Synthetic gas options'},{code:'synthetic_lo',name:'Synthetic crude options'}],hasMore:false};
   if(path==='options/positions'){if(failPositions)throw Object.assign(Error('The positions could not be read.'),{code:'synthetic_failure'});return positions;}
   if(path==='vol-surfaces/read')return {definitionRevisionId:'definition-a',snapshotId:'synthetic-close',model,state:fitted?'fitted':'notFitted',job:null,surface:fitted?surface:null};
   if(path==='options/strategy/setup')return {...strategySetup,product:body.product,expiryAt:body.expiryAt};
   if(path==='options/strategy/analyze'){
-   analyses.push(body);if(holdAnalysis)await holdAnalysis;
+   analyses.push(body);signals.push(signal);if(holdAnalysis)await holdAnalysis;
    if(refuseAnalysis)throw Object.assign(Error('Choose a positive lower bound, a higher upper bound and at least two points whose even spacing is an exact decimal.'),{code:'strategy_price_range'});
    return analysed(body);
   }
@@ -127,12 +128,14 @@ browser('Strategy opens on the expiry in view with the templates, range and curv
  const refused=$('.options-template[data-template=iron_condor]');
  return {state:state(),pressed:$('#options-view-strategy').getAttribute('aria-pressed'),soon:/Coming soon/.test($('#options-view-strategy').textContent),strategy:${strategyState},
   shown:!$('#options-strategy').hidden&&$('.options-chain-view').hidden&&!$('#options-expiries').closest('[hidden]'),setup:calls.filter(c=>c==='options/strategy/setup').length,
-  templates:all('.options-template').map(c=>[c.dataset.template,c.disabled]),why:refused.title,
+  templates:all('.options-template').map(c=>[c.dataset.template,c.getAttribute('aria-disabled')==='true']),why:refused.title,
+  said:(refused.click(),[$('#options-strategy').dataset.state,$('#options-strategy-message').textContent,$('#options-strategy-legs tbody tr[data-series]')]),
   range:[$('#options-strategy-lower').value,$('#options-strategy-upper').value,$('#options-strategy-points').value,all('#options-strategy-points option').map(o=>o.value).join()],
   curves:all('.options-strategy-curve').map(c=>c.dataset.instant===at),dates:all('#options-strategy-add-curve option').length,shift:$('#options-strategy-shift').value,
   legs:$('#options-strategy-legs tbody').textContent,analyse:$('#options-strategy-analyse').disabled,analysed:analyses.length};
 `,{state:'strategy',pressed:'true',soon:false,strategy:'empty',shown:true,setup:1,templates:[['straddle',false],['iron_condor',true]],
- why:'Iron condor needs a put 4 listed strikes below 3, and the expiry lists none there.',range:['2.6','3.4','21','11,21,41'],curves:[true],dates:2,shift:'0',
+ why:'Iron condor needs a put 4 listed strikes below 3, and the expiry lists none there.',
+ said:['refused','Iron condor is not offered at this expiry. Iron condor needs a put 4 listed strikes below 3, and the expiry lists none there.',null],range:['2.6','3.4','21','11,21,41'],curves:[true],dates:2,shift:'0',
  legs:'No legs yet. Choose a template, or add a call or a put from the chain.',analyse:true,analysed:0});
 
 browser('a template fills its legs and is analysed with the offered policies sent back: the payoff is drawn and the backend\'s figures are shown',`
@@ -191,8 +194,29 @@ browser('dated curves are chosen from the offered dates up to the limit; refused
  $('#options-strategy-analyse').click();await tick();const busy=${strategyState};
  $('.options-strategy-curve').click();const during=${strategyState};
  release();holdAnalysis=null;await tick();await tick();
- return {chosen,left,refused,busy,during,after:${strategyState},curves:all('.options-strategy-curve').length,refusedStill:!!$('#options-strategy-refused')};
+ return {chosen,left,refused,busy,during,after:${strategyState},curves:all('.options-strategy-curve').length,refusedStill:!!$('#options-strategy-refused'),cancelled:signals.at(-1).aborted,earlier:signals[0].aborted};
 `,{chosen:['2026-10-16T17:00:00+00:00','2026-10-17T17:00:00+00:00'],left:1,
  refused:{strategy:'analysed',instants:['2026-10-16T17:00:00+00:00','2026-10-17T17:00:00+00:00'],why:'No dated curve: Valued at intrinsic, so it has no sensitivities.',
   title:'A leg is valued at intrinsic and has no volatility, so the strategy has no dated curve.',chart:true,label:'Profit and loss against the futures price: At expiry. Futures 3.01, Breakeven 2.666, Breakeven 3.334'},
- busy:'busy',during:'stale',after:'stale',curves:1,refusedStill:true});
+ busy:'busy',during:'stale',after:'stale',curves:1,refusedStill:true,cancelled:true,earlier:false});
+
+browser('the keyboard keeps its place when the legs are redrawn, an answer leaves what is being typed alone, and moving to another product cancels a pending analysis',`
+ await options.open('synthetic_on');await tick();$('#options-view-strategy').click();await tick();await tick();
+ const focus=()=>document.activeElement?.dataset?.focus??document.activeElement?.tagName;
+ const chip=$('.options-template[data-template=straddle]');chip.focus();chip.click();const afterTemplate=focus();await tick();await tick();await tick();
+ const flip=$('.options-leg-side');flip.focus();flip.click();const afterFlip=[focus(),document.activeElement.textContent];
+ const remove=all('.options-leg-remove')[1];remove.focus();remove.click();const afterRemove=focus();
+ // An answer arrives while a number is being typed and has not been entered yet.
+ let release;holdAnalysis=new Promise(resolve=>release=resolve);
+ $('#options-strategy-analyse').click();await tick();
+ const lots=$('.options-leg-lots');lots.focus();lots.value='7';
+ release();holdAnalysis=null;await tick();await tick();
+ const typing=[${strategyState},$('.options-leg-lots')===lots,lots.value,document.activeElement===lots,$('#options-strategy-legs .options-leg-figure').textContent];
+ // Another product is chosen while an analysis is awaited.
+ holdAnalysis=new Promise(resolve=>release=resolve);$('#options-strategy-analyse').click();await tick();
+ const pending=signals.at(-1);
+ all('.options-product')[1].click();await tick();
+ const cancelled=pending.aborted;release();holdAnalysis=null;await tick();await tick();await tick();
+ return {afterTemplate,afterFlip,afterRemove,typing,cancelled,state:state(),product:$('.options-product[aria-pressed=true]').dataset.product,legs:$('#options-strategy-legs tbody').textContent,unhandled};
+`,{afterTemplate:'template:straddle',afterFlip:['side:c3','Sell'],afterRemove:'analyse',typing:['analysed',true,'7',true,'45.1%'],cancelled:true,state:'strategy',product:'synthetic_lo',
+ legs:'No legs yet. Choose a template, or add a call or a put from the chain.',unhandled:[]});

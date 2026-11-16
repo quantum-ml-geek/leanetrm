@@ -344,7 +344,7 @@ the reads are [OptionStrategyRead.cs](../src/OpenEtrm.Api/OptionStrategyRead.cs)
 | `context`, `product`, `expiryAt` | The trading context, the option product and the instant every leg expires at. |
 | `legs[]` | `series` (a listed series code), `side` (`buy` or `sell`), `lots` (a whole number from 1 to 100,000), `entryPrice` (exact decimal text, not negative, per unit of quote). Each series is on one leg. |
 | `prices` | `lower`, `upper` and `points`: evenly spaced futures prices, bounds included. |
-| `instants[]` | The instants of the dated curves, increasing, from the valuation instant to before expiry. None is an empty list. |
+| `instants[]` | The instants of the dated curves, increasing, from the valuation instant to before the legs' instruction cutoff while one is ahead, or else their expiry. None is an empty list. |
 | `volatilityShiftPoints` | Added to every leg's held volatility for the dated curves, in volatility points (5 is 0.05), in hundredths of a point. |
 | `valuation` | The option valuation policy, in full: the one the setup offers. |
 | `sensitivities` | The `option_sensitivities_layers_v1` selection, as a fit states it, with a clock only at a working snapshot. |
@@ -370,7 +370,8 @@ the reads are [OptionStrategyRead.cs](../src/OpenEtrm.Api/OptionStrategyRead.cs)
 - `request`, `policies` (valuation, sensitivities as stated with their clock
   and day, the expiry rule, the price, clock and volatility layer conventions
   and the reporting policy), `limits` and `work` (calibration and valuation
-  tree prices, the sets the curves were valued in, elapsed time).
+  tree prices and their sum, the sets the curves were valued in, elapsed
+  time).
 
 **Refusals.** `strategy_limit`, `strategy_legs`, `strategy_leg_side`,
 `strategy_leg_lots`, `strategy_leg_entry`, `strategy_leg_series`,

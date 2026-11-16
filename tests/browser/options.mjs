@@ -152,10 +152,10 @@ export async function run({command,evaluate,wait,click,persona,check,idle,fitsWi
     Number(document.querySelector('#options-strategy-lower').value)===${Number(offer.answer.offered.prices.lower)}&&Number(document.querySelector('#options-strategy-upper').value)===${Number(offer.answer.offered.prices.upper)}&&
     document.querySelectorAll('.options-strategy-curve').length===1&&document.querySelector('#options-strategy-analyse').disabled&&/No legs yet/.test(document.querySelector('#options-strategy-legs').textContent)`,
    `[${strategy},document.querySelector('#options-strategy-controls').textContent,document.querySelector('#options-strategy-message').textContent]`);
-  await check('each template is offered with its legs, or is disabled and says which strike or series the expiry does not list',
-   `${q(offer.answer.templates.filter(t=>t.refusal).map(t=>t.id).sort().join())}===[...document.querySelectorAll('.options-template:disabled')].map(c=>c.dataset.template).sort().join()&&
-    [...document.querySelectorAll('.options-template:disabled')].every(c=>c.title.length>0)&&!document.querySelector('.options-template[data-template=straddle]').disabled`,
-   "[...document.querySelectorAll('.options-template')].map(c=>[c.dataset.template,c.disabled,c.title])");
+  await check('each template is offered with its legs, or is marked unavailable and says which strike or series the expiry does not list',
+   `${q(offer.answer.templates.filter(t=>t.refusal).map(t=>t.id).sort().join())}===[...document.querySelectorAll('.options-template[aria-disabled=true]')].map(c=>c.dataset.template).sort().join()&&
+    [...document.querySelectorAll('.options-template[aria-disabled=true]')].every(c=>c.title.length>0)&&!document.querySelector('.options-template[data-template=straddle]').hasAttribute('aria-disabled')`,
+   "[...document.querySelectorAll('.options-template')].map(c=>[c.dataset.template,c.getAttribute('aria-disabled'),c.title])");
   // Fewer price points keep this analysis short; the range and the curve stay as offered.
   await enter('#options-strategy-points','11');
   await click('.options-template[data-template=straddle]');

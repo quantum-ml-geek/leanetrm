@@ -2855,8 +2855,8 @@ header>div:first-child{flex:1 1 160px}
 .options-templates{display:flex;flex-wrap:wrap;align-items:center;gap:8px;min-width:0}
 .options-templates-label{font-size:11px;font-weight:650;letter-spacing:.08em;text-transform:uppercase;color:var(--text-3);margin-right:4px}
 .options-template,.options-strategy-curve{padding:6px 12px;border-radius:999px;font-weight:500;background:var(--surface);color:var(--text-2);border:1px solid var(--border)}
-.options-template:hover:not(:disabled),.options-strategy-curve:hover{background:var(--surface);border-color:var(--accent);color:var(--text)}
-.options-template:disabled{color:var(--text-disabled);cursor:default}
+.options-template:hover:not([aria-disabled=true]),.options-strategy-curve:hover{background:var(--surface);border-color:var(--accent);color:var(--text)}
+.options-template[aria-disabled=true]{color:var(--text-disabled);cursor:default}
 .options-strategy-legs td{vertical-align:middle}
 .options-strategy-leg-host{max-width:780px}
 .options-strategy-legs input{width:9ch;text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}

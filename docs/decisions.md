@@ -5624,7 +5624,9 @@ trading P&L and every value they state are unchanged.
   price, a range where the payoff is zero, or every price from one upward. The
   curve is exact at each requested price and at each strike between them.
 - **Before expiry.** One curve per requested instant, from the valuation
-  instant to before expiry: at each price, ordinary instrument PV of the legs
+  instant to before the legs' instruction cutoff while one is ahead, or else
+  their expiry, which is as far as the option model values a series; a later
+  instant is refused (`strategy_curve_instant`). At each price, ordinary instrument PV of the legs
   under a scenario that moves the underlying future to that price, the
   calculation clock to the instant (`frozen_absolute_inputs_forward_clock_v1`)
   and every leg's held volatility by the stated shift, less the premium paid
@@ -5637,7 +5639,9 @@ trading P&L and every value they state are unchanged.
   dated curve (`option_at_intrinsic`, `strategy_leg_uncalibrated`): none is
   drawn from the legs that did solve. A sample the valuation refuses, such as
   a shifted volatility it cannot price, refuses the dated curves with its
-  code. The payoff at expiry needs no volatility and is still returned.
+  code. The payoff at expiry needs no volatility and is still returned. Only
+  those refuse the curves; anything else wrong with what was asked fails the
+  read.
 - **Value and sensitivities.** The strategy's value, delta, gamma, vega and
   theta are its legs' figures under the request's
   `option_sensitivities_layers_v1` selection, each times its multiplier and
@@ -5652,13 +5656,15 @@ trading P&L and every value they state are unchanged.
   the layer conventions it ran under and the work done. Price points are
   evenly spaced exact decimals; a range that does not divide that way is
   refused, never moved (`strategy_price_range`).
-- **Bounded.** At most 4 legs, 41 price points and 3 dated curves, with a
-  volatility shift of at most 100 points. A request beyond one is refused
-  `strategy_limit`, not cut down. The limits come from the measurement in
+- **Bounded.** At most 4 legs, 41 price points and 3 dated curves; a request
+  beyond one is refused `strategy_limit`, not cut down. A leg is at most
+  100,000 lots (`strategy_leg_lots`) and the volatility shift at most 100
+  points (`strategy_volatility_shift`). The limits come from the measurement in
   [verification](verification.md#option-strategy-viewer-d407): one tree price
-  is tens of milliseconds, and an analysis at every limit is 492 of them for
-  its curves. The curves are valued in up to four sets side by side, each
-  over a market of its own, as a fit's expiries are.
+  is tens of milliseconds, and an analysis at every limit is about 500 of them
+  for its curves (492 scenario prices and one base price per leg for each
+  set). The curves are valued in up to four sets side by side, each over a
+  market of its own, as a fit's expiries are.
 - **Asynchronous.** The analysis is admitted on the asynchronous read channel
   as `options.strategy.analyze.v1` (D404), which the page uses; the ordinary
   endpoint keeps the ordinary request limit.
@@ -5671,7 +5677,8 @@ trading P&L and every value they state are unchanged.
   and a strike or series that is not listed refuses the template rather than
   taking a nearer one); a price range six listed strikes either side of the
   money at 21 points; the valuation instant and the same local time on each
-  later calendar date before expiry; and the policies an analysis names. Days
+  later calendar date before the instant curves stop at, with whether that
+  list is complete; and the policies an analysis names. Days
   are counted on the close convention's clock, or at a working snapshot on the
   clock the surface's own fit named, so a strategy's day is its chain's. An
   offer is for sending back: an analysis accepts what it is given, offered or
@@ -5682,7 +5689,8 @@ trading P&L and every value they state are unchanged.
   filled in the gain tone above zero and the loss tone below, dashed dated
   curves told apart by dash as well as colour, and marks at the settled
   futures price and each breakeven. The page computes nothing. A strategy's
-  legs are kept per product and expiry while the page is open.
+  legs are kept per product and expiry until the context changes. An analysis
+  a newer choice replaces is cancelled.
 - **Reads only.** Both reads are for readers of trades and market data. They
   book nothing and store nothing, and no agent tool calls them.
 - **Still open.** Strategies across expiries, which need a declared
