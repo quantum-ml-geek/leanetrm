@@ -1711,7 +1711,8 @@ newest. A surface that states no selection is refused with `vol_surface_input`.
 Surfaces stored before this release state no selection. The migration removes
 them with their pinned inputs and command receipts; their fit jobs and request
 identities remain as operational history, so each product is refitted after the
-release. The three existing functions are patched in place and keep their
+release. A completed fit also reports its analytics' tree prices and time. The
+four existing functions are patched in place and keep their
 owners and privileges; a function that no longer reads as expected stops the
 migration. `options` joins the pages whose assistant guidance can be configured.
 It requires a qualified schema release.

@@ -1,7 +1,8 @@
 -- A fitted volatility surface states the option sensitivity selection its series' analytics were computed under, and that
 -- selection is part of what a refit is compared against: the same inputs under another selection are a new revision, never a
 -- nondeterministic refit. Surfaces fitted before analytics state none, so they are removed here and refitted; their fit
--- jobs stay as operational history. The Options page is a page whose guidance can be configured.
+-- jobs stay as operational history. A completed fit reports its analytics' work beside the fit's. The Options page is a page
+-- whose guidance can be configured.
 BEGIN;
 SET LOCAL search_path=pg_catalog;
 SET LOCAL lock_timeout='5s';
@@ -34,6 +35,12 @@ DO $upgrade$DECLARE body text;before text;BEGIN
  IF(length(body)-length(replace(body,before,'')))/length(before)<>1 THEN RAISE EXCEPTION 'vol_surface_sensitivities_drift: submit request';END IF;
  EXECUTE replace(body,before,'IS DISTINCT FROM ARRAY[''businessDate'',''convention'',''engineVersion'',''futuresConvention'',''model'',''product'',''sensitivities'',''solverPolicy'']'
   ||' OR jsonb_typeof(request->''sensitivities'') IS DISTINCT FROM ''object''');
+
+ -- A completed fit also reports the work of its analytics.
+ body=pg_get_functiondef('risk.finish_vol_surface_fit(uuid,uuid,uuid[],jsonb,text,jsonb)'::regprocedure);
+ before='IS DISTINCT FROM ARRAY[''elapsedMs'',''series'',''solves'']';
+ IF(length(body)-length(replace(body,before,'')))/length(before)<>1 THEN RAISE EXCEPTION 'vol_surface_sensitivities_drift: finish measures';END IF;
+ EXECUTE replace(body,before,'IS DISTINCT FROM ARRAY[''analyticsMs'',''analyticsTreePrices'',''elapsedMs'',''series'',''solves'']');
 
  body=pg_get_functiondef('assistant.is_prompt_page(text)'::regprocedure);
  before='''vol_surfaces''';
