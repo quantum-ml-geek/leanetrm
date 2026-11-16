@@ -60,6 +60,21 @@ test('one New trade product choice includes the explicit Park and loan profile b
  assert.equal(newTradeProducts.find(([key])=>key==='park-loan')[1],'Park and loan');
 });
 
+test('the Park and loan introduction leaves the fee law to the explicitly selected profile',async()=>{
+ const old=globalThis.document;
+ class Node{constructor(){this.children=[];this.dataset={};this.text='';}
+  append(...children){this.children.push(...children);}replaceChildren(...children){this.children=children;}
+  setAttribute(){}get firstElementChild(){return this.children[0];}
+  set textContent(value){this.text=String(value);}get textContent(){return this.text+this.children.map(child=>child.textContent).join('');}}
+ globalThis.document={createElement:()=>new Node()};
+ try{
+  const {setupNewTrade}=await import('../dist/new-trade.js'),parts=Object.fromEntries(['head','body','view'].map(key=>[key,new Node()]));
+  setupNewTrade({element:key=>parts[key]},{choose:()=>{},busy:()=>false}).show({kind:'new',product:'park-loan'},'loading');
+  assert.match(parts.head.textContent,/explicitly selected fee profile/);
+  assert.doesNotMatch(parts.head.textContent,/independent fixed fee/);
+ }finally{globalThis.document=old;}
+});
+
 test('unsupported Transport and Storage remain coming soon: disabled, tagged and with their hover text',async()=>{
  const old=globalThis.document;
  class Node{constructor(tag){this.tagName=tag.toUpperCase();this.children=[];this.attributes={};this.dataset={};this.className='';this.title='';this.disabled=false;this.text='';}

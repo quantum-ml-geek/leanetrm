@@ -138,6 +138,9 @@ def run_checks(pg_bin, dotnet, browser, *, group='all', run=subprocess.run):
         ('check_gas_park_loan','booked Park and Loan, native ownership and independent whole-book price scenarios'),
         ('check_gas_park_loan_upgrade','populated Park and Loan schema upgrade preserves existing native owners and cash'),
         ('check_gas_park_loan_worker','retained Park and Loan price workers preserve exact scope, source and original authority'),
+        ('check_gas_park_loan_balance_fee','outstanding-balance fee accrual, independent cash and whole-book price scenarios'),
+        ('check_gas_balance_fee_upgrade','populated fixed-fee upgrade retains exact owners and rejects predecessor drift'),
+        ('check_gas_balance_fee_worker','balance-time fee PRICE workers and explicit economic-continuation refusals'),
         ('check_gas_fee_existing_origins','fixed loan fee upgrade preserves exact existing financial origins and bank history'),
         ('check_gas_loan_quantity_reconciliation','loan withdrawal, exact source authority and cash-only maturity'),
         ('check_gas_owned_fact_acknowledgements','original gas commands acknowledge accepted financial snapshots without new effects'),
@@ -152,7 +155,7 @@ def run_checks(pg_bin, dotnet, browser, *, group='all', run=subprocess.run):
         ('check_gas_operator_ordinary_value','ordinary and zero operator corrections retain exact owners through economic workers'),
         ('check_gas_known_cashout','source-known future cashouts retain exact commodity and independent cash owners')):
         check(label,[sys.executable,f'tools/{helper}.py','--pg-bin',str(pg_bin),'--dotnet',str(dotnet),'--no-build'],suite='portfolio')
-    for helper,suite in (('check_gas_park_loan_browser','gas'),('check_gas_mixed_quantity_browser','lifecycle'),('check_lifecycle_browser','lifecycle'),('check_gas_fee_browser','gas'),
+    for helper,suite in (('check_gas_park_loan_browser','gas'),('check_gas_balance_fee_browser','gas'),('check_gas_mixed_quantity_browser','lifecycle'),('check_lifecycle_browser','lifecycle'),('check_gas_fee_browser','gas'),
                          ('check_gas_loan_quantity_browser','gas'),('check_gas_operator_quantity_browser','gas'),('check_lifecycle_economic_browser','portfolio'),
                          ('check_agent_operating_settings','assistant')):
         check(helper,[sys.executable,f'tools/{helper}.py','--pg-bin',str(pg_bin),'--dotnet',str(dotnet),

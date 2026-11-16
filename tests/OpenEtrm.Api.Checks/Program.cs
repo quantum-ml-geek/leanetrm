@@ -127,6 +127,7 @@ if(args is ["--schedule-preview"]){SchedulePreviewChecks.Run();return;}
 if(args is ["--ticket-description"]){TicketDescriptionChecks.Run();return;}
 if(args is ["--gas-ticket"]){GasTicketChecks.Run();return;}
 if(args is ["--gas-park-loan-ticket"]){GasParkLoanTicketChecks.Run();GasParkLoanPortfolioChecks.Run();GasParkLoanPositionChecks.Run();GasParkLoanActionChecks.Run();return;}
+if(args is ["--gas-park-loan-balance-fee"]){GasParkLoanBalanceFeeAdapterChecks.Run();return;}
 if(args is ["--gas-park-loan-setup"]){GasParkLoanSetupChecks.Run();return;}
 if(args is ["--gas-park-loan-native",var parkLoanPacket]){await GasParkLoanNativeChecks.Run(parkLoanPacket);return;}
 if(args is ["--gas-park-loan-worker-submit",var parkLoanWorkerPacket]){await GasParkLoanWorkerChecks.Run(parkLoanWorkerPacket,false);return;}
@@ -264,6 +265,7 @@ if (args is ["--schedules"])
     TicketDescriptionChecks.Run();
     GasTicketChecks.Run();
     GasParkLoanTicketChecks.Run();
+    GasParkLoanBalanceFeeAdapterChecks.Run();
     GasParkLoanPortfolioChecks.Run();
     GasParkLoanPositionChecks.Run();
     GasParkLoanActionChecks.Run();

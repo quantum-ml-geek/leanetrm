@@ -112,8 +112,8 @@ const string malformed="The request is incomplete or malformed.";
     PostgresException p when p.MessageText.StartsWith("lifecycle_",StringComparison.Ordinal)
         => (p.SqlState=="42501"?403:p.MessageText.Contains("conflict",StringComparison.Ordinal)||p.MessageText.Contains("stale",StringComparison.Ordinal)?409:422,
             p.MessageText,LifecycleNative.Refusal(p.MessageText)),
-    PostgresException p when p.MessageText.StartsWith("gas_park_loan_",StringComparison.Ordinal)
-        =>(p.SqlState=="42501"?403:p.MessageText is "gas_park_loan_stale" or "gas_park_loan_context" or "gas_park_loan_conflict" or "gas_park_loan_policy"?409:422,
+    PostgresException p when p.MessageText.StartsWith("gas_park_loan_",StringComparison.Ordinal)||p.MessageText.StartsWith("gas_balance_fee_",StringComparison.Ordinal)
+        =>(p.SqlState=="42501"?403:p.MessageText is "gas_park_loan_stale" or "gas_park_loan_context" or "gas_park_loan_conflict" or "gas_park_loan_policy" or "gas_balance_fee_context" or "gas_balance_fee_source" or "gas_balance_fee_stale" or "gas_balance_fee_conflict" or "gas_balance_fee_policy" or "gas_balance_fee_policy_changed"?409:422,
             p.MessageText,GasParkLoanActions.Refusal(p.MessageText)),
     MarketDataException m when m.Code is "gas_park_loan_context" or "gas_park_loan_reconciliation" => (409,m.Code,m.Message),
     PostgresException p when p.MessageText.StartsWith("gas_quantity_",StringComparison.Ordinal)
@@ -1749,7 +1749,7 @@ FuturesReadRequest TicketContext(FuturesReadRequest? context)=>context??throw ne
 GasCompositionRequest TicketRequest(TicketDraft draft,FuturesReadRequest context,Guid operation,Guid definition)=>
  GasTicket.Request(draft,context.SnapshotId,context.KnowledgeMode??throw new MarketDataException("ticket_input","Supply the ticket's knowledge mode."),operation,definition);
 api.MapPost("/tickets/description",(HttpContext c,TicketDescriptionRequest body)=>FuturesRead(c,TicketContext(body.Context),
- async (connection,data,frame,ct)=>GasTicketStore.Description(body.Product) with{SideCalendars=await SideCalendarPolicies.Catalog(connection,ct)},expectedConvention:PhysicalGasStore.Convention,gasReferenceChoices:true));
+ async (connection,data,frame,ct)=>GasTicketStore.Description(body.Product,body.Draft) with{SideCalendars=await SideCalendarPolicies.Catalog(connection,ct)},expectedConvention:PhysicalGasStore.Convention,gasReferenceChoices:true));
 api.MapPost("/tickets/choices",(HttpContext c,TicketFieldRequest body)=>FuturesRead(c,TicketContext(body.Context),
  (connection,data,frame,ct)=>body.Draft.Product==GasParkLoanTicket.Product?parkLoanTicket.Choices(connection,data,frame,body,ct):gasTicket.Choices(connection,data,frame,body,ct),expectedConvention:PhysicalGasStore.Convention,gasReferenceChoices:true));
 api.MapPost("/tickets/lookup",(HttpContext c,TicketFieldRequest body)=>FuturesRead(c,TicketContext(body.Context),

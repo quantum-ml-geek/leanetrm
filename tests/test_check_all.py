@@ -26,6 +26,7 @@ LIFECYCLE_NATIVE={f'tools/{name}.py' for name in (
     'check_risk_fit_authority','check_lifecycle_browser','check_retained_swap_schedule_reads')}
 GAS_AMENDMENTS={f'tools/{name}.py' for name in (
     'check_gas_park_loan','check_gas_park_loan_upgrade','check_gas_park_loan_worker','check_gas_park_loan_browser',
+    'check_gas_park_loan_balance_fee','check_gas_balance_fee_upgrade','check_gas_balance_fee_worker','check_gas_balance_fee_browser',
     'check_gas_fee_existing_origins','check_gas_fee_browser','check_gas_loan_quantity_browser',
     'check_gas_loan_quantity_reconciliation','check_gas_owned_fact_acknowledgements','check_gas_owned_title_acknowledgements','check_gas_read_authority','check_gas_operator_quantity_browser',
     'check_gas_operator_existing_origins','check_gas_operator_upgrade','check_gas_operator_native_upgrade')}
@@ -63,6 +64,29 @@ class CheckAllTests(unittest.TestCase):
                         check_all.main()
                     self.assertEqual(failure.exception.code, 2)
                     selected.assert_not_called()
+
+    def test_balance_fee_native_upgrade_worker_and_browser_run_once_in_gas(self):
+        expected = {f'tools/{name}.py' for name in (
+            'check_gas_park_loan_balance_fee', 'check_gas_balance_fee_upgrade',
+            'check_gas_balance_fee_worker', 'check_gas_balance_fee_browser')}
+        for group in GROUPS:
+            selected = []
+            def run(command, **options):
+                helpers = expected.intersection(command)
+                if not helpers:
+                    return
+                helper = helpers.pop()
+                selected.append(helper)
+                self.assertEqual(command[command.index('--pg-bin') + 1], '/stock pg')
+                self.assertEqual(options['env']['DOTNET'], '/selected sdk')
+                if helper.endswith('_browser.py'):
+                    self.assertEqual(command[command.index('--dotnet') + 1], '/selected sdk')
+                    self.assertEqual(command[command.index('--browser') + 1], '/selected browser')
+                    self.assertIn('--no-build', command)
+            run_checks(Path('/stock pg'), Path('/selected sdk'), Path('/selected browser'),
+                       group=group, run=run)
+            self.assertEqual(set(selected), expected if group == 'gas' else set())
+            self.assertEqual(len(selected), len(expected) if group == 'gas' else 0)
 
     def test_park_loan_qualifiers_are_required_in_gas_partition(self):
         commands = []

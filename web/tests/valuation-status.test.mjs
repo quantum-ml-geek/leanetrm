@@ -64,3 +64,8 @@ test('Park and loan unavailable values name the native reconciliation or selecte
  assert.match(valuationReason('missing_observation','physical_gas_park_loan'),/Missing principal mark/);
  assert.throws(()=>valuationReason('gas_park_loan_reconciliation','physical_gas'),/unknown valuation status/);
 });
+
+test('a closed balance-time advance window has its own product-specific unavailable label',()=>{
+ assert.equal(valuationReason('gas_balance_fee_advance_window','physical_gas_park_loan'),'Advance window closed without accepted performance; remaining plan value unavailable');
+ assert.throws(()=>valuationReason('gas_balance_fee_advance_window','physical_gas'),/unknown valuation status/);
+});
