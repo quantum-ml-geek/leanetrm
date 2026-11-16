@@ -1539,12 +1539,12 @@ api.MapPost("/corrections",(HttpContext c,CorrectionRequest body)=>Locked(c,asyn
     if (session.Frames.Count>=128&&!(c.Features.Get<AssistantInvocation>()?.ResultIdentity is {} replay&&session.Frames.ContainsKey(replay))) throw new MarketDataException("preview_limit","Restart the disposable preview to create more saved selections.");
     if (string.IsNullOrWhiteSpace(body.Value)) throw new MarketDataException("missing_value","Enter an exact decimal value.");
     c.Items["correction_attempted"]=true;
-    var (revision,id)=await database.WithIdentity(Profile(session),"ImportObservations",async(connection,ct)=>{
+    var id=await database.WithIdentity(Profile(session),"ImportObservations",async(connection,ct)=>{
         var selected=held.Length==1?held[0].RevisionId:(await MarketInputSelection.RootSource(database,connection,frame,ct)).DefinitionRevisionId;
-        return(selected,await database.Correct(connection,selected,body.ObservationId,body.Value,ct));
+        return await database.Correct(connection,selected,body.ObservationId,body.Value,ct);
     },c.RequestAborted);
     var updated=held.Length==0?frame.SelectRevision(body.ObservationId,id,"Edited inputs")
-        :frame.SelectSwapMarketRevision(revision,held[0].Pins,body.ObservationId,id,"Edited inputs");
+        :frame.SelectSwapMarketRevision(held[0].RevisionId,held[0].Pins,body.ObservationId,id,"Edited inputs");
     if(c.Features.Get<AssistantInvocation>()?.ResultIdentity is {} identity)updated=updated with{Id=identity};
     if(c.Features.Get<AssistantInvocation>() is not null)session.Frames.TryAdd(updated.Id,updated);else session.Frames.Add(updated.Id,updated);
     return Results.Ok(new {frame=updated,observationId=id});
@@ -2089,18 +2089,18 @@ GasCompositionRequest TicketRequest(TicketDraft draft,FuturesReadRequest context
 api.MapPost("/tickets/description",(HttpContext c,TicketDescriptionRequest body)=>body.Product==GasTransportFinancialTicket.Product?
  FinancialTicketRead(c,TicketContext(body.Context),(_,_,_)=>Task.FromResult<object>(GasTransportFinancialTicket.Describe(body.Draft))):FuturesRead(c,TicketContext(body.Context),
  async (connection,data,frame,ct)=>GasTicketStore.Description(body.Product,body.Draft) with{SideCalendars=await SideCalendarPolicies.Catalog(connection,ct)},expectedConvention:PhysicalGasStore.Convention,gasReferenceChoices:true));
-api.MapPost("/tickets/choices",(HttpContext c,TicketFieldRequest body)=>body.Draft.Product==GasTransportFinancialTicket.Product?
+api.MapPost("/tickets/choices",(HttpContext c,TicketFieldRequest body)=>TicketDraft.Require(body.Draft).Product==GasTransportFinancialTicket.Product?
  FinancialTicketRead(c,TicketContext(body.Context),(connection,frame,ct)=>transportTicket.Choices(connection,frame,body,ct),requireCapacity:body.Field is "entitlement" or "capacity_version"):FuturesRead(c,TicketContext(body.Context),
- (connection,data,frame,ct)=>GasParkCustodyTicket.IsSelected(body.Draft)?parkCustodyTicket.Choices(connection,data,frame,body,ct):body.Draft.Product==GasParkLoanTicket.Product?parkLoanTicket.Choices(connection,data,frame,body,ct):gasTicket.Choices(connection,data,frame,body,ct),expectedConvention:PhysicalGasStore.Convention,gasReferenceChoices:true));
-api.MapPost("/tickets/lookup",(HttpContext c,TicketFieldRequest body)=>body.Draft.Product==GasTransportFinancialTicket.Product?
+ (connection,data,frame,ct)=>GasParkCustodyTicket.IsSelected(body.Draft)?parkCustodyTicket.Choices(connection,data,frame,body,ct):TicketDraft.Require(body.Draft).Product==GasParkLoanTicket.Product?parkLoanTicket.Choices(connection,data,frame,body,ct):gasTicket.Choices(connection,data,frame,body,ct),expectedConvention:PhysicalGasStore.Convention,gasReferenceChoices:true));
+api.MapPost("/tickets/lookup",(HttpContext c,TicketFieldRequest body)=>TicketDraft.Require(body.Draft).Product==GasTransportFinancialTicket.Product?
  FinancialTicketRead(c,TicketContext(body.Context),(connection,frame,ct)=>transportTicket.Lookup(connection,frame,body,ct)):FuturesRead(c,TicketContext(body.Context),
- (connection,data,frame,ct)=>GasParkCustodyTicket.IsSelected(body.Draft)?parkCustodyTicket.Lookup(connection,data,frame,body,ct):body.Draft.Product==GasParkLoanTicket.Product?parkLoanTicket.Lookup(connection,data,frame,body,ct):gasTicket.Lookup(connection,data,frame,body,ct),expectedConvention:PhysicalGasStore.Convention,
- gasReferenceChoices:body.Draft.Product is GasParkLoanTicket.Product or GasParkCustodyTicket.Product||GasTicket.LookupOf(body.Draft,body.Side,body.Field)!="market_price"));
-api.MapPost("/tickets/preview",(HttpContext c,TicketPreviewRequest body)=>body.Draft.Product==GasTransportFinancialTicket.Product?Locked(c,async session=>{
+ (connection,data,frame,ct)=>GasParkCustodyTicket.IsSelected(body.Draft)?parkCustodyTicket.Lookup(connection,data,frame,body,ct):TicketDraft.Require(body.Draft).Product==GasParkLoanTicket.Product?parkLoanTicket.Lookup(connection,data,frame,body,ct):gasTicket.Lookup(connection,data,frame,body,ct),expectedConvention:PhysicalGasStore.Convention,
+ gasReferenceChoices:TicketDraft.Require(body.Draft).Product is GasParkLoanTicket.Product or GasParkCustodyTicket.Product||GasTicket.LookupOf(body.Draft,body.Side,body.Field)!="market_price"));
+api.MapPost("/tickets/preview",(HttpContext c,TicketPreviewRequest body)=>TicketDraft.Require(body.Draft).Product==GasTransportFinancialTicket.Product?Locked(c,async session=>{
  var context=TicketContext(body.Context);RequireGasBooking(session,context.KnowledgeMode,context.ContextId);RequireConvention(context,PhysicalGasStore.Convention);
  return Results.Ok(await transportTicket.Preview(Profile(session),Frame(session,context.SnapshotId),body,c.RequestAborted));
 }):FuturesRead(c,TicketContext(body.Context),
- (connection,data,frame,ct)=>GasParkCustodyTicket.IsSelected(body.Draft)?parkCustodyTicket.Preview(connection,data,frame,body,ct):body.Draft.Product==GasParkLoanTicket.Product?parkLoanTicket.Preview(connection,data,frame,body,ct):gasComposition.Preview(connection,data,frame,TicketRequest(body.Draft,body.Context,Guid.Empty,data.DefinitionRevision.RevisionId),ct),expectedConvention:PhysicalGasStore.Convention));
+ (connection,data,frame,ct)=>GasParkCustodyTicket.IsSelected(body.Draft)?parkCustodyTicket.Preview(connection,data,frame,body,ct):TicketDraft.Require(body.Draft).Product==GasParkLoanTicket.Product?parkLoanTicket.Preview(connection,data,frame,body,ct):gasComposition.Preview(connection,data,frame,TicketRequest(body.Draft,body.Context,Guid.Empty,data.DefinitionRevision.RevisionId),ct),expectedConvention:PhysicalGasStore.Convention));
 // A booked trade offers day entries by the record operation's own rule, on the read's working or historical selection.
 api.MapPost("/tickets/trade",(HttpContext c,TicketTradeRequest body)=>body.Product==GasTransportFinancialTicket.Product?
  FinancialTicketRead(c,TicketContext(body.Context),(connection,frame,ct)=>transportTicket.Trade(connection,frame,body,ct)):FuturesRead(c,TicketContext(body.Context),
@@ -2141,7 +2141,7 @@ api.MapPost("/tickets/amend",(HttpContext c,TicketAmendRequest body)=>Locked(c,a
 // Booking maps the draft against the definition revision its booking read resolves for the selected frame.
 api.MapPost("/tickets/book",(HttpContext c,TicketBookRequest body)=>Locked(c,session=>{
  var context=TicketContext(body.Context);RequireGasBooking(session,context.KnowledgeMode,context.ContextId);RequireConvention(context,PhysicalGasStore.Convention);
- return body.Draft.Product==GasTransportFinancialTicket.Product?BookTransport(c,session,body):GasParkCustodyTicket.IsSelected(body.Draft)?BookParkCustody(c,session,body):body.Draft.Product==GasParkLoanTicket.Product?BookParkLoan(c,session,body):BookGasComposition(c,session,TicketRequest(body.Draft,context,body.OperationId,body.DefinitionRevisionId));
+ return TicketDraft.Require(body.Draft).Product==GasTransportFinancialTicket.Product?BookTransport(c,session,body):GasParkCustodyTicket.IsSelected(body.Draft)?BookParkCustody(c,session,body):TicketDraft.Require(body.Draft).Product==GasParkLoanTicket.Product?BookParkLoan(c,session,body):BookGasComposition(c,session,TicketRequest(body.Draft,context,body.OperationId,body.DefinitionRevisionId));
 }));
 
 async Task<IResult> BookParkLoan(HttpContext c,PreviewSession session,TicketBookRequest body)=>
