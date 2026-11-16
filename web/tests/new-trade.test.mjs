@@ -56,7 +56,7 @@ test('a retained request holds New trade back, ahead of every other reason, beca
 
 test('New trade keeps one public Park and loan family beside physical gas',async()=>{
  const {newTradeProducts}=await import('../dist/new-trade.js');
- assert.deepEqual(newTradeProducts.map(([key])=>key),['futures','options','swaps','ppa','gas','park-loan','crude','lng']);
+ assert.deepEqual(newTradeProducts.map(([key])=>key),['futures','options','swaps','ppa','gas','park-loan','crude','lng','rec']);
  assert.equal(newTradeProducts.find(([key])=>key==='park-loan')[1],'Park and loan');
  assert.equal(newTradeProducts.some(([key])=>key==='park-custody'),false);
 });

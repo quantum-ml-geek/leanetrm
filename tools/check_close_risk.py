@@ -54,6 +54,7 @@ def run_checks(url,query,manifest,dotnet,owned_root,app_environment,psql,environ
         query(f"""BEGIN;
             ALTER TABLE trading.instrument_side_schedules DISABLE TRIGGER USER;
             DELETE FROM trading.instrument_side_schedules WHERE instrument_id='{incomplete['bindings'][0]['instrumentId']}'::uuid;
+            SET CONSTRAINTS ALL IMMEDIATE;
             ALTER TABLE trading.instrument_side_schedules ENABLE TRIGGER USER;
             COMMIT;""")
     assert query("SELECT bool_and(tgenabled='O') FROM pg_trigger WHERE tgrelid='trading.instrument_side_schedules'::regclass AND NOT tgisinternal;")=='t'

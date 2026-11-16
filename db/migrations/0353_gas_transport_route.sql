@@ -9,7 +9,7 @@ SELECT pg_advisory_xact_lock(730849102);
 -- Page identity admits prompts, without enabling assistant operations.
 DO $pages$ DECLARE definition text;marker text:='''transport_capacity''';BEGIN
  SELECT pg_get_functiondef(p.oid) INTO STRICT definition FROM pg_proc p WHERE p.oid='assistant.is_prompt_page(text)'::regprocedure
-  AND md5(p.prosrc)='6bdaf9571d6c5c01091141f66c959564' AND pg_get_userbyid(p.proowner)='openetrm_security_owner'
+  AND md5(p.prosrc)='a66025172980e767ef3cd11e63ffbc27' AND pg_get_userbyid(p.proowner)='openetrm_security_owner'
   AND NOT p.prosecdef AND p.provolatile='i' AND p.prokind='f' AND p.proparallel='u' AND NOT p.proisstrict AND NOT p.proleakproof
   AND p.provariadic=0 AND p.proargmodes IS NULL AND p.proargnames=ARRAY['page'] AND p.prorettype='boolean'::regtype
   AND p.prolang=(SELECT oid FROM pg_language WHERE lanname='sql') AND p.proconfig=ARRAY['search_path=pg_catalog']

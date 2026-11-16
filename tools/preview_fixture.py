@@ -149,6 +149,18 @@ def fixture(root, current_schema=True, fixing_frames=False, date_plan=None, wind
     for kind in ['pipeline','node','region','terminal','delivery_point','physical_site']:
         extra_ref.append(f"INSERT INTO ref_data.location_types VALUES ({R},'test_{kind}','Synthetic {kind.replace('_',' ')}');")
     extra_ref.append(f"INSERT INTO ref_data.locations (catalog_id,revision_id,code,name,type_code,clock_code,latitude,longitude) VALUES ({R},'test_facility_a','Synthetic facility A','test_physical_site','test_utc',12.345678,-45.678912);")
+    if current_schema:
+        # One complete operating right is the external unit for constrained-facility
+        # pricing; its fixed access payment consumes the corresponding exact quote.
+        # Dimensionless counts share one physical dimension; exact unit
+        # and quantity identities distinguish resource rights from certificates.
+        extra_ref.extend([
+            f"INSERT INTO ref_data.dimensions VALUES ({R},'certificate',0,0,0,0,0,0,0) ON CONFLICT(catalog_id,revision_id,code) DO NOTHING;",
+            f"INSERT INTO ref_data.units (catalog_id,revision_id,code,symbol,dimension_code) VALUES ({R},'resource_right','right','certificate');",
+            f"INSERT INTO ref_data.commodity_units VALUES ({R},'test_power','resource_right','certificate');",
+            f"INSERT INTO ref_data.measurement_bases VALUES ({R},'test_resource_right_basis','test_power','certificate');",
+            f"INSERT INTO ref_data.quantity_specifications VALUES ({R},'test_resource_right_quantity','test_power','test_resource_right_basis','resource_right','certificate');",
+            f"INSERT INTO ref_data.quote_specifications VALUES ({R},'test_resource_right_quote','test_power','outright','test_resource_right_quantity','usd',1,0.01,0.01,-1000000,1000000);"])
     for kind in ['pipeline','node','region','terminal','delivery_point']:
         extra_ref.append(f"INSERT INTO ref_data.locations (catalog_id,revision_id,code,name,type_code,clock_code) VALUES ({R},'test_{kind}_a','Synthetic {kind.replace('_',' ')} A','test_{kind}','test_utc');")
     # Market clocks for the TOU products, and weekday closures in the business calendar.

@@ -34,7 +34,7 @@ internal static class BookedScheduleSources
     if(at==slot)result=SideScheduleSnapshot.FromProgram(side.SideId,source.Frame.Id,input,Utc);
    },slot);return result??throw Missing();
   }),
-  new SwapScheduleSource(database),new PpaScheduleSource(database)
+  new SwapScheduleSource(database),new PpaScheduleSource(database),new OperatingScheduleSource(database),new RecScheduleSource(database)
  ];
  internal static DateTimeOffset Utc(DateOnly day)=>new(day.ToDateTime(TimeOnly.MinValue,DateTimeKind.Utc));
  internal static MarketDataException Missing()=>new("side_schedule_inspection","The selected native Side produced no schedule values.");

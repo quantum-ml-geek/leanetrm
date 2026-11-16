@@ -58,6 +58,7 @@ public abstract record Instrument
     public abstract ReferenceKey Currency { get; }
     public abstract Quantity UnitQuantity { get; }
     public virtual bool SupportsQuantityScaling=>false;
+    public virtual bool SupportsFixedUnitBinding=>false;
     internal virtual bool RequiresNativeProgramMarket=>false;
     public virtual InstrumentValuation PV(SideValuationContext context)=>
         throw new MarketDataException("valuation_measure","This instrument requires its declared unit valuation context.");
@@ -79,7 +80,7 @@ public abstract record Instrument
     }
     public virtual void ValidateBinding(Quantity quantity,DeliveryCoverage? coverage)
     {
-        if(!SupportsQuantityScaling)
+        if(!SupportsQuantityScaling&&(!SupportsFixedUnitBinding||quantity!=UnitQuantity))
             throw new MarketDataException("risk_quantity_scaling","This instrument has not declared linear scaling in booked quantity.");
         if(coverage is not null)
             throw new MarketDataException("ppa_segment_coverage","This instrument does not accept delivery coverage.");

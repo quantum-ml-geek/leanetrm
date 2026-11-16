@@ -37,7 +37,7 @@ def run_checks(url, previous_known_at=None, client=None):
     source = spec('test_gas','mmbtu_it')
     for target in [spec('test_power','megawatt_hour'),spec('test_gas','cubic_metre')]:
         assert c.call('units/convert',{'value':'1','from':source,'to':target,'decimalPlaces':None,'tieRule':None},expected=422)['code'] == 'quantity_conversion'
-    assert c.call('units/convert',{'value':'1','from':spec('test_power','megawatt'),'to':spec('test_power','megawatt_hour'),'decimalPlaces':None,'tieRule':None},expected=422)['code'] == 'quantity_conversion'
+    assert c.call('units/convert',{'value':'1','from':spec('test_power','megawatt','test_power_flow'),'to':spec('test_power','megawatt_hour'),'decimalPlaces':None,'tieRule':None},expected=422)['code'] == 'quantity_conversion'
     assert c.call('units/convert',{'value':'1','from':source,'to':'missing','decimalPlaces':None,'tieRule':None},expected=422)['code'] == 'missing_reference'
     print('PASS unit conversion: fractional rounding is explicit; commodity, basis, missing-reference and power/energy mismatches reject', flush=True)
     display = c.call('amounts/display',[

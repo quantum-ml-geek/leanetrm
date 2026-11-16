@@ -25,6 +25,7 @@ public sealed record ScheduleRowValue(Guid SideId,SideSlot? NativeSlot,Component
 {
     public required ScheduleRow Row { get; init; }
     public CashPaymentBalance? CashBalance { get; init; }
+    public OperatingQuantityCell? OperatingEvidence { get; init; }
     public SideSlot Slot=>NativeSlot??throw new MarketDataException("schedule_row_kind","A dated payment row has no interval composition slot.");
     public DeliveryInterval Interval=>NativeInterval??throw new MarketDataException("schedule_row_kind","A dated row retains its explicit date delivery window.");
     public EconomicClass Class=>RowClass??throw new MarketDataException("schedule_row_classification","This dated payment contract does not declare an interval lifecycle classification.");

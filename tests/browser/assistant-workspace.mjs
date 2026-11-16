@@ -1,6 +1,7 @@
 import {sideSession} from './side-session.mjs';
 import {press} from './blotter-window.mjs';
 import {openPhysical} from './physical-workspace.mjs';
+import {assistantPageCases} from './assistant-page-states.mjs';
 
 // Real page selection -> admitted report -> pinned digest, in the owned synthetic workspace fixture.
 export async function run({command,evaluate,wait,click,set,submit,persona,check,shot,idle,url,provider}){
@@ -37,15 +38,15 @@ export async function run({command,evaluate,wait,click,set,submit,persona,check,
       return response;
     };}`});
   await command('Page.navigate',{url});await wait(idle);await persona('admin');await click('#nav-ai');await click('#ai-tab-agents');
-  await check('native page reports, labels and server prompt admission have the same catalog',`(()=>{return import('/assistant-pages.js').then(({pageReport,reportedPages})=>{
-    const base={page:'futures',risk:false,trade:null,entry:null,lens:'values',view:{mode:'trades',bookIds:[],portfolioIds:[],groupBy:[],measures:[]},pane:{details:false,charts:false},poppedOut:false};
-    const states=[{page:'market',curve:null,tab:'prices'},{page:'power',frame:true},{page:'schedules'},
-      {page:'reference',table:'units',search:''},{page:'parties',kind:'counterparty'},{page:'jobs',job:null},{page:'lifecycle'},{page:'ppa',trade:null,book:null},{page:'custom-curves',curve:null,unsaved:false},
-      base,{...base,risk:true},{...base,lens:'risk'},...[null,'futures','options','swaps','ppa','gas','park-loan','crude','lng'].map(product=>({...base,entry:{product}})),
-      {page:'risk',view:'risk'},...['physical-operations','facilities','dashboard','crude-setup','gas-setup','gas','crude','delivery','interval-series','interval-curves','vol-surfaces','options','admin','ai'].map(page=>({page})),
-      {page:'facilities',facilitySection:'definitions'},{page:'facilities',facilitySection:'activity'},
-      {page:'facilities',facilitySection:'transport'},{page:'facilities',facilitySection:'route'}];
-    const actual=[...new Set(states.map(state=>pageReport(state).page))].sort();return JSON.stringify(actual)===${JSON.stringify(JSON.stringify(reportPages))}&&JSON.stringify(actual)===JSON.stringify(reportedPages.filter(page=>page!=='contract_definitions').sort());});})()`);
+  const reportCatalog=`import('/assistant-pages.js').then(({pageReport,reportedPages})=>{
+    const cases=${JSON.stringify(assistantPageCases())},expected=cases.map(([page])=>page).sort();
+    const labels=reportedPages.filter(page=>page!=='contract_definitions').sort(),admitted=${JSON.stringify(reportPages)};
+    const wrongReports=cases.map(([page,state])=>({page,actual:pageReport(state).page})).filter(row=>row.actual!==row.page);
+    return {matched:JSON.stringify(expected)===JSON.stringify(labels)&&JSON.stringify(expected)===JSON.stringify(admitted)&&wrongReports.length===0,
+      missingRepresentatives:labels.filter(page=>!expected.includes(page)),unexpectedRepresentatives:expected.filter(page=>!labels.includes(page)),
+      missingAdmission:expected.filter(page=>!admitted.includes(page)),unexpectedAdmission:admitted.filter(page=>!expected.includes(page)),wrongReports};
+  })`;
+  await check('native page reports, labels and server prompt admission have the same catalog',`${reportCatalog}.then(result=>result.matched)`,reportCatalog);
   await check('Contract pricing and Publications refuse an assistant report until they have an admitted read contract',`import('/assistant-pages.js').then(({pageReport})=>{try{pageReport({page:'configuration'});return false;}catch(error){return error.message==='The assistant’s page is inconsistent. Reload it.';}})`);
   await check('an administrator can explicitly configure both new workspace tools',"['read_page_digest','present_walkthrough'].every(code=>[...document.querySelectorAll('#ai-agent-tools input')].some(i=>i.value===code))&&document.querySelector('#error').hidden");
   await persona('trader');await click('#nav-futures');await wait(idle);

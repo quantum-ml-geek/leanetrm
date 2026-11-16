@@ -14,9 +14,9 @@ def run():
     prepared = {}
     root = Path(__file__).resolve().parents[1]
     def before(query, migration):
-        if migration.name != '0345_gas_transport_capacity.sql':
+        if migration.name != '0352_gas_transport_capacity.sql':
             return
-        guard_checks(query,migration,number='0345',guard='gas_transport_capacity_upgrade',signatures=('assistant.is_prompt_page(text)',))
+        guard_checks(query,migration,number='0352',guard='gas_transport_capacity_upgrade',signatures=('assistant.is_prompt_page(text)',))
         reference, market, access, manifest = fixture(root)
         for sql in [reference,market,access]: query(sql)
         f = CustodyFixture(query,manifest)
