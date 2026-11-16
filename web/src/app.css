@@ -2814,6 +2814,11 @@ header>div:first-child{flex:1 1 160px}
 .lifecycle-review-facts{display:grid;grid-template-columns:max-content 1fr;gap:.5rem 1rem}
 .lifecycle-review-facts dd{margin:0;overflow-wrap:anywhere}
 @media(max-width:600px){.lifecycle-review-facts{grid-template-columns:minmax(0,1fr);gap:.25rem}.lifecycle-review-facts dd{margin-bottom:.5rem}}
+
+#physical-power-page{min-width:0}
+#physical-power-page .table-wrap{max-width:100%;overflow:auto}
+#physical-power-page textarea{width:100%;max-width:100%;min-width:0}
+#physical-power-page .schedule-actions{flex-wrap:wrap}
 /* Options (options-view.ts): the chain of one expiry, read from the product's stored surface. Calls mirror puts about the
    strike column; a side in the money is washed, the at-the-money strike is marked, and a missing figure is a muted dash. */
 #options-page{display:flex;flex-direction:column;gap:16px;min-width:0}

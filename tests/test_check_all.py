@@ -37,6 +37,7 @@ LIFECYCLE_PORTFOLIO={f'tools/{name}.py' for name in (
 OPTION_VALUE_APPS={'tools/check_lifecycle_valuation_browser.py'}
 AGENT_SETTINGS_BROWSER={'tools/check_agent_operating_settings.py'}
 STORAGE_FACILITY={f'tools/{name}.py' for name in ('check_storage_facility','check_storage_facility_upgrade','check_storage_facility_browser')}
+OPERATING_FACILITIES={'tools/check_operating_facilities.py'}
 
 
 class CheckAllTests(unittest.TestCase):
@@ -45,6 +46,13 @@ class CheckAllTests(unittest.TestCase):
         versions = [int(migration.name.split('_', 1)[0]) for migration in migrations]
         self.assertEqual(versions, list(range(1, len(migrations) + 1)),
                          'The ordered migration chain must have one file per version.')
+
+    def test_structured_power_storage_and_http_run_in_physical_partition(self):
+        for group in ALL_GROUPS:
+            commands=[]
+            run_checks(Path('/pg'),Path('/dotnet'),Path('/browser'),group=group,run=lambda command,**options:commands.append(command))
+            selected=[command for command in commands if OPERATING_FACILITIES.intersection(command) or '--structured-power-check' in command]
+            self.assertEqual(len(selected),2 if group=='physical' else 0)
 
     def test_assistant_prompt_and_demand_checks_are_required(self):
         for group in ALL_GROUPS:
@@ -474,7 +482,7 @@ class CheckAllTests(unittest.TestCase):
                 self.assertFalse(any('unittest' in c or 'test' in c or 'run' in c and '--project' in c for c in selected))
         margin={f'tools/check_futures_margin_{part}.py' for part in ('sources','adoption','projection_sources')}|{'tools/check_trading_business_date.py'}
         def shared(command):
-            return 'tools/run_preview.py' not in command and not (margin|LIFECYCLE_NATIVE|GAS_AMENDMENTS|LIFECYCLE_PORTFOLIO|OPTION_VALUE_APPS|AGENT_SETTINGS_BROWSER|STORAGE_FACILITY).intersection(command)
+            return 'tools/run_preview.py' not in command and not (margin|LIFECYCLE_NATIVE|GAS_AMENDMENTS|LIFECYCLE_PORTFOLIO|OPTION_VALUE_APPS|AGENT_SETTINGS_BROWSER|STORAGE_FACILITY|OPERATING_FACILITIES).intersection(command)
         previews = {name: [c for c in value if 'tools/run_preview.py' in c]
                     for name, value in groups.items()}
         owned = {name: [c for c in value if not shared(c)] for name, value in groups.items()}

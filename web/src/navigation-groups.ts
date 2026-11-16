@@ -11,7 +11,7 @@ export const navigationGroups:readonly NavigationGroup[]=[
  {id:'trading',label:'Trading',pages:['futures','options'],opened:['ppa','gas','crude']},
  {id:'markets',label:'Markets',pages:['market','delivery','interval-series','vol-surfaces','interval-curves']},
  {id:'risk',label:'Risk',pages:['risk','risk-pnl','risk-scenarios','risk-var','risk-runs']},
- {id:'scheduling',label:'Scheduling',pages:['lifecycle','physical-operations','facilities']},
+ {id:'scheduling',label:'Scheduling',pages:['lifecycle','physical-operations','facilities','physical-power']},
  {id:'reference',label:'Reference Data',pages:['reference'],opened:['curve-definitions','custom-curves','configuration','schedules','power','parties','gas-setup','crude-setup']},
  {id:'administration',label:'Administration',pages:['jobs','admin','ai']},
 ];
@@ -27,6 +27,7 @@ export function pageGroup(page:string):string{
 export function pageAvailable(page:string,permissions:string[]):boolean{
  const has=(...needed:string[])=>needed.every(permission=>permissions.includes(permission));
  switch(page){
+  case 'physical-power':return has('ReadMarketData','ReadPhysical');
   case 'facilities':return has('ReadMarketData','ReadTrades','ReadFacilityQuantities');
   // Options and Vol surfaces read option products, which trade readers see.
   case 'lifecycle':case 'physical-operations':case 'futures':case 'options':case 'ppa':case 'gas':case 'crude':case 'vol-surfaces':return has('ReadMarketData','ReadTrades');

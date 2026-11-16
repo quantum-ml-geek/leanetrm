@@ -411,6 +411,10 @@ test('Looking at says which physical instrument revision, tab, gas day and stage
  assert.equal(shows({}),'Physical instrument operations under the header context. Unsaved edits are not sent.');
 });
 
+test('operating facilities report a distinct page without unsaved browser terms',()=>{
+ assert.deepEqual(pageReport({page:'physical-power'}),{page:'physical_power',selection:{}});
+});
+
 test('a selected Park and Loan permits questions and identifies its unavailable trade read',()=>{
   const report=pageReport({page:'futures',...open,risk:false,trade:{tradeId:trade,instrumentType:'physical_gas_park_loan',revision:1,reference:'TR-000009'},entry:null,view:blotter});
   assert.equal(report.page,'blotter');
