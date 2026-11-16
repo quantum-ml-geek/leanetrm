@@ -275,29 +275,32 @@ def run_checks(url, query, psql, environment, manifest):
         for grant in saved:
             query(f"UPDATE security.role_grants SET granted_to='{grant['until']}'::timestamptz WHERE id='{grant['id']}';")
     # An ordinary read's answer waits for the session gate. Authority that ends in that wait, after the read's own
-    # transaction has finished with it intact, must still refuse the answer.
+    # transaction has finished with it intact, must still refuse the answer. A gated read of the same session holds
+    # the gate on a second lock meanwhile; it must be released before its own command times out.
     GATE='LOCK presentation.dashboard_layouts IN ACCESS EXCLUSIVE MODE'
+    gate_waiters="SELECT count(*) FROM pg_locks WHERE relation='presentation.dashboard_layouts'::regclass AND NOT granted;"
+    def until(sql,value,message,seconds=4):
+        deadline=time.monotonic()+seconds
+        while query(sql)!=value:
+            assert time.monotonic()<deadline,message
+            time.sleep(.025)
     saved=json.loads(query(f"SELECT json_agg(json_build_object('id',id,'until',granted_to)) FROM security.role_grants WHERE principal_id={principal};"))
     try:
         def answering():
             def reading():
-                query(f"UPDATE security.role_grants SET granted_to=clock_timestamp()+interval '8 seconds' WHERE principal_id={principal};")
                 thread,held=background('portfolio/risk',risk,expected=403);waiting(1)
                 gated,_=background('dashboard/layout',None)
-                deadline=time.monotonic()+6
-                while query("SELECT count(*) FROM pg_locks WHERE relation='presentation.dashboard_layouts'::regclass AND NOT granted;")!='1':
-                    assert time.monotonic()<deadline,'The gated request did not hold the session gate'
-                    time.sleep(.025)
+                until(gate_waiters,'1','The gated request did not hold the session gate')
                 return thread,held,gated
             thread,held,gated=holding(psql,environment,LOCK,reading)
-            assert query(f"SELECT bool_and(granted_to>clock_timestamp()+interval '3 seconds') FROM security.role_grants WHERE principal_id={principal};")=='t','The read needs its authority while it executes'
-            deadline=time.monotonic()+12
-            while query(f"SELECT bool_and(granted_to<clock_timestamp()) FROM security.role_grants WHERE principal_id={principal};")!='t':
-                assert time.monotonic()<deadline,'The owned Risk role did not expire'
-                time.sleep(.05)
-            return thread,held,gated,time.monotonic()
-        thread,held,gated,expired=holding(psql,environment,GATE,answering);thread.join(timeout=20);gated.join(timeout=20)
-        assert (held.get('value') or {}).get('code')=='access_denied',f"the waiting read answered {held.get('at',0)-expired:+.2f} s from the role's expiry: {held}"
+            # Only the gated request still works in the database once the read's own transaction has committed.
+            until("SELECT count(*) FROM pg_stat_activity WHERE usename='preview_runtime' AND state<>'idle';",'1','The read did not finish its own transaction')
+            assert 'at' not in held,f'The read answered before it could take the session gate: {held}'
+            query(f"UPDATE security.role_grants SET granted_to=clock_timestamp() WHERE principal_id={principal};")
+            assert query(gate_waiters)=='1','The gated request released the session gate before the role ended'
+            return thread,held,gated
+        thread,held,gated=holding(psql,environment,GATE,answering);thread.join(timeout=20);gated.join(timeout=20)
+        assert (held.get('value') or {}).get('code')=='access_denied',f'the waiting read answered {held}'
         check('authority that ends while an ordinary read waits to answer refuses it')
     finally:
         for grant in saved:
