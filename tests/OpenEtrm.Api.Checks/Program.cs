@@ -26,6 +26,8 @@ if(args is ["--gas-transport-route-metadata"]){GasTransportRouteMetadataChecks.R
 if(args is ["--gas-transport-capacity-metadata"]){GasTransportCapacityMetadataChecks.Run();GasTransportCapacityPresentationChecks.Run();return;}
 if(args is ["--gas-transport-capacity-normalize",var transportInput,var transportOutput]){GasTransportCapacityPacket.Normalize(transportInput,transportOutput);return;}
 if(args is ["--storage-facility-setup"]){StorageFacilityMetadataChecks.Run();return;}
+if(args is ["--structured-power"]){StructuredPowerChecks.Run();return;}
+if(args is ["--power-hedge"]){StructuredPowerHedgeChecks.Run();return;}
 if(args is ["--assistant-prompts"]){TurnWorkerChecks.Run();AgentToolChecks.Run();await ModelProviderChecks.Run();return;}
 if(args is ["--async-reads"]){AsyncReadContractChecks.Run();await AsyncReadChecks.Run();return;}
 if(args is ["--async-read-contracts"]){AsyncReadContractChecks.Run();return;}
@@ -38,6 +40,7 @@ if(args is ["--cash-option-value-policy"]){CashOptionPolicyChecks.Run();return;}
 if(args is ["--selected-option-inputs"]){SelectedOptionInputChecks.Run();return;}
 if(args is ["--option-sensitivity-request"]){OptionSensitivityRequestChecks.Run();return;}
 if(args is ["--option-position-analytics"]){OptionPositionAnalyticsChecks.Run();return;}
+if(args is ["--option-strategy-request"]){OptionStrategyRequestChecks.Run();return;}
 if(args is ["--cash-option-value",var cashOptionPath]){await CashOptionValueChecks.Run(cashOptionPath);return;}
 if(args is ["--physical-option-economic",var physicalEconomicPath]){await PhysicalOptionValueChecks.Run(physicalEconomicPath,true);return;}
 if(args is ["--gas-physical-completion-fixture",var completionPath]){await GasPhysicalCompletionFixture.Run(completionPath);return;}
@@ -260,6 +263,7 @@ if (args is ["--schedules"])
     GasTransportCapacityMetadataChecks.Run();
     GasTransportCapacityPresentationChecks.Run();
     StorageFacilityMetadataChecks.Run();
+    StructuredPowerChecks.Run();
     FuturesMarginSourceChecks.Run();
     CashInstrumentChecks.Run();
     CurveDisplayChecks.Run();
@@ -275,6 +279,7 @@ if (args is ["--schedules"])
     SelectedOptionInputChecks.Run();
     OptionSensitivityRequestChecks.Run();
     OptionPositionAnalyticsChecks.Run();
+    OptionStrategyRequestChecks.Run();
     ReferencePresentationChecks.Run();
     CurveActivationInputChecks.Run();
     ConnectedSampleChecks.Run();

@@ -49,6 +49,8 @@ if(args is ["--binding-discounting"]){BindingDiscountingChecks.Run();return;}
 if(args is ["--instant-rate-graph"]){InstantRateGraphChecks.Run();return;}
 if(args is ["--option-clock"]){FuturesOptionChecks.ClockLayers();return;}
 if(args is ["--option-sensitivities"]){OptionSensitivityChecks.Run();return;}
+if(args is ["--option-strategies"]){OptionStrategyChecks.Run();return;}
+if(args is ["--option-strategy-workload",var strategyPoints,var strategyCurves]){OptionStrategyChecks.Workload(int.Parse(strategyPoints),int.Parse(strategyCurves));return;}
 if(args is ["--valuation-environment"]){ValuationEnvironmentChecks.Run();return;}
 if(args is ["--pnl-attribution"]){TradingPnlAttributionChecks.Run();return;}
 if(args is ["--unpaid-cash"]){UnpaidCashChecks.Run();return;}
@@ -72,6 +74,13 @@ if(args is ["--side-payment-state"]){SidePaymentStateChecks.Run();return;}
 if(args is ["--physical-lifecycle"]){PhysicalLifecycleChecks.Run();return;}
 if(args is ["--gas-forward-settlement-example"]){GasForwardSettlementExampleChecks.Run();return;}
 if(args is ["--gas-forward-settlement-example-json"]){Console.WriteLine(GasForwardSettlementExampleChecks.Export());return;}
+if(args is ["--operating-sides"]){OperatingSideChecks.Run();return;}
+if(args is ["--rec-forward"]){RecForwardChecks.Run();return;}
+if(args is ["--operating-book"]){OperatingBookChecks.Run();return;}
+if(args is ["--battery-toll"]){BatteryOperatingPlanChecks.Run();return;}
+
+if(args is ["--thermal-toll"]){ThermalTollChecks.Run();return;}
+if(args is ["--solar-rec"]){SolarOutputChecks.Run();RecInventoryChecks.Run();return;}
 if(args is ["--contract-observation-schedules"]){ContractObservationScheduleChecks.Run();return;}
 if(args is ["--schedule-market-sources"]){ScheduleMarketSourceChecks.Run();return;}
 if(args is ["--schedule-input-batch"]){await ScheduleInputBatchChecks.Run();return;}
@@ -189,6 +198,9 @@ CrudeInventorySalesChecks.Run();
 PhysicalCrudeSideChecks.Run();
 LngCargoChecks.Run();
 await ScheduleInputBatchChecks.Run();
+ThermalTollChecks.Run();
+SolarOutputChecks.Run();
+RecInventoryChecks.Run();
 BookedSideProgramChecks.Run();
 ScheduleMarketSourceChecks.Run();
 ScheduleProgramExecutionChecks.Run();
@@ -208,7 +220,7 @@ CustomCurveChecks.Run();
 CurveKindChecks.Run();
 ExactCurvePriceChecks.Run();
 ExactArithmeticChecks.Run();
-var passed = PpaConnectedChecks.Run()+CrossCommoditySwapChecks.Run()+PpaBenchmark.CheckWorkloads()+ScheduledSwapChecks.Run()+SwapSettlementChecks.Run()+SettlementDeterminationChecks.Run()+SwapLifecycleChecks.Run()+SwapNetSettlementChecks.Run()+SwapContractBridgeChecks.Run();
+var passed = RecForwardChecks.Run()+OperatingBookChecks.Run()+OperatingSideChecks.Run()+BatteryOperatingPlanChecks.Run()+PpaConnectedChecks.Run()+CrossCommoditySwapChecks.Run()+PpaBenchmark.CheckWorkloads()+ScheduledSwapChecks.Run()+SwapSettlementChecks.Run()+SettlementDeterminationChecks.Run()+SwapLifecycleChecks.Run()+SwapNetSettlementChecks.Run()+SwapContractBridgeChecks.Run();
 void Check(string label, Action run) { run(); passed++; Console.WriteLine($"PASS {label}"); }
 void Equal<T>(T actual, T expected) where T : notnull
 {
@@ -638,6 +650,7 @@ CustomProjectionChecks.Run();
 ConnectedPortfolioChecks.Run();
 ValuationEnvironmentChecks.Run();passed++;
 OptionSensitivityChecks.Run();passed++;
+OptionStrategyChecks.Run();passed++;
 JointScenarioRiskChecks.Run();
 AlignedFactorHistoryChecks.Run();
 ParametricRiskChecks.Run();

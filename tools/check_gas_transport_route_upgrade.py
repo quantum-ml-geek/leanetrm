@@ -16,8 +16,8 @@ def run():
             "'kind',prokind,'language',prolang,'arguments',proargnames,'return',prorettype,'settings',proconfig,'acl',proacl,'variadic',provariadic,'modes',proargmodes) "
             "FROM pg_proc WHERE oid='trading.verify_gas_transport_capacity_plan(uuid,uuid)'::regprocedure;")
     def before(query,migration):
-        if migration.name!='0346_gas_transport_route.sql':return
-        guard_checks(query,migration,number='0346',guard='gas_transport_route_upgrade',signatures=(
+        if migration.name!='0353_gas_transport_route.sql':return
+        guard_checks(query,migration,number='0353',guard='gas_transport_route_upgrade',signatures=(
             'assistant.is_prompt_page(text)','trading.verify_gas_transport_capacity_plan(uuid,uuid)'))
         reference,market,access,manifest=fixture(root)
         for sql in [reference,market,access]:query(sql)

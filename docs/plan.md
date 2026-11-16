@@ -1,6 +1,6 @@
 # Delivery plan and acceptance criteria
 
-D414 implements the selected [financial Transport rights and fixed-fee
+D416 implements the selected [financial Transport rights and fixed-fee
 contract](gas-transport-financial.md). Native and managed value/upgrade controls
 and actual shared browser checks provide local evidence. First-value market
 publication, integrated upstream qualification and release remain delivery gates.
@@ -20,7 +20,7 @@ deferred source changes, original authority, historical reads and populated
 upgrades. The same frozen application artifact passed 55 route, 64 capacity and
 30 storage browser checks, with desktop, local-zone and phone views reviewed.
 
-D412 implements [commercial Transport capacity operations](gas-transport-capacity-operations.md)
+D415 implements [commercial Transport capacity operations](gas-transport-capacity-operations.md)
 with immutable legal/reference/path scope, complete dated gross limits and
 independent chosen plans. Explicit empty release permits cleanup while retaining
 other breaches. Local managed/native, populated-upgrade and actual browser
@@ -28,7 +28,7 @@ checks passed. Integration/release gates remain open.
 This operating consumer does not enable financial Transport booking, route
 conservation, accepted flow or complete service value.
 
-The D412 checkpoint passed 741 managed core, 1,984 frontend and 146 Python
+The D415 checkpoint passed 741 managed core, 1,984 frontend and 146 Python
 checks, the full API schedule suite, native source/concurrency/receipt/authority
 controls and populated predecessor/drift checks. Actual browser qualification
 passed 64 Transport checks and 30 existing-storage regression checks against
@@ -42,7 +42,7 @@ browser, native financial and populated-upgrade qualifiers passed. Aggregate CI,
 release and service economic-horizon qualification remain open. Broader service
 terms require separately qualified executable profiles.
 
-D409 adds a [storage physical operations consumer](storage-facility-operations.md):
+D414 adds a [storage physical operations consumer](storage-facility-operations.md):
 versioned asset rules, pipeline ports, dated opening evidence and independent
 planned/measured activity. Native persistence, explicit coverage, concurrent plan
 admission, existing allocation links and shared UI have local qualification.
@@ -1888,6 +1888,42 @@ named place. Physical cargo logistics and tanker freight need distinct explicit
 contracts. Additional fee types/amounts remain deferred to their first executable
 consumer; no unused catalog is added in this increment.
 
+## Authorized structured power continuation (D412)
+
+The [operating-facility slice](operating-facilities.md) retains supported thermal,
+battery and solar physical parameters on exact existing locations, with supplied
+plan feasibility and independent Side valuation. Its initial managed, storage,
+HTTP and browser qualification is recorded in that capability contract.
+
+The continuation implements saved trading and hedging plus durable REC inventory:
+
+1. Retain exact operating-right terms and immutable, membership-owned schedules
+   through current trade booking, party/book authorization, command receipts and
+   certified historical reads. Preserve native Instrument/Side PV and existing
+   physical delivery ownership; pin physical facility versions and explicit plan
+   state/quantities without turning a forecast into an actual.
+2. Price saved rights and separately booked financial hedges under one captured
+   market/scenario context. Report gross sides, separate base measures and
+   operating/hedge/net price changes using ordinary holdings; hedges do not
+   change physical feasibility or infer an exposure from a price level.
+3. Persist manually evidenced REC issuance/incoming holdings, exact certificate
+   lots/ranges, allocation/release and transfer/retirement under current authority,
+   exact registry/program/class/purpose references, append-only corrections,
+   request replay and semantic fact idempotency. Reuse the pure range evaluator
+   and native publication/history patterns. Provide the same authorized backend
+   operations to UI and other clients, with retained unknown-outcome recovery.
+4. Require independent numerical, temporal, authorization, overlap/conservation,
+   concurrent retry and populated additive-upgrade cases, then exercise saved
+   trade/hedge/inventory workflows in the shared UI. Record actual capability
+   and remaining cash, balancing and settlement bounds in the
+   [trading and inventory contract](structured-power-trading.md).
+
+No optimizer, stochastic dispatch, external registry action, automatic lot
+selection, inventory costing or shared-resource pooling is authorized by this
+increment. The [structured product contract](structured-power-products.md) keeps
+those extensions separate; proposed APIs or new reference seeds alone are not
+implementation evidence.
+
 ## Later scope
 
 Planned facility and transport delivery workflows, each needing its own supported
@@ -1907,12 +1943,10 @@ Extend only after the baseline contracts are demonstrated:
 - Broader calendars, delivery shapes and schedule authoring.
 - Options beyond listed American futures options (D288): other exercise and
   settlement styles, volatility inputs and shocks, and nonlinear model diagnostics.
-- An option strategy viewer on the Options page (D408): legs of one expiry
-  combined from the chain, with profit and loss against the futures price at
-  expiry and at stated earlier instants from an analysis read over the shared
-  layers. Strategies across expiries need a declared relationship between
-  futures months first; futures legs, saved strategies and booking a strategy
-  in one action follow it.
+- Option strategies beyond one expiry (D409 analyses and draws legs of one
+  expiry on one underlying future). Strategies across expiries need a declared
+  relationship between futures months first; futures legs, saved strategies and
+  booking a strategy in one action follow it.
 - Spread-option valuation for storage, tolling and transport, once one of those
   product lines names it as a consumer.
 - Option-side sibling dependencies, shared exercise groups and an explicit

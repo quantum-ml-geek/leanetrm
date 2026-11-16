@@ -252,7 +252,7 @@ public sealed partial class SideValuationContext
 {
     private readonly PricingInputs? pricingInputs;
     public PricingInputs Inputs=>pricingInputs??throw new MarketDataException("risk_dependency","This Side requires its declared unit valuation inputs.");
-    private readonly Dictionary<Side,SideValuation> sideValues=new(ReferenceEqualityComparer.Instance);
+    private Dictionary<Side,SideValuation> sideValues=new(ReferenceEqualityComparer.Instance);
     internal int EvaluatedSides=>sideValues.Count;
     internal SideValuation Evaluate(Side side)
     {

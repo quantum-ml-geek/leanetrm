@@ -36,7 +36,7 @@ uses its own API prefix and session scope. Neither arbitrary URLs nor financial
 commands are valid operations. A repeated ID with the same normalized typed
 input acknowledges the original work; conflicting reuse refuses.
 
-The 25 admitted operations cover these existing consumers:
+The 26 admitted operations cover these existing consumers:
 
 | Consumer | Reads |
 | --- | --- |
@@ -45,6 +45,7 @@ The 25 admitted operations cover these existing consumers:
 | Risk | Scope, catalog, scenario calculation, dated-factor history and statistical setup. |
 | Statistical Risk | Parametric calculation/summary, historical calculation/summary/sample and Monte Carlo calculation. |
 | Retained Risk | Recent job list, exact job read and paged statistical archive. |
+| Options | The analysis of a strategy of option legs on one expiry (D409). |
 
 ## Lifecycle and limits
 
@@ -84,13 +85,14 @@ HTTP operations.
 
 ## Coverage boundaries
 
-The 25 allowlisted operations cover selected curve evaluation/history/shapes,
-trading directory/positions/workspace/Blotter, futures/swap editors and portfolio
-Risk setup, calculations, history and retained reports. Dashboard curve widgets
+The 26 allowlisted operations cover selected curve evaluation/history/shapes,
+trading directory/positions/workspace/Blotter, futures/swap editors, portfolio
+Risk setup, calculations, history and retained reports, and the option strategy
+analysis, whose tree prices can outlast an ordinary request. Dashboard curve widgets
 inherit these reads; saved layouts and definitions remain ordinary HTTP.
 
 Distinct delivery-price, interval-data, hourly-price and volatility-surface paths
-remain ordinary HTTP, as do curve-definition authoring/catalogs, Trading P&L,
+and the other Options reads remain ordinary HTTP, as do curve-definition authoring/catalogs, Trading P&L,
 lifecycle/physical operations, facilities, reference administration, product-specific
 booking paths, infrastructure Jobs, access and AI settings. Some economic-risk
 calculation/report consumers share mapped operations, while their setup and cash

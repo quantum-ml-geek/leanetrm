@@ -1,6 +1,6 @@
 # Architecture and domain contracts
 
-D414 implements the selected first [financial Transport rights and fixed-fee
+D416 implements the selected first [financial Transport rights and fixed-fee
 contract](gas-transport-financial.md). Direct signed whole-package values,
 independent ordinary cash and explicit expiry retain separate owners. Native, managed and actual browser consumers have local qualification, including
 explicit expiry recovery and independent cash. First-value market publication,
@@ -12,7 +12,7 @@ Managed/native, populated-upgrade and actual browser checks qualify persisted
 route adoption and release. Integrated release, physical performance and financial
 value remain separate.
 
-D412 adds [commercial Transport capacity operations](gas-transport-capacity-operations.md)
+D415 adds [commercial Transport capacity operations](gas-transport-capacity-operations.md)
 over independent exact entitlement, capacity-version and chosen-plan identities.
 Shared gross limits, explicit empty release and retained source/authority
 admission have local managed/native, upgrade and actual browser qualification.
@@ -24,7 +24,7 @@ over independent native ownership and cash. The bounded title-transfer profile
 uses shared entry, lifecycle and current-clock interactive/retained price risk.
 Release qualification and broader service capabilities remain separate.
 
-D409 adds [physical storage assets and activity](storage-facility-operations.md),
+D414 adds [physical storage assets and activity](storage-facility-operations.md),
 independent from commercial entitlement, title and cash. The first operating
 profile has local managed, native, upgrade and browser qualification. Integration
 and release gates remain separate from that evidence.
@@ -445,6 +445,22 @@ execution and automated-close gas admission remain work. D347–D350 subsequentl
 composition booking, future replacement amendments and independent indexed
 consideration through the existing FloatingSide. These preserve contractual net
 MTM and do not admit started-delivery cash lifecycle operations.
+
+D412 adds [versioned operating facilities](operating-facilities.md) and bounded
+supplied-plan thermal toll, battery and solar calculation through independent
+Side schedules. Physical operating parameters extend exact existing locations;
+trade entitlement, guarantees, state and prices stay separate. Saved complete-right
+trades retain their exact facility version, supplied plan and membership-owned
+programs. Ordinary Instrument/Side reads, Blotter and shared factor scenarios
+consume those programs. The hedge report keeps base measures distinct and adds
+only like-currency price changes under one scenario set. Standalone REC forwards
+own independent physical-delivery and consideration schedules; the durable manual
+inventory consumer records evidenced serial ownership and exact outgoing delivery
+allocations. Both use current authorization, certified history and idempotent
+commands. See [trading and inventory contracts](structured-power-trading.md).
+Optimization and external registry submission remain separate work.
+[Structured power](structured-power-products.md)
+and [contract conventions](power-contract-conventions.md) record the boundaries.
 
 D229 integrates PPA bindings into the common blotter and interactive/queued
 portfolio risk, with an explicit pending-meter policy and distinct value measure.

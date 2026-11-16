@@ -203,3 +203,8 @@ separate gates.
 Automated valuation, source/party/fee amendment, residual service rights,
 assignment and complete economic continuation remain separate capabilities.
 No production activation is implied.
+
+New and saved Transport tickets report their identity for assistant questions.
+They expose no qualified assistant trade read or navigation target; unavailable
+reads refuse explicitly while separately selected background Blotter summaries
+retain their ordinary scope and authority.

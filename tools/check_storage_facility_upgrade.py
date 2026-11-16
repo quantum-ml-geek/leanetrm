@@ -27,7 +27,7 @@ def run():
             f"FROM trading.{table} x WHERE x.catalog_id='{catalog}') digest" for table in tables) + ')s;')
 
     def before(query, migration):
-        if migration.name != '0342_storage_facility_operations.sql':
+        if migration.name != '0349_storage_facility_operations.sql':
             return
         reference, market, security, manifest = fixture(root)
         for sql in [reference, market, security]:

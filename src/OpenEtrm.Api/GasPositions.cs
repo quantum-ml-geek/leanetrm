@@ -96,16 +96,19 @@ internal static class GasPositions
    throw new MarketDataException("position_facts","Every held gas position requires its exact authorized temporal head and sources.");
   if(position is not null)position.Require(heads);
   if(heads.IsEmpty)return [];
+  // Resolve only the held memberships once; reference joins must not repeat
+  // their row-security checks for unrelated catalogue combinations.
   var physical=await PreviewDatabase.Rows(connection,"""
+   WITH members AS MATERIALIZED(
+    SELECT i.catalog_id,i.instrument_id,i.definition_revision_id,i.assignment_code,0 slot,i.delivery_from,i.delivery_to
+     FROM trading.gas_instruments i WHERE i.catalog_id=$1 AND i.instrument_id=ANY($2::uuid[]) AND NOT i.composition
+    UNION ALL SELECT m.catalog_id,m.instrument_id,m.definition_revision_id,m.assignment_code,m.slot,m.delivery_from,m.delivery_to
+     FROM trading.gas_component_terms m WHERE m.catalog_id=$1 AND m.instrument_id=ANY($2::uuid[]) AND m.role='physical'
+   )
    SELECT row_to_json(x)::text FROM(
     SELECT m.*,a.reference_catalog_id,a.reference_revision_id,a.curve_code,a.pipeline_code,a.zone_code,a.point_code,a.product_code,c.name curve_name,
      q.quantity_code,q.currency_code,q.multiplier,n.commodity_code,co.name commodity_name,u.symbol unit,cu.display_code currency
-    FROM(
-     SELECT i.catalog_id,i.instrument_id,i.definition_revision_id,i.assignment_code,0 slot,i.delivery_from,i.delivery_to
-      FROM trading.gas_instruments i WHERE i.catalog_id=$1 AND i.instrument_id=ANY($2::uuid[]) AND NOT i.composition
-     UNION ALL SELECT m.catalog_id,m.instrument_id,m.definition_revision_id,m.assignment_code,m.slot,m.delivery_from,m.delivery_to
-      FROM trading.gas_component_terms m WHERE m.catalog_id=$1 AND m.instrument_id=ANY($2::uuid[]) AND m.role='physical'
-    )m
+    FROM members m
     JOIN market_data.gas_valuation_assignments a ON(a.catalog_id,a.revision_id,a.code)=(m.catalog_id,m.definition_revision_id,m.assignment_code)
     JOIN market_data.curves c ON(c.catalog_id,c.revision_id,c.code)=(a.catalog_id,a.revision_id,a.curve_code)
     JOIN ref_data.quote_specifications q ON(q.catalog_id,q.revision_id,q.code)=(a.reference_catalog_id,a.reference_revision_id,c.quote_code)

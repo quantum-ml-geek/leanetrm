@@ -59,6 +59,7 @@ public abstract record Instrument
     public abstract Quantity UnitQuantity { get; }
     public virtual bool SupportsQuantityScaling=>false;
     public virtual bool SupportsWholePosition=>false;
+    public virtual bool SupportsFixedUnitBinding=>false;
     internal virtual bool RequiresNativeProgramMarket=>false;
     public virtual InstrumentValuation PV(SideValuationContext context)=>
         throw new MarketDataException("valuation_measure","This instrument requires its declared unit valuation context.");
@@ -81,6 +82,8 @@ public abstract record Instrument
     public virtual void ValidateBinding(Quantity quantity,DeliveryCoverage? coverage)
     {
         RequireQuantity(quantity,coverage);
+        if(!SupportsQuantityScaling&&!SupportsWholePosition&&quantity!=UnitQuantity)
+            throw new MarketDataException("risk_quantity_scaling","This instrument has not declared linear scaling in booked quantity.");
         if(coverage is not null)
             throw new MarketDataException("ppa_segment_coverage","This instrument does not accept delivery coverage.");
     }
@@ -93,7 +96,7 @@ public abstract record Instrument
     }
     private void RequireQuantity(Quantity quantity,DeliveryCoverage? coverage)
     {
-        if(!SupportsQuantityScaling&&!SupportsWholePosition)
+        if(!SupportsQuantityScaling&&!SupportsWholePosition&&!SupportsFixedUnitBinding)
             throw new MarketDataException("risk_quantity_scaling","This instrument has not declared linear scaling in booked quantity.");
         if(SupportsWholePosition&&(SupportsQuantityScaling||quantity is null||quantity.Amount!=ExactDecimal.Parse("1")||
             quantity.Specification!=UnitQuantity.Specification||UnitQuantity.Amount!=ExactDecimal.Parse("1")||coverage is not null))
