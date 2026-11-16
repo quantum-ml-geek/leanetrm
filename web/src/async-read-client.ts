@@ -2,7 +2,7 @@ const postOperations={
   evaluate:'curve.evaluate.v1',history:'curve.history.v1','market/curve-shapes':'curve.shapes.v1',
   'trading/directory':'trading.directory.v1','trading/freshness':'trading.freshness.v1','trading/positions':'trading.positions.v1','trading/position':'trading.position.v1',
   'trading/workspace':'trading.workspace.v1','trading/blotter':'trading.blotter.v1',
-  'futures/editor':'futures.editor.v1','swaps/editor':'swaps.editor.v1',
+  'futures/editor':'futures.editor.v1','swaps/editor':'swaps.editor.v1','options/strategy/analyze':'options.strategy.analyze.v1',
   'portfolio/risk/catalog':'portfolio.risk.catalog.v1','portfolio/risk':'portfolio.risk.calculate.v1',
   'portfolio/risk/scope':'portfolio.risk.scope.v1','portfolio/risk/history':'portfolio.risk.history.v1',
   'portfolio/risk/statistical/setup':'portfolio.risk.statistical.setup.v1',
