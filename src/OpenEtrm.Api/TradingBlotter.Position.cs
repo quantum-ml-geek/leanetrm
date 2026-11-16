@@ -24,6 +24,11 @@ public sealed partial class TradingBlotter
    case "ppa":
     rows=(await PpaBlotter.Read(connection,database,data,frame,[],[],ct,selected)).ToArray();
     break;
+   case GasParkLoanTicket.Product:
+    var parkLoan=await GasParkLoanBlotter.Run(connection,database,frame,[],[],ct,selected);
+    var parkLoanRows=new List<JsonObject>();await foreach(var unit in parkLoan.Units(ct))parkLoanRows.AddRange(unit);
+    rows=[..parkLoanRows];
+    break;
    case "physical_gas":
     var gas=await GasBlotter.Run(connection,database,frame,[],[],ct,selected);
     var gasRows=new List<JsonObject>();await foreach(var unit in gas.Units(ct))gasRows.AddRange(unit);

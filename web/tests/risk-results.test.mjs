@@ -120,3 +120,9 @@ test('a retained run opens as the scope’s current report only at the selected 
  assert.equal(opensAsCurrent(read({underStatedPricingPolicy:undefined}),'s1'),false,'a job that does not say is not assumed to');
  assert.equal(opensAsCurrent(read({result:undefined}),'s1'),false,'a job without a result');
 });
+test('an explicitly selected pricing policy requires the backend report comparison for that exact choice',()=>{
+ const saved={result:report([]),underStatedPricingPolicy:true,statedPricingPolicyId:'base'};
+ assert.equal(opensAsCurrent(saved,'s1','native-gas-v1'),false);
+ assert.equal(opensAsCurrent({...saved,underStatedPricingPolicy:false,statedPricingPolicyId:'native-gas-v1'},'s1','native-gas-v1'),true);
+ assert.equal(opensAsCurrent({...saved,statedPricingPolicyId:undefined},'s1','base'),false);
+});

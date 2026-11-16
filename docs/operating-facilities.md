@@ -14,7 +14,7 @@ physical calculations retain separate implementations.
 
 ## Saved identity and history
 
-Migration [0338](../db/migrations/0338_power_operating_facilities.sql) stores
+Migration [0339](../db/migrations/0339_power_operating_facilities.sql) stores
 immutable operating versions. Location name, type and coordinates come from
 `ref_data.locations`; the operating extension creates no second facility master.
 Each version pins the exact definition/reference bundles, location, clock and

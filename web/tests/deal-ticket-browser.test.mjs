@@ -2,6 +2,35 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {browserAvailable,withBrowserPage,browserTestTimeout,pressKey} from './browser-page.mjs';
 
+test('a managed profile with trade fields and no editable sides does not offer an empty side composer',{skip:!browserAvailable,timeout:browserTestTimeout},async()=>{
+ await withBrowserPage('<div id="host"></div>',async evaluate=>{
+  await evaluate(`(async()=>{
+   const {renderTicket}=await import('/deal-ticket.js'),{newTicket}=await import('/ticket-model.js');
+   const field={id:'return_rule',label:'Return quantity rule',meaning:'An explicit saved contract selection.',type:'choice',unit:null,state:'editable',required:true,band:null,choices:'return_rules',dependsOn:[],lookup:null,soon:null,rule:null};
+   const description={product:'synthetic_service',version:1,rowShape:'flow',tradeFields:[field],sideLimits:[],levels:['term'],modes:['new','booked'],tabs:[],tradeColumns:[],sides:[]};
+   window.ticket=renderTicket(document.querySelector('#host'),{state:newTicket(description),mode:'new',actions:null,schedule:null,quantityUnit:null,instant:at=>at,zone:'UTC',previous:null,summaries:[],links:[],entry:null,status:{kind:'current',text:'Choose the contract terms.'},fieldErrors:{},choices:{return_rule:[{value:'equal_quantity',label:'Equal quantity'}]},selectedSide:null,tab:'instrument',level:'term',closed:new Set(),on:new Proxy({},{get:()=>()=>{}})});
+  })()`);
+  assert.equal(await evaluate("document.querySelector('[data-field=return_rule] select').value"),'','a contract selection stays explicit');
+  assert.equal(await evaluate("document.querySelector('.ticket-deck')===null"),true);
+  assert.equal(await evaluate("document.querySelector('.ticket-chips')===null"),true);
+  assert.equal(await evaluate("document.querySelector('.ticket-book').textContent"),'Book');
+ });
+});
+
+test('retained terms presentation preserves backend labels and values without placing lifecycle commands or a second schedule on Terms',{skip:!browserAvailable,timeout:browserTestTimeout},async()=>{
+ await withBrowserPage('<div id="host"></div>',async evaluate=>{
+  await evaluate(`(async()=>{
+   const {renderTicket}=await import('/deal-ticket.js'),{ticketOf}=await import('/ticket-model.js');
+   const field={id:'perspective',label:'Principal perspective',meaning:'The party giving or receiving the principal.',type:'choice',unit:null,state:'editable',required:true,band:null,choices:'perspectives',dependsOn:[],lookup:null,soon:null,rule:null};
+   const d={product:'synthetic_service',version:1,rowShape:'flow',tradeFields:[field],sideLimits:[],levels:['term'],modes:['new','booked'],tabs:[],tradeColumns:[],sides:[]};
+   const state=ticketOf(d,{product:d.product,version:1,trade:{perspective:'principal_receiver'},sides:[]});
+   window.ticket=renderTicket(document.querySelector('#host'),{state,mode:'booked',presentation:'terms',actions:{amend:{allowed:false,reason:'Unavailable'},closeOut:{allowed:false,reason:'Unavailable'},record:{allowed:false,reason:'Use the native lifecycle actions.'}},schedule:null,quantityUnit:'MMBtu',instant:at=>at,zone:'UTC',previous:null,summaries:[],links:[],entry:null,status:{kind:'current',text:'Retained contract terms.'},fieldErrors:{},choices:{perspective:[{value:'principal_receiver',label:'Principal receiver'}]},selectedSide:null,tab:'instrument',level:'term',closed:new Set(),on:new Proxy({},{get:()=>()=>{}})});
+  })()`);
+  assert.equal(await evaluate("document.querySelector('[data-field=perspective] .ticket-value').textContent"),'Principal receiver');
+  assert.equal(await evaluate("document.querySelectorAll('input,select,button,.ticket-schedule').length"),0);
+ });
+});
+
 // The ticket draws a synthetic in-delivery schedule view in the real grid dependency: the backend's delivered, remaining and total rows,
 // pinned in that order, and the strip's delivered count.
 test('a ticket in delivery shows the delivered count and the delivered, remaining and total rows above the pinned total',{skip:!browserAvailable,timeout:browserTestTimeout},async()=>{
