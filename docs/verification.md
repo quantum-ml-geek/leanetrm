@@ -38,8 +38,8 @@ The gas partition includes the Park and Loan native, populated-upgrade, retained
 price-worker and real application browser qualifiers, alongside its existing
 amendment upgrades and application checks.
 
-The current integrated runner contains 189 commands: 64 shared checks,
-64 isolated application previews and 61 partition-specific native/application
+The current integrated runner contains 192 commands: 64 shared checks,
+64 isolated application previews and 64 partition-specific native/application
 checks. The D404 local checkpoint passed 1,866 frontend checks and 122 Python
 checks. The earlier calendar/lifecycle checkpoint passed 737 managed core checks,
 88 rate checks, 1,806 frontend checks and 121 Python checks; those counts describe

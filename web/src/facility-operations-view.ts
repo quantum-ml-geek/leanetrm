@@ -2,7 +2,7 @@ import {mountOperationFields,type OperationField} from './operation-fields.js';
 import {PendingCommand,actorTransport,restoreTradeRequest,type RequestCommand} from './pending-command.js';
 import {zonedInput,sameUtcInstant} from './user-time.js';
 import {renderRegularTable} from './regular-table.js';
-import {displayExactInstant} from './market-view.js';
+import {displayExactInstant,displayInstant} from './market-view.js';
 import type {FacilityContext} from './facility-quantities-view.js';
 
 type Api=<T>(path:string,body?:unknown)=>Promise<T>;
@@ -66,7 +66,7 @@ export function setupFacilityOperations(root:HTMLElement,o:Options){
  function drawContext(){
   const value=source(),host=get('context');
   host.title=value?.context.knownAt??'';
-  host.textContent=value?`Business date ${value.context.effectiveOn} · ${value.historical?'Historical, read only':'Working data'} · known through ${displayExactInstant(value.context.knownAt,o.zone())}`:'';
+  host.textContent=value?`Business date ${value.context.effectiveOn} · ${value.historical?'Historical, read only':'Working data'} · known as of ${displayInstant(value.context.knownAt,o.zone())} · ${o.zone()}`:'';
  }
  function validate(value:View,context:FacilityContext){
   if(!value||typeof value.ownerId!=='string'||!value.ownerId||!value.context?.contextId||typeof value.context.knownAt!=='string'||value.context.effectiveOn!==context.effectiveOn||context.knowledgeMode==='retained'&&value.context.contextId!==context.retained?.contextId||

@@ -2,7 +2,7 @@
 
 Status: locally implemented operating profile. Managed behavior, native admission,
 source correction, concurrency and populated upgrade checks pass on unmodified
-PostgreSQL 16. Shared UI browser qualification is in progress. This profile does
+PostgreSQL 16. The integrated shared UI browser checks pass. This profile does
 not install the commercial Storage or Transport instruments. Release qualification
 and schema activation remain separate steps.
 
@@ -108,8 +108,12 @@ sealed membership, original outcomes, knowledge horizons and source search.
 A populated upgrade retains an existing reported quantity of 100 with 60 allocated;
 source correction to 90 preserves the same ledger and its allocation.
 
-Shared UI qualification must finish authoring, dated opening evidence, prospective
-review, retained measured breaches, local-time display and existing allocation
-links on desktop and narrow screens. The required verification runner includes
-native, populated-upgrade and real-browser checks in the physical partition.
-No deployment is authorized by this document.
+The integrated browser run passes 30 checks covering authoring, fresh-request
+fact acknowledgement, dated opening evidence, prospective review, retained
+measured breaches, source search, request recovery, local-time display, historical
+read-only views and existing allocation links on desktop and narrow screens.
+Native postconditions retain the original source quantity of 100 and allocation
+of 60, with no new title or cash. Assistant page/catalog parity also passes.
+The required verification runner includes native, populated-upgrade and
+real-browser checks in the physical partition. No deployment is authorized by
+this document.

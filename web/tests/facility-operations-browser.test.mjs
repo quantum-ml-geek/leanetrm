@@ -193,15 +193,26 @@ test('only backend-declared UTC table cells change display zone and keep their e
  assert.match(await evaluate("document.querySelector('[data-facility-ops=inspection] tbody td').textContent"),/08:00:00\.000001 UTC/);
 }));
 
+test('knowledge summaries use readable local time and keep machine precision in the source title',browser,()=>withBrowserPage('<div id="host"></div>',async evaluate=>{
+ await evaluate(setup);
+ await evaluate("(async()=>{reply.context.knownAt='2032-03-14T20:00:17.123456Z';displayZone='America/Chicago';await operations.load();})()");
+ const context=await evaluate("({text:document.querySelector('[data-facility-ops=context]').textContent,title:document.querySelector('[data-facility-ops=context]').title})");
+ assert.match(context.text,/Mar 14, 2032/);
+ assert.match(context.text,/3:00\s*PM/);
+ assert.match(context.text,/America\/Chicago/);
+ assert.doesNotMatch(context.text,/123456|UTC-0[56]/);
+ assert.equal(context.title,'2032-03-14T20:00:17.123456Z');
+}));
+
 test('the facility knowledge cut follows the selected user zone and retains its exact source instant',browser,()=>withBrowserPage('<div id="host"></div>',async evaluate=>{
  await evaluate(setup);
- assert.match(await evaluate("document.querySelector('[data-facility-ops=context]').textContent"),/8:00\s*PM UTC/);
+ assert.match(await evaluate("document.querySelector('[data-facility-ops=context]').textContent"),/8:00\s*PM · UTC/);
  assert.equal(await evaluate("document.querySelector('[data-facility-ops=context]').title"),'2032-03-14T20:00:00Z');
  const reads=await evaluate('calls.length');
  await evaluate("displayZone='America/Chicago';operations.refresh()");
  const context=await evaluate("({text:document.querySelector('[data-facility-ops=context]').textContent,title:document.querySelector('[data-facility-ops=context]').title})");
  assert.match(context.text,/Business date 2032-03-14/);
- assert.match(context.text,/3:00\s*PM CDT/);
+ assert.match(context.text,/3:00\s*PM · America\/Chicago/);
  assert.equal(context.title,'2032-03-14T20:00:00Z');
  assert.equal(await evaluate('calls.length'),reads,'a display preference does not replace the certified source');
 }));
