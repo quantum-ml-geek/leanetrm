@@ -4,7 +4,6 @@ using OpenEtrm.MarketData.Risk;
 
 namespace OpenEtrm.MarketData.Trading;
 
-// Commodity definitions retain their own identity fields and membership rules.
 public interface IRetainedProgramMember
 {
     Guid SideId { get; }
@@ -14,43 +13,75 @@ public interface IRetainedProgramMember
     ExactRatio? ValuationRatio { get; }
 }
 
-// Shared contractual PV mechanics for independently valued retained programs.
-// Source admission, units and physical policies stay with the concrete model.
-public abstract record RetainedProgramInstrument<TMember> : Instrument where TMember : IRetainedProgramMember
+// Published Members remain the canonical contract. Sides are a checked,
+// deterministic execution view of those same programs, in membership order.
+internal interface IRetainedSideComposition
+{
+    void RequireRetainedSides();
+}
+
+public abstract record RetainedProgramInstrument<TMember> : SidedInstrument, IRetainedSideComposition where TMember : IRetainedProgramMember
 {
     public abstract ImmutableArray<TMember> Members { get; }
-    public override bool SupportsQuantityScaling => true;
+    internal override bool SupportsSettlement => false;
     internal override bool RequiresNativeProgramMarket => true;
     public override string RetainedScheduleIdentity => "retained_side_programs_v1/" + string.Join('/', Members.Select(m => m.ProgramDigest));
 
-    protected RetainedProgramInstrument(Guid id) : base(id) { }
-    protected abstract ScheduleMarketSources Sources(CurveBuild basis);
-
-    public override ExactMoney Value(UnitValuationContext context)
+    protected RetainedProgramInstrument(Guid id, ImmutableArray<TMember> members, Quantity unit, ReferenceKey currency)
+        : base(id, CreateSides(members, unit, currency)) { }
+    private static ImmutableArray<SideMembership> CreateSides(ImmutableArray<TMember> members, Quantity unit, ReferenceKey currency)
     {
-        var evaluations = EvaluateMembers(context);
-        var total = ExactMoney.FromMoney(new(default, Currency));
-        for (var n = 0; n < Members.Length; n++) total = total.Add(Signed(Members[n], evaluations[n].PresentValue));
-        return total;
+        if(members.IsDefaultOrEmpty || members.Any(m => m is null || m.Program is null))
+            throw new MarketDataException("retained_side_composition", "Retain the complete ordered program memberships.");
+        return [..members.Select((m, slot) => new SideMembership(
+            RetainedProgramSide.Define(m.SideId, slot, m.Program, unit, currency), m.ValuationCoefficient, m.ValuationRatio))];
     }
-
-    // One unscaled evaluation per member, in member order, from the shared base and scenario markets.
-    protected ImmutableArray<BookedSideEvaluation> EvaluateMembers(UnitValuationContext context)
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<RetainedProgramInstrument<TMember>,object> Proofs = new();
+    public void RequireRetainedSides() => _ = Proofs.GetValue(this, static instrument =>
+    {instrument.ValidateRetainedSides();return new object();});
+    private void ValidateRetainedSides()
     {
-        if (context.Measure != ValuationMeasure.PresentValue)
+        if(Sides.IsDefault || Sides.Length != Members.Length) throw Composition();
+        for(var slot = 0; slot < Members.Length; slot++)
+        {
+            var member = Members[slot]; var actual = Sides[slot];
+            if(actual?.Side is not RetainedProgramSide side || side.Slot != slot || side.Id != member.SideId ||
+                actual.Coefficient != member.ValuationCoefficient || actual.QuantityRatio != member.ValuationRatio ||
+                side.ProgramDigest != member.ProgramDigest || side.Currency != Currency || side.UnitQuantity != UnitQuantity ||
+                !ReferenceEquals(side.Program, member.Program) && !side.Program.Write().AsSpan().SequenceEqual(member.Program.Write()) ||
+                DefinitionIdentity.For(side.CalendarPolicy) != DefinitionIdentity.For(RetainedSideCalendarPolicy.Read(member.Program)))
+                throw Composition();
+        }
+    }
+    private static MarketDataException Composition() => new("retained_side_composition", "Every retained Side must preserve its exact ordered native program, coefficient, ratio, unit and captured calendar policy.");
+    protected UnitPricingContract RetainedDeclaration(UnitPricingContract declaration)
+    {RequireRetainedSides();return declaration;}
+    protected abstract ScheduleMarketSources Sources(CurveBuild basis);
+    private protected virtual RetainedProgramContext PrepareSides(UnitValuationContext context, CurveBuild basis, CurveBuild scenario) => new(Sources(basis), scenario);
+    protected InstrumentValuation EvaluateSides(UnitValuationContext context)
+    {
+        RequireRetainedSides();
+        if(context.Measure != ValuationMeasure.PresentValue)
             throw new MarketDataException("valuation_measure", "This retained instrument implements contractual present value only.");
         var (basis, scenario) = context.RetainedProgramMarkets(Declare(context).Dependencies);
-        var sources = Sources(basis);
-        return [..Members.Select(member => sources.Evaluate(member.Program, member.SideId, scenario, context.DiscountProvider, context.Cancellation))];
+        return PV(context.SideContextRetained(PrepareSides(context, basis, scenario)));
     }
-    protected static ExactMoney Signed(TMember member, ExactMoney value) =>
-        (member.ValuationRatio is {} ratio ? value.Scale(ratio) : value).Scale(member.ValuationCoefficient);
-
-    // The started-delivery lifecycle has one supported consumer; other commodities name the missing policy.
+    public override InstrumentValuation PV(SideValuationContext context)
+    {
+        RequireRetainedSides();
+        return base.PV(context);
+    }
+    public override ExactMoney Value(UnitValuationContext context) => EvaluateSides(context).PresentValue;
+    internal override UnitPricingContract DeclareScope(UnitValuationContext context, bool lifecycle)
+    {
+        RequireRetainedSides();
+        return Declare(context);
+    }
     public override void ValidateValuationState(IBindingValuationState? state)
     {
-        if (state is PhysicalCashState)
+        if(state is PhysicalCashState)
             throw new MarketDataException("physical_lifecycle_unsupported", "This retained instrument has no started-delivery lifecycle policy.");
-        base.ValidateValuationState(state);
+        if(state is not null)
+            throw new MarketDataException("settlement_scope", "This retained instrument does not accept an unrelated settlement state.");
     }
 }

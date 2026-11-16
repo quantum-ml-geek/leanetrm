@@ -14,6 +14,13 @@ internal static class CalendarPolicyReplayChecks
         var newlyVisible=SideCalendarPolicy.UseOne(Calendar(earlierProof),true,false,true);
         var canonical="{\"contract\":\"synthetic_calendar_replay_v1\",\"CalendarPolicy\":"+DefinitionIdentity.For(original).Canonical+"}";
         var input=SideCalendarPolicies.FromRetained(canonical);
+        var pureCalendar=new CalendarDefinition(reference,new(2040,1,1),new(2042,1,1),0,[],CalendarDefinition.Implementation,null);
+        var purePolicy=SideCalendarPolicy.UseOne(pureCalendar,true,false,true);
+        var pureCanonical="{\"contract\":\"synthetic_calendar_replay_v1\",\"CalendarPolicy\":"+DefinitionIdentity.For(purePolicy).Canonical+"}";
+        if(DefinitionIdentity.For(RetainedSideCalendarPolicy.Read(pureCanonical))!=DefinitionIdentity.For(purePolicy))
+            throw new Exception("The pure retained definition must preserve nullable synthetic publication evidence exactly.");
+        try{SideCalendarPolicies.FromRetained(pureCanonical);throw new Exception("Native calendar hydration must still require its original publication proof.");}
+        catch(MarketDataException error)when(error.Code=="side_calendar_policy"){}
         // No current metadata is consulted to reinterpret a verified retained identity.
         var replay=SideCalendarPolicies.Resolve(null!,input);
         if(DefinitionIdentity.For(replay)!=DefinitionIdentity.For(original)||DefinitionIdentity.For(replay)==DefinitionIdentity.For(newlyVisible))

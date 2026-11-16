@@ -33,6 +33,12 @@ internal static class GasParkAndLoanChecks
             Equal(GasParkAndLoanPrincipal.Plan(terms,Q("720"),Q("720"),Q("270"),due).OverdueReturn.Amount,"450");
             var complete=GasParkAndLoanPrincipal.Plan(terms,Q("720"),Q("720"),Q("720"),due.AddDays(2));
             Equal(complete.OutstandingReturn.Amount,"0");Equal(complete.SignedReturnHolding.Amount,"0");
+            var contractual=GasParkAndLoanValuation.ContractualComponents(terms,Q("720"));
+            if(contractual.Length!=3||contractual.Any(c=>c.Instrument is not SidedInstrument)||
+                contractual[0].Quantity.Amount!=ExactDecimal.Parse(sign)*ExactDecimal.Parse("720")||
+                contractual[1].Quantity.Amount!=-contractual[0].Quantity.Amount||contractual[2].Quantity.Amount!=ExactDecimal.Parse("-18")||
+                !GasParkAndLoanValuation.Components(terms,Q("720"),Q("720"),due.AddDays(2)).IsEmpty)
+                throw new Exception("Contractual Side definitions remain inspectable after completion without recreating remaining holdings or determined cash.");
             // The fee is a separate amount. Principal performance and gas size
             // never pay, scale or reverse it.
             Equal(before.FixedFee.Amount,"-18");Equal(partial.FixedFee.Amount,"-18");Equal(complete.FixedFee.Amount,"-18");
@@ -79,6 +85,8 @@ internal static class GasParkAndLoanChecks
             if(Terms("18",direction,advance).FeeDueAt!=advance||Terms("18",direction,advance.AddMicroseconds(1)).FeeDueAt!=advance.AddMicroseconds(1))
                 throw new Exception("The installed fee rule admits an explicit due instant at or after its planned advance.");
             var zero=Terms("0",direction,null);
+            if(GasParkAndLoanValuation.ContractualComponents(zero,new(ExactDecimal.Parse("720"),quote.Quantity)).Length!=2)
+                throw new Exception("An explicit zero fee must not acquire a fabricated contractual cash Instrument or Side.");
             if(zero.FeeDueAt is not null||zero.FixedFee.Amount!=default||zero.FeeDirection!=ExactDecimal.Parse(direction))
                 throw new Exception("An explicitly zero fee retains no payment due and preserves its independently selected direction.");
             if(zero.FeeRecognition!="accepted_advance_v1"||GasParkAndLoanTerms.FeeAtAdvance!=zero.FeeRecognition||

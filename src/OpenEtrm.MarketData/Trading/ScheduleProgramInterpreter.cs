@@ -198,6 +198,8 @@ public sealed partial class BookedSideProgram
                 throw new MarketDataException("side_due_leg_unresolved","Due accrued cash requires its fixed, actual or published price.");
             return new(ComponentKind.Payment,null,null,ValueCoverage.OverdueBalance,false,null);
         }
+        if(row.Parameters["lifecycle"]==OperatingContractScheduleSource.DeliveryLifecycle)
+            return new(ComponentKind.Delivery,EconomicClass.Unrealised,null,ValueCoverage.Discounted,modeled,null);
         if(row.Grid is null)return new(ComponentKind.Payment,null,null,ValueCoverage.Discounted,modeled,null);
         var delivered=Document.Grids[row.Grid.Value].EndTicks(cell)<=valuation.Ticks;
         var payment=row.Parameters["lifecycle"]=="interval_payment_v1";

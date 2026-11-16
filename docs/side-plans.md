@@ -28,6 +28,22 @@ temporal and authorization contract. D257 decides the price node the rows read.
 This supersedes the earlier compile-per-calculation proposal. Implementation and
 qualification of direct execution remain work.
 
+## Instrument membership requirement
+
+D417 requires genuine Side composition for every non-exchange Instrument,
+including cash, owned-gas claims, whole service-rights values and retained-program
+projections. Only futures and futures options are exempt. Sides own their
+schedules, PV and inspection; Instruments own signs, quantity ratios and typed
+connections. A scalar current value is a noncash holding row, without an invented
+payment or delivery interval. Separately owned fees remain independent cash
+Instruments with their own Sides; a zero fee does not create a fictitious Side.
+
+Retained-program Sides execute the stored program directly. Their schedule
+wrappers expose original addresses lazily, and their calendar policies are
+reconstructed exactly from saved canonical terms. The checked derived membership
+view preserves published program and Instrument identity contracts. It never
+recompiles a schedule or refreshes a calendar from the current catalog.
+
 ## Baseline before the trial
 
 Before the trial, two schedule shapes existed; neither was the complete PV input on its own.

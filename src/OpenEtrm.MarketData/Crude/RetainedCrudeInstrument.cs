@@ -26,7 +26,7 @@ public sealed record RetainedCrudeMember : IRetainedProgramMember
     }
 }
 
-// A booked execution projection: no Side definition or schedule generator is used.
+// Genuine Sides execute the exact booked programs without replacement generators.
 [EconomicDefinition("retained_crude_instrument_v1")]
 public sealed record RetainedCrudeInstrument : RetainedProgramInstrument<RetainedCrudeMember>
 {
@@ -37,7 +37,7 @@ public sealed record RetainedCrudeInstrument : RetainedProgramInstrument<Retaine
     public override Quantity UnitQuantity => new(ExactDecimal.Parse("1"), Assignment.Quantity.Key);
     public override DefinitionIdentity PricingBindingIdentity => DefinitionIdentity.For(Assignment);
 
-    public RetainedCrudeInstrument(Guid id, CrudeValuationAssignment assignment, ImmutableArray<RetainedCrudeMember> members) : base(id)
+    public RetainedCrudeInstrument(Guid id, CrudeValuationAssignment assignment, ImmutableArray<RetainedCrudeMember> members) : base(id,members,new(ExactDecimal.Parse("1"),Required(assignment).Quantity.Key),Required(assignment).Quote.Currency)
     {
         if (assignment is null || members.IsDefault || members.Length is < 2 or > 3 || members.Any(m => m is null) ||
             members[0].Program.Document.Family != "crude" ||
@@ -47,6 +47,9 @@ public sealed record RetainedCrudeInstrument : RetainedProgramInstrument<Retaine
         Members = members;
     }
 
+    private static CrudeValuationAssignment Required(CrudeValuationAssignment? assignment)=>assignment??
+        throw new MarketDataException("crude_membership","Select the exact retained source assignment before constructing its Side definitions.");
+
     public override void ValidateBinding(Quantity quantity, OpenEtrm.MarketData.Power.DeliveryCoverage? coverage)
     {
         base.ValidateBinding(quantity, coverage);
@@ -54,9 +57,9 @@ public sealed record RetainedCrudeInstrument : RetainedProgramInstrument<Retaine
             throw new MarketDataException("crude_quantity", "Select a positive total in the exact retained standard-volume specification.");
     }
 
-    public override UnitPricingContract Declare(UnitValuationContext context) => new(Id, "retained_crude_unit_pv_v1",
+    public override UnitPricingContract Declare(UnitValuationContext context) => RetainedDeclaration(new(Id, "retained_crude_side_pv_v2",
         PeriodPriceSelector.ProjectionAt(Assignment.Lookup, context.Snapshot) is {} market ? [market] : [],
-        UnitQuantity.Specification, Currency) { Time = ValuationTimeDependency.Pinned,  ScheduleIdentity = RetainedScheduleIdentity };
+        UnitQuantity.Specification, Currency) { Time = ValuationTimeDependency.Pinned,  ScheduleIdentity = RetainedScheduleIdentity });
 
     protected override ScheduleMarketSources Sources(CurveBuild basis) => ScheduleMarketSources.ForPhysicalCrude(basis, [Assignment]);
 }

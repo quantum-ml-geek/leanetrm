@@ -345,19 +345,18 @@ internal static class JointScenarioRiskChecks
             [..new[]{shifts.X is null?null:Shift(0,shifts.X),shifts.Y is null?null:Shift(1,shifts.Y)}.OfType<CurveShift>()]);
         internal ConnectedRiskScenarioSet Set(params ConnectedRiskScenario[] scenarios)=>new("synthetic_named_stresses","v1",ConnectedRiskScenarioSet.Independent,[..scenarios]);
     }
-    private sealed record Probe : Instrument
+    private sealed record Probe : SyntheticSidedInstrument
     {
         private readonly ImmutableArray<CurveRequest> inputs;
-        private readonly Func<PricingInputs,ExactMoney> price;
         private readonly ValuationTimeDependency time;
         private readonly ImmutableArray<VolatilityInput> volatility;
         internal ImmutableArray<DeclaredPriceStep> PriceSteps{get;init;}=[];
         public override ReferenceKey Currency{get;}
         public override Quantity UnitQuantity{get;}
         public override bool SupportsQuantityScaling=>true;
-        internal Probe(Guid id,PriceUnit unit,ImmutableArray<CurveRequest> inputs,Func<PricingInputs,ExactMoney> price,ValuationTimeDependency? time=null,ImmutableArray<VolatilityInput> volatility=default):base(id)
-        {Currency=unit.Currency;UnitQuantity=new(ExactDecimal.Parse("1"),unit.Quantity);this.inputs=inputs;this.price=price;this.time=time??ValuationTimeDependency.Independent;this.volatility=volatility.IsDefault?[]:volatility;}
+        internal Probe(Guid id,PriceUnit unit,ImmutableArray<CurveRequest> inputs,Func<PricingInputs,ExactMoney> price,ValuationTimeDependency? time=null,ImmutableArray<VolatilityInput> volatility=default):base(id,SyntheticValueSide.One(id,unit.Currency,unit.Quantity,inputs,c=>price(c.Inputs),"synthetic_joint_pv_v1"))
+        {Currency=unit.Currency;UnitQuantity=new(ExactDecimal.Parse("1"),unit.Quantity);this.inputs=inputs;this.time=time??ValuationTimeDependency.Independent;this.volatility=volatility.IsDefault?[]:volatility;}
         public override UnitPricingContract Declare(UnitValuationContext context)=>new(Id,"synthetic_joint_pv_v1",inputs,UnitQuantity.Specification,Currency){Time=time,Volatility=volatility,PriceSteps=PriceSteps};
-        public override UnitValuation PV(UnitValuationContext context)=>new(context,price(context.Inputs),UnitQuantity.Specification);
+        public override ExactMoney Value(UnitValuationContext context)=>PV(context.SideContext()).PresentValue;
     }
 }

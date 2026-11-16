@@ -118,8 +118,8 @@ internal static class PhysicalLifecycleChecks
         Equal(demo.Value(Demo.Close,paid,Demo.Undiscounted,marked:(nov6,"3.3")).Unrealized,"12");
         Reject("delivery_mark_final_settlement",()=>demo.Value(Demo.Close,paid,Demo.Undiscounted,marked:(nov6,null)));
         Reject("delivery_mark_final_settlement",()=>demo.Headline(Demo.Close,paid,Demo.Undiscounted,(nov6,null)));
-        Require(demo.ModelVersion(Demo.Close,paid)=="physical_whole_day_accrual_v1/delivery_mark_final_settlement_v1/retained_gas_unit_pv_v2"&&
-            demo.ModelVersion(Demo.Close,null)=="delivery_mark_final_settlement_v1/retained_gas_unit_pv_v2","The started lifecycle names its delivery mark policy in its model version.");
+        Require(demo.ModelVersion(Demo.Close,paid)=="physical_whole_day_accrual_v1/delivery_mark_final_settlement_v1/retained_gas_side_pv_v3"&&
+            demo.ModelVersion(Demo.Close,null)=="delivery_mark_final_settlement_v1/retained_gas_side_pv_v3","The started lifecycle names its delivery mark policy in its model version.");
         // Retained risk carries both components per position under the same pinned scenarios: a bump to Nov 7's mark moves
         // unrealized alone, and the components sum to the position's value in base, up and down.
         var risk=demo.Risk(Demo.Close,paid,nov7);

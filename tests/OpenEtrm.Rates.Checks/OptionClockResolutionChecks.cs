@@ -132,10 +132,10 @@ internal static class OptionClockResolutionChecks
         public ImmutableArray<SidePaymentFactor> ResolveForValuation(ImmutableArray<SidePaymentKey> keys,MarketSnapshot snapshot,DateTimeOffset at,string? policy)=>
             [..source.ResolveForValuation(keys,snapshot,at,policy).Select(f=>at==snapshot.ValuationAt?f:change(f))];
     }
-    private sealed record ResolutionEscape:Instrument
+    private sealed record ResolutionEscape:SidedInstrument
     {
         private readonly CurveRequest market;private readonly QuoteSpecification quote;private readonly SidePaymentKey payment;private readonly DateTimeOffset from,until;
-        public ResolutionEscape(Guid id,CurveRequest market,QuoteSpecification quote,SidePaymentKey payment,DateTimeOffset from,DateTimeOffset until):base(id)
+        public ResolutionEscape(Guid id,CurveRequest market,QuoteSpecification quote,SidePaymentKey payment,DateTimeOffset from,DateTimeOffset until):base(id,[new(new ResolutionSide(id,market,quote),D("1"))])
         {(this.market,this.quote,this.payment,this.from,this.until)=(market,quote,payment,from,until);}
         public override ReferenceKey Currency=>quote.Currency;
         public override Quantity UnitQuantity=>new(D("1"),quote.Quantity);
@@ -145,4 +145,16 @@ internal static class OptionClockResolutionChecks
         public override ImmutableArray<DeclaredPriceStep> ResolvePriceSteps(UnitValuationContext context,UnitPricingContract declaration)
         {_=context.Inputs.Discounts([payment]);return [];}
     }
+    [EconomicDefinition("synthetic_resolution_side_v1")]
+    private sealed record ResolutionSide : ValueSide
+    {
+        private readonly CurveRequest request;
+        internal ResolutionSide(Guid id,CurveRequest request,QuoteSpecification quote)
+            :base(id,quote.Currency,new(D("1"),quote.Quantity),"synthetic_resolution_side_v1",[new(0,ComponentKind.Holding,null,null,null,null,request)])
+        {this.request=request;}
+        public override System.Collections.Immutable.ImmutableArray<CurveRequest> Dependencies=>[request];
+        protected override System.Collections.Immutable.ImmutableArray<ScheduleRowValue> Evaluate(SideValuationContext context,IReadOnlyList<ScheduleRow> rows)=>
+            throw new Exception("The deliberately invalid resolution declaration must refuse before Side PV.");
+    }
+
 }

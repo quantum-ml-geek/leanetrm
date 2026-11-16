@@ -48,7 +48,7 @@ public sealed record RetainedRecForwardInstrument:RetainedProgramInstrument<Reta
  [IdentityField]public override Quantity UnitQuantity {get;}
  [IdentityField]public override ReferenceKey Currency {get;}
  [IdentityField]public override ImmutableArray<RetainedOperatingMember> Members {get;}
- public RetainedRecForwardInstrument(Guid id,ReferenceKey product,DateOnly from,DateOnly to,Quantity unit,ReferenceKey currency,ImmutableArray<RetainedOperatingMember> members):base(id)
+ public RetainedRecForwardInstrument(Guid id,ReferenceKey product,DateOnly from,DateOnly to,Quantity unit,ReferenceKey currency,ImmutableArray<RetainedOperatingMember> members):base(id,members,unit,currency)
  {
   RecForwardRules.Product(product,from,to);Money.RequireKey(currency);
   if(unit is null||unit.Amount!=ExactDecimal.Parse("1")||unit.Specification.Revision!=product.Revision||currency.Revision!=product.Revision||members.IsDefault||members.Length!=2||
@@ -69,9 +69,9 @@ public sealed record RetainedRecForwardInstrument:RetainedProgramInstrument<Reta
    throw new MarketDataException("rec_delivery_lifecycle","A started certificate delivery requires a separately selected fulfillment lifecycle.");
   return base.Value(context);
  }
- public override UnitPricingContract Declare(UnitValuationContext context)=>new(Id,"retained_rec_forward_v1",
+ public override UnitPricingContract Declare(UnitValuationContext context)=>RetainedDeclaration(new(Id,"retained_rec_forward_side_v2",
   [..Members.SelectMany(m=>m.Program.Document.Instructions).SelectMany(i=>i.Bindings).Where(b=>b.Kind=="contract_price").Select(b=>b.Market!.Value).Distinct()],
-  UnitQuantity.Specification,Currency){Time=ValuationTimeDependency.Pinned,ScheduleIdentity=RetainedScheduleIdentity};
+  UnitQuantity.Specification,Currency){Time=ValuationTimeDependency.Pinned,ScheduleIdentity=RetainedScheduleIdentity});
  protected override ScheduleMarketSources Sources(CurveBuild basis)=>ScheduleMarketSources.ForOperating(basis);
 }
 internal static class RecForwardRules

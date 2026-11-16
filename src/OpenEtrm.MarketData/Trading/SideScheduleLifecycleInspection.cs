@@ -38,7 +38,7 @@ public static partial class SideScheduleInspection
     guard.Output.ObservationFrom,guard.Output.ObservationTo,guard.Output.ValueAt,Value(quantity.Column,quantity.Cell,scale),Value(price.Column,price.Cell,one),
     Value(contribution.Amount,0,scale),Value(discount.Column,discount.Cell,one),row.Unrealized.Add(row.RealizedUnsettled).ToExactString(),row.QuantityBasis,prices,
     new ScheduleInspectionLifecycle(row.Delivery.ToString(),due,row.Settlement?.ToString()??"NotApplicable",state.Class?.ToString(),measures,null))
-    {QuantitySpecification=quantity.Column.Unit,Currency=contribution.Amount.Currency,QuoteMultiplier=price.Column.QuoteMultiplier,OperatingDate=geometry.OperatingDate,
+    {PaymentTiming=RetainedTiming(guard.Output,state.Kind),QuantitySpecification=quantity.Column.Unit,Currency=contribution.Amount.Currency,QuoteMultiplier=price.Column.QuoteMultiplier,OperatingDate=geometry.OperatingDate,
      Accrued=cash?row.Accrued.ToExactString():null,Paid=cash?row.Paid.ToExactString():null,Outstanding=cash?row.Outstanding.ToExactString():null,PaidAt=row.PaidAt,
      FinalDetermination=determinations.TryGetValue(row.Occurrence,out var final)?final.ToExactString():null});
   }

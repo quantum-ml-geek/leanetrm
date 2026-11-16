@@ -76,6 +76,7 @@ internal static class OperatingBookChecks
         var reopened=new RetainedOperatingInstrument(Guid.NewGuid(),resource,rightQuantity,power.Currency,
             [..right.Sides.Select(member=>new RetainedOperatingMember(member.Side.Id,member.Coefficient,
                 BookedSideProgram.Compile(ScheduleDefinitionCompiler.Generate(member.Side,operatingInputs:cells))))]);
+        RetainedInstrumentContractChecks.Sides(reopened,[..reopened.Members.Select(m=>(m.SideId,m.Program,m.Coefficient,(ExactRatio?)null))]);
         var reopenedPortfolio=ValuationPortfolio.FromTrades([new Trade(Guid.NewGuid(),book,[new(Guid.NewGuid(),reopened,rightQuantity)])],
             setup with{OperatingQuantities=ImmutableDictionary<Guid,OperatingQuantityInputs>.Empty});
         var powerBump=new QuoteBump(new(f.S(7),InputUse.Variable),power.Key,PriceUnit.FromQuote(power),ExactDecimal.Parse("1"),QuoteBump.Convention);

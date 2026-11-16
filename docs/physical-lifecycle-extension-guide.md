@@ -25,7 +25,9 @@ object names do not justify a parallel persistence or event framework.
    Inspect crude and swap mechanisms before writing another cash/invoice ledger.
 3. Draw the participating objects and their invariants. Keep booked quantity on
    the Trade binding, unit economics on Instrument/Side and peer connections on
-   Instrument. A booked physical membership has a DeliverySchedule over retained
+   Instrument. Every non-exchange Instrument requires genuine Sides owning its
+   schedules and PV; only futures and futures options are exempt (D417). Independent
+   fees remain separate cash Instruments with their own Sides. A booked physical membership has a DeliverySchedule over retained
    geometry with distinct operational quantity tracks. Direct entries can own their
    evidence; shared/imported records retain their source identity/authority and
    explicit allocations. An independent movement schedule is needed only for a

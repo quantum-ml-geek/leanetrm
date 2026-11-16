@@ -4,17 +4,21 @@ using OpenEtrm.MarketData;
 using OpenEtrm.MarketData.Trading;
 using OpenEtrm.MarketData.Risk;
 using Npgsql;
+using OpenEtrm.MarketData.Power;
+using OpenEtrm.Shared.Temporal;
 
 internal static class MarketPreparationReuseChecks
 {
-    private sealed record Consumer(ImmutableArray<CurveRequest> Dependencies,PriceUnit Unit):Instrument(Guid.NewGuid())
+    private sealed record Consumer(ImmutableArray<CurveRequest> Inputs,PriceUnit Unit):ApiSidedProbe(Guid.NewGuid(),Unit.Currency,Unit.Quantity,Inputs,
+        _=>throw new Exception("Market preparation must not value the consumer Side."),"synthetic_market_consumer_v1")
     {
         public override ReferenceKey Currency=>Unit.Currency;
         public override Quantity UnitQuantity=>new(ExactDecimal.Parse("1"),Unit.Quantity);
-        public override UnitPricingContract Declare(UnitValuationContext context)=>new(Id,"synthetic_market_consumer_v1",Dependencies,Unit.Quantity,Unit.Currency) { Time = ValuationTimeDependency.Independent };
+        public override UnitPricingContract Declare(UnitValuationContext context)=>new(Id,"synthetic_market_consumer_v1",Inputs,Unit.Quantity,Unit.Currency) { Time = ValuationTimeDependency.Independent };
     }
     internal static void Run()
     {
+        RetainedPreparation();
         var fixture=PreviewDataChecks.Fixture(405);
         PreviewData Data()=>new(fixture.Manifest,fixture.Definitions,fixture.References,fixture.Observations);
         var data=Data();
@@ -74,4 +78,43 @@ internal static class MarketPreparationReuseChecks
         scope=new();Require(Prepare().Preparation.SourceCompilations==1,"Another operation requires fresh preparation.");
         Console.WriteLine("PASS ordinary preparation reuse: distinct consumers, exact sets/pins/context/data/connection and active-fixing refusal");
     }
+    private static void RetainedPreparation()
+    {
+        var f=StructuredPowerChecks.Fixture();var one=ExactDecimal.Parse("1");
+        var at=DateTimeOffset.Parse("2040-01-31T00:00:00Z");var day=new DateOnly(2040,2,1);var contextId=Guid.NewGuid();
+        var quote=f.Data.QuoteRows("energy_price").Single();var unit=new Quantity(one,new(f.Data.ReferenceRevision,"right"));
+        var payment=new PaymentRule(PaymentFrequency.Monthly,PaymentDateRule.DaysAfterPeriodEnd,18,null,PaymentDayBasis.CalendarDays,null,DateRoll.Unadjusted,null,PaymentRule.Implementation);
+        var calendar=new SideCalendarPolicy(CalendarBinding.NotApplicable(),CalendarBinding.NotApplicable(),CalendarBinding.NotApplicable(),SideCalendarPolicy.Implementation);
+        var interval=new DeliveryInterval(at.AddDays(1),at.AddDays(1).AddHours(1),day,0,0,1);
+        var side=new FixedSide(Guid.NewGuid(),new OperatingSideTerms(unit,quote,payment,ComponentKind.Payment,
+            [new(interval,day,day.AddMonths(1),new(null,new(ExactDecimal.Parse("5"),quote.Quantity)),null)],OperatingSideTerms.SupportedImplementation,calendar),
+            new FlatPrice(new(ExactDecimal.Parse("100"),quote)));
+        var program=BookedSideProgram.Compile(ScheduleDefinitionCompiler.Generate(side));
+        var instrument=new RetainedOperatingInstrument(Guid.NewGuid(),new(f.Data.DefinitionRevision,f.Terms.FacilityCode),unit,quote.Currency,
+            [new(side.Id,one,program)]);
+        var setup=new ValuationSetup(ValuationMeasure.PresentValue,ImmutableDictionary<Guid,FuturesMarketBinding>.Empty,
+            new ExplicitDiscounting(one,DiscountFactorSource.Undiscounted));
+        var portfolio=ValuationPortfolio.FromTrades([new Trade(Guid.NewGuid(),Guid.NewGuid(),[new(Guid.NewGuid(),instrument,unit)])],setup);
+        var frame=new InputFrame(Guid.NewGuid(),"Synthetic retained programme source",at,new(2040,1,31),[],ImmutableDictionary<string,ImmutableArray<Guid>>.Empty)
+            {Source=CatalogueSource.From(f.Data),ContextId=contextId};
+        var snapshot=f.Data.Snapshot(frame).WithKnowledge(contextId,at);var context=new ScheduleContext("2040-01-31",1,at.ToString("O"),contextId);
+        using var source=NpgsqlDataSource.Create("Host=127.0.0.1;Database=synthetic_unopened;Username=synthetic");
+        var database=new PreviewDatabase(f.Manifest,source);using var connection=source.CreateConnection();
+        // Both installed native readers supply this retained operating-program
+        // shape after source admission. Preparing it must not reinterpret its
+        // stored instructions as newly authored dated fixing terms.
+        var operating=OperatingPortfolio.PrepareMarket(connection,database,new(f.Data,frame,snapshot,portfolio,[]),context,default).GetAwaiter().GetResult();
+        var certificate=RecPortfolio.PrepareMarket(connection,database,new(f.Data,frame,snapshot,portfolio,[]),context,default).GetAwaiter().GetResult();
+        foreach(var market in new[]{operating,certificate})
+            if(market.Authority.Snapshot.Knowledge?.ContextId!=contextId||!market.Bindings.IsEmpty)
+                throw new Exception("Retained contract-only market preparation must preserve its exact source and require no invented fixing or mark input.");
+        try
+        {
+            CustomCurves.PrepareMarket(connection,database,f.Data,frame,snapshot,context,[instrument],[],CustomCurves.MarketPreparation.ValuationDependencies,default).GetAwaiter().GetResult();
+            throw new Exception("Unknown retained programme price metadata must not be silently skipped by generic preparation.");
+        }
+        catch(MarketDataException error)when(error.Code=="schedule_row_kind"){}
+        Console.WriteLine("PASS retained operating/certificate source preparation: explicit contract-only inputs, genuine saved Side programs and unknown-program fallback refusal");
+    }
+
 }

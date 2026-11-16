@@ -23,12 +23,12 @@ public static partial class SideScheduleInspection
    {
     ct.ThrowIfCancellationRequested();
     var window=Geometry(program.Document,row,cell,boundary);
-    var payment=row.Grid is null||row.Parameters["lifecycle"]=="interval_payment_v1";
+    var payment=ScheduleLifecycles.IsPayment(row);
     var kind=payment?ComponentKind.Payment:row.Parameters["lifecycle"]=="certificate_holding_v1"&&window.End<=valuationAt?ComponentKind.Holding:ComponentKind.Delivery;
     rows.Add(new($"{row.Ordinal}:{cell}",row.Operation,kind.ToString(),window.From,window.To,window.Start,window.End,row.ObservationFrom,row.ObservationTo,row.ValueAt,
      null,null,null,null,null,null,[],new ScheduleInspectionLifecycle(Delivery(window.Start,window.End,valuationAt),payment?PaymentDatePolicy.IsDue(row.ValueAt!.Value,valuationAt)?"Due":"NotDue":null,
       payment?"NotTracked":null,null,null,unavailableReason){Fulfillment=payment?null:"NotTracked"})
-      {OperatingDate=window.OperatingDate,Currency=row.Currency,QuantitySpecification=Operand(program.Document,Operand(program.Document,instruction,"amount"),"quantity").Output.Unit});
+      {PaymentTiming=RetainedTiming(row,kind),OperatingDate=window.OperatingDate,Currency=row.Currency,QuantitySpecification=Operand(program.Document,Operand(program.Document,instruction,"amount"),"quantity").Output.Unit});
    }
   }
   return new(side,program.Document.ScheduleManifest,valuationAt,knownAt,offset,total,rows.ToImmutable());

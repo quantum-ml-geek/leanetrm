@@ -57,22 +57,23 @@ public sealed record ValuationSetup(ValuationMeasure Measure,
 // provider is intentional; equal-looking providers do not establish equal pins.
 internal sealed class SideValuationContexts
 {
-    private sealed record Key(ISideDiscounting? Provider,UnitPricingContract Declaration,IBindingValuationState? State,OperatingQuantityInputs? Operating);
+    private sealed record Key(ISideDiscounting? Provider,UnitPricingContract Declaration,IBindingValuationState? State,OperatingQuantityInputs? Operating,RetainedProgramContext? Retained);
     private sealed class Keys:IEqualityComparer<Key>
     {
-        public bool Equals(Key? a,Key? b)=>ReferenceEquals(a,b)||a is not null&&b is not null&&ReferenceEquals(a.Provider,b.Provider)&&ReferenceEquals(a.State,b.State)&&ReferenceEquals(a.Operating,b.Operating)&&a.Declaration.SameInputFence(b.Declaration);
+        public bool Equals(Key? a,Key? b)=>ReferenceEquals(a,b)||a is not null&&b is not null&&ReferenceEquals(a.Provider,b.Provider)&&ReferenceEquals(a.State,b.State)&&ReferenceEquals(a.Operating,b.Operating)&&ReferenceEquals(a.Retained,b.Retained)&&a.Declaration.SameInputFence(b.Declaration);
         public int GetHashCode(Key key)
         {
             var hash=key.Provider is null?0:System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(key.Provider);
             return HashCode.Combine(hash,key.Declaration.InputFenceHash(),key.State is null?0:System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(key.State),
-                key.Operating is null?0:System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(key.Operating));
+                key.Operating is null?0:System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(key.Operating),
+                key.Retained is null?0:System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(key.Retained));
         }
     }
     private readonly Dictionary<Key,SideValuationContext> contexts=new(new Keys());
     internal int Calculations=>contexts.Values.Sum(c=>c.EvaluatedSides);
-    internal SideValuationContext Get(ISideDiscounting? provider,UnitPricingContract declaration,IBindingValuationState? state,OperatingQuantityInputs? operating,Func<SideValuationContext> create)
+    internal SideValuationContext Get(ISideDiscounting? provider,UnitPricingContract declaration,IBindingValuationState? state,OperatingQuantityInputs? operating,RetainedProgramContext? retained,Func<SideValuationContext> create)
     {
-        var key=new Key(provider,declaration,state,operating);
+        var key=new Key(provider,declaration,state,operating,retained);
         if(!contexts.TryGetValue(key,out var context)){context=create();contexts.Add(key,context);}
         return context;
     }
@@ -167,15 +168,20 @@ public sealed class UnitValuationContext
             throw new MarketDataException("valuation_binding","Futures-option pricing requires its exact qualified market definition authority.");
         return binding;
     }
-    internal SideValuationContext SideContext(ISideDiscounting? selected=null)
+    internal SideValuationContext SideContext(ISideDiscounting? selected=null)=>SideContextCore(selected,BindingState);
+    internal SideValuationContext SideContextWithoutBindingState()=>SideContextCore(null,null);
+    internal SideValuationContext SideContextRetained(RetainedProgramContext retained)=>SideContextCore(null,BindingState,retained);
+    private SideValuationContext SideContextCore(ISideDiscounting? selected,IBindingValuationState? state,RetainedProgramContext? retained=null)
     {
         if(pricing is null||declaration is null)
             throw new MarketDataException("side_context","Supply the declared market and explicit payment discount inputs.");
         var provider=selected??Setup.Discounting??Setup.InstrumentDiscounting.GetValueOrDefault(declaration.Id);
         var operating=Setup.OperatingQuantities.GetValueOrDefault(declaration.Id);
-        return sideContexts.Get(provider,declaration,BindingState,operating,()=>
+        return sideContexts.Get(provider,declaration,state,operating,retained,()=>
         {
-            var context=pricing.Context(provider,declaration.Dependencies,cancellation,Inputs).WithBindingState(BindingState);
+            var context=pricing.Context(provider,declaration.Dependencies,cancellation,Inputs).WithBindingState(state)
+                .WithUnitEvaluation(CalculationAt,IsLifecycleProjection,Measure,cancellation);
+            if(retained is not null) context = context.WithRetainedPrograms(retained);
             return operating is null?context:context.WithOperatingQuantities(operating);
         });
     }

@@ -102,22 +102,21 @@ internal static class InstrumentRiskChecks
         });
         Console.WriteLine($"{count} instrument risk checks passed.");return count;
     }
-    private sealed record PvModel:Instrument
+    private sealed record PvModel:SyntheticSidedInstrument
     {
         public override bool SupportsQuantityScaling=>true;
         public override ReferenceKey Currency{get;}
         public override Quantity UnitQuantity{get;}
         private readonly ImmutableArray<CurveRequest> dependencies;
-        private readonly Func<SideValuationContext,ExactMoney> price;
         private InstrumentValuation? previous;
         public bool ReuseResult{get;init;}
-        public PvModel(Guid id,ReferenceKey currency,ReferenceKey quantity,ImmutableArray<CurveRequest> dependencies,Func<SideValuationContext,ExactMoney> price):base(id)
-        {Currency=currency;UnitQuantity=new(ExactDecimal.Parse("1"),quantity);this.dependencies=dependencies;this.price=price;}
+        public PvModel(Guid id,ReferenceKey currency,ReferenceKey quantity,ImmutableArray<CurveRequest> dependencies,Func<SideValuationContext,ExactMoney> price):base(id,SyntheticValueSide.One(id,currency,quantity,dependencies,price,"synthetic_nonlinear_pv_v1"))
+        {Currency=currency;UnitQuantity=new(ExactDecimal.Parse("1"),quantity);this.dependencies=dependencies;}
         public override UnitPricingContract Declare(UnitValuationContext context)=>new(Id,"synthetic_nonlinear_pv_v1",dependencies,UnitQuantity.Specification,Currency) { Time = ValuationTimeDependency.Independent };
         public override InstrumentValuation PV(SideValuationContext context)
         {
             if(ReuseResult&&previous is not null)return previous;
-            return previous=new(this,context,price(context),"synthetic_nonlinear_pv_v1");
+            return previous=base.PV(context);
         }
     }
 }

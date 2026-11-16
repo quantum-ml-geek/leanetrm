@@ -45,6 +45,7 @@ internal static class ScheduleViewChecks
             payment.DeliveryTo!=new DateOnly(2032,1,1)||payment.ValueAt!=PayAt||payment.Quantity!="310000"||payment.Price!="3.412"||
             payment.Amount!="1057720"||payment.DiscountFactor!="1"||payment.PresentValue!="1057720"||payment.Lifecycle.Due!="NotDue"||
             payment.Lifecycle.Cash!="NotTracked"||payment.QuantitySpecification!=Quote.Quantity||payment.Currency!=Quote.Currency||payment.QuoteMultiplier!="1")throw new Exception("The shared inspector must expose exact schedule dates and evaluated price, discount, value and independent lifecycle facts.");
+        if(payment.PaymentTiming!="utc_payment_day")throw new Exception("Retained cash inspection must retain its actual saved UTC payment-day law.");
         var signed=SideScheduleInspection.Read(cash with{Coefficient=S(-1),Scale=D("2")},Utc,0,48).Rows.Single();
         if(signed.Quantity!="-620000"||signed.Amount!="-2115440"||signed.PresentValue!="-2115440"||signed.Price!="3.412"||signed.DiscountFactor!="1")
             throw new Exception("Inspection applies the signed membership and trade scale only to quantities and money.");
@@ -54,6 +55,7 @@ internal static class ScheduleViewChecks
         var paged=SideScheduleInspection.Read(daily,Utc,15,4);
         if(paged.Total!=31||paged.Rows.Length!=4||paged.Rows[0].Start!=From.AddDays(15)||paged.Rows[0].End!=From.AddDays(16)||paged.Rows[0].Lifecycle.Cash is not null||paged.Rows[0].DeliveryFrom is not null||paged.Rows[0].OperatingDate!=new DateOnly(2031,12,16))
             throw new Exception("Inspection pages native physical intervals without inventing cash state.");
+        if(paged.Rows.Any(row=>row.PaymentTiming is not null))throw new Exception("Physical inspection must not invent cash timing.");
         Pass("shared schedule inspection keeps dates, exact values, scale, paging and lifecycle axes");
         var calculation=SideScheduleInspection.Calculation(cash with{Coefficient=S(-1),Scale=D("2")},Utc,inspected.Rows[0].Key,0,128);
         if(calculation.ValueBasis!="unit_side_v1"||calculation.TradeQuantityScale!="2"||calculation.MembershipNumerator!="-1"||calculation.MembershipDenominator!="1"||

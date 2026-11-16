@@ -61,23 +61,24 @@ public static class GasPhysicalFinalHandoff
 
 // Final VM closes the futures mark exposure, but physical performance remains
 // an ordinary acquisition/dispatch obligation until title is actually exchanged.
-[EconomicDefinition("gas_physical_delivery_obligation_v1")]
-public sealed record GasPhysicalDeliveryObligationInstrument:Instrument,IGasQuantityInstrument
+[EconomicDefinition("gas_physical_delivery_obligation_v2")]
+public sealed record GasPhysicalDeliveryObligationInstrument:SidedInstrument,IGasQuantityInstrument
 {
     [IdentityField]public GasPhysicalDeliveryTerms Terms{get;}
     [IdentityField]public ExactUnitPrice FinalPrice{get;}
     public override ReferenceKey Currency=>Terms.Currency;
     public override Quantity UnitQuantity=>new(ExactDecimal.Parse("1"),Terms.Quantity);
     public override bool SupportsQuantityScaling=>true;
+    internal override bool SupportsSettlement=>false;
+    public override DefinitionIdentity PricingBindingIdentity=>GasDeliveryExchangeSides.Binding(Id,Terms);
     CurveRequest IGasQuantityInstrument.Mark=>Terms.Mark;
     ReferenceKey IGasQuantityInstrument.QuantitySpecification=>Terms.Quantity;
     DateTimeOffset? IGasQuantityInstrument.ReturnAt=>null;
     GasHoldingCarrying IGasQuantityInstrument.Carrying=>Terms.Carrying;
     Instrument IGasQuantityInstrument.ValuationInstrument=>this;
-    public GasPhysicalDeliveryObligationInstrument(Guid id,GasPhysicalDeliveryTerms terms,ExactUnitPrice finalPrice):base(id)
+    public GasPhysicalDeliveryObligationInstrument(Guid id,GasPhysicalDeliveryTerms terms,ExactUnitPrice finalPrice)
+        :base(id,GasDeliveryExchangeSides.Fixed(id,terms,finalPrice))
     {
-        if(terms is null||finalPrice is null||finalPrice.Unit.Currency!=terms.Currency||finalPrice.Unit.Quantity!=terms.Quantity)
-            throw new MarketDataException("gas_delivery_terms","A physical obligation requires its exact accepted or path-local final quotation.");
         Terms=terms;FinalPrice=finalPrice;
     }
     public System.Collections.Immutable.ImmutableArray<SidePaymentKey> RequiredDiscounts(DateTimeOffset calculationAt)=>
@@ -85,14 +86,10 @@ public sealed record GasPhysicalDeliveryObligationInstrument:Instrument,IGasQuan
     public override UnitPricingContract Declare(UnitValuationContext context)
     {
         var discounted=RequiredDiscounts(context.CalculationAt);
-        return new(Id,"gas_physical_delivery_obligation_pv_v1",[Terms.Mark],Terms.Quantity,Currency){
+        return new(Id,"gas_physical_delivery_obligation_side_pv_v2",[Terms.Mark],Terms.Quantity,Currency){
             Time=discounted.IsEmpty?ValuationTimeDependency.Independent:ValuationTimeDependency.Between(context.CalculationAt,discounted.Min(p=>p.PaymentAt)),
             DiscountInputs=[..discounted.Select(p=>new DiscountInput(p,context.PaymentDiscounting(Id)))]};
     }
-    public override UnitValuation PV(UnitValuationContext context)
-    {
-        if(context.Measure!=ValuationMeasure.PresentValue)throw new MarketDataException("valuation_measure","A physical delivery obligation implements remaining PV.");
-        ValidateValuationState(context.BindingState);
-        return new(context,GasDeliveryExchange.Value(Id,Terms,UnitQuantity,context.Inputs.ExactPrice(Terms.Mark),FinalPrice,context),Terms.Quantity);
-    }
+    public override void ValidateValuationState(IBindingValuationState? state)=>GasDeliveryExchangeSides.RequireState(state);
+    internal override UnitPricingContract DeclareScope(UnitValuationContext context,bool lifecycle)=>Declare(context);
 }

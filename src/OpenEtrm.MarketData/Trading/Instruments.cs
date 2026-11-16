@@ -49,7 +49,14 @@ public abstract record Instrument
     // Derived once per instance. A `with` copy is a new instance and derives its
     // own, so a retained identity never describes different terms.
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Instrument, DefinitionIdentity> identities = new();
-    public DefinitionIdentity EconomicIdentity => identities.GetValue(this, static instrument => DefinitionIdentity.For(instrument));
+    public DefinitionIdentity EconomicIdentity
+    {
+        get
+        {
+            if(this is IRetainedSideComposition retained) retained.RequireRetainedSides();
+            return identities.GetValue(this, static instrument => DefinitionIdentity.For(instrument));
+        }
+    }
     public virtual DefinitionIdentity? PricingBindingIdentity => null;
     public ImmutableArray<SettlementProjection> SettlementProjections=>this is SidedInstrument sided?
         [..sided.Sides.SelectMany(m=>m.Side.SettlementProjections).Distinct()]:[];
@@ -94,8 +101,16 @@ public abstract record Instrument
             throw new MarketDataException("risk_quantity_scaling","This instrument has not declared linear scaling in booked quantity.");
         if(SupportsWholePosition&&execution is not null)
             throw new MarketDataException("risk_whole_position","A whole position has no execution basis or quantity scaling.");
+        RequireSideComposition();
         ValidateBinding(quantity,coverage);
         RequireQuantity(quantity,coverage);
+    }
+    internal void RequireSideComposition()
+    {
+        if(this is FuturesContract or FuturesOptionInstrument)return;
+        if(this is not SidedInstrument sided || sided.Sides.IsDefaultOrEmpty || sided.Sides.Any(m=>m is null || m.Side is null))
+            throw new MarketDataException("instrument_sides", "Every non-exchange Instrument requires complete explicit Side memberships.");
+        if(this is IRetainedSideComposition retained)retained.RequireRetainedSides();
     }
     private void RequireQuantity(Quantity quantity,DeliveryCoverage? coverage)
     {
@@ -171,7 +186,7 @@ public abstract record SidedInstrument : Instrument
     {
         if (id == Guid.Empty || sides.IsDefaultOrEmpty || sides.Any(m => m is null || m.Side is null))
             throw new MarketDataException("instrument_definition", "An instrument requires an exact identity and at least one valid side membership.");
-        if(sides.Any(m=>m.QuantityRatio is not null)&&this is not (ScheduledFinancialSwap or CrossCommodityScheduledSwap or OpenEtrm.MarketData.Gas.GasCompositionInstrument))
+        if(sides.Any(m=>m.QuantityRatio is not null)&&this is not (ScheduledFinancialSwap or CrossCommodityScheduledSwap or OpenEtrm.MarketData.Gas.GasCompositionInstrument or IRetainedSideComposition))
             throw new MarketDataException("instrument_definition","Quantity-ratio memberships require the scheduled swap contract version.");
         Sides = sides;
     }
@@ -183,6 +198,7 @@ public abstract record SidedInstrument : Instrument
     public override InstrumentValuation PV(SideValuationContext context)
     {
         if (context is null) throw new MarketDataException("side_context", "An explicit valuation context is required.");
+        RequireSideComposition();
         return new(this, context, Sides.Select(m => context.Evaluate(m.Side)).ToImmutableArray());
     }
 

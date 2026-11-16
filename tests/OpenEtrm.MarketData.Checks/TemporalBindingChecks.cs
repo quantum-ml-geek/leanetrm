@@ -170,17 +170,16 @@ internal static class TemporalBindingChecks
         }
     }
 
-    private sealed record TemporalCurvePv : Instrument
+    private sealed record TemporalCurvePv : SyntheticSidedInstrument
     {
         public override bool SupportsQuantityScaling=>true;
         private const string Model="synthetic_temporal_curve_pv_v1";
         private readonly CurveRequest request;
         public override ReferenceKey Currency{get;}
         public override Quantity UnitQuantity{get;}
-        public TemporalCurvePv(Guid id,PriceUnit unit,CurveRequest request):base(id)
+        public TemporalCurvePv(Guid id,PriceUnit unit,CurveRequest request):base(id,SyntheticValueSide.One(id,unit.Currency,unit.Quantity,[request],c=>c.ExactPrice(request).ExactTimes(new(ExactDecimal.Parse("1"),unit.Quantity)),Model))
         {Currency=unit.Currency;UnitQuantity=new(ExactDecimal.Parse("1"),unit.Quantity);this.request=request;}
         public override UnitPricingContract Declare(UnitValuationContext context)=>new(Id,Model,[request],UnitQuantity.Specification,Currency) { Time = ValuationTimeDependency.Independent };
-        public override InstrumentValuation PV(SideValuationContext context)=>new(this,context,context.ExactPrice(request).ExactTimes(UnitQuantity),Model);
     }
 
     private static DateTimeOffset At(int day)=>new(2020,5,day,0,0,0,TimeSpan.Zero);

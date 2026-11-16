@@ -209,17 +209,17 @@ internal static class RiskChecks
         Console.WriteLine($"{count} risk checks passed.");return count;
     }
     [EconomicDefinition("synthetic_unit_pricer_v1")]
-    internal sealed record TestPricer:Instrument
+    internal sealed record TestPricer:SyntheticSidedInstrument
     {
         public override bool SupportsQuantityScaling=>true;
         [IdentityField] public UnitPricingContract Contract{get;}
-        private readonly Func<PricingInputs,Money> evaluate;
         public override ReferenceKey Currency=>Contract.Currency;
         public override Quantity UnitQuantity=>new(ExactDecimal.Parse("1"),Contract.Quantity);
-        public TestPricer(UnitPricingContract contract,Func<PricingInputs,Money> evaluate):base(contract.Id)
-        {Contract=contract;this.evaluate=evaluate;}
+        public TestPricer(UnitPricingContract contract,Func<PricingInputs,Money> evaluate):base(contract.Id,SyntheticValueSide.One(contract.Id,contract.Currency,contract.Quantity,contract.Dependencies,c=>ExactMoney.FromMoney(evaluate(c.Inputs)),"synthetic_unit_pricer_v1"))
+        {Contract=contract;}
         public override UnitPricingContract Declare(UnitValuationContext context)=>Contract;
-        public override ExactMoney Value(UnitValuationContext context)=>ExactMoney.FromMoney(evaluate(context.Inputs));
-        public override InstrumentValuation PV(SideValuationContext context)=>throw new MarketDataException("test_context","Select the declared synthetic unit valuation context.");
+        // This explicit execution-P&L fixture supplies economic PV to the
+        // portfolio's retained execution-basis subtraction, through its Side.
+        public override ExactMoney Value(UnitValuationContext context)=>PV(context.SideContext()).PresentValue;
     }
 }

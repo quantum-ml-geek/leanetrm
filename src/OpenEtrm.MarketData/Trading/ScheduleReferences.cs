@@ -5,6 +5,7 @@ namespace OpenEtrm.MarketData.Trading;
 public abstract record ScheduleDeliveryWindow;
 public sealed record DatedScheduleWindow(DateOnly From,DateOnly To):ScheduleDeliveryWindow;
 public sealed record IntervalScheduleWindow(DeliveryInterval Interval):ScheduleDeliveryWindow;
+public sealed record ValueScheduleWindow(DateTimeOffset? From,DateTimeOffset? To):ScheduleDeliveryWindow;
 
 public abstract record ScheduleQuantityReference;
 public sealed record ContractualScheduleQuantity(ExactQuantity Amount) : ScheduleQuantityReference;
