@@ -1,7 +1,7 @@
 # Solar, generation tolling, batteries and RECs
 
 Status: bounded local implementation and remaining delivery proposal,
-2026-11-15. D408 implements operating-facility versions and supplied-plan
+2026-11-15. D412 implements operating-facility versions and supplied-plan
 thermal, battery and solar previews, saved operating trades, common-scenario price
 hedging and durable manual REC inventory/forwards. The broader product sequence
 below remains future work. The power-plant scope here is **generation tolling**.

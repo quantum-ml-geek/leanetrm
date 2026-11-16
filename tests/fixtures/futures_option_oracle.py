@@ -1,6 +1,6 @@
 """Generates futures-option-oracle.json: reference exp/ln/sqrt values,
-Black-76 European option values on a future and American option values on a
-strike-centred (Leisen-Reimer) tree.
+Black-76 European option values and sensitivities on a future and American
+option values on a strike-centred (Leisen-Reimer) tree.
 
 Uses only the standard library `decimal` at 60 digits, rounded half-even to
 30 fractional digits. Run: python3 -I tests/fixtures/futures_option_oracle.py
@@ -87,6 +87,12 @@ LEISEN_REIMER = [
 BLACK76_WIDE = [
     ("60", "443.3434", "1", "1"),
     ("60", "3275.889", "2", "1"),
+]
+
+# Black-76 sensitivities at a unit discount, at the volatility implied by a
+# price: futures, strike, call price, seconds to expiry under act/365 fixed.
+BLACK76_GREEKS = [
+    ("3", "3", "0.08", 588600),
 ]
 
 
@@ -198,6 +204,25 @@ def black76_row(futures, strike, volatility, years, discount):
             "undiscounted_call": q(forward_call), "undiscounted_put": q(forward_put)}
 
 
+def black76_greeks_row(futures, strike, price, seconds):
+    """The volatility a call price implies at a unit discount, by bisection,
+    and the sensitivities there: delta per unit of futures price, gamma per
+    unit squared and vega per 1.00 of volatility."""
+    f, k, target = Decimal(futures), Decimal(strike), Decimal(price)
+    years = Decimal(seconds) / (365 * 86400)
+    low, high = Decimal("0.01"), Decimal(3)
+    for _ in range(140):
+        middle = (low + high) / 2
+        low, high = (middle, high) if black76(f, k, middle, years, "1")[0] < target else (low, middle)
+    volatility = (low + high) / 2
+    spread = volatility * years.sqrt()
+    d1 = ((f / k).ln() + spread * spread / 2) / spread
+    density = (-d1 * d1 / 2).exp() / (2 * pi()).sqrt()
+    return {"futures": futures, "strike": strike, "call": price, "seconds": seconds, "volatility": q(volatility),
+            "delta_call": q(ncdf(d1)), "delta_put": q(ncdf(d1) - 1), "gamma": q(density / (f * spread)),
+            "vega": q(f * density * years.sqrt())}
+
+
 def main():
     getcontext().prec = 60
     oracle = {
@@ -208,6 +233,7 @@ def main():
         "leisen_reimer": [leisen_reimer_row(*case) for case in LEISEN_REIMER],
         "black76_wide": [{"futures": f, "strike": k, "volatility": s, "years": t, "undiscounted_call": q(black76(f, k, s, t, "1")[0])}
                          for f, k, s, t in BLACK76_WIDE],
+        "black76_greeks": [black76_greeks_row(*case) for case in BLACK76_GREEKS],
     }
     path = pathlib.Path(__file__).with_name("futures-option-oracle.json")
     path.write_text(json.dumps(oracle, indent=2) + "\n")

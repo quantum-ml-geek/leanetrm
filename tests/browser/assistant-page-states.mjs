@@ -21,6 +21,7 @@ export function assistantPageCases(){
     ['risk_jobs',{page:'risk',view:'risk'}],
     ['physical_power',{page:'physical-power'}],
     ['rec_inventory',{page:'rec-inventory'}],
+    ['options',{page:'options'}],
     ...[['physical-operations','physical_operations'],['facilities','facility_quantities'],['dashboard','dashboard'],['crude-setup','crude_setup'],['gas-setup','gas_setup'],['gas','physical_gas'],['crude','physical_crude'],['delivery','delivery_prices'],['interval-series','interval_series'],['interval-curves','interval_curves'],['vol-surfaces','vol_surfaces'],['admin','users_access'],['ai','settings_ai']]
       .map(([page,report])=>[report,{page}])
   ];

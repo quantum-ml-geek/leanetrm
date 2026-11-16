@@ -481,6 +481,47 @@ without an assertion failure. Other verification groups retain 45 minutes. All g
 and release dependencies remain unchanged; this is CI capacity, not a pricing or
 production-runtime limit.
 
+## Option analytics and the Options page (D408)
+
+Runs on 15 November 2026 at the branch head, with synthetic data. The local
+machine has no PostgreSQL, so database-backed checks ran in a disposable
+PostgreSQL 18 cluster in a container on a separate two-CPU Linux host, from a
+Debug build. The browser suites under `tests/browser` have not been run for
+this change; they run in the pull request's CI.
+
+| Run | Where | Result |
+| --- | --- | --- |
+| MarketData checks `--option-sensitivities`, `--vol-surface` | local | 8 and 19 PASS |
+| Api checks `--schedules` (with the option request and position checks) | local | exit 0, 417 PASS |
+| `npm test --prefix web` | local | 1,887 pass |
+| `python3 -m unittest tests.test_ci_impact tests.test_check_all tests.test_migration_identity tests.test_ci_dependencies` | local | 60 OK |
+| `run_preview.py --check --exchange-check` | container | exit 0, 342 PASS |
+| `tools/check_risk_fit_authority.py` | container | exit 0, 29 PASS |
+| `tools/check_vol_surface_admission_expiry.py` | container | exit 0, 3 PASS |
+
+The exchange run applies migration 0341 and covers: a fit that states no
+supported selection or the wrong clock is refused at submit; a fit at a working
+snapshot and one at a recorded close each complete with analytics and state
+their clock and day; every calibrated series has each measure or the code of
+why not; a series at intrinsic has its settlement and no sensitivities; stored
+signs and call/put agreement; an identical refit records nothing while another
+selection records a new revision that only a later cutoff reads; and the
+positions read with its units and stated selection. Two full local web runs
+each had one unrelated browser test fail because its local browser did not
+start within 60 s; each passed when re-run, and the third full run passed.
+
+Measured on that host for one product of the example (71 listed series, 70
+solved), in the risk worker: the fit itself 27.2 s; the analytics 47.8 s for
+1,190 tree prices, about 17 per solved series, with the five expiries valued in
+parallel (76.2 s before they were). No measure was missing. These are
+observations on one small host, not a performance qualification. A fit job now
+takes about 2.8 times as long there as before this change.
+
+Not covered: no check isolates the recording of the discount-curve points the
+one-day roll reads, and no check re-runs one fit job after an abandoned
+attempt; a refit of the same inputs producing identical content is the
+evidence of determinism.
+
 ## Volatility surfaces (D304)
 
 D356 (surfaces at their close and the surface library), local runs on 6 November
