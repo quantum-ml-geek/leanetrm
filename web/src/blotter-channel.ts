@@ -5,6 +5,7 @@
 import {parseBlotterViews,validLayoutField,type BlotterView} from './blotter-layout.js';
 import type {PageState} from './assistant-pages.js';
 import type {GridLayout} from './data-grid.js';
+import {newTradeProducts} from './new-trade.js';
 
 // `brought_back`: the main window brings the Blotter back, having asked about the pop-out's edits; the pop-out hands it back and closes.
 export type EndReason='signed_out'|'account_changed'|'main_closed'|'brought_back';
@@ -39,7 +40,7 @@ const record=<T>(key:Parse<string>,parse:Parse<T>):Parse<Record<string,T>>=>x=>i
 const strings=list(str);
 
 const selection=shape({mode:oneOf('trades','pivot'),bookIds:strings,portfolioIds:strings,groupBy:strings,measures:strings});
-const tradeShown=shape({tradeId:str,instrumentType:oneOf('future','financial_swap','heat_rate','ppa','physical_gas','physical_crude','physical_lng','futures_option'),revision,reference:str});
+const tradeShown=shape({tradeId:str,instrumentType:oneOf('future','financial_swap','heat_rate','ppa','physical_gas','physical_gas_park_loan','physical_crude','physical_lng','futures_option'),revision,reference:str});
 // Grid keys are columns, which may be pivot keys longer than ordinary text, so the saved-view rule decides them.
 const layoutKey:Parse<string>=x=>typeof x==='string'&&validLayoutField(x)?x:refuse('a grid column is unknown');
 const gridLayout:Parse<GridLayout>=shape({order:list(layoutKey),widths:record(layoutKey,x=>Number.isSafeInteger(x)?x as number:refuse('a width is not a whole number')),sort:list(shape({key:layoutKey,direction:oneOf('asc','desc')}))});
@@ -47,7 +48,7 @@ const gridLayout:Parse<GridLayout>=shape({order:list(layoutKey),widths:record(la
 const pageStates:Record<string,Parse<object>>={
   market:shape({curve:orNull(str),tab:oneOf('prices','dependencies','inputs')}),power:shape({frame:bool}),configuration:shape({}),schedules:shape({}),
   reference:shape({table:str,search:str}),parties:shape({kind:str}),
-  futures:shape({risk:bool,trade:orNull(tradeShown),entry:orNull(shape({product:orNull(oneOf('futures','options','swaps','ppa','gas','crude'))})),lens:oneOf('values','risk'),view:selection,pane:shape({details:bool,charts:bool}),poppedOut:bool}),
+  futures:shape({risk:bool,trade:orNull(tradeShown),entry:orNull(shape({product:orNull(oneOf(...newTradeProducts.map(([product])=>product)))})),lens:oneOf('values','risk'),view:selection,pane:shape({details:bool,charts:bool}),poppedOut:bool}),
   jobs:shape({job:orNull(str)}),ppa:shape({trade:orNull(shape({tradeId:str,revision})),book:orNull(str)}),'custom-curves':shape({curve:orNull(str),unsaved:bool}),
   'physical-operations':shape({}),delivery:shape({}),'interval-series':shape({}),'interval-curves':shape({}),admin:shape({}),ai:shape({})};
 function pageState(state:unknown):PageState{

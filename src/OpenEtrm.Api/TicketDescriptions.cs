@@ -8,7 +8,7 @@ public static class TicketBand { public static readonly ImmutableArray<string> R
 // Unit names the unit a field's or column's values are in, resolved per trade, never a unit symbol: "quantity" is the trade's quantity unit,
 // which the product's preview and booked read return.
 public sealed record TicketField(string Id,string Label,string Meaning,string Type,string? Unit,string State,bool Required,string? Band,string? Choices,ImmutableArray<string> DependsOn,string? Lookup,string? Soon,string? Rule)
-{public ImmutableArray<string> RefreshOn{get;init;}=[];}
+{public ImmutableArray<string> RefreshOn{get;init;}=[];public bool AllowNotApplicable{get;init;}}
 // Input names the modes in which a side column's day cells are entered in the side's tab, each recorded by the product's own operation.
 // Soon, on a field, side kind, column or tab, is the hover text of an item drawn as coming soon: it holds no value, is never sent and reads nothing.
 public sealed record TicketColumn(string Id,string Label,string? Unit,string Measure,ImmutableArray<string> Input,string? Soon=null);

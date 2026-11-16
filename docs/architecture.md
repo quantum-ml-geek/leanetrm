@@ -1,5 +1,10 @@
 # Architecture and domain contracts
 
+D405 adds locally qualified [Park and Loan commercial booking](gas-park-loan.md)
+over independent native ownership and cash. The bounded title-transfer profile
+uses shared entry, lifecycle and current-clock interactive/retained price risk.
+Release qualification and broader service capabilities remain separate.
+
 D401 selects [shared lifecycle delivery](lifecycle-delivery.md): operation-specific
 eligibility, native lifecycle coordination, gas ownership/entitlements/borrowing
 and event-aware economic risk. Its delivery gates distinguish implementation from
