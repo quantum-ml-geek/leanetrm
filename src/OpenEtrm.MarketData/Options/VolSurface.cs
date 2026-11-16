@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using OpenEtrm.MarketData.Trading;
 
 namespace OpenEtrm.MarketData.Options;
 
@@ -7,20 +8,43 @@ namespace OpenEtrm.MarketData.Options;
 public sealed record SurfaceSeries(string Code, OptionRight Right, ExactDecimal Strike, DateTimeOffset ExpiryAt, string UnderlyingCode,
     ExactDecimal? Settlement, string Outcome, LatticeDecimal? MarketVolatility);
 
-// Futures is null when the underlying settlement is missing.
-public sealed record SurfaceExpiryInput(DateTimeOffset ExpiryAt, string UnderlyingCode, LatticeDecimal? Futures);
+// Futures is null when the underlying settlement is missing. DaysToExpiry is the model's own time to expiry in days,
+// stated by the fit that knows its valuation instant.
+public sealed record SurfaceExpiryInput(DateTimeOffset ExpiryAt, string UnderlyingCode, LatticeDecimal? Futures)
+{
+    public ExactDecimal? DaysToExpiry { get; init; }
+}
 
-// RichCheap = MarketVolatility - Fitted, for every solved series of a fitted expiry.
-public sealed record SurfaceSeriesResult(SurfaceSeries Series, LatticeDecimal? LogMoneyness, LatticeDecimal? Fitted, LatticeDecimal? RichCheap, bool FitPoint);
+// RichCheap = MarketVolatility - Fitted, for every solved series of a fitted expiry. InTheMoney is a call struck below
+// the underlying settlement or a put struck above it, and is absent without that settlement or once expired. Analytics
+// are the series' value and sensitivities where the fit computed them.
+public sealed record SurfaceSeriesResult(SurfaceSeries Series, LatticeDecimal? LogMoneyness, LatticeDecimal? Fitted, LatticeDecimal? RichCheap, bool FitPoint,
+    bool? InTheMoney)
+{
+    public OptionSeriesSensitivities? Analytics { get; init; }
+}
 
 public sealed record SurfaceGridPoint(ExactDecimal Strike, LatticeDecimal LogMoneyness, LatticeDecimal Fitted);
 
 // Status is fitted, option_expired (every series of the expiry is at or past it), vol_fit_insufficient_strikes or vol_fit_nonpositive.
+// AtTheMoneyStrike is the listed strike nearest the underlying settlement, the higher of two equally near; it is absent
+// without that settlement or once expired.
 public sealed record SurfaceExpiry(DateTimeOffset ExpiryAt, string UnderlyingCode, LatticeDecimal? Futures, string Status, SmileParameters? Parameters,
-    int Points, LatticeDecimal? RmsResidual, LatticeDecimal? MaxAbsResidual, ImmutableArray<SurfaceGridPoint> Grid);
+    int Points, LatticeDecimal? RmsResidual, LatticeDecimal? MaxAbsResidual, ImmutableArray<SurfaceGridPoint> Grid, ExactDecimal? AtTheMoneyStrike)
+{
+    public ExactDecimal? DaysToExpiry { get; init; }
+}
+
+// The sensitivity selection a fit computed its series' analytics under, every member as stated, with the calendar clock
+// one day was counted on and the instant that day runs to. The clock is absent where none could be read.
+public sealed record SurfaceSensitivities(string Policy, int Ticks, int? PriceSteps, string AbsoluteTolerance, string DeltaRelativeTolerance,
+    string GammaRelativeTolerance, ExactDecimal VolatilityBump, string? ClockSource, string? ClockZone, DateTimeOffset? DayTo);
 
 // StrikeAxis lists the strikes of the series of every expiry that has not expired.
-public sealed record VolSurfaceResult(string ModelId, ImmutableArray<ExactDecimal> StrikeAxis, ImmutableArray<SurfaceExpiry> Expiries, ImmutableArray<SurfaceSeriesResult> Series);
+public sealed record VolSurfaceResult(string ModelId, ImmutableArray<ExactDecimal> StrikeAxis, ImmutableArray<SurfaceExpiry> Expiries, ImmutableArray<SurfaceSeriesResult> Series)
+{
+    public SurfaceSensitivities? Sensitivities { get; init; }
+}
 
 public static class VolSurfaces
 {
@@ -57,21 +81,24 @@ public static class VolSurfaces
     private static (SurfaceExpiry, List<SurfaceSeriesResult>) BuildExpiry(IVolModel model, SurfaceExpiryInput input, List<SurfaceSeries> members, ExactDecimal strikeInterval)
     {
         if (members.Count > 0 && members.All(m => m.Outcome == Expired))
-            return (Gap(input, Expired), [.. members.Select(m => new SurfaceSeriesResult(m, null, null, null, false))]);
+            return (Gap(input, Expired, null), [.. members.Select(m => new SurfaceSeriesResult(m, null, null, null, false, null))]);
         if (input.Futures is not { } futures)
-            return (Gap(input, "vol_fit_insufficient_strikes"), [.. members.Select(m => new SurfaceSeriesResult(m, null, null, null, false))]);
+            return (Gap(input, "vol_fit_insufficient_strikes", null), [.. members.Select(m => new SurfaceSeriesResult(m, null, null, null, false, null))]);
 
+        bool InTheMoney(SurfaceSeries m) => LatticeDecimal.From(m.Strike).CompareTo(futures) is var side && (m.Right == OptionRight.Call ? side < 0 : side > 0);
+        LatticeDecimal Distance(ExactDecimal strike) => LatticeDecimal.Max(LatticeDecimal.From(strike) - futures, futures - LatticeDecimal.From(strike));
+        ExactDecimal? atTheMoney = members.Count == 0 ? null : members.Select(m => m.Strike).Distinct().OrderBy(Distance).ThenByDescending(strike => strike).First();
         var moneyness = members.ToDictionary(m => m, m => (LatticeDecimal.From(m.Strike) / futures).Ln());
         var fitSeries = members.Where(m => m.MarketVolatility is not null && m.Right == OtmRight(m.Strike, futures)).ToList();
         var fit = model.Fit([.. fitSeries.Select(m => new SmilePoint(moneyness[m], m.MarketVolatility!.Value))]);
 
         if (fit is not FittedSmile fitted)
-            return (Gap(input, ((SmileGap)fit).Code), [.. members.Select(m => new SurfaceSeriesResult(m, moneyness[m], null, null, false))]);
+            return (Gap(input, ((SmileGap)fit).Code, atTheMoney), [.. members.Select(m => new SurfaceSeriesResult(m, moneyness[m], null, null, false, InTheMoney(m)))]);
 
         var results = members.Select(m =>
         {
             var fittedVol = m.MarketVolatility is null ? (LatticeDecimal?)null : model.Evaluate(fitted.Parameters, moneyness[m]);
-            return new SurfaceSeriesResult(m, moneyness[m], fittedVol, m.MarketVolatility - fittedVol, fitSeries.Contains(m));
+            return new SurfaceSeriesResult(m, moneyness[m], fittedVol, m.MarketVolatility - fittedVol, fitSeries.Contains(m), InTheMoney(m));
         }).ToList();
         var grid = GridStrikes(fitSeries.Select(m => m.Strike).Order().ToList(), strikeInterval)
             .Select(strike =>
@@ -79,12 +106,13 @@ public static class VolSurfaces
                 var k = (LatticeDecimal.From(strike) / futures).Ln();
                 return new SurfaceGridPoint(strike, k, model.Evaluate(fitted.Parameters, k));
             }).ToImmutableArray();
-        var expiry = new SurfaceExpiry(input.ExpiryAt, input.UnderlyingCode, futures, "fitted", fitted.Parameters, fitted.Points, fitted.RmsResidual, fitted.MaxAbsResidual, grid);
+        var expiry = new SurfaceExpiry(input.ExpiryAt, input.UnderlyingCode, futures, "fitted", fitted.Parameters, fitted.Points, fitted.RmsResidual, fitted.MaxAbsResidual, grid,
+            atTheMoney) { DaysToExpiry = input.DaysToExpiry };
         return (expiry, results);
     }
 
-    private static SurfaceExpiry Gap(SurfaceExpiryInput input, string code) =>
-        new(input.ExpiryAt, input.UnderlyingCode, input.Futures, code, null, 0, null, null, []);
+    private static SurfaceExpiry Gap(SurfaceExpiryInput input, string code, ExactDecimal? atTheMoney) =>
+        new(input.ExpiryAt, input.UnderlyingCode, input.Futures, code, null, 0, null, null, [], atTheMoney) { DaysToExpiry = input.DaysToExpiry };
 
     private static OptionRight OtmRight(ExactDecimal strike, LatticeDecimal futures) =>
         LatticeDecimal.From(strike).CompareTo(futures) < 0 ? OptionRight.Put : OptionRight.Call;

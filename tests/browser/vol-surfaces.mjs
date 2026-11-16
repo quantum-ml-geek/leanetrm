@@ -147,6 +147,12 @@ export async function run({command,evaluate,wait,click,set,persona,check,idle,fi
    "[document.querySelector('#vol-fit-status')?.textContent,document.querySelector('#vol-fit-here')?.textContent,document.querySelector('#vol-fit-failure')?.textContent]");
 
   // Calibrating submits a job. Its response is lost after the backend queued it: the request is kept and retried under its own id.
+  // A working snapshot has no close convention, so the person names the clock one day is counted on; nothing is chosen for them.
+  await click('#vol-fit-here');
+  await check('calibrating at a working snapshot asks for a clock and submits nothing until one is chosen',
+   `${calls('vol-surfaces/fit')}.length===0&&document.querySelector('#vol-fit-clock').value===''&&/Choose the clock/.test(document.querySelector('#vol-fit-failure').textContent)`,
+   "[document.querySelector('#vol-fit-clock')?.value,document.querySelector('#vol-fit-failure')?.textContent]");
+  await set('#vol-fit-clock','UTC');
   await evaluate('window.loseNextFit=true');await click('#vol-fit-here');
   await settled(`${calls('vol-surfaces/fit')}.length===1&&!document.querySelector('#vol-fit-retry').hidden`,30000);
   const lost=await evaluate(`${calls('vol-surfaces/fit')}.at(-1)`);

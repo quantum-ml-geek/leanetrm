@@ -12,6 +12,11 @@ from preview_client import PreviewClient
 OPTION = 'futures_option_premium_v1'
 MODEL = 'smile_quadratic_log_moneyness_v1'
 SOLVER_POLICY = 'american_futures_option_crr_v1'
+SENSITIVITY_POLICY = 'option_sensitivities_layers_v1'
+UTC = {'code': 'UTC', 'kind': 'fixed_offset', 'fixedOffsetSeconds': 0, 'ianaZone': None, 'tzdbVersion': None}
+# The selection a fit states in full. The example's frames are working snapshots, so each fit names its clock.
+SENSITIVITIES = {'policy': SENSITIVITY_POLICY, 'bump': {'ticks': 1, 'priceSteps': 2, 'absoluteTolerance': '0.000001', 'deltaRelativeTolerance': '0.15',
+                                                        'gammaRelativeTolerance': '0.1'}, 'volatilityBump': '0.01', 'clock': UTC}
 PRODUCT = 'nymex_on'
 # The product the failing and revoked fits use, so that neither leaves a stored surface behind.
 UNFITTED = 'nymex_lo'
@@ -37,9 +42,9 @@ def run_checks(url, query, manifest, *, run_worker, worker_login):
         return c.call('vol-surfaces/read', {'context': {'snapshotId': snapshot or frame['id'], 'convention': OPTION, 'knowledgeMode': 'current', **context},
                                             'product': product, 'model': MODEL, **({'definitionRevisionId': definition} if definition else {})}, timeout=TIMEOUT)
 
-    def fit(product=PRODUCT, snapshot=None, request=None, model=MODEL, expected=200):
-        return c.call('vol-surfaces/fit', {'requestId': request or str(uuid4()), 'snapshotId': snapshot or frame['id'], 'product': product, 'model': model},
-                      expected=expected, timeout=TIMEOUT)
+    def fit(product=PRODUCT, snapshot=None, request=None, model=MODEL, expected=200, sensitivities=SENSITIVITIES):
+        return c.call('vol-surfaces/fit', {'requestId': request or str(uuid4()), 'snapshotId': snapshot or frame['id'], 'product': product, 'model': model,
+                                           'sensitivities': sensitivities}, expected=expected, timeout=TIMEOUT)
 
     def job(job_id):
         return json.loads(query(f"SELECT json_build_object('state',state,'errorCode',error_code,'result',result)::text FROM risk.jobs WHERE id='{job_id}';"))
@@ -64,6 +69,14 @@ def run_checks(url, query, manifest, *, run_worker, worker_login):
     c.call('profile', {'profile': 'trader'})
     check('a fitter sees canFit true', read()['canFit'] is True)
     check('unknown model is refused at submit', fit(model='smile_unknown_v1', expected=422)['code'] == 'vol_model_unknown')
+    offered = read()['sensitivities']
+    check('the read offers the sensitivity selection and the clocks a working snapshot may name, and fills nothing in',
+          offered['offered'] == {k: v for k, v in SENSITIVITIES.items() if k != 'clock'} and UTC in offered['clocks'] and offered['clockRequired'] is True, offered)
+    unstated = [fit(sensitivities=selection, expected=422)['code'] for selection in (
+        None, {**SENSITIVITIES, 'clock': None}, {**SENSITIVITIES, 'policy': 'option_sensitivities_unknown_v1'}, {**SENSITIVITIES, 'volatilityBump': '0.02'},
+        {**SENSITIVITIES, 'bump': {**SENSITIVITIES['bump'], 'priceSteps': 3}})]
+    check('a fit that does not state a supported sensitivity selection and its clock is refused at submit',
+          unstated == ['option_sensitivity_policy'] * 5 and read()['job'] is None, unstated)
     request = str(uuid4())
     first = fit(request=request)
     check('same request id returns the same job', first['state'] == 'queued' and fit(request=request) == first, first)
@@ -88,6 +101,52 @@ def run_checks(url, query, manifest, *, run_worker, worker_login):
           and all(isinstance(v, str) for s in surface['series'] if s['series']['outcome'] == 'solved' for v in (s['series']['marketVolatility'],)),
           surface['series'][0])
     print(f"WORKLOAD volatility surface fit {PRODUCT}: {measured['series']} series, {measured['solves']} solved, {measured['elapsedMs']} ms in the risk worker", flush=True)
+
+    # Each calibrated series' value and sensitivities, as the fit stored them under the stated selection.
+    measures = ('delta', 'gamma', 'vega', 'theta')
+    solved = [s for s in surface['series'] if s['series']['outcome'] == 'solved']
+    intrinsic = [s for s in surface['series'] if s['series']['outcome'] == 'at_intrinsic']
+    stated = surface['sensitivities']
+    day = datetime.fromisoformat(frame['at']).timestamp() + 86400
+    check('the surface states the selection its analytics were computed under and the day its theta runs to',
+          (stated['policy'], stated['ticks'], stated['priceSteps'], stated['volatilityBump'], stated['clockSource'], stated['clockZone'])
+          == (SENSITIVITY_POLICY, 1, 2, '0.01', 'request', 'UTC') and datetime.fromisoformat(stated['dayTo']).timestamp() == day, stated)
+    check('every calibrated series has analytics, each measure a figure or the code of why there is none',
+          solved and intrinsic and all(s['analytics'] and all((s['analytics'][m]['value'] is None) != (s['analytics'][m]['missing'] is None) for m in measures)
+                                       for s in solved + intrinsic)
+          and all(s['analytics'] is None for s in surface['series'] if s['series']['outcome'] not in ('solved', 'at_intrinsic')),
+          [s for s in solved + intrinsic if not s['analytics']][:2])
+    check('a series valued at intrinsic has its settlement as its value and no sensitivities',
+          all(Decimal(s['analytics']['value']) == Decimal(s['series']['settlement']) and s['analytics']['priceBump'] is None
+              and all(s['analytics'][m] == {'value': None, 'missing': 'option_at_intrinsic'} for m in measures) for s in intrinsic), intrinsic[:1])
+
+    def figure(row, measure):
+        return None if row['analytics'][measure]['value'] is None else Decimal(row['analytics'][measure]['value'])
+    absent = {}
+    for row in solved:
+        for measure in measures:
+            if figure(row, measure) is None:
+                absent[row['analytics'][measure]['missing']] = absent.get(row['analytics'][measure]['missing'], 0) + 1
+    print(f"WORKLOAD option analytics {PRODUCT}: {len(solved)} solved series, {measured['analyticsTreePrices']} tree prices, {measured['analyticsMs']} ms, "
+          f"missing measures by code {absent}", flush=True)
+    check('a solved series is valued within one option tick of its settlement',
+          all(abs(Decimal(s['analytics']['value']) - Decimal(s['series']['settlement'])) <= Decimal('0.001') for s in solved),
+          [(s['series']['code'], s['analytics']['value'], s['series']['settlement']) for s in solved][:3])
+    signs = [(s['series']['code'], m) for s in solved for m, holds in (
+        ('delta', lambda v, s=s: 0 < v < 1 if s['series']['right'] == 'call' else -1 < v < 0), ('gamma', lambda v: v > 0), ('vega', lambda v: v > 0),
+        ('theta', lambda v: v < 0)) if figure(s, m) is not None and not holds(figure(s, m))]
+    check('stored sensitivities have the sign their measure must have', not signs and measured['analyticsTreePrices'] > 0 and measured['analyticsMs'] >= 0, signs[:5])
+    # A call and a put of one strike and expiry differ in delta by close to one and share gamma and vega, to within the
+    # small effect of early exercise under this example's discounting.
+    pairs = {}
+    for row in solved:
+        pairs.setdefault((row['series']['expiryAt'], row['series']['strike']), {})[row['series']['right']] = row
+    both = [p for p in pairs.values() if len(p) == 2 and all(figure(r, m) is not None for r in p.values() for m in ('delta', 'gamma', 'vega'))]
+    parity = [(p['call']['series']['code'], figure(p['call'], 'delta') - figure(p['put'], 'delta')) for p in both
+              if abs(figure(p['call'], 'delta') - figure(p['put'], 'delta') - 1) > Decimal('0.05')
+              or abs(figure(p['call'], 'vega') - figure(p['put'], 'vega')) > Decimal('0.05') * figure(p['call'], 'vega')]
+    check('a call and a put of one strike agree in their sensitivities', both and len(both) * 2 >= len(pairs) and not parity, (len(both), len(pairs), parity[:5]))
+    check('most solved series have every sensitivity', sum(absent.values()) * 10 <= len(solved) * 4, absent)
 
     refit = fit()
     run_worker()

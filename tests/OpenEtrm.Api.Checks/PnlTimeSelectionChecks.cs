@@ -48,7 +48,7 @@ internal static class PnlTimeSelectionChecks
 
         // The same local time on the next calendar day is 25 hours later on the convention's clock, and the report says
         // whose clock that is.
-        var convention=new TradingPnlReport.CloseConvention("new_york_every_day",2,"New York every day","new_york_all_days",newYork);
+        var convention=new CloseConvention("new_york_every_day",2,"New York every day","new_york_all_days",newYork);
         var counted=TradingPnlReport.ConventionTime(convention,from);
         if(counted.Target.At!=At(11,1,22)||counted.Target.Policy!=ClockChange.FrozenInputs||counted.Target.Calendar is not {Zone:"America/New_York",Convention:CalendarClockRoll.NextDay} calendar||calendar.From!=from)
             throw new Exception("One calendar day from a recorded close is counted on its convention's calendar clock.");

@@ -38,23 +38,25 @@ public static class FuturesOptionSensitivities
     private static Guid UnitTrade(Guid instrument)=>ContractIdentity.FromCanonical($"option_sensitivity_unit_v1:{instrument:D}");
 
     // The series of one underlying future. The prepared portfolio holds UnitHoldings of exactly the bindings solved for a
-    // volatility; a binding valued at intrinsic takes no layer and reports its settlement with no sensitivities. A sample
+    // volatility, and is absent when none is; a binding valued at intrinsic takes no layer and reports its settlement with
+    // no sensitivities. A sample
     // the valuation refuses leaves its measures missing, with the refusing code, for every series; a first or second
     // difference that does not agree across half, whole and double bumps is missing as unstable. Day is the instant one
     // day later, or null where no clock was selected.
-    public static ImmutableArray<OptionSeriesSensitivities> Calculate(PreparedConnectedPortfolioRisk prepared,
+    public static ImmutableArray<OptionSeriesSensitivities> Calculate(PreparedConnectedPortfolioRisk? prepared,
         ImmutableDictionary<Guid,FuturesOptionMarketBinding> bindings,OptionSensitivitySelection selection,ClockChange? day,CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
-        if(prepared is null||bindings is null||selection?.Bump is null||selection.Delta is null||selection.Gamma is null||selection.VolatilityBump.CompareTo(default)<=0)
-            throw Error("Supply the prepared unit holdings, their bindings and an explicit selection.");
+        if(bindings is null||selection?.Bump is null||selection.Delta is null||selection.Gamma is null||selection.VolatilityBump.CompareTo(default)<=0)
+            throw Error("Supply the series' bindings and an explicit selection.");
         var solved=bindings.Values.Where(b=>b.Calibration is SolvedVolatility).ToDictionary(b=>UnitTrade(b.Instrument.Id));
-        if(!prepared.Holdings.Select(h=>h.TradeId).ToHashSet().SetEquals(solved.Keys)||prepared.Holdings.Length!=solved.Count)
+        var held=prepared?.Holdings??[];
+        if(!held.Select(h=>h.TradeId).ToHashSet().SetEquals(solved.Keys)||held.Length!=solved.Count)
             throw Error("The prepared portfolio must hold one contract of each solved series and nothing else.");
         OptionMeasure Absent(string code)=>new(null,code);
         var results=bindings.Values.Where(b=>b.Calibration is IntrinsicFallback).Select(b=>new OptionSeriesSensitivities(b.Instrument.Id,
             b.BaseSettlement.ToExact(),null,Absent(AtIntrinsic),Absent(AtIntrinsic),Absent(AtIntrinsic),Absent(AtIntrinsic))).ToList();
-        if(solved.Count==0)return Ordered(results);
+        if(prepared is null)return Ordered(results);
         if(prepared.Factors is not [{} future])throw Error("The series of one calculation are priced from one underlying future.");
 
         ExactDecimal Unit(Guid trade,ExactMoney contract)=>contract.DivideBy(solved[trade].Instrument.Series.Multiplier).ToMoney(Reported).Amount;

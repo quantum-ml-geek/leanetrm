@@ -13,9 +13,9 @@ using OpenEtrm.MarketData.Trading;
 
 namespace OpenEtrm.Api;
 
-/// <summary>A fit of one option product's surface at a working frame, under an explicit vol model.</summary>
+/// <summary>A fit of one option product's surface at a working frame, under an explicit vol model and option sensitivity selection.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record VolSurfaceFitRequest(Guid RequestId,Guid SnapshotId,string Product,string Model,Guid? DefinitionRevisionId=null);
+public sealed record VolSurfaceFitRequest(Guid RequestId,Guid SnapshotId,string Product,string Model,OptionSensitivityRequest Sensitivities,Guid? DefinitionRevisionId=null);
 
 /// <summary>A read of one option product's stored surface at a trading context, under an explicit vol model.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
@@ -25,8 +25,9 @@ public sealed record VolSurfaceReadRequest(FuturesReadRequest Context,string Pro
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record VolSurfaceLibraryRequest(FuturesReadRequest Context,string Model,int Offset,string? Product=null,Guid? DefinitionRevisionId=null);
 
-// A fitted surface as its job's completion records it: the pinned inputs, the canonical bytes and their digest, and the work done.
-internal sealed record VolSurfaceFitOutcome(ImmutableArray<Guid> Inputs,string Surface,string Digest,int Series,int Solves,long ElapsedMs);
+// A fitted surface as its job's completion records it: the pinned inputs, the canonical bytes and their digest, and the work done:
+// the fit's series, solves and time, then the analytics' tree prices and time.
+internal sealed record VolSurfaceFitOutcome(ImmutableArray<Guid> Inputs,string Surface,string Digest,int Series,int Solves,long ElapsedMs,int AnalyticsTreePrices,long AnalyticsMs);
 
 // Volatility surfaces are fitted by jobs of kind vol_surface_fit_v1 on the retained risk-job queue and read from their stored,
 // bitemporal revisions. Admission pins the frame, product, business date, model and actor; the risk worker fits and records.
@@ -49,8 +50,11 @@ internal static class VolSurfaceStore
         var contextId=view.Context.ContextId??throw new MarketDataException("vol_surface_context","The fit requires its captured trading context.");
         // A fit is new work: at a recorded close it requires the close in force for its session and business day (D334).
         if(view.Frame.OriginCloseId is {} close)await SelectedClose.RequireInForce(connection,manifest.CatalogId,close,ct);
+        // The sensitivity selection and the clock its one calendar day is counted on are pinned here, with the fit's other inputs.
+        var sensitivities=OptionSurfaceAnalytics.Pin(body.Sensitivities,view.Frame.Close is {} recorded?await CloseConventions.Read(connection,manifest.CatalogId,recorded,ct):null);
         var request=new JsonObject{["convention"]=Convention,["engineVersion"]=RiskJobs.EngineVersion,["product"]=Product(manifest,body.Product),
-            ["businessDate"]=BusinessDate(view),["model"]=body.Model,["solverPolicy"]=SolverPolicy,["futuresConvention"]=manifest.FuturesConvention};
+            ["businessDate"]=BusinessDate(view),["model"]=body.Model,["solverPolicy"]=SolverPolicy,["futuresConvention"]=manifest.FuturesConvention,
+            ["sensitivities"]=sensitivities};
         var frame=RetainedFrames.Record(selected.Frame with{SwapMarketSelections=null});
         await using var command=ScheduleStore.Command(connection,"SELECT risk.submit_vol_surface_fit($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb)::text",
             manifest.CatalogId,body.RequestId,contextId,manifest.RevisionId,view.Frame.At,request.ToJsonString(),frame.ToJsonString(RiskJobs.Json));
@@ -85,7 +89,10 @@ internal static class VolSurfaceStore
         var canFit=await PreviewDatabase.HasPermission(connection,"PublishMarketData",ct)&&await PreviewDatabase.HasPermission(connection,"ReadTrades",ct);
         return new JsonObject{["snapshotId"]=view.Frame.Id,["definitionRevisionId"]=manifest.RevisionId,["model"]=body.Model,
             ["solverPolicy"]=stored?["solverPolicy"]?.DeepClone()??SolverPolicy,["state"]=stored is null?"notFitted":"fitted",
-            ["revision"]=revision,["job"]=job,["canFit"]=canFit,["surface"]=stored?["content"]?.DeepClone()};
+            ["revision"]=revision,["job"]=job,["canFit"]=canFit,["surface"]=stored?["content"]?.DeepClone(),
+            // What a fit may select: offered for the page to send back, with the clocks a working snapshot may name.
+            ["sensitivities"]=new JsonObject{["offered"]=JsonSerializer.SerializeToNode(OptionSurfaceAnalytics.Offered,RiskJobs.Json),
+                ["clocks"]=JsonSerializer.SerializeToNode(TradingPnlReport.Clocks(),RiskJobs.Json),["clockRequired"]=view.Frame.Close is null}};
     }
 
     // The surfaces stored at or before the view's bound context, the view's own first and then newest business date first, each
@@ -169,13 +176,21 @@ internal static class VolSurfaceStore
         await using(var bind=ScheduleStore.Command(connection,"SELECT risk.bind($1,$2)",id,lease))await bind.ExecuteScalarAsync(ct);
         await using var database=new PreviewDatabase(manifest,source);
         var data=await RetainedFrames.ReadBoundJobInputs(database,connection,frame,revision,ReferenceReadScope.DefinitionClosure,ct);
+        var plan=OptionSurfaceAnalytics.Plan(request["sensitivities"],frame.At);
+        // Calibration and analytics value under the job's one certified context, as a portfolio valuation does.
+        var context=PinnedContext.Exact((await new KnowledgeStore(catalog).Read(connection,frame.ContextId!.Value,ct)).Context);
+        var snapshot=MarketSnapshotBinding.Bind(data.Snapshot(frame),frame.ContextId.Value,SchedulePreview.ParseAt(context.KnownAt));
         var elapsed=Stopwatch.StartNew();
-        var fitted=await VolSurfaceFit.Compute(connection,database,data,frame,data.Snapshot(frame),product["code"]!.GetValue<string>(),model,ct);
+        var fitted=await VolSurfaceFit.Compute(connection,database,data,frame,snapshot,product["code"]!.GetValue<string>(),model,ct);
         elapsed.Stop();
+        var analysing=Stopwatch.StartNew();
+        var analysed=await OptionSurfaceAnalytics.Attach(connection,database,data,frame,snapshot,context,fitted,plan,ct);
+        analysing.Stop();
         await transaction.CommitAsync(ct);
-        var surface=JsonSerializer.Serialize(fitted.Result,Json);
+        var surface=JsonSerializer.Serialize(analysed.Surface,Json);
         return new(fitted.ObservationIds,surface,Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(surface))),
-            fitted.Result.Series.Length,fitted.Result.Series.Count(s=>s.Series.Outcome==FuturesOptionPricing.SolvedMode),elapsed.ElapsedMilliseconds);
+            fitted.Result.Series.Length,fitted.Result.Series.Count(s=>s.Series.Outcome==FuturesOptionPricing.SolvedMode),elapsed.ElapsedMilliseconds,
+            analysed.TreePrices,analysing.ElapsedMilliseconds);
     }
 
     // Records the outcome and completes the job's attempt in one transaction.
@@ -184,12 +199,13 @@ internal static class VolSurfaceStore
         var command=source.CreateCommand("SELECT risk.finish_vol_surface_fit($1,$2,$3,$4::jsonb,$5,$6::jsonb)");
         command.Parameters.AddWithValue(id);command.Parameters.AddWithValue(lease);command.Parameters.AddWithValue(fit.Inputs.ToArray());
         command.Parameters.AddWithValue(fit.Surface);command.Parameters.AddWithValue(fit.Digest);
-        command.Parameters.AddWithValue(JsonSerializer.Serialize(new{series=fit.Series,solves=fit.Solves,elapsedMs=fit.ElapsedMs}));
+        command.Parameters.AddWithValue(JsonSerializer.Serialize(new{series=fit.Series,solves=fit.Solves,elapsedMs=fit.ElapsedMs,
+            analyticsTreePrices=fit.AnalyticsTreePrices,analyticsMs=fit.AnalyticsMs}));
         return command;
     }
 
     // The deterministic refusals a fit job's completion can meet: each fails the job with its own code instead of being retried.
-    internal static bool Refusal(string code)=>code is "vol_surface_nondeterministic" or "vol_surface_input" or "vol_surface_product" or "vol_model_unknown"
+    internal static bool Refusal(string code)=>code is "vol_surface_nondeterministic" or "vol_surface_input" or "vol_surface_product" or "vol_model_unknown" or "option_sensitivity_policy"
         or "historical_read_only" or "risk_job_input" or "risk_result_limit";
 
     internal static bool Fits(JsonObject job)=>job["request"]?["convention"]?.GetValue<string>()==Convention;

@@ -17,14 +17,23 @@ type Api=<T>(path:string,body?:unknown)=>Promise<T>;
 /** The trading context a read is made at, as the option operations state it. */
 export type FuturesReadRequest={snapshotId:string;convention:string;knowledgeMode:'current'|'retained';contextId?:string};
 type Right='call'|'put';
+/** One figure of a series' analytics, or the code of why there is none. */
+export type Measure={value:string|null;missing:string|null};
+/** A series' value and sensitivities per unit of quote, as its fit stored them. */
+export type SeriesAnalytics={value:string;priceBump:string|null;delta:Measure;gamma:Measure;vega:Measure;theta:Measure};
 export type SurfaceSeries={series:{code:string;right:Right;strike:string;expiryAt:string;underlyingCode:string;settlement:string|null;outcome:string;marketVolatility:string|null};
- logMoneyness:string|null;fitted:string|null;richCheap:string|null;fitPoint:boolean};
-export type SurfaceExpiry={expiryAt:string;underlyingCode:string;futures:string|null;status:string;points:number;rmsResidual:string|null;maxAbsResidual:string|null;
- grid:{strike:string;logMoneyness:string;fitted:string}[]};
-export type VolSurfaceResult={modelId:string;strikeAxis:string[];expiries:SurfaceExpiry[];series:SurfaceSeries[]};
+ logMoneyness:string|null;fitted:string|null;richCheap:string|null;fitPoint:boolean;inTheMoney:boolean|null;analytics:SeriesAnalytics|null};
+export type SurfaceExpiry={expiryAt:string;underlyingCode:string;futures:string|null;status:string;parameters:{a:string;b:string;c:string}|null;points:number;
+ rmsResidual:string|null;maxAbsResidual:string|null;grid:{strike:string;logMoneyness:string;fitted:string}[];atTheMoneyStrike:string|null;daysToExpiry:string|null};
+/** The sensitivity selection a surface's analytics were computed under, with the clock and instant of its one day. */
+export type SurfaceSensitivities={policy:string;ticks:number;priceSteps:number|null;volatilityBump:string;clockSource:string|null;clockZone:string|null;dayTo:string|null};
+export type VolSurfaceResult={modelId:string;strikeAxis:string[];expiries:SurfaceExpiry[];series:SurfaceSeries[];sensitivities:SurfaceSensitivities|null};
 type Job={id:string;state:string;errorCode:string|null};
+type ClockRule={code:string;kind:string;fixedOffsetSeconds:number|null;ianaZone:string|null;tzdbVersion:string|null};
+/** What a fit may select: the selection the backend offers, sent back unchanged, and the clocks a working snapshot names one of. */
+export type SensitivityOffer={offered:Record<string,unknown>;clocks:ClockRule[];clockRequired:boolean};
 type SurfaceRead={definitionRevisionId:string;snapshotId:string;model:string;state:'fitted'|'notFitted';revision:{id:string;knownFrom:string;inputsRevised:boolean}|null;job:Job|null;canFit:boolean;
- surface:VolSurfaceResult|null};
+ surface:VolSurfaceResult|null;sensitivities:SensitivityOffer};
 
 // The only vol model: an explicit input of every read and fit, shown read-only.
 const model='smile_quadratic_log_moneyness_v1';
@@ -254,7 +263,10 @@ export function setupVolSurfaces(o:{api:Api;context:()=>FuturesReadRequest;histo
  const failure=el('span','vol-fit-failure');failure.id='vol-fit-failure';
  const retry=button('secondary','Retry the calibration request','vol-fit-retry');
  const note=el('span','vol-fit-note');
- actions.append(note,failure,retry,fit);productHead.append(naming,actions);
+ // A working snapshot belongs to no close convention, so its fit names the calendar clock one day of decay is counted on.
+ const clockLabel=el('label','vol-fit-clock'),clock=el('select');clock.id='vol-fit-clock';
+ clockLabel.append('One day counted on ',clock);clock.onchange=()=>{fitMessage='';render();};
+ actions.append(note,failure,clockLabel,retry,fit);productHead.append(naming,actions);
  const status=el('p','vol-status');status.id='vol-fit-status';status.setAttribute('role','status');
  const closes=el('nav','vol-closes');closes.id='vol-closes';closes.setAttribute('aria-label','Closes this product is calibrated at');
  const missing=el('div','vol-missing');missing.id='vol-missing';
@@ -512,6 +524,11 @@ export function setupVolSurfaces(o:{api:Api;context:()=>FuturesReadRequest;histo
   const ended=!running&&job&&(job.state==='failed'||job.state==='cancelled');
   failure.textContent=fitMessage||(ended?`Last calibration ${job!.state==='failed'?'failed':'was cancelled'}${job!.errorCode?` · ${jobFailures[job!.errorCode]?jobFailures[job!.errorCode]+' ':''}${job!.errorCode}`:''}`:'');
   retry.hidden=!pending.command||submitting;
+  // The clocks come from the read; nothing is chosen for the person.
+  clockLabel.hidden=!read.canFit||historical||running||!read.sensitivities.clockRequired;
+  const chosen=clock.value;
+  clock.replaceChildren(new Option('Choose a clock',''),...read.sensitivities.clocks.map(rule=>new Option(rule.code,rule.code)));
+  clock.value=read.sensitivities.clocks.some(rule=>rule.code===chosen)?chosen:'';
   actions.hidden=false;
   root.dataset.state=read.state;error.hidden=true;views.hidden=read.state!=='fitted';
   renderTimeline();renderMissing();
@@ -520,7 +537,10 @@ export function setupVolSurfaces(o:{api:Api;context:()=>FuturesReadRequest;histo
 
  async function submit(){
   if(submitting)return;
-  let command;try{const c=o.context();command=pending.begin('vol-surfaces/fit',{snapshotId:c.snapshotId,product,model,definitionRevisionId:requireDefinition()});}catch(cause){fitMessage=messageOf(cause);render();return;}
+  const offer=shown?.sensitivities,named=offer?.clocks.find(rule=>rule.code===clock.value)??null;
+  if(!offer||offer.clockRequired&&!named){fitMessage='Choose the clock one day is counted on, then calibrate.';render();return;}
+  let command;try{const c=o.context();command=pending.begin('vol-surfaces/fit',{snapshotId:c.snapshotId,product,model,
+   sensitivities:{...offer.offered,clock:offer.clockRequired?named:null},definitionRevisionId:requireDefinition()});}catch(cause){fitMessage=messageOf(cause);render();return;}
   const number=generation;submitting=true;fitMessage='';render();
   const previouslyUncertain=pending.sending();
   let queued=false;
