@@ -278,7 +278,7 @@ See [the lifecycle contract](exchange-futures.md#option-lifecycle) for the full 
   does (D395). A report that values options states its option valuation policy
   in its heading, and the Risk page opens a retained run as a scope's current
   report only when it was valued under the stated pricing policy (D396).
-- **Options.** A Trading page for readers of market data and trades (D406). Its
+- **Options.** A Trading page for readers of market data and trades (D407). Its
   **Chain** view draws one expiry of a product from the product's stored
   [volatility surface](vol-surfaces.md#option-analytics): calls and puts about
   the strike, each with its settlement, implied volatility, delta, gamma, vega,
@@ -324,7 +324,7 @@ See [the lifecycle contract](exchange-futures.md#option-lifecycle) for the full 
 - **Volatility.** Stored volatility surfaces under a versioned vol model, with
   rich/cheap and their graphics, are shipped for viewing as
   [volatility surfaces](vol-surfaces.md) (D304), and each fit stores its series'
-  value, delta, gamma, vega and theta for the Options page (D406). Valuing
+  value, delta, gamma, vega and theta for the Options page (D407). Valuing
   options from the surface, interpolated values for unsettled series, volatility
   in Risk, scheduled fitting, strategies and payoff diagrams remain. The shared valuation layer
   supports held calibrated-series IV and weighted-node shocks with explicit

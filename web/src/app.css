@@ -737,6 +737,8 @@ body .tabulator-popup-container{border:1px solid var(--border-strong);background
 .ticket-label{color:var(--text-2);font-size:12px;line-height:1.5;font-weight:550}
 .ticket-body{display:flex;align-items:center;gap:6px;min-height:36px}
 .ticket-control{flex:1 1 auto;min-width:0;height:36px;padding:0 10px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--surface);font-size:13px;font-variant-numeric:tabular-nums}
+.ticket-datetime{display:flex;flex:1 1 auto;flex-wrap:wrap;align-items:center;gap:6px;min-width:0}
+.ticket-date-applicability{display:flex;align-items:center;gap:4px;font-size:12px;white-space:nowrap}
 .ticket-unit{color:var(--text-3);font-size:12px}
 .ticket-looked .ticket-control{background:var(--accent-soft);border-color:var(--accent-border)}
 .ticket-chip{flex:none;padding:1px 6px;border-radius:999px;background:var(--accent);color:var(--on-accent);font-size:10px;font-weight:600;white-space:nowrap}

@@ -8,6 +8,7 @@ import {readCrudeView} from './crude-trade-view.js';
 import {readOptionView} from './futures-option-view.js';
 import {lifecycleWrites} from './futures-option-model.js';
 import {readGasView} from './gas-trade-view.js';
+import {readParkLoanView} from './park-loan-trade-view.js';
 import type {ProductTickets,TicketProduct} from './product-tickets.js';
 import {readPpaView} from './ppa-trade-view.js';
 import {openPositionWindow,type PositionWindowSelection} from './position-window-selection.js';
@@ -366,7 +367,7 @@ export function setupFutures(options:{tickets:ProductTickets;api:Api;stream:(bod
       const stale=!holdings,context=readContext();
       const displayed=displayedContext();if(!displayed?.contextId)throw Error('Read the Blotter before inspecting its Side schedules.');
       const inspectionContext={...context,knowledgeMode:'retained',contextId:displayed.contextId};
-      const read=await(h.instrumentType==='futures_option'?readOptionView(api,context,h,{actor:options.profile,recorded:()=>void act(load),surface:options.volSurface,lifecycle:options.lifecycle}):h.instrumentType==='physical_lng'?readLngView(api,context,h):h.instrumentType==='physical_crude'?readCrudeView(api,context,h):h.instrumentType==='physical_gas'?readGasView(api,context,h,{onDenied:clear,actor:options.profile,readOnly:stale,amend:options.window.kind==='main'?()=>void perform({kind:'amend',key:rowKey(h)}):undefined}):h.instrumentType==='ppa'?readPpaView(api,context,h,displayed.knownAt,()=>void manage('ppa',h.tradeId)):(h.instrumentType==='financial_swap'||h.instrumentType==='heat_rate')?readSwapView(api,context,h,formats,{busy,act,settle:()=>settle(h)}):h.instrumentType==='future'?readTradeView(api,context,h,formats):genericPositionView(h));
+      const read=await(h.instrumentType==='futures_option'?readOptionView(api,context,h,{actor:options.profile,recorded:()=>void act(load),surface:options.volSurface,lifecycle:options.lifecycle}):h.instrumentType==='physical_gas_park_loan'?readParkLoanView(api,inspectionContext,h,{actor:options.profile,lifecycle:options.window.kind==='main'?options.lifecycle:undefined}):h.instrumentType==='physical_lng'?readLngView(api,context,h):h.instrumentType==='physical_crude'?readCrudeView(api,context,h):h.instrumentType==='physical_gas'?readGasView(api,context,h,{onDenied:clear,actor:options.profile,readOnly:stale,amend:options.window.kind==='main'?()=>void perform({kind:'amend',key:rowKey(h)}):undefined}):h.instrumentType==='ppa'?readPpaView(api,context,h,displayed.knownAt,()=>void manage('ppa',h.tradeId)):(h.instrumentType==='financial_swap'||h.instrumentType==='heat_rate')?readSwapView(api,context,h,formats,{busy,act,settle:()=>settle(h)}):h.instrumentType==='future'?readTradeView(api,context,h,formats):genericPositionView(h));
 
       // Details kept on screen while the Blotter is read again do not transition into a working settlement editor.
       const scheduled=withSideSchedules(read,api,inspectionContext,h,clear);

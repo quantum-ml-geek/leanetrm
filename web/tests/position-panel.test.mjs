@@ -43,6 +43,13 @@ test('the value carries its measure, sign and currency, and a position the close
  assert.equal(summary('TR-000005').value.amount.text,'+15');
 });
 
+test('a Park and loan position names its qualified scheduled-plan measure',()=>{
+ const holding={...fixture.holdings[0],instrumentType:'physical_gas_park_loan',contractIdentityKind:'gas_park_loan_agreement',direction:'multi_side',quantity:'720',
+  fixedPrice:null,mark:null,markMinusPrice:null,presentValue:'23.5',measure:'scheduled_plan_present_value_v1',unavailableReason:null};
+ const row={...rows['TR-000001'],pill:'GAS',instrumentType:'physical_gas_park_loan',measure:'Remaining scheduled plan PV',price:null,priceUnit:null,mark:null,markNote:'Saved account mark',value:'23.5'};
+ assert.equal(positionSummary(holding,row,formats).value.label,'Remaining scheduled plan PV');
+});
+
 test('mark minus price is the backend row value, labeled by what the position was done at, and omitted when the backend has none',()=>{
  const swap=summary('TR-000001').markMinusPrice;
  assert.deepEqual([swap.label,swap.text,swap.exact,swap.unit],['Mark − fixed','−0.01','-0.01','USD/MMBtu (IT)']);

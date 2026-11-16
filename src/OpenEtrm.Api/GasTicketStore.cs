@@ -17,7 +17,8 @@ public sealed record TicketPreviewRequest([property:JsonRequired]FuturesReadRequ
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record TicketBookRequest([property:JsonRequired]FuturesReadRequest Context,[property:JsonRequired]TicketDraft Draft,[property:JsonRequired]Guid DefinitionRevisionId,[property:JsonRequired]Guid OperationId);
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record TicketTradeRequest([property:JsonRequired]FuturesReadRequest Context,[property:JsonRequired]Guid TradeId,[property:JsonRequired]Guid BindingId,[property:JsonRequired]int Revision);
+public sealed record TicketTradeRequest([property:JsonRequired]FuturesReadRequest Context,[property:JsonRequired]Guid TradeId,[property:JsonRequired]Guid BindingId,[property:JsonRequired]int Revision)
+{public string? Product{get;init;}};
 
 // Deal ticket reads for physical gas: choices and lookups from the gas catalog under the read's
 // context, and a booked trade as the ticket draft of its terms.
@@ -34,7 +35,7 @@ public sealed class GasTicketStore(PreviewDatabase database)
  // nominated record, else the contract's. Amounts stay the contract's: recorded quantities do not revalue the trade.
  const string QuantityPolicy=GasDailyQuantitySelection.ProjectionPolicy;
 
- public static TicketDescription Description(string product)=>product==GasTicket.Description.Product?GasTicket.Description:
+ public static TicketDescription Description(string product)=>product==GasParkLoanTicket.Product?GasParkLoanTicket.Description:product==GasTicket.Description.Product?GasTicket.Description:
   throw new MarketDataException("ticket_input",$"No deal ticket describes product '{product}'.");
 
  // The catalog's books and parties are trading records under row security: the bound read context

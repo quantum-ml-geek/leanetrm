@@ -1,5 +1,12 @@
 # Delivery plan and acceptance criteria
 
+D406 locally qualifies a bounded [Park and Loan consumer](gas-park-loan.md):
+explicit booking, native advance and partial return, independent fee cash, shared
+ticket and lifecycle forms, and ordinary/retained current-clock price risk. Real
+browser, native financial and populated-upgrade qualifiers passed. Aggregate CI,
+release and service economic-horizon qualification remain open. Broader service
+terms require separately qualified executable profiles.
+
 D404 is implemented for 25 selected main-workbench curve, trading and Risk reads,
 with independent view progress, bounded execution, cancellation admission fences
 and exact authorization/context checks before SSE publication. Local qualification
@@ -29,11 +36,12 @@ instants and exchange option expiry retain their explicit timing and rate inputs
 required purpose bindings and Side-owned rules; omission checks are mandatory
 in the verification runner.
 
-The integrated verification runner requires 185 commands, including 64 isolated
-application previews, with domain, native database, populated-upgrade, agent and
-browser coverage. Local integration checks passed 737 managed core checks,
-88 rate checks and 28 owned lifecycle browser checks at the D403 checkpoint.
-The later D404 checkpoint passed 1,866 frontend checks and 122 Python checks.
+The integrated verification runner requires 189 commands, including required
+Park and Loan native, populated-upgrade, retained-worker and browser qualifiers,
+with domain, native database, agent and browser coverage. Local checks at D406
+passed 738 managed core checks and 1,889 frontend checks. The earlier D403
+checkpoint passed 737 managed core checks, 88 rate checks and 28 owned lifecycle
+browser checks; D404 passed 1,866 frontend and 122 Python checks.
 The integrated CI matrix must pass before publication qualification is complete. Native rejection
 probes cover altered calendar and clock captures, payment dates, quantities,
 source contracts and retained program agreement.
@@ -1842,7 +1850,7 @@ Extend only after the baseline contracts are demonstrated:
 - Broader calendars, delivery shapes and schedule authoring.
 - Options beyond listed American futures options (D288): other exercise and
   settlement styles, volatility inputs and shocks, and nonlinear model diagnostics.
-- An option strategy viewer on the Options page (D406): legs of one expiry
+- An option strategy viewer on the Options page (D407): legs of one expiry
   combined from the chain, with profit and loss against the futures price at
   expiry and at stated earlier instants from an analysis read over the shared
   layers. Strategies across expiries need a declared relationship between

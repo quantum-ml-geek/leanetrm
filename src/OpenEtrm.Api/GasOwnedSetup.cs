@@ -50,6 +50,11 @@ internal static partial class GasOwnedSetup
         {
             await PinnedContext.BindExact(connection,catalog,source,ct);
             await TradingContext.Bind(connection,catalog,source,request.Context.AsOf,ct);
+            if(request.Target?.Handler==GasParkLoanActions.Handler)
+            {
+                var agreement=await ParkLoanSetup(connection,database,request,ct);
+                await admission.RequireCommit(connection,ct);return agreement;
+            }
             if(request.Target?.Handler==GasLoanFeeActions.Handler)
             {
                 var fee=await LoanFeeSetup(connection,database,request,ct);

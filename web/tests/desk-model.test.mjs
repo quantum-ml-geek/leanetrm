@@ -548,6 +548,27 @@ test('gas contractual PV shares the desk without adding receipt and delivery qua
  assert.throws(()=>positionRows([{...gas,measure:'gas_value'}]),/value measure/);
 });
 
+test('Park and loan displays managed principal and scheduled-plan PV without deriving a long or short exposure',()=>{
+ const service={...fixture.holdings[0],instrumentType:'physical_gas_park_loan',contractIdentityKind:'gas_park_loan_agreement',direction:'multi_side',
+  quantity:'720',lots:null,executionPrice:null,fixedPrice:null,mark:null,markMinusPrice:null,executionPnl:null,presentValue:'23.456789012345678901',measure:'scheduled_plan_present_value_v1',unavailableReason:null};
+ const [row]=positionRows([service]);
+ assert.deepEqual([row.pill,row.measure,row.side,row.quantity,row.exposure,row.priceUnit],['GAS','Remaining scheduled plan PV','Park and loan','720',null,null]);
+ assert.equal(row.value,'23.456789012345678901');
+ assert.throws(()=>positionRows([{...service,measure:'gas_contractual_present_value'}]),/scheduled plan/);
+ assert.throws(()=>positionRows([{...service,quantity:null}]),/principal/);
+});
+
+test('Park and loan scheduled-plan totals stay in their own backend-supplied tile',()=>{
+ const summaries=clone(fixture.summaries);
+ for(const index of [0,1,2,3])for(const group of summaries[index].groups)if(group.instrumentType==='financial_swap'){
+  group.instrumentType='physical_gas_park_loan';group.measure='scheduled_plan_present_value_v1';
+ }
+ const tiles=summaryTiles(summaries),tile=tiles.find(t=>t.key==='parkLoanPv');
+ assert.ok(tile);
+ assert.deepEqual(tile.rows.map(row=>[row.currency,row.total]),[['EUR','15'],['USD','220']]);
+ assert.equal(tiles.find(t=>t.key==='swapPv').rows.length,0);
+});
+
 test('physical crude displays its exact total volume and independent-side contractual PV',()=>{
  const crude={...fixture.holdings[0],instrumentType:'physical_crude',contractIdentityKind:'crude_instrument',direction:'receive',
   quantity:'1000',lots:null,executionPrice:null,fixedPrice:'70',mark:'80',markMinusPrice:null,executionPnl:null,presentValue:'9900',measure:'crude_contractual_present_value',unavailableReason:null};
