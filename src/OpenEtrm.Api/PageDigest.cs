@@ -48,7 +48,7 @@ internal static class PageDigest
     internal static string Shown(JsonNode? node)=>node is JsonObject amount?Text(amount["display"]):
         node is null?"unavailable":Text(node);
     internal static string Count(int value)=>UnitOperations.Display([new(value.ToString(CultureInfo.InvariantCulture),0,null,true)])[0];
-    internal static string Header(string page,TurnPin pin)=>$"Page: {page} | As of: {(pin.Frame is {} f?Plain(f.Name)+" ("+f.At.ToString("O",CultureInfo.InvariantCulture)+")":"none")} | cutoff: {pin.Cutoff.ToString("O",CultureInfo.InvariantCulture)}";
+    internal static string Header(string page,TurnPin pin)=>$"Page: {page} | As of: {(pin.Frame is {} f?Plain(f.Name)+" ("+f.At.ToString("O",CultureInfo.InvariantCulture)+")":"none")} | cutoff: {(pin.Resolved?pin.Cutoff.ToString("O",CultureInfo.InvariantCulture):"not acquired")}";
     static string Scope(ImmutableArray<Guid> ids)=>ids.IsEmpty?"all authorized":string.Join(',',ids.Order());
     static string Identity(JsonObject row)=>Text(row["tradeId"])+":"+Text(row["bindingId"]);
     // Comparison preserves exact decimal and rational page values, without conversion to floating point.
@@ -277,7 +277,7 @@ public sealed partial class AgentTools
             var digestTargets=digest.Targets.Select((target,i)=>new IssuedTarget(NavigationTargets.Handle(targets.Next+i),target)).ToImmutableArray();
             var digestValue=new JsonObject{["text"]=digest.Text,["presentation"]=WalkthroughPlans.Capabilities(page),["targets"]=new JsonArray([..digestTargets.Select(i=>(JsonNode?)new JsonObject{["handle"]=i.Handle,["label"]=i.Target.Label})])};
             if(screens is not null)digestValue["screens"]=screens;
-            var envelope=new JsonObject{["operation"]="workspace.digest_v1",["context"]=new JsonObject{["knowledge"]=turn.Pin.Operational?"current_operations":turn.Pin.Working?"working_data":"retained",["contextId"]=turn.Pin.Operational?null:turn.Pin.ContextId.ToString(),["cutoff"]=turn.Pin.Cutoff.ToString("O",CultureInfo.InvariantCulture)},["amountDisplay"]=ToolAmountDisplay.Implementation,["result"]=digestValue};
+            var envelope=new JsonObject{["operation"]="workspace.digest_v1",["context"]=new JsonObject{["knowledge"]=turn.Pin.Operational?"current_operations":turn.Pin.Working?"working_data":"retained",["contextId"]=turn.Pin.ContextId==Guid.Empty?null:turn.Pin.ContextId.ToString(),["cutoff"]=turn.Pin.Resolved?turn.Pin.Cutoff.ToString("O",CultureInfo.InvariantCulture):null},["amountDisplay"]=ToolAmountDisplay.Implementation,["result"]=digestValue};
             return Bounded(envelope,digest.Rows,turn.OutputLimits) is {} content?Step(null,content,ToolStepEnd.Result) with{ReadPages=[..readPages],ReadFocus=arguments.Mode=="overview"&&PageReports.DigestView(turn.PageReport) is not null&&PageFocus.From(turn.PageReport)?.PivotCell is not null?turn.PageReport.GetProperty("focus").Clone():null,Issued=digestTargets}:throw new ToolRefusal("result_too_large");
         }
         catch(ToolRefusal e){return Step(e.Code,Refusal(e.Code),ToolStepEnd.Refusal);}

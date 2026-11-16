@@ -30,7 +30,7 @@ def run():
             f"FROM {schema}.{table} x WHERE x.catalog_id=ANY(ARRAY[{selected}])) digest" for schema, table in tables) + ')s;')
 
     def before(query, migration):
-        if migration.name != '0341_gas_park_custody.sql':
+        if migration.name != '0344_gas_park_custody.sql':
             return
         signatures = ['security.record_cash_payment(uuid,jsonb,timestamptz)', 'risk.authorized(risk.jobs)', 'risk.worker_read()',
             'risk.needs_gas(risk.jobs)', 'risk.claim(integer,text)', 'risk.owned_attempt(uuid,uuid,boolean,boolean)', 'risk.bind(uuid,uuid)']

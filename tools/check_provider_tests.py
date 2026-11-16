@@ -8,6 +8,7 @@ import subprocess
 import time
 from uuid import uuid4
 from assistant_context import ISSUER, Contexts, check_guard, expect, holding, refused, refused_at, state, waiting
+from assistant_prompt_fixture import INSTRUCTION, PROMPT, configure_probe
 from check_model_qualification import command as provider_command, terms
 from check_model_versions import capabilities
 
@@ -99,6 +100,7 @@ def usage(*dimensions):
 def run_checks(query, psql, manifest, environment, admin):
     """`admin` is a session of the preview administrator, shared with the other modules."""
     contexts = Contexts(query, manifest)
+    configure_probe(admin)
     passed = 0
 
     def check(name, condition=True):
@@ -269,7 +271,8 @@ def run_checks(query, psql, manifest, environment, admin):
           "identifiers, the mapping, its parameters and the attested key, sealed",
           first == {'call': call, 'identifier': 'model-synthetic-tested', 'acceptedServed': ['model-synthetic-tested-served'],
                     'mapping': 'messages_v1', 'reasoning': 'low', 'maxOutputTokens': 256, 'provider': provider_id, 'vendor': 'anthropic',
-                    'credentialVersion': credential['version'], 'nonce': credential['nonce'], 'ciphertext': credential['ciphertext'], 'tag': credential['tag']})
+                    'credentialVersion': credential['version'], 'nonce': credential['nonce'], 'ciphertext': credential['ciphertext'], 'tag': credential['tag'],
+                    'testInstructions': INSTRUCTION, 'testQuestion': PROMPT})
     check('the record pins the current capability version, the attested key and terms, the price in force at its start, the cost method, '
           'the worker generation, the administrator and the token digest',
           (stored['operation_id'], stored['actor_id'], stored['token_digest'], stored['generation'], stored['model_version'],
@@ -499,9 +502,9 @@ def run_checks(query, psql, manifest, environment, admin):
             ('its principal', f"SELECT id FROM security.principals WHERE id='{contexts.administrator}' FOR NO KEY UPDATE",
              r'replayed_test\(.*\) line \d+ at assignment', None),
             ('its model row', f"SELECT id FROM assistant.models WHERE id='{tested}' FOR UPDATE",
-             r'open_test\(.*\) line \d+ at assignment', ('security.principals', 'RowShareLock')),
+             r'open_test_without_prompt\(.*\) line \d+ at assignment', ('security.principals', 'RowShareLock')),
             ('its record write', f"SELECT sequence FROM assistant.price_revisions WHERE model_id='{tested}' AND sequence=2 FOR UPDATE",
-             r'open_test\(.*\) line \d+ at PERFORM', ('assistant.model_calls', 'RowExclusiveLock'))):
+             r'open_test_without_prompt\(.*\) line \d+ at PERFORM', ('assistant.model_calls', 'RowExclusiveLock'))):
         failure = contexts.expiring(psql, environment, 'context', lock, statement, held=held)
         check(f'a test waiting for {wait} with an expired request context is refused at its recheck',
               refused_at(failure, '42501', rf'function assistant\.{site}'))

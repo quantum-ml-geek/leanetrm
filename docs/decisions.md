@@ -5570,8 +5570,90 @@ catch a future-effective agreement already known at opening. Generated close
 activation, broader Park and Loan terms and other gas services need their own
 qualified consumers. See [Park and Loan contracts](gas-park-loan.md).
 
+## D407 — Requested assistant context and installation-owned prompts
 
-## D407 · Physical storage assets and independently tracked activity
+Assistant admission retains selection identity and configured prompt versions only.
+It does not read the page, serialize a market frame or capture financial knowledge.
+A financial tool request acquires the selected context once, with original actor,
+session, deadline and worker-generation fencing. Current knowledge is certified at
+that first financial request; retained knowledge stays at its explicitly selected
+certificate. Exact-operation discovery can acquire the certificate necessary to
+construct the financial request. Broad discovery and presentation remain independent
+of financial inputs. Current-only execution does not imply context-free execution.
+
+Exact recorded-close relationships replace repeated source-matrix copies for this
+consumer, preserving historical frame aliases separately. Existing retained frames,
+results and completed operation retries remain readable. No booked input or selected
+close is substituted, and no production database is rewritten by this change.
+
+Application, agent, page and tool guidance are installation-owned immutable settings.
+Missing optional guidance adds nothing; absence is pinned as well as configured
+versions. No production instructions or prompt defaults ship in public source or
+migrations. Provider connectivity tests also use configured text and retain its exact
+versions. Only explicitly synthetic test configuration belongs in verification fixtures.
+Formal tool schemas, business constraints, authorization and separate human approval
+remain enforced in code and cannot be overridden by any prompt.
+
+A selected Park and Loan trade admits questions under the Blotter prompt. Its
+unqualified trade read returns `page_not_supported` without financial acquisition;
+it cannot dispatch the swap reader. The UI identifies that read limitation.
+
+Publication and deployment remain separate from local implementation and qualification.
+
+## D408 · A fitted surface stores its series' value and sensitivities, and Options reads them
+
+2026-11-15. Decided by the owner, who left the choice of approach to the builder.
+Takes strategies' prerequisites, option sensitivities and their graphics from the
+items D288 left open. Option valuation, Risk reports, trading P&L and every
+value they state are unchanged.
+
+- **One route.** A listed series' delta, gamma, vega and one-day theta are
+  differences of its ordinary instrument PV under the shared price, volatility
+  and clock layers, through the common finite-difference sampler
+  ([valuation layers](valuation-context-layers.md)). Each series is a
+  one-contract holding of its own instrument. No pricer, discount formula or
+  derivative algorithm is added, and none is approximated for display.
+- **Selection.** Policy `option_sensitivities_layers_v1` is stated in full by
+  the fit that uses it: the price bump and the agreement its estimates must
+  reach, as a trading P&L report selects them (D394), and a volatility bump of
+  0.01. Delta and gamma come from the underlying future's price axis, vega from
+  the series' declared volatility input, held under the price and clock samples
+  (`option_implied_volatility_held_v1`), and theta from one calendar day of
+  model decay (D398) with the shared discount roll.
+- **Clock.** A fit at a recorded close counts its day on that close
+  convention's calendar clock and names none. A fit at a working snapshot names
+  one of the offered clocks. Either is refused otherwise with
+  `option_sensitivity_policy`. Admission pins the clock with the fit's other
+  inputs; where a convention's clock cannot be read no day is selected and
+  theta is missing.
+- **Missing is missing.** A series valued at intrinsic has its settlement as
+  its value and no sensitivities (`option_at_intrinsic`). An estimate whose
+  half, whole and double bumps do not agree is `sensitivity_unstable`. A sample
+  the valuation refuses leaves its measures missing with the refusing code, and
+  a day that reaches expiry leaves theta missing. Nothing is clamped or zero.
+- **Stored with the surface.** The fit job computes the analytics and the
+  surface states them per series with the selection, whether each series is in
+  the money, each expiry's at-the-money strike and days to expiry. The stated
+  selection is part of what a refit is compared with: other content under the
+  same inputs and selection stays `vol_surface_nondeterministic`, and another
+  selection is a new revision. Surfaces stored before migration 0341 state no
+  selection and are removed for refitting.
+- **Options.** A Trading page for readers of market data and trades draws a
+  product's chain from its stored surface and lists booked option positions
+  with those figures scaled by multiplier and signed open lots in the backend.
+  It prices nothing. Sensitivities are added within one underlying future only,
+  and value and theta per currency; a sum with a missing member is missing, and
+  thetas that run to different days are not one sum. A product with no surface
+  at the close shows that and where it is calibrated.
+- **Not Risk.** These are the option model's own sensitivities at the stated
+  selection. They enter no Risk, VaR or P&L report, and the page says so.
+- **Still open.** The strategy viewer and its analysis read; spread, storage,
+  tolling and transport models; strategies across expiries, which need a
+  declared relationship between futures months; futures legs; valuing options
+  from the fitted smile; volatility in Risk; rho; scheduled fitting; assistant
+  reading of the page.
+
+## D409 · Physical storage assets and independently tracked activity
 
 **Status:** implemented operating profile with local managed, native, upgrade and
 browser qualification. Integration and release checks remain separate gates.
@@ -5594,7 +5676,7 @@ agreements, other ratchet laws, loss/conversion rules and complete optionality
 valuation require their own qualified contracts. See
 [storage facility operations](storage-facility-operations.md).
 
-## D408 · Explicit balance-time fees and cumulative independent cash
+## D410 · Explicit balance-time fees and cumulative independent cash
 
 **Status:** implemented bounded profile with disposable local qualification;
 the exact combined artifact and release remain separately gated.
@@ -5626,7 +5708,7 @@ projection remain unqualified. The economic fence includes source-known future,
 zero-rate, rounded-zero and cash-only states. See the [fee contract and actual
 qualification](gas-park-loan-balance-fee.md).
 
-## D409 · Retained-title parking with independent reservations and fee cash
+## D411 · Retained-title parking with independent reservations and fee cash
 
 **Status:** bounded implementation with disposable local qualification; aggregate
 CI, release and production activation remain separate gates.
