@@ -1,6 +1,6 @@
 # Delivery plan and acceptance criteria
 
-D405 locally qualifies a bounded [Park and Loan consumer](gas-park-loan.md):
+D406 locally qualifies a bounded [Park and Loan consumer](gas-park-loan.md):
 explicit booking, native advance and partial return, independent fee cash, shared
 ticket and lifecycle forms, and ordinary/retained current-clock price risk. Real
 browser, native financial and populated-upgrade qualifiers passed. Aggregate CI,
@@ -38,7 +38,7 @@ in the verification runner.
 
 The integrated verification runner requires 189 commands, including required
 Park and Loan native, populated-upgrade, retained-worker and browser qualifiers,
-with domain, native database, agent and browser coverage. Local checks at D405
+with domain, native database, agent and browser coverage. Local checks at D406
 passed 738 managed core checks and 1,889 frontend checks. The earlier D403
 checkpoint passed 737 managed core checks, 88 rate checks and 28 owned lifecycle
 browser checks; D404 passed 1,866 frontend and 122 Python checks.

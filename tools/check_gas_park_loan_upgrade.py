@@ -34,8 +34,18 @@ def run():
         for change in changes:
             rejected(lambda: query('BEGIN;' + change + migration_body(migration.read_text()) + 'ROLLBACK;'),
                 'gas_park_loan_upgrade: unexpected gas worker classifier')
+        prompt = 'assistant.is_prompt_page(text)'
+        prompt_changes = [f"ALTER FUNCTION {prompt} {setting};" for setting in [
+            "STABLE", "STRICT", "LEAKPROOF", "PARALLEL SAFE", "SECURITY DEFINER", "SET work_mem='64kB'", "OWNER TO openetrm_runtime"]]
+        prompt_changes += [f"GRANT EXECUTE ON FUNCTION {prompt} TO openetrm_runtime;",
+            f"DO $$DECLARE d text=pg_get_functiondef('{prompt}'::regprocedure);BEGIN "
+            "EXECUTE replace(d,'AS $function$','AS $function$ /* synthetic drift */ ');END$$;"]
+        for change in prompt_changes:
+            rejected(lambda: query('BEGIN;' + change + migration_body(migration.read_text()) + 'ROLLBACK;'),
+                'gas_park_loan_prompt_predecessor')
         query('BEGIN;SET LOCAL search_path=security,risk,public;' + migration_body(migration.read_text()) + 'ROLLBACK;')
         print('PASS Park and Loan upgrade refuses gas classifier source, owner, admission, settings and ACL drift under any caller search path', flush=True)
+        print('PASS Park and Loan entry prompt registration refuses source, owner, language settings and ACL drift', flush=True)
         reference, market, security, manifest = fixture(root)
         for sql in [reference, market, security]:
             query(sql)

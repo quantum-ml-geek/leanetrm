@@ -10,7 +10,11 @@ from gas_park_loan_valuation import checkpoint
 
 
 def checks(query, manifest):
+    assert query("SELECT assistant.is_prompt_page('blotter_new_park_loan');") == 't'
+    assert query("SELECT assistant.is_prompt_page('synthetic_unlisted_page');") == 'f'
     f = ParkLoanFixture(query, manifest)
+    from gas_park_loan_presence import checks as presence
+    presence(f, 'd1000000-0000-0000-0000-000000000001', f.capture(), f.at)
     if not os.environ.get('DOTNET'):
         print('Native-only qualification; set DOTNET to the pinned SDK executable to include managed whole-book PV/scenario checkpoints.', flush=True)
     for kind, perspective, direction in [('loan', 'customer', 1), ('park', 'provider', 1),

@@ -5544,7 +5544,7 @@ pushes retain that path so they cannot strand earlier runtime changes. See
 [CI impact selection](ci-impact.md) for the executable boundaries and remaining
 qualification. No application, schema or financial contract changes are included.
 
-## D405 · Bookable Park and Loan with independent native owners
+## D406 · Bookable Park and Loan with independent native owners
 
 **Status:** implemented with disposable local qualification; aggregate CI and release qualification remain open.
 

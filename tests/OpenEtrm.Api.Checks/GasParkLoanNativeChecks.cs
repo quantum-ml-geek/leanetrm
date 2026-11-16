@@ -18,6 +18,8 @@ internal static class GasParkLoanNativeChecks
             throw new Exception("Service qualification requires an owned disposable PostgreSQL cluster.");
         var login=new NpgsqlConnectionStringBuilder{Host=host,Port=55439,Database="postgres",Username="preview_runtime",Timezone="UTC",Pooling=false};
         await using var database=new PreviewDatabase(manifest,new NpgsqlConnectionStringBuilder(login.ConnectionString){Username="preview_authenticator"},login);
+        if(fixture.Text("checkpoint")=="loan_customer booked before advance")
+            foreach(var retainOriginal in new[]{false,true})await PresenceRollback(database,fixture,retainOriginal);
         await database.WithIdentity("trader",null,async(connection,ct)=>
         {
             var at=fixture.Instant("at");var context=fixture.Id("contextId");var book=fixture.Id("bookId");var trade=fixture.Id("tradeId");
@@ -105,5 +107,37 @@ internal static class GasParkLoanNativeChecks
             Console.WriteLine($"PASS native service whole book: {fixture.Text("checkpoint")}, {services.Length} service contributions, exact base/up/down {basis.ToExactString()}/{up.ToExactString()}/{down.ToExactString()}");
             return true;
         },default);
+    }
+
+    private static async Task PresenceRollback(PreviewDatabase database,JsonElement fixture,bool retainOriginal)
+    {
+        await database.WithIdentity("trader",null,async(connection,ct)=>
+        {
+            var catalog=database.Manifest.CatalogId;var at=fixture.Instant("at");var context=fixture.Id("contextId");
+            var source=(await new KnowledgeStore(catalog).Read(connection,context,ct)).Context;
+            var original=(await new KnowledgeStore(catalog).Capture(connection,new(fixture.Text("businessDate"),null,"current"),ct)).Context;
+            if(original.ContextId==context)throw new Exception("The presence restoration fixture needs distinct certified source identities.");
+            DateTimeOffset? until=retainOriginal?await TradingContext.AdmitSource(database,connection,original,at,ct):null;
+            await using(var save=ScheduleStore.Command(connection,"SAVEPOINT presence_source"))await save.ExecuteNonQueryAsync(ct);
+            try
+            {
+                await PinnedContext.BindExact(connection,catalog,source,ct);
+                await TradingContext.Bind(connection,catalog,source,at,ct);
+                var frame=new InputFrame(Guid.NewGuid(),"Synthetic temporary presence source",at,PublishedSchedules.ContextDate(source),[],
+                    ImmutableDictionary<string,ImmutableArray<Guid>>.Empty,context);
+                if(!await GasParkLoanPositions.Present(connection,database,frame,[fixture.Id("bookId")],[fixture.Id("tradeId")],ct))
+                    throw new Exception("The exact service membership disappeared from its immutable presence cut.");
+            }
+            finally
+            {
+                await using var restore=ScheduleStore.Command(connection,"ROLLBACK TO SAVEPOINT presence_source;RELEASE SAVEPOINT presence_source");
+                await restore.ExecuteNonQueryAsync(ct);
+            }
+            if(retainOriginal&&until!=await TradingContext.AdmitSource(database,connection,original,at,ct))
+                throw new Exception("A temporary presence read replaced or extended the original command source.");
+            return true;
+        },default);
+        Console.WriteLine(retainOriginal?"PASS presence admission preserves a different original source across read rollback":
+            "PASS presence admission commits after its temporary bound source is rolled back");
     }
 }

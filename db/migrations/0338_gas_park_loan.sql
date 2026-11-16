@@ -566,6 +566,29 @@ CREATE FUNCTION security.gas_park_loan_directory(catalog uuid,context uuid,as_of
  SELECT security.gas_park_loan_directory(catalog,context,as_of,ARRAY[]::uuid[],ARRAY[]::uuid[]);
 $$;
 
+-- An immutable existence read keeps its original current authority without
+-- claiming the command's single admitted source or retaining a temporary bind.
+CREATE FUNCTION security.require_gas_park_loan_presence(catalog uuid,context uuid,as_of timestamptz,books uuid[],trades uuid[],until_at timestamptz) RETURNS void
+ LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog AS $$
+BEGIN
+ PERFORM settlement_data.require_futures_margin_preview(catalog,until_at);
+ PERFORM security.require_trading_history(catalog,context);
+ PERFORM security.require_gas_park_loan_worker_scope(catalog,context,as_of,books,trades,NULL);
+ IF books IS NULL OR cardinality(books) NOT BETWEEN 1 AND 128 OR trades IS NULL OR cardinality(trades)>4096
+  OR EXISTS(SELECT 1 FROM unnest(trades)t WHERE t IS NULL)
+  OR '00000000-0000-0000-0000-000000000000'::uuid=ANY(books)
+  OR '00000000-0000-0000-0000-000000000000'::uuid=ANY(trades)
+  OR(SELECT count(DISTINCT b) FROM unnest(books)b)<>cardinality(books)
+  OR(SELECT count(DISTINCT t) FROM unnest(trades)t)<>cardinality(trades)
+  OR security.trading_context_day_matches(catalog,context,as_of) IS NOT TRUE
+  OR NOT EXISTS(SELECT 1 FROM market_data.temporal_contexts t JOIN trading.contexts x ON(x.catalog_id,x.context_id)=(t.catalog_id,t.id)
+   WHERE(t.catalog_id,t.id)=(catalog,context))
+  OR EXISTS(SELECT 1 FROM unnest(books)b WHERE b IS NULL OR NOT EXISTS(SELECT 1 FROM trading.books k WHERE(k.catalog_id,k.id)=(catalog,b)
+   AND trading.gas_owned_visible(catalog,k.publication_order,k.effective_at,context,as_of)))
+ THEN RAISE EXCEPTION 'gas_park_loan_scope';END IF;
+ PERFORM settlement_data.require_futures_margin_preview(catalog,until_at);
+END$$;
+
 CREATE FUNCTION security.require_gas_park_loan_scope(catalog uuid,context uuid,as_of timestamptz,books uuid[],trades uuid[]) RETURNS boolean
  LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog AS $$
 DECLARE deadline timestamptz;present boolean;BEGIN
@@ -687,7 +710,7 @@ REVOKE ALL ON FUNCTION risk.needs_gas(risk.jobs) FROM PUBLIC,openetrm_runtime,op
 
 DO $$DECLARE signature regprocedure;BEGIN
  FOR signature IN SELECT p.oid::regprocedure FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
-  WHERE(n.nspname='security' AND p.proname IN('gas_park_loan_authority','book_gas_park_loan','read_gas_park_loan','record_gas_park_loan','gas_park_loan_directory','gas_park_loan_booking_status','require_gas_park_loan_scope','gas_park_loan_command_receipt','gas_park_loan_trade_head','gas_park_loan_projection_fence','require_gas_park_loan_worker_scope','risk_gas_park_loan_trade_heads'))
+  WHERE(n.nspname='security' AND p.proname IN('gas_park_loan_authority','book_gas_park_loan','read_gas_park_loan','record_gas_park_loan','gas_park_loan_directory','gas_park_loan_booking_status','require_gas_park_loan_scope','require_gas_park_loan_presence','gas_park_loan_command_receipt','gas_park_loan_trade_head','gas_park_loan_projection_fence','require_gas_park_loan_worker_scope','risk_gas_park_loan_trade_heads'))
    OR(n.nspname='trading' AND p.proname IN('apply_park_loan_native','gas_park_loan_keys','gas_park_loan_fact','check_gas_park_loan_integrity','guard_gas_park_loan_correction')) LOOP
   EXECUTE format('ALTER FUNCTION %s OWNER TO openetrm_security_owner',signature);
   EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC',signature);
@@ -710,4 +733,20 @@ GRANT EXECUTE ON FUNCTION security.read_gas_park_loan(uuid,uuid,uuid,timestamptz
  security.gas_park_loan_directory(uuid,uuid,timestamptz),security.gas_park_loan_directory(uuid,uuid,timestamptz,uuid[],uuid[]),
  security.gas_park_loan_directory(uuid,uuid,timestamptz,uuid[],uuid[],uuid[]),security.gas_park_loan_authority(uuid,boolean) TO openetrm_risk_worker;
 GRANT EXECUTE ON FUNCTION security.risk_gas_park_loan_trade_heads(uuid,uuid[],uuid[]) TO openetrm_runtime,openetrm_risk_worker;
+GRANT EXECUTE ON FUNCTION security.require_gas_park_loan_presence(uuid,uuid,timestamptz,uuid[],uuid[],timestamptz) TO openetrm_runtime,openetrm_risk_worker;
+-- The installed entry page shares the ordinary immutable prompt contract.
+DO $prompt_page$
+DECLARE definition text;before text='''blotter_new_gas''';BEGIN
+ SELECT pg_get_functiondef(p.oid) INTO STRICT definition FROM pg_proc p
+ WHERE p.oid='assistant.is_prompt_page(text)'::regprocedure
+  AND encode(sha256(convert_to(p.prosrc,'UTF8')),'hex')='23f84ecb327ed0d2c0fe02c7c5dd76d7c90c9a06d742747fc533a0ad3a882a59'
+  AND pg_get_userbyid(p.proowner)='openetrm_security_owner' AND NOT p.prosecdef AND p.provolatile='i'
+  AND p.prokind='f' AND p.proparallel='u' AND NOT p.proisstrict AND NOT p.proleakproof AND p.provariadic=0
+  AND p.proargmodes IS NULL AND p.proargnames=ARRAY['page'] AND p.prolang=(SELECT oid FROM pg_language WHERE lanname='sql')
+  AND p.proconfig=ARRAY['search_path=pg_catalog'] AND p.prorettype='boolean'::regtype
+  AND p.proacl='{openetrm_security_owner=X/openetrm_security_owner}'::aclitem[];
+ IF(length(definition)-length(replace(definition,before,'')))/length(before)<>1 THEN RAISE EXCEPTION 'gas_park_loan_prompt_predecessor';END IF;
+ EXECUTE replace(definition,before,before||',''blotter_new_park_loan''');
+EXCEPTION WHEN no_data_found THEN RAISE EXCEPTION 'gas_park_loan_prompt_predecessor';
+END $prompt_page$;
 COMMIT;

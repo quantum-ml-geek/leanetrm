@@ -1,6 +1,6 @@
 # Architecture and domain contracts
 
-D405 adds locally qualified [Park and Loan commercial booking](gas-park-loan.md)
+D406 adds locally qualified [Park and Loan commercial booking](gas-park-loan.md)
 over independent native ownership and cash. The bounded title-transfer profile
 uses shared entry, lifecycle and current-clock interactive/retained price risk.
 Release qualification and broader service capabilities remain separate.

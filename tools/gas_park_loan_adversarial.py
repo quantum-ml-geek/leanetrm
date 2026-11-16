@@ -20,11 +20,20 @@ def checks(f, booking, booked, accepted, operation, original_context, advance, r
         assert f.call(bound + f"SELECT security.require_gas_park_loan_scope('{catalog}','{selected}','{f.at}',ARRAY['d1000000-0000-0000-0000-000000000002']::uuid[],ARRAY[]::uuid[]);") == 'f'
         identities = f.call(bound + f"SELECT security.risk_gas_park_loan_trade_heads('{catalog}',ARRAY['{booking['bookId']}']::uuid[],ARRAY['{trade}']::uuid[])::text;")
         assert json.loads(identities) == dict(trade_id=trade, book_id=booking['bookId'], revision=1)
+        f.call(f"SELECT security.require_gas_park_loan_presence('{catalog}','{selected}','{f.at}',ARRAY['{booking['bookId']}']::uuid[],ARRAY[]::uuid[],"
+            f"settlement_data.futures_margin_preview_authority('{catalog}'));")
         rejected(lambda: read(selected), 'gas_owned_denied')
         rejected(lambda: command('advance', advance, operation=operation, context=original_context), 'gas_owned_denied')
         rejected(lambda: f.call(f"SELECT security.gas_park_loan_booking_status('{catalog}','{booking['operationId']}');"), 'gas_owned_denied')
     finally:
         f.query(f"INSERT INTO security.role_permissions VALUES('{role}','ReadGasOwnedHoldings');")
+    guard = f"SELECT security.require_gas_park_loan_presence('{catalog}','{selected}','{f.at}',ARRAY['{booking['bookId']}']::uuid[],ARRAY[]::uuid[],"
+    rejected(lambda: f.call(guard + "clock_timestamp()-interval '1 second');"), 'futures_margin_denied')
+    f.query(f"DELETE FROM security.role_permissions WHERE(role_id,permission)=('{role}','ReadTrades');")
+    try:
+        rejected(lambda: f.call(guard + "clock_timestamp()+interval '1 minute');"), 'futures_margin_denied')
+    finally:
+        f.query(f"INSERT INTO security.role_permissions VALUES('{role}','ReadTrades');")
     assert command('advance', advance, operation=operation, context=original_context) == accepted
     grants_until = f.query(f"SELECT granted_to FROM security.role_grants WHERE role_id='{role}' AND principal_id="
         "(SELECT principal_id FROM security.identity_bindings WHERE issuer='https://preview.invalid' AND subject='trader');")

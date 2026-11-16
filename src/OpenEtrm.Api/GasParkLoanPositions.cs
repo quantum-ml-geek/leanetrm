@@ -44,6 +44,16 @@ internal sealed record GasParkLoanPosition(JsonElement Agreement,JsonElement Boo
 internal static class GasParkLoanPositions
 {
     internal const string Type=GasParkLoanTicket.Product;
+    private sealed record PresenceAdmission(Guid Catalog,Guid Context,DateTimeOffset At,ImmutableArray<Guid> Books,
+        ImmutableArray<Guid> Trades,DateTimeOffset Until):ICommitAdmission
+    {
+        public async Task RequireCommit(NpgsqlConnection connection,CancellationToken ct)
+        {
+            await using var guard=ScheduleStore.Command(connection,"SELECT security.require_gas_park_loan_presence($1,$2,$3,$4::uuid[],$5::uuid[],$6)",
+                Catalog,Context,At,Books.ToArray(),Trades.ToArray(),Until);
+            await guard.ExecuteNonQueryAsync(ct);
+        }
+    }
 
     internal static async Task<bool> Present(NpgsqlConnection connection,PreviewDatabase database,InputFrame frame,
         ImmutableArray<Guid> books,ImmutableArray<Guid>? selectedTrades,CancellationToken ct)
@@ -52,10 +62,15 @@ internal static class GasParkLoanPositions
             selectedTrades is {} trades&&(trades.IsDefault||trades.Any(id=>id==Guid.Empty)||trades.Distinct().Count()!=trades.Length))
             throw Missing("Select the certified service context and explicit exact book and trade scopes.");
         if(books.IsEmpty||selectedTrades is {} empty&&empty.IsEmpty)return false;
-        await TradingContext.AdmitSource(database,connection,context,frame.At,frame.BusinessDate,ct);
+        await using var capture=ScheduleStore.Command(connection,"SELECT settlement_data.futures_margin_preview_authority($1)",database.Manifest.CatalogId);
+        var until=new DateTimeOffset((DateTime)(await capture.ExecuteScalarAsync(ct))!);
         await using var probe=ScheduleStore.Command(connection,"SELECT security.require_gas_park_loan_scope($1,$2,$3,$4::uuid[],$5::uuid[])",
             database.Manifest.CatalogId,context,frame.At,books.ToArray(),selectedTrades?.ToArray()??Array.Empty<Guid>());
-        return(bool)(await probe.ExecuteScalarAsync(ct))!;
+        var present=(bool)(await probe.ExecuteScalarAsync(ct))!;
+        // An existence read does not own the command's single source slot. Its
+        // original authority must survive a caller restoring a temporary view.
+        database.RegisterCommitAdmission(connection,new PresenceAdmission(database.Manifest.CatalogId,context,frame.At,books,selectedTrades??[],until));
+        return present;
     }
 
     internal static async Task<ImmutableArray<GasParkLoanPosition>> Read(NpgsqlConnection connection,PreviewDatabase database,InputFrame frame,

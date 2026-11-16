@@ -102,6 +102,13 @@ def checks(query, manifest):
             probe_call(f"security.gas_park_loan_directory({','.join(arguments)})")
 
         probe(args)
+        presence = [args[0],args[1],args[2],args[3],args[5],f"settlement_data.futures_margin_preview_authority('{f.catalog}')"]
+        probe_call(f"security.require_gas_park_loan_presence({','.join(presence)})")
+        for index, value in [(1,f"'{uuid4()}'"),(2,f"'{packet['at']}'::timestamptz+interval '1 second'"),
+                             (3,f"ARRAY['{uuid4()}']::uuid[]"),(4,f"ARRAY['{uuid4()}']::uuid[]")]:
+            forged=list(presence);forged[index]=value
+            rejected(lambda: probe_call(f"security.require_gas_park_loan_presence({','.join(forged)})"), 'risk_job_scope')
+        rejected(lambda: probe_call(f"security.require_gas_park_loan_presence({','.join(presence[:-1])},clock_timestamp()-interval '1 second')"), 'futures_margin_denied')
         rejected(lambda: probe([f"'{uuid4()}'", *args[1:]]), 'gas_owned_denied')
         for index, value in [(1, f"'{uuid4()}'"),
                              (2, f"'{packet['at']}'::timestamptz+interval '1 second'"),
