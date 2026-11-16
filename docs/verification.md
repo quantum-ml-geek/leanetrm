@@ -20,23 +20,19 @@ of the workspace partition. Dated records below preserve earlier results.
 
 For the current complete command and prerequisites, start with
 [Required tools](#required-tools). `tools/check_all.py` runs all suites by
-default; `--group workspace|reference|standard|exchange|assistant|risk|trading|lifecycle|physical|gas|portfolio|settlement|ppa|recovery`
-selects one CI partition. CI requires every partition and its aggregate check
-to succeed. The implementation records below retain the results and limits of
-each dated increment; older check counts are not the current suite size.
+default. CI adds four shared groups (`repository`, `frontend`, `managed`,
+`database`) to the fourteen existing integration partitions. Pull requests select
+the union of declared path consumers; master pushes and manual dispatch retain
+the complete gate. See [impact selection](ci-impact.md) for rules and limits.
 
-The reference-data, crude/LNG, gas and statistical-risk previews have separate
-required partitions. Each job keeps locked preparation and the shared domain and
-upgrade checks; the union contains every preview exactly once. Runner-contract
-checks enforce that coverage and bound each preview queue to twelve suites.
-The standard browser and exchange-option workflows each have a dedicated partition.
-Jobs have a 90-minute limit, including preparation and shared-runner variation;
-cancellation still fails the aggregate release gate.
-
-The gas partition runs the native amendment upgrade and real application checks.
-Every partition retains fresh-checkout preparation and the shared checks; the
-required aggregate waits for all fourteen partitions. The command-union checks require
-each owned consumer exactly once across the matrix.
+Shared behavior checks run once across a full matrix. Every integration job
+retains locked preparation in its own checkout and owned disposable resources.
+The reference, exchange, assistant, risk, trading, lifecycle, physical, gas,
+portfolio, settlement, PPA, recovery, workspace and standard partitions retain
+their existing consumers. Runner-contract checks require all full-gate commands,
+each behavior command once, and each preview queue bounded to twelve suites.
+Jobs keep their 90-minute limit; the existing aggregate check rejects failed,
+cancelled or skipped selection/jobs. Lightweight groups do not install PostgreSQL.
 
 The current integrated runner contains 185 commands: 64 shared checks,
 64 isolated application previews and 57 partition-specific native/application
@@ -2352,33 +2348,20 @@ pushes to `master`, pull requests and manual dispatch. A branch push without a p
 request runs no CI; its pull request run verifies the same head. Checkout and tool-setup actions are
 pinned to exact commits. The checks job has read-only repository access, does not
 persist checkout credentials and requires no repository secrets. The full local
-`check_all.py` command remains available. CI partitions its existing stages into
-nine groups (`check_all.py` `GROUPS`): `workspace`, `standard`, `assistant`,
-`trading`, `lifecycle`, `portfolio`, `settlement`, `ppa` and `recovery`;
-each fresh checkout repeats all shared preparation and checks. The union covers
-every full-gate stage, with each owned qualification suite in exactly one group.
-Standard and trading have 60-minute job deadlines; the other groups have
-45 minutes. Individual command and owned-resource deadlines remain in force.
-The lifecycle group runs native margin, scheduling, delivery, ownership and
-authority qualification, including its two application browser suites. A November
-2026 trading run reached its 60-minute limit while still passing checks; these
-native stages had taken about 21 minutes before the trading previews. Separating
-them preserves the complete gate without increasing its existing deadlines.
-The original partitions followed measured preview durations on four October 2026 runs: shared preparation
-took about 2.5 minutes per group, while the scheduled swap settlement (10-15
-minutes), renewable close recovery (13-20), standard browser (8-13) and
-page-assistant (about 6) stages dominated. Those long stages run in `settlement`,
-`recovery`, `standard` and `assistant` so that no group queues two of them. `trading` owns swap pricing and
-observation schedules; `portfolio` owns portfolio valuation, close workers and the
-Blotter desk's valuation-status and desk-field checks; `workspace` keeps the
-remaining workspace browser checks. Every preview stage still runs once across the matrix.
-Group completion is reported separately from full-gate completion, and the final required check
-accepts only successful completion of every group. Failures, cancellation and
-skipped groups cannot qualify. It does not publish packages or
-deploy the application. A separate, gated `publish` job runs only after successful
-checks on a push to `master` when release publication is explicitly enabled. It
-uses the hosted-release environment and scoped write/attestation permissions to
-publish the reviewed release. Pull requests do not trigger that publisher.
+`check_all.py` command remains available. [Impact selection](ci-impact.md)
+chooses from the four shared groups and fourteen integration groups. Shared
+behavior suites run once; each selected integration group performs its own locked
+build and owns its disposable application, browser and database. Each group keeps
+its 90-minute deadline and existing per-command/resource deadlines. The complete
+local gate retains all 185 commands in the same order.
+
+The stable `Stock database and browser checks` aggregate requires successful
+impact selection and every selected job. Failed, cancelled and skipped jobs
+cannot qualify. A separate publisher requires the complete gate for the same
+master push, explicit publication enablement and the hosted-release environment.
+All master pushes remain full because the updater admits a release only for the
+exact current branch head; a documentation push must not strand earlier runtime
+changes. Pull requests never publish an application release.
 
 The job installs stock PostgreSQL 18.6 from the reviewed package lock and uses
 the runner's Chrome. [Dependency caches](ci-dependencies.md) cover NuGet, npm and
