@@ -2197,7 +2197,7 @@ api.MapPost("/options/positions",(HttpContext c,OptionPositionsRequest body)=>Tr
 api.MapPost("/options/strategy/setup",(HttpContext c,OptionStrategySetupRequest body)=>TradingRead(c,body.Context??throw new MarketDataException("option_context","Supply the selected context."),
     (connection,view,ct)=>tradeReads.ReadBound(connection,view,()=>OptionStrategyRead.Setup(connection,database,view,body,ct),ct),expectedConvention:FuturesOptionStore.Convention));
 api.MapPost("/options/strategy/analyze",(HttpContext c,OptionStrategyAnalyzeRequest body)=>TradingRead(c,body.Context??throw new MarketDataException("option_context","Supply the selected context."),
-    (connection,view,ct)=>tradeReads.ReadBound(connection,view,()=>OptionStrategyRead.Analyze(connection,database,view,body,ct),ct),expectedConvention:FuturesOptionStore.Convention));
+    (connection,view,ct)=>OptionStrategyRead.Read(tradeReads,connection,database,view,body,ct),expectedConvention:FuturesOptionStore.Convention));
 // Volatility surfaces: a fit is a job on the retained risk queue, admitted over working data by those who may publish market data
 // and read trades; the read returns the stored revision fitted at the selected close and known at the selected context, and the
 // library lists the stored surfaces with the close each belongs to. No agent tool fits.
@@ -2485,7 +2485,7 @@ AsyncReadPlan PrepareAsyncRead(PreviewSession session,AsyncReadInput input)
             FuturesEditorRequest body=>(connection,view,ct)=>tradeReads.FuturesTrade(connection,view,body.TradeId,body.Revision,ct),
             SwapEditorRequest body=>(connection,view,ct)=>tradeReads.SwapTrade(connection,view,body.TradeId,body.Revision,ct),
             RiskScopeRequest body=>(connection,view,ct)=>tradeReads.ReadBound(connection,view,()=>RiskTradeScope.Directory(connection,database.Manifest.CatalogId,view.CalculationFrame,body,ct),ct),
-            OptionStrategyAnalyzeRequest body=>(connection,view,ct)=>tradeReads.ReadBound(connection,view,()=>OptionStrategyRead.Analyze(connection,database,view,body,ct),ct),
+            OptionStrategyAnalyzeRequest body=>(connection,view,ct)=>OptionStrategyRead.Read(tradeReads,connection,database,view,body,ct),
             _=>(connection,view,ct)=>tradeReads.Read(connection,view,data=>AsyncPortfolioRead(input,connection,data,view.CalculationFrame,ct),ct,
                 referenceScope:ReferenceReadScope.TradeValuation,observationScope:ObservationReadScope.ExactPins)
         };
