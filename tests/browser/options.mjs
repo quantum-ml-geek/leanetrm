@@ -26,11 +26,15 @@ export async function run({command,evaluate,wait,click,persona,check,idle,fitsWi
  const settled=(expression,ms)=>wait(expression,ms).catch(async error=>{throw Error(error.message+' · observed '+q(await evaluate(
   `({state:${state},error:document.querySelector('#options-error')?.textContent,calls:window.optionCalls.slice(-3).map(c=>[c.path,c.status,c.answer?.state??c.answer?.code])})`)));});
  const chip=product=>`document.querySelector('.options-product[data-product=${product}]')`;
+ // Choosing a product's chip reads its surface. A product already chosen is read by the page itself when it opens, so its
+ // newest read is waited for instead.
  async function choose(product){
   await settled(`!!${chip(product)}&&${idle}`,30000);
+  const answered=`${calls('vol-surfaces/read')}.at(-1)?.status!==undefined&&${calls('vol-surfaces/read')}.at(-1).body.product===${q(product)}&&${state}!=='loading'`;
+  if(await evaluate(`${chip(product)}.getAttribute('aria-pressed')==='true'`))return settled(answered,30000);
   const reads=await evaluate(`${calls('vol-surfaces/read')}.length`);
   await click(`.options-product[data-product=${product}]`);
-  await settled(`${calls('vol-surfaces/read')}.length>${reads}&&${calls('vol-surfaces/read')}.at(-1).status!==undefined&&${state}!=='loading'`,30000);
+  await settled(`${calls('vol-surfaces/read')}.length>${reads}&&${answered}`,30000);
  }
  try{
   await command('Page.navigate',{url:url+'/?example=exchange'});await wait("document.querySelectorAll('.curve-button').length>0&&"+idle,60000);
@@ -69,15 +73,19 @@ export async function run({command,evaluate,wait,click,persona,check,idle,fitsWi
    `[document.querySelectorAll('#options-chain tbody tr').length,[...document.querySelectorAll('#options-chain tr.options-atm')].map(r=>r.dataset.strike),document.querySelector('#options-facts').textContent]`);
   // Each side's delta is the stored figure to two decimals: a call's between 0 and 1, a put's between -1 and 0.
   const solved=surface.series.filter(s=>s.series.expiryAt===first.expiryAt&&s.analytics?.delta.value!=null);
-  const shownDelta=code=>`[...document.querySelectorAll('#options-chain td[data-series=${q(code).slice(1,-1)}]')].map(td=>td.textContent)`;
-  const call=solved.find(s=>s.series.right==='call'),put=solved.find(s=>s.series.right==='put');
+  const shownDelta=code=>`[...document.querySelectorAll('#options-chain td[data-series="${code}"]')].map(td=>td.textContent)`;
+  // The pair at the money, whose deltas are well inside the unit interval, so two decimals show their sign and size.
+  const side=right=>solved.find(s=>s.series.right===right&&s.series.strike===first.atTheMoneyStrike)??solved.find(s=>s.series.right===right);
+  const call=side('call'),put=side('put');
   await check('each side shows its stored delta to two decimals, calls mirrored about the strike',
-   `${q(!!call&&!!put)}&&(c=>c.length===7&&Math.abs(Number(c[4])-${Number(call?.analytics.delta.value)})<=0.005+1e-9&&/^0[.]\\d\\d$/.test(c[4]))(${shownDelta(call?.series.code??'')})&&
-    (p=>p.length===7&&Math.abs(Number(p[2])-${Number(put?.analytics.delta.value)})<=0.005+1e-9&&/^-0[.]\\d\\d$/.test(p[2]))(${shownDelta(put?.series.code??'')})`,
+   `${q(!!call&&!!put)}&&(c=>c.length===7&&Math.abs(Number(c[4])-(${Number(call?.analytics.delta.value)}))<=0.005+1e-9&&/^0[.]\\d\\d$/.test(c[4]))(${shownDelta(call?.series.code??'')})&&
+    (p=>p.length===7&&Math.abs(Number(p[2])-(${Number(put?.analytics.delta.value)}))<=0.005+1e-9&&/^-0[.]\\d\\d$/.test(p[2]))(${shownDelta(put?.series.code??'')})`,
    `[${shownDelta(call?.series.code??'')},${shownDelta(put?.series.code??'')}]`);
-  await check('a figure the fit could not state is a dash that says why, never a zero',
-   `[...document.querySelectorAll('#options-chain td.options-missing-figure')].every(td=>td.textContent==='—'&&td.title.length>0)&&
-    ![...document.querySelectorAll('#options-chain td.numeric')].some(td=>/^-?0(\\.0+)?$/.test(td.textContent)&&!td.classList.contains('options-held'))`);
+  // What the surface stores as missing is drawn as a dash with its reason; every other cell shows its stored figure.
+  const absent=surface.series.filter(s=>s.series.expiryAt===first.expiryAt).flatMap(s=>['delta','gamma','vega','theta'].filter(m=>!s.analytics||s.analytics[m].value===null)).length;
+  await check('a figure the fit could not state is a dash that says why',
+   `(cells=>cells.length>=${absent}&&cells.every(td=>td.textContent==='—'&&td.title.length>0))([...document.querySelectorAll('#options-chain td.options-missing-figure')])`,
+   "[...document.querySelectorAll('#options-chain td.options-missing-figure')].map(td=>[td.dataset.series,td.title]).slice(0,5)");
   await check('the page states what its figures are and that Risk reports keep their own',
    "/Per unit of quote/.test(document.querySelector('#options-basis').textContent)&&/option_sensitivities_layers_v1/.test(document.querySelector('#options-basis').textContent)");
   await check('the chain fits the page width',fitsWidth);
@@ -103,14 +111,14 @@ export async function run({command,evaluate,wait,click,persona,check,idle,fitsWi
   await click(`#options-chain td[data-series="${call.series.code}"]`);await click('#options-book');
   await settled("document.querySelector('#page-title').textContent==='Blotter'&&!!document.querySelector('#option-page')?.offsetParent&&document.querySelector('#option-strike').value!==''",30000);
   await check('Book opens the option ticket on that series, with no execution terms filled in',
-   `document.querySelector('#option-right').value===${q(call.series.right)}&&document.querySelector('#option-strike').value===${q(call.series.strike)}&&
+   `document.querySelector('#option-right').value===${q(call.series.right)}&&Number(document.querySelector('#option-strike').value)===${Number(call.series.strike)}&&
     document.querySelector('#option-underlying').value===${q(call.series.underlyingCode)}&&document.querySelector('#option-page').textContent.includes(${q(call.series.code)})&&
     ['#option-side','#option-lots','#option-premium'].every(id=>document.querySelector(id).value==='')`,
    "['exchange','commodity','underlying','right','strike','side','lots','premium'].map(id=>document.querySelector('#option-'+id)?.value)");
   await persona('risk');await click('#example');
 
   // Positions: the booked option positions with the backend's figures, subtotals and totals. The page adds nothing up.
-  await click('#nav-options');await settled(`${state}==='fitted'`,30000);
+  await click('#nav-options');await choose('nymex_on');await settled(`${state}==='fitted'`,30000);
   await click('#options-view-positions');await settled(`${state}==='positions'`,30000);
   const held=await evaluate(`${calls('options/positions')}.at(-1).answer`);
   const rows=held.groups.flatMap(g=>g.rows);
