@@ -26,42 +26,47 @@ context by the risk profile: 24 positions in 24 trades over
 5 unique contracts (1 future, 4 financial swaps); the Risk read is one
 factor bump, 3 scenarios, 5 unique valuations and 11 unit pricer calls. Each
 figure is the median of 7 samples after one warm-up. The API's sampled peak
-resident memory was 348 MiB before and 348 MiB after.
+resident memory was 348 MiB before and 337 MiB after.
 
 The wait is `GET access` issued 50 ms after an ordinary `portfolio/risk` read
 starts, from the same session and, as the control, from another session.
 
 | Wait behind a 608 ms read | Before, ms (max) | After, ms (max) |
 | --- | ---: | ---: |
-| Same session | 565.9 (591.4) | 7.7 (23.3) |
-| Another session | 8.0 (19.5) | 7.2 (9.5) |
+| Same session | 565.9 (591.4) | 7.6 (21.7) |
+| Another session | 8.0 (19.5) | 7.5 (10.5) |
 
 | Read | HTTP before, ms | HTTP after, ms | Channel before, ms | Channel after, ms | HTTP bytes | Channel bytes |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `evaluate` | 75.6 | 89.5 | 100.0 | 92.9 | 259,604 | 271,402 |
-| `history` | 75.5 | 97.8 | 82.0 | 85.6 | 2,215 | 2,532 |
-| `trading/directory` | 19.5 | 24.7 | 34.6 | 27.0 | 1,418 | 1,689 |
-| `trading/workspace` | 444.9 | 458.3 | 452.5 | 459.6 | 6,749 | 53,586 |
-| `trading/blotter` | 429.8 | 439.2 | 456.7 | 438.7 | 51,529 | 52,118 |
-| `portfolio/risk/catalog` | 593.6 | 625.0 | 627.0 | 622.6 | 381,809 | 383,339 |
-| `portfolio/risk` | 601.2 | 601.3 | 633.0 | 616.2 | 443,168 | 446,277 |
+| `evaluate` | 75.6 | 83.2 | 100.0 | 83.9 | 259,604 | 271,402 |
+| `history` | 75.5 | 91.1 | 82.0 | 91.2 | 2,215 | 2,532 |
+| `trading/directory` | 19.5 | 33.2 | 34.6 | 30.8 | 1,418 | 1,689 |
+| `trading/workspace` | 444.9 | 470.8 | 452.5 | 478.9 | 6,738 | 53,582 |
+| `trading/blotter` | 429.8 | 432.3 | 456.7 | 440.4 | 51,525 | 52,114 |
+| `portfolio/risk/catalog` | 593.6 | 639.1 | 627.0 | 622.1 | 381,809 | 383,339 |
+| `portfolio/risk` | 601.2 | 620.5 | 633.0 | 617.5 | 443,168 | 446,277 |
 
 An ordinary request no longer waits for another read of its session. An ordinary
-covered read now pays a second identity transaction before it answers, which
-shows as 5 to 22 ms on the three short reads and is within run-to-run variation
-on the others. Bytes are the body as sent with `Accept-Encoding: gzip`; only
-`trading/workspace` is compressed over HTTP, and no channel result is. This is
-one small synthetic workload on one two-processor machine. It does not establish
-capacity, tail latency or behaviour under several users.
+covered read now authorizes again on its sealed evidence before it answers and
+costs about what the channel read costs: 2 to 46 ms more than before in
+this run. A second run of the same build differed from this one by up to 35 ms
+on a single read, so the smaller differences are within run-to-run variation.
+Bytes are the body as sent with `Accept-Encoding: gzip`; only `trading/workspace`
+is compressed over HTTP, and no channel result is. This is one small synthetic
+workload on one two-processor machine. It does not establish capacity, tail
+latency or behaviour under several users.
 
-Correctness on the same machine: the asynchronous workbench check passed 33
-checks, four of them new (an ordinary request proceeds beside a waiting read, a
-third read waits for a slot and completes, a profile switch refuses a waiting
-read, and Risk authority expiring during a read prevents its answer); the first
-of these failed before the change. The live-calculation check passed, including
-ordinary history after a live update. Locally, `--async-reads` passed its three
-groups, `--assistant-workspace` its 21, and the web suite 1,955 tests. Browser
-suites and the complete gate were not run for this change outside CI.
+Correctness on the same machine: the asynchronous workbench check passed 34
+checks, five of them new. An ordinary request proceeds beside a waiting read; a
+third read waits for a slot and completes; a profile switch refuses a waiting
+read; Risk authority expiring during a read prevents its answer; and authority
+that ends after a read's own transaction, while its answer waits for the session
+gate, refuses it. The first failed before the change, and the last failed
+against a build with the publication authorization removed. The live-calculation
+check passed, including ordinary history after a live update. Locally,
+`--async-reads` passed its three groups, `--assistant-workspace` its 21, and the
+web suite 1,955 tests. Browser suites and the complete gate were not run for
+this change outside CI.
 
 ## Current runner
 
