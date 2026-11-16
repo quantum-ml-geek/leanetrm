@@ -1,3 +1,4 @@
+import {ticketFieldGroups} from './ticket-field-groups.js';
 import {isCalendarAuthoringRefusal} from './side-calendar.js';
 import {isCatalogueSource,type CatalogueSource} from './market-navigation.js';
 import {renderTicket,type TicketEntry,type TicketEvents,type TicketView} from './deal-ticket.js';
@@ -125,7 +126,7 @@ export function setupTicket(host:HTMLElement,o:TicketOptions):TicketHandle{
   if(!current()||!d||!state)return;
   const levels=panel.schedule?.levels??d.levels;
   if(!levels.includes(level)){level=levels[0];closed=new Set();}
-  const shown:TicketView={state,mode,presentation:o.presentation,actions,schedule:panel.schedule,quantityUnit:panel.quantityUnit,instant:o.instant,zone:o.zone(),previous:panel.previous,summaries:panel.summaries,links:panel.links,facilityAllocations,measures,currency,entry:entryView(),status:panel.status,
+  const shown:TicketView={state,mode,presentation:o.presentation,actions,schedule:panel.schedule,quantityUnit:panel.quantityUnit,instant:o.instant,zone:o.zone(),previous:panel.previous,summaries:panel.summaries,links:panel.links,sideGroups:panel.sideGroups,sideGroupsReason:panel.sideGroupsReason,facilityAllocations,measures,currency,entry:entryView(),status:panel.status,
 
    fieldErrors:entry?{...choiceErrors,...lookupErrors,...panel.errors}:{},choices,selectedSide,tab,level,closed,on};
   if(mode==='booked'&&o.sideSchedule)shown.sideSchedule=(target,side)=>{
@@ -203,7 +204,7 @@ export function setupTicket(host:HTMLElement,o:TicketOptions):TicketHandle{
    const answer=await selectedDescription(draft(),signal);
    if(signal.aborted||serial!==descriptionSerial||!current()||selection!==selectedDescriptionKey())return;
    d=answer;state=nextPreview({...state,description:answer}).state;descriptionPending=false;
-   panel={...panel,status:{kind:'updating',text:'Updating…'}};draw();settle();void readChoices(listed());
+   panel={...panel,sideGroups:undefined,sideGroupsReason:undefined,status:{kind:'updating',text:'Updating…'}};draw();settle();void readChoices(listed());
   }catch(error){
    if(signal.aborted||serial!==descriptionSerial||!current()||selection!==selectedDescriptionKey())return;
    descriptionPending=false;descriptionRefusal=reasonOf(error);panel=previewed(panel,{refused:error});draw();
@@ -246,7 +247,7 @@ export function setupTicket(host:HTMLElement,o:TicketOptions):TicketHandle{
     choices[key]=r.choices;delete choiceErrors[key];
     if(entry&&state&&choiceEdits.get(key)===edit&&!blocked()){
      const before=sent();state=resolveChoice(state,side,f.id,r.choices,retainedChoices.get(key),clearedChoices.has(key)?null:r.startingValue);retainedChoices.delete(key);
-     if(sent()!==before){state=nextPreview(state).state;bookable=undefined;cancelPreview();panel={...panel,status:{kind:'updating',text:'Updating…'}};settle();void readChoices(dependents(side,f.id));}
+     if(sent()!==before){state=nextPreview(state).state;bookable=undefined;cancelPreview();panel={...panel,sideGroups:undefined,sideGroupsReason:undefined,status:{kind:'updating',text:'Updating…'}};settle();void readChoices(dependents(side,f.id));}
     }
    }
    catch(error){if(signal.aborted||asked.get(key)!==n)return;choices[key]=[];choiceErrors[key]=reasonOf(error);}
@@ -277,7 +278,7 @@ export function setupTicket(host:HTMLElement,o:TicketOptions):TicketHandle{
    else{state=dropLookup(state,a.side,a.f.id);lookupErrors[key]=a.refused!;}
   }
   // A lookup that filled a term changed the draft, which is previewed in turn.
-  if(sent()!==asking){state=nextPreview(state).state;bookable=undefined;previewRead?.abort();panel={...panel,status:{kind:'updating',text:'Updating…'}};settle();}
+  if(sent()!==asking){state=nextPreview(state).state;bookable=undefined;previewRead?.abort();panel={...panel,sideGroups:undefined,sideGroupsReason:undefined,status:{kind:'updating',text:'Updating…'}};settle();}
   if(refresh.size)void readChoices([...refresh.values()]);
   draw();
  }
@@ -287,13 +288,13 @@ export function setupTicket(host:HTMLElement,o:TicketOptions):TicketHandle{
   if(!state||blocked()||!descriptionReady())return;
   previewRead?.abort();const controller=previewRead=new AbortController(),signal=AbortSignal.any([lifetime.signal,controller.signal]);
   const next=nextPreview(state),body={context:o.context(),draft:draftOf(next.state),...amendmentTerms()},asking=previewIdentity(body.draft);
-  state=next.state;panel={...panel,status:{kind:'updating',text:'Updating…'}};draw();
+  state=next.state;panel={...panel,sideGroups:undefined,sideGroupsReason:undefined,status:{kind:'updating',text:'Updating…'}};draw();
   void readLookups();
   let outcome:{preview:TicketPreview}|{refused:unknown};
   try{outcome={preview:await o.api<TicketPreview>(amendment?'tickets/amend-preview':'tickets/preview',body,signal)};}catch(error){outcome={refused:error};}
   // Only the latest preview is drawn: an answer that arrives after a newer edit or preview is discarded.
   if(signal.aborted||!alive||!state||!acceptPreview(state,next.serial))return;
-  try{if('preview' in outcome&&!isCatalogueSource(outcome.preview.source))throw Error('The preview did not identify its exact trade terms.');panel=previewed(panel,outcome);bookable='preview' in outcome?asking:undefined;previewSource='preview' in outcome?outcome.preview.source:undefined;}
+  try{if('preview' in outcome&&!isCatalogueSource(outcome.preview.source))throw Error('The preview did not identify its exact trade terms.');panel=previewed(panel,outcome,{sideGroupsRequired:d?.sideGroupsRequired,fieldGroups:d?ticketFieldGroups(d):undefined,retained:false});bookable='preview' in outcome?asking:undefined;previewSource='preview' in outcome?outcome.preview.source:undefined;}
   catch(error){panel=previewed(panel,{refused:error});bookable=undefined;}
   draw();
  }
@@ -304,7 +305,7 @@ export function setupTicket(host:HTMLElement,o:TicketOptions):TicketHandle{
   catch(error){state={...state,notices:[reasonOf(error)]};draw();return;}
   bookable=undefined;cancelPreview();
   if(describe){said='';void refreshDescription();return;}
-  said='';panel={...panel,status:{kind:'updating',text:'Updating…'}};draw();settle();
+  said='';panel={...panel,sideGroups:undefined,sideGroupsReason:undefined,status:{kind:'updating',text:'Updating…'}};draw();settle();
   void readChoices(lists==='all'?listed():lists);
  }
  const retry=()=>listed().filter(([side,f])=>keyOf(side,f.id) in choiceErrors);
@@ -445,7 +446,7 @@ export function setupTicket(host:HTMLElement,o:TicketOptions):TicketHandle{
    if(tab===''){if(!state.sides.length)throw Error('This trade has no Side schedules.');selectedSide=tab=state.sides[0].code;}
   }
   measures=r.measures??null;currency=r.currency;
-  facilityAllocations=o.presentation?[]:r.facilityAllocations;panel=previewed(panel,{preview:r});
+  facilityAllocations=o.presentation?[]:r.facilityAllocations;panel=previewed(panel,{preview:r},{sideGroupsRequired:d?.sideGroupsRequired,fieldGroups:d?ticketFieldGroups(d):undefined,retained:mode==='booked'});
   if(panel.status.kind==='current')panel={...panel,status:{kind:'current',text:amendment?'Edit the retained terms, enter a reason and preview before saving a new revision.':'Booked terms and their retained schedule.'}};
 
   draw();

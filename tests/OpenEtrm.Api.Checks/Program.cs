@@ -10,6 +10,7 @@ if(args is ["--point-trader-mark-commands"]){PointTraderMarkCommandChecks.Run();
 if(args is ["--point-trader-mark-receipts"]){PointTraderMarkReceiptChecks.Run();return;}
 if(args is ["--gas-transport-financial-commands"]){GasTransportFinancialCommandChecks.Run();return;}
 if(args is ["--gas-transport-financial-source"]){GasTransportFinancialSourceChecks.Run();return;}
+if(args is ["--instrument-side-presentation"]){InstrumentSidePresentationChecks.Run();return;}
 if(args is ["--gas-transport-financial-ticket"]){GasTransportFinancialTicketChecks.Run();return;}
 if(args is ["--gas-transport-financial-native",var financialTransportFixture]){await GasTransportFinancialNativeChecks.Run(financialTransportFixture);return;}
 if(args is ["--gas-transport-financial-positions"]){GasTransportFinancialPositionChecks.Run();return;}
@@ -330,6 +331,7 @@ if (args is ["--schedules"])
     ContractObservationAuthoringChecks.Run();
     SchedulePreviewChecks.Run();
     TicketDescriptionChecks.Run();
+    InstrumentSidePresentationChecks.Run();
     GasTicketChecks.Run();
     GasParkLoanTicketChecks.Run();
     GasParkLoanBalanceFeeAdapterChecks.Run();

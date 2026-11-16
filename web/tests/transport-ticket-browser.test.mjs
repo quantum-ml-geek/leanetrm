@@ -88,14 +88,25 @@ test('retained financial choice labels refuse '+label+' metadata without discove
 
 test('a future financial head leaves availability and evidence visible without reconstructing an obsolete ticket',{skip:!browserAvailable,timeout:browserTestTimeout},async()=>{
  await withBrowserPage(page,async evaluate=>{
-  await evaluate(`(async()=>{${fixture}trade.draft=null;trade.unavailableReason='financial_state_future';
+  await evaluate(`(async()=>{${fixture}trade.draft=null;trade.unavailableReason='financial_state_future';trade.sideGroups=null;trade.sideGroupsReason=null;trade.sideGroupsUnavailableReason='financial_state_future';
    window.detail=await readTransportView(api,{snapshotId:'synthetic-snapshot',knowledgeMode:'retained',contextId:'synthetic-cutoff'},holding,{actor:()=>actor});
    const view=detail.view('UTC');window.rows=view.terms[0].rows;view.termsContent(document.querySelector('#terms'));
   })()`);
   assert.equal(await evaluate("rows.find(([label])=>label==='Value unavailable')[1]"),'Latest financial state is not yet effective in this view');
+  assert.equal(await evaluate("rows.find(([label])=>label==='Side composition unavailable')?.[1]"),'Latest financial state is not yet effective in this view');
   assert.equal(await evaluate("document.querySelector('#terms .ticket')===null"),true);
   assert.equal(await evaluate("calls.filter(c=>c.path==='tickets/trade').length"),1);
   assert.equal(await evaluate("document.querySelector('[data-field=\"Capacity version\"] dd').textContent"),'Retained operating definition');
+  assert.equal(await evaluate("document.querySelectorAll('[data-instrument-side-group]').length"),0);
+  assert.doesNotMatch(await evaluate("document.querySelector('#terms').textContent"),/no financial instrument/i);
+ });
+});
+
+test('future-state composition cannot silently become financial absence or retain a foreign current Side',{skip:!browserAvailable,timeout:browserTestTimeout},async()=>{
+ await withBrowserPage(page,async evaluate=>{
+  for(const change of ["delete trade.sideGroupsUnavailableReason","trade.sideGroups=[];trade.sideGroupsReason='No financial instrument.'","trade.sideGroups=[{instrumentId:'old-state'}]"]){
+   assert.match(await evaluate(`(async()=>{${fixture}trade.draft=null;trade.unavailableReason='financial_state_future';trade.sideGroups=null;trade.sideGroupsReason=null;trade.sideGroupsUnavailableReason='financial_state_future';${change};return readTransportView(api,{snapshotId:'synthetic-snapshot',knowledgeMode:'retained',contextId:'synthetic-cutoff'},holding,{actor:()=>actor}).then(()=>'',error=>error.message);})()`),/composition.*unavailable|unavailable.*composition/i);
+  }
  });
 });
 

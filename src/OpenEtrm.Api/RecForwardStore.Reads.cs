@@ -23,7 +23,7 @@ public sealed partial class RecForwardStore
    if(member.Id("sideId")!=s.SideId)throw Invalid();
    return new RecForwardBookedSide(s.Slot,s.SideId,s.ScheduleId,s.Slot==0?"physical_delivery":"consideration",member.Text("coefficient"),s.Program.Document.ScheduleManifest);
   }).ToImmutableArray();
-  return new(p.Trade,revision,p.Binding,p.Book.Id("id"),TradingReference.Trade(p.Head),p.Terms(),sides);
+  return new(p.Trade,revision,p.Binding,p.Book.Id("id"),TradingReference.Trade(p.Head),p.Terms(),sides){SideGroups=[RetainedInstrumentSidePresentation.Rec(p,programs)]};
  }
  public async Task<RecForwardPreviewResult> Value(NpgsqlConnection c,InputFrame frame,Guid trade,int revision,CancellationToken ct)
  {

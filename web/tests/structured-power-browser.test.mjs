@@ -2,9 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {browserAvailable,browserTestTimeout,withBrowserPage} from './browser-page.mjs';
+import {operatingFieldLayouts} from './side-layout-fixtures.mjs';
 const markup=readFileSync(new URL('../src/index.html',import.meta.url),'utf8').replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,'');
 const pins={definitionCatalogId:'dc',definitionRevisionId:'dr',referenceCatalogId:'rc',referenceRevisionId:'rr'};
 const catalog={pins,locations:[{code:'existing',label:'Synthetic existing facility'}],clocks:[{code:'utc',label:'UTC'}],kinds:[{code:'battery',label:'Battery storage',intervalMinutes:[60]},{code:'thermal',label:'Thermal tolling',intervalMinutes:[60]},{code:'solar',label:'Solar output right',intervalMinutes:[60]}],powerQuantities:[{code:'mw',label:'Native MW'}],energyQuantities:[{code:'mwh',label:'Native MWh'}],fuelQuantities:[{code:'fuel',label:'Fuel energy'}],rightQuantities:[{code:'right',label:'One complete resource right'}],currencies:[{code:'usd',label:'USD'}],quotes:[{code:'energy',label:'USD per MWh',quantityCode:'mwh',currencyCode:'usd',multiplier:'1'}],paymentImplementation:'monthly_payment_date_rules_v1',canSave:true,canPreview:true};
+
+catalog.valuationFieldGroups=operatingFieldLayouts;
 
 test('operating controls retain explicit disabled states through global busy updates',{skip:!browserAvailable,timeout:browserTestTimeout},()=>withBrowserPage(markup,async evaluate=>{
  const state=await evaluate(`(async()=>{const {setupStructuredPower}=await import('/structured-power-view.js');const host=document.getElementById('physical-power-page');host.hidden=false;let busy=false;const widget=setupStructuredPower(host,{api:async(path)=>path.endsWith('/catalog')?${JSON.stringify(catalog)}:[],act:async work=>work(),busy:()=>busy,source:()=>({snapshotId:'frame',contextKey:'working'}),identity:()=> 'workspace:alpha'});await widget.load();
@@ -12,8 +15,8 @@ test('operating controls retain explicit disabled states through global busy upd
  const planned=()=>[...host.querySelectorAll('input')].filter(n=>n.placeholder==='Coming soon');
  document.querySelectorAll('button,input,select,textarea').forEach(n=>{if(!n.closest('[data-own-controls]'))n.disabled=false;});widget.sync();const preserved=planned().every(n=>n.disabled);
  busy=true;widget.sync();const blocked=host.inert;busy=false;widget.sync();
- return {preserved,blocked,restored:!host.inert,planned:planned().length,masters:document.querySelectorAll('#nav-facilities').length,groups:document.querySelectorAll('#nav-group-scheduling').length};})()`);
- assert.deepEqual(state,{preserved:true,blocked:true,restored:true,planned:3,masters:1,groups:1});
+ return {sideGroups:[...host.querySelectorAll('[data-field-layout-group]')].map(group=>group.dataset.fieldLayoutGroup),preserved,blocked,restored:!host.inert,planned:planned().length,masters:document.querySelectorAll('#nav-facilities').length,groups:document.querySelectorAll('#nav-group-scheduling').length};})()`);
+ assert.deepEqual(state,{sideGroups:['valuation','energy','charging','variable_fee','access_fee'],preserved:true,blocked:true,restored:true,planned:3,masters:1,groups:1});
 }));
 
 test('facility form preserves exact transport, backend side values and actor-specific uncertain saves',{skip:!browserAvailable,timeout:browserTestTimeout},()=>withBrowserPage(markup,async(evaluate,command)=>{

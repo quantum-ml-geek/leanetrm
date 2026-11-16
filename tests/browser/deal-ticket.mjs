@@ -5,10 +5,12 @@
 import {newTrade} from './new-trade.mjs';
 import {sideSession,correctSyntheticBase} from './side-session.mjs';
 import {blotterAt,bookedTicket as booked,decemberClose,gasTicket,openBookedSchedules,q} from './gas-ticket.mjs';
+import {captureSideTerms,retainedSideTerms,sideCards,sidePhone} from './instrument-side-qualification.mjs';
 
 export async function run(actions){
  const {command,evaluate,wait,set,click,check,persona,shot,idle,url,tab}=actions;
  const {ticket,card,field,control,choose,status,current,month,observed,until,tradeTerms,physicalTerms,cashTerms,addSide}=gasTicket(actions);
+ await captureSideTerms(actions);
 
  // A desk-sized window shows the Blotter's grid beside the Details pane; the last step narrows it.
  await command('Emulation.setDeviceMetricsOverride',{width:1440,height:1050,deviceScaleFactor:1,mobile:false});
@@ -104,6 +106,9 @@ export async function run(actions){
  await check('the reconciled ticket shows the request\'s exact terms, locked',`document.querySelector(${q(control('physical-1','quantity'))}).value==='10000'&&document.querySelector('#gas-ticket > div').inert`);
  await evaluate(`${reconcile}.click()`);
  await wait("document.querySelector('#position-details').dataset.mode==='position'&&document.querySelector('#desk-positions .standard-data-grid')?.dataset.selectedRow?.startsWith("+q(bookedReceipt.tradeId+':')+")&&"+idle);
+ await click('#position-details-tabs-terms');await wait(idle);
+ await sideCards(actions,'#position-details',await retainedSideTerms(actions,'gas'),{label:'saved native gas Terms expose every exact contractual Side without schedule or price reconstruction',retained:true,bindings:[bookedReceipt.instrumentId],roles:['Contractual gas delivery','Contractual gas consideration','Contractual usage fee']});
+ await sidePhone(actions,'#position-details','physical-gas-sides-mobile');
  await openBookedSchedules(actions);
  await wait(`!!document.querySelector(${q(booked+' .ticket-tab[data-tab=instrument]')})`);await click(`${booked} .ticket-tab[data-tab=instrument]`);
  await until(`!!document.querySelector(${q(booked)})&&`+current(booked),`({error:document.querySelector('#error').textContent,booking:document.querySelector('#gas-ticket .ticket-booking')?.textContent,details:document.querySelector('#position-details').textContent.slice(0,300)})`);

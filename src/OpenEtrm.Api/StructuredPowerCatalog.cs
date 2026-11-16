@@ -17,6 +17,7 @@ public sealed record StructuredPowerCatalogResult(StructuredPowerPins Pins,Immut
 {
     public ImmutableArray<StructuredPowerPriceContract> PriceContracts { get; init; }=[];
     public ImmutableArray<string> OperatingBookingClockCodes { get; init; }=[];
+    public ImmutableDictionary<string,EntryFieldLayout> ValuationFieldGroups{get;init;}=ImmutableDictionary<string,EntryFieldLayout>.Empty;
 }
 
 public static partial class StructuredPowerPreview
@@ -33,6 +34,7 @@ public static partial class StructuredPowerPreview
             [..quantities.Where(x=>x.UnitCode=="megawatt"&&x.DimensionCode=="power")],[..quantities.Where(x=>x.UnitCode=="megawatt_hour"&&x.DimensionCode=="energy")],
             [..quantities.Where(x=>x.DimensionCode=="energy")],[..quantities.Where(x=>x.UnitCode=="resource_right"&&CompleteRightDimension(data,x.DimensionCode))],
             Choices("currencies"),[..data.Quotes.Where(x=>x.Kind==QuoteKind.Outright).Select(x=>new StructuredPowerQuoteChoice(x.Key.Code,$"{x.Key.Code} · {x.Currency.Code} per {x.Quantity.Code} × {x.Multiplier}",x.Quantity.Code,x.Currency.Code,x.Multiplier.ToString()))],OpenEtrm.MarketData.Trading.PaymentRule.Implementation,canSave,canPreview)
-        {OperatingBookingClockCodes=[..data.References["clock_rules"].Where(r=>r.Text("kind")=="fixed_offset"&&r.Number("fixed_offset_seconds")==default).Select(r=>r.Text("code"))]};
+        {OperatingBookingClockCodes=[..data.References["clock_rules"].Where(r=>r.Text("kind")=="fixed_offset"&&r.Number("fixed_offset_seconds")==default).Select(r=>r.Text("code"))],
+            ValuationFieldGroups=EntrySideFieldGroups.Operating()};
     }
 }

@@ -1,5 +1,6 @@
 import {setupStructuredPowerTrades} from './structured-power-trades-view.js';
 import {amountText,prepareAmountDisplay} from './amount-display.js';
+import {mountFieldGroupLayout,type FieldGroupLayout} from './field-group-layout.js';
 
 import {operatingPrice,StructuredPowerPendingStore,comingSoonFields,facilityTerms,operatingParameterFields,structuredPreviewRequest,type OperatingField,type OperatingPriceContract,type StructuredPowerKind,type StructuredPowerPins,type StructuredPowerVersion} from './structured-power-model.js';
 
@@ -7,7 +8,7 @@ type Api=<T>(path:string,body?:unknown)=>Promise<T>;
 type Choice={code:string;label:string};
 type QuantityChoice=Choice&{commodityCode:string;unitCode:string;dimensionCode:string};
 type QuoteChoice=Choice&{quantityCode:string;currencyCode:string;multiplier:string};
-type Catalog={pins:StructuredPowerPins;locations:Choice[];clocks:Choice[];kinds:(Choice&{intervalMinutes:number[]})[];powerQuantities:QuantityChoice[];energyQuantities:QuantityChoice[];fuelQuantities:QuantityChoice[];rightQuantities:QuantityChoice[];currencies:Choice[];quotes:QuoteChoice[];priceContracts?:OperatingPriceContract[];operatingBookingClockCodes?:string[];paymentImplementation:string;canSave:boolean;canPreview:boolean};
+type Catalog={pins:StructuredPowerPins;locations:Choice[];clocks:Choice[];kinds:(Choice&{intervalMinutes:number[]})[];powerQuantities:QuantityChoice[];energyQuantities:QuantityChoice[];fuelQuantities:QuantityChoice[];rightQuantities:QuantityChoice[];currencies:Choice[];quotes:QuoteChoice[];priceContracts?:OperatingPriceContract[];operatingBookingClockCodes?:string[];valuationFieldGroups:Record<string,FieldGroupLayout>;paymentImplementation:string;canSave:boolean;canPreview:boolean};
 type Fraction={numerator:string;denominator:string};
 type Quantity=Fraction&{specification:{code:string}};
 type Money=Fraction&{currency:{code:string}};
@@ -16,7 +17,7 @@ type Preview={previewId:string;kind:string;clockFingerprint:string;knownAt:strin
  closingState:{at:string;commitment:string|null;elapsedMinutes:number|null;startsUsed:number|null;quantities:{name:string;quantity:Quantity}[]}|null;
  valuation:{measure:string;perspective:string;currency:{code:string};value:Money;sides:{id:string;name:string;coefficient:string;quote:{code:string};grossValue:Money;contribution:Money;rows:{interval:Interval;paymentAt:string;quantity:Quantity;price:Fraction;amount:Money;presentValue:Money;state:number;evidenceId:string|null;knownAt:string|null}[]}[]}|null;limitations:string[]};
 type Receipt={requestId:string;changed:boolean;facility:StructuredPowerVersion};
-type Options={api:Api;busy:()=>boolean;act:(work:()=>Promise<void>)=>Promise<void>;source:()=>{snapshotId:string;contextKey:string};identity:()=>string;trading?:{available?:()=>boolean;canHedge?:()=>boolean;openTrade:(tradeId:string,revision:number)=>Promise<void>}};
+type Options={api:Api;busy:()=>boolean;act:(work:()=>Promise<void>)=>Promise<void>;source:()=>{snapshotId:string;contextKey:string};identity:()=>string;zone?:()=>string;trading?:{available?:()=>boolean;canHedge?:()=>boolean;openTrade:(tradeId:string,revision:number)=>Promise<void>}};
 const prefix='physical/power-facilities/';
 const fraction=(value:Fraction)=>value.denominator==='1'?value.numerator:`${value.numerator}/${value.denominator}`;
 const label=(value:string)=>value.replace(/_/g,' ');
@@ -87,6 +88,9 @@ export function setupStructuredPower(host:HTMLElement,o:Options){
  const accessQuote=select(priceFields,'Optional access fee quote per complete right');accessQuote.required=false;
  const accessPrice=input(priceFields,'Optional access fee for this preview horizon');accessPrice.required=false;
  const accessBasis=select(priceFields,'Access fee period (only with fee)');options(accessBasis,[{code:'preview_horizon_once_v1',label:'Once for the complete supplied preview horizon'}]);accessBasis.required=false;
+ const priceControls=new Map(Object.entries({right,currency,perspective,measure,discounting,paymentDays,paymentPolicy,
+  saleMode,saleContract,saleQuote,salePrice,chargeMode,chargeContract,chargeQuote,chargePrice,fuelMode,fuelContract,fuelQuote,fuelPrice,fuelBasis,
+  variablePrice,variableBasis,accessQuote,accessPrice,accessBasis}).map(([id,control])=>[id,control.parentElement!.parentElement!]));
  const previewButton=el('button','Preview');previewButton.type='submit';previewForm.append(previewButton);
  const output=card('Preview result');output.hidden=true;
  function sync(){tradeWorkspace?.sync();host.inert=o.busy();saveButton.disabled=!catalog?.canSave||!!pending.command;add.disabled=!catalog?.canSave||!!pending.command;previewButton.disabled=!catalog?.canPreview||!saved||dirty;recovery.hidden=!pending.command;refresh.disabled=false;}
@@ -111,6 +115,7 @@ export function setupStructuredPower(host:HTMLElement,o:Options){
   showPricing();
  }
  function showPricing(){const pricing=priceEnabled.value==='fixed',k=selectedKind();priceFields.hidden=!pricing;for(const node of priceFields.querySelectorAll<HTMLInputElement|HTMLSelectElement>('input,select'))node.disabled=!pricing;
+  if(catalog&&k){const layout=catalog.valuationFieldGroups?.[k];if(!layout)throw Error('Reread the operating Side field layout for this selected kind.');mountFieldGroupLayout(priceFields,layout,priceControls);}
   for(const [mode,contract,quote,price,active] of [[saleMode,saleContract,saleQuote,salePrice,true],[chargeMode,chargeContract,chargeQuote,chargePrice,k==='battery'],[fuelMode,fuelContract,fuelQuote,fuelPrice,k==='thermal']] as const){
    for(const control of [mode,contract,quote,price]){control.parentElement!.parentElement!.hidden=!active;control.disabled=!pricing||!active;}
    for(const control of [quote,price]){control.parentElement!.parentElement!.hidden=!active||mode.value!=='fixed';control.disabled=!pricing||!active||mode.value!=='fixed';}
@@ -165,6 +170,6 @@ export function setupStructuredPower(host:HTMLElement,o:Options){
   for(const control of [versionSelect,location,kind,clock,minutes,power,energy,fuel,right,currency,saleMode,saleContract,chargeMode,chargeContract,fuelMode,fuelContract,saleQuote,chargeQuote,fuelQuote,accessQuote])control.replaceChildren();
   for(const control of host.querySelectorAll<HTMLInputElement|HTMLTextAreaElement>('input,textarea'))control.value='';
   priceEnabled.value='';showPricing();sync();status.textContent='Load operating facilities under the selected context.';}
- if(o.trading){const target=card('Saved operating-right trades');tradeWorkspace=setupStructuredPowerTrades(target,{api:o.api,act:o.act,busy:o.busy,source:o.source,identity:o.identity,plan:planRequest,changed:()=>sync(),available:o.trading.available,canHedge:o.trading.canHedge,admission:()=>({available:!!saved&&!!catalog?.operatingBookingClockCodes?.includes(saved.terms.clockCode),reason:!saved?'Select an exact saved facility for operating-right booking.':'Saved operating-right booking for this clock · Coming soon.'}),committed:()=>{previewDirty=false;},openTrade:o.trading.openTrade});}
+ if(o.trading){const target=card('Saved operating-right trades');tradeWorkspace=setupStructuredPowerTrades(target,{api:o.api,act:o.act,busy:o.busy,source:o.source,identity:o.identity,zone:o.zone,plan:planRequest,changed:()=>sync(),available:o.trading.available,canHedge:o.trading.canHedge,admission:()=>({available:!!saved&&!!catalog?.operatingBookingClockCodes?.includes(saved.terms.clockCode),reason:!saved?'Select an exact saved facility for operating-right booking.':'Saved operating-right booking for this clock · Coming soon.'}),committed:()=>{previewDirty=false;},openTrade:o.trading.openTrade});}
  showPricing();sync();return {load,sync,selectedTrade:()=>tradeWorkspace?.selected(),plan:planRequest,reset:contextChanged,contextChanged,unconfirmed:()=>{bindIdentity();return !!pending.command||!!tradeWorkspace?.unconfirmed();},unsaved:()=>{bindIdentity();return !!pending.command||dirty||previewDirty||!!tradeWorkspace?.unsaved();},open:async(locationCode?:string)=>{await load();if(locationCode)location.value=locationCode;host.scrollIntoView({block:'start'});}};
 }

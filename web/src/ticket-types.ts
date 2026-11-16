@@ -2,6 +2,8 @@ import type {SideCalendarPolicy,CalendarPurposes,SideCalendarCatalogRow} from '.
 import type {CatalogueSource} from './market-navigation.js';
 import type {GasMeasures} from './lifecycle-text.js';
 import type {LifecycleTarget} from './lifecycle-model.js';
+import type {InstrumentSideGroup} from './instrument-sides.js';
+import type {TicketFieldGroup} from './ticket-field-groups.js';
 // Mirrors of the deal ticket routes' JSON (System.Text.Json web defaults, nulls written).
 // Numeric schedule values are exact decimal strings or exact "a/b" ratios, never numbers.
 // A field's or column's unit names the unit its values are in, resolved per trade: 'quantity' is the trade's quantity unit, which each preview and
@@ -15,7 +17,7 @@ export type TicketSideKind={kind:string;pill:string;colour:string;min:number;ini
 // At most `max` sides of the named kinds together.
 export type TicketSideLimit={kinds:string[];max:number};
 export type TicketTab={id:string;label:string;soon:string|null};
-export type TicketDescription={product:string;version:number;rowShape:string;tradeFields:TicketField[];sides:TicketSideKind[];sideLimits:TicketSideLimit[];tradeColumns:TicketColumn[];levels:string[];tabs:TicketTab[];modes:string[];sideCalendars?:SideCalendarCatalogRow[];selection?:Record<string,string>};
+export type TicketDescription={product:string;version:number;rowShape:string;tradeFields:TicketField[];sides:TicketSideKind[];sideLimits:TicketSideLimit[];tradeColumns:TicketColumn[];levels:string[];tabs:TicketTab[];modes:string[];sideCalendars?:SideCalendarCatalogRow[];selection?:Record<string,string>;sideGroupsRequired?:boolean;fieldGroups?:TicketFieldGroup[]|null};
 export type TicketSideDraft={kind:string;code:string;values:Record<string,string>;calendarPolicy?:SideCalendarPolicy};
 export type TicketDraft={product:string;version:number;trade:Record<string,string>;sides:TicketSideDraft[]};
 export type TicketChoice={value:string;label:string};
@@ -33,7 +35,7 @@ export type TradeActions={amend:TradeAction;closeOut:TradeAction;record:TradeAct
 // and the actions it offers; a booking answers its receipt.
 // A link is a physical side whose quantity follows its source's: their receipt, delivery and fuel totals over the term, as exact text.
 export type TicketLink={source:string;target:string;formula:string;fraction:string;receipt:string;delivery:string;fuel:string};
-export type TicketPreview={source:CatalogueSource;schedule:ScheduleView|null;summaries:TicketSummary[]|null;scheduleRefusal:ScheduleRefusal|null;quantityUnit:string;links:TicketLink[]};
+export type TicketPreview={source:CatalogueSource;schedule:ScheduleView|null;summaries:TicketSummary[]|null;scheduleRefusal:ScheduleRefusal|null;quantityUnit:string;links:TicketLink[];sideGroups?:InstrumentSideGroup[];sideGroupsReason?:string|null};
 // quantityPolicy is the daily quantity selection the booked schedule shows, or null for a trade that records no daily quantities.
 export type FacilityAllocationTrack={obligationId:string;sideCode:string;day:string;quantity:string|null;unit:string;state:'planned'|'no_current_allocation';finalQuantity?:string|null;finalState?:string};
 export type TicketTrade=TicketPreview&{measures?:GasMeasures|null;currency?:string;draft:TicketDraft;retainedChoices?:Record<string,TicketChoice[]>;lifecycleTarget?:LifecycleTarget;definitionRevisionId:string;snapshotId:string;context:{contextId:string;effectiveOn:string;knownAt:string};sideSlots:Record<string,number>;actions:TradeActions;quantityPolicy:string|null;facilityAllocations:FacilityAllocationTrack[]};

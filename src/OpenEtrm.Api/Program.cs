@@ -737,12 +737,12 @@ api.MapPost("/physical/power-trades/preview",(HttpContext c,StructuredPowerBookR
             context!.ContextId!.Value,frame.At,frame.Time.Date,ct);
         return Results.Ok((await operatingTrades.Prepare(connection,data,frame,saved,SchedulePreview.ParseAt(context.KnownAt),body,ct)).Preview);
     }));
-api.MapPost("/physical/power-trades/get",(HttpContext c,StructuredPowerTradeReadRequest body)=>
-    PhysicalPowerOperation(c,body.SnapshotId,"ReadTrades",false,async(connection,_,frame,_,_,ct)=>
-        Results.Ok(await operatingTrades.ReadExact(connection,frame,body.TradeId,ct))));
 api.MapPost("/physical/power-trades/valuation",(HttpContext c,StructuredPowerTradeReadRequest body)=>
-    PhysicalPowerOperation(c,body.SnapshotId,"ReadTrades",false,async(connection,_,frame,_,_,ct)=>
-        Results.Ok(await operatingTrades.Value(connection,frame,body.TradeId,ct))));
+{
+    body.RequireCurrentValuation();
+    return PhysicalPowerOperation(c,body.SnapshotId,"ReadTrades",false,async(connection,_,frame,_,_,ct)=>
+        Results.Ok(await operatingTrades.Value(connection,frame,body.TradeId,ct)));
+});
 api.MapPost("/physical/power-trades/directory",(HttpContext c,StructuredPowerTradeDirectoryRequest body)=>
     PhysicalPowerOperation(c,body.SnapshotId,"ReadTrades",false,async(connection,_,frame,_,_,ct)=>
         Results.Ok(await operatingTrades.Directory(connection,frame,body.BookIds,body.Offset,body.Limit,ct))));
@@ -1625,6 +1625,21 @@ Task<TradingView> TradeView(NpgsqlConnection connection,PreviewSession session,F
     =>TradingReadSelection.Capture(session,body,frame).Resolve(connection,knowledgeStore,body,ct);
 // How trading reads publish their results: camel-case members, exact decimals as exact text.
 var tradingJson=new JsonSerializerOptions{PropertyNamingPolicy=JsonNamingPolicy.CamelCase,Converters={new ExactDecimalJsonConverter()}};
+api.MapPost("/physical/power-trades/get",(HttpContext c,StructuredPowerTradeReadRequest body)=>
+{
+    if(body.Selected)
+    {
+        var selected=body.Selection();
+        AsyncReadVisibilityProof? exactVisibility=null;
+        return TradingRead(c,body.Context!,
+            (connection,view,ct)=>OperatingSideReadProjection.Run(()=>tradeReads.ReadBound(connection,view,async()=>await operatingTrades.ReadSelected(connection,view,selected,ct),ct),proof=>{exactVisibility=proof;return Task.CompletedTask;}),
+            expectedConvention:TradingBlotter.Convention,sourceAdmission:(connection,ct)=>OperatingSideReadAdmission.Capture(connection,database,ct),
+            publicationCheck:(connection,_,ct)=>(exactVisibility??throw new PreviewDeniedException()).Require(connection,ct));
+    }
+    return PhysicalPowerOperation(c,body.SnapshotId,"ReadTrades",false,async(connection,_,frame,_,_,ct)=>
+        Results.Ok(await operatingTrades.ReadExact(connection,frame,body.TradeId,ct)));
+});
+
 // Trading pages without a read operation of their own run their store's read on the shared trading read path.
 Task<IResult> FuturesRead(HttpContext c,FuturesReadRequest body,Func<NpgsqlConnection,PreviewData,InputFrame,CancellationToken,Task<object>> read,bool scenario=false,Guid? headTrade=null,bool amendmentPreview=false,string? expectedConvention=null,bool dealRisk=false,Guid? gasTrade=null,Guid? crudeTrade=null,Guid? crudeSetup=null,bool gasReferenceChoices=false,Guid? lngTrade=null)
 {
@@ -1821,7 +1836,7 @@ api.MapPost("/rec/trades/catalog",(HttpContext c,RecForwardCatalogRequest body)=
 api.MapPost("/rec/trades/preview",(HttpContext c,RecForwardPreviewRequest body)=>RecTradeRead(c,body.Context,
     async(connection,data,frame,context,_,ct)=>await recTrades.Preview(connection,data,frame,SchedulePreview.ParseAt(context.KnownAt),body,ct)));
 api.MapPost("/rec/trades/get",(HttpContext c,RecForwardReadRequest body)=>RecTradeRead(c,body.Context,
-    async(connection,_,frame,_,_,ct)=>await recTrades.ReadExact(connection,frame,body.TradeId,body.Revision,ct)));
+    async(connection,_,frame,context,_,ct)=>(await recTrades.ReadExact(connection,frame,body.TradeId,body.Revision,ct)) with{RetainedSource=RetainedSideSource.From(frame,context)}));
 api.MapPost("/rec/trades/valuation",(HttpContext c,RecForwardReadRequest body)=>RecTradeRead(c,body.Context,
     async(connection,_,frame,_,_,ct)=>await recTrades.Value(connection,frame,body.TradeId,body.Revision,ct)));
 api.MapPost("/rec/trades/status",(HttpContext c,RecForwardStatusRequest body)=>Locked(c,session=>

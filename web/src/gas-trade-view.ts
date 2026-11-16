@@ -6,6 +6,7 @@ import type {AmendState,DetailRead,TermSection} from './position-panel.js';
 import {displayInstant} from './market-view.js';
 import {setupTicket,ticketBookingRetained,type TicketHandle} from './ticket-controller.js';
 import type {ProductSelection} from './product-tickets.js';
+import {requireBoundInstrumentSides,renderInstrumentSides,type InstrumentSideGroup} from './instrument-sides.js';
 type Api=<T>(path:string,body?:unknown,signal?:AbortSignal)=>Promise<T>;
 const convention='physical_gas_fixed_quantity_v4';
 
@@ -13,13 +14,14 @@ const convention='physical_gas_fixed_quantity_v4';
 // remain available after delivery starts, without changing the booked contract.
 // Every gas trade opens read-only in the deal ticket; a single-point trade opens as the composition of one physical side it is.
 export async function readGasView(api:Api,context:Record<string,unknown>,h:Holding,o:{actor:()=>string;onDenied:()=>void;readOnly?:boolean;amend?:()=>void}):Promise<DetailRead>{
- const detail=await api<GasInstrumentFacts&{amend:AmendState;history?:Record<string,string|number|null>[]}>('trading/gas',{context:{...context,convention:'trading_workspace_v1'},tradeId:h.tradeId,bindingId:h.bindingId,revision:Number(h.revision),instrumentType:'physical_gas'});
+ const detail=await api<GasInstrumentFacts&{amend:AmendState;history?:Record<string,string|number|null>[];sideGroups:InstrumentSideGroup[]}>('trading/gas',{context:{...context,convention:'trading_workspace_v1'},tradeId:h.tradeId,bindingId:h.bindingId,revision:Number(h.revision),instrumentType:'physical_gas'});
  if(String(detail.head.revision)!==h.revision||detail.head.instrument_id!==h.bindingId)throw Error('The gas position changed. Refresh the Blotter.');
+ const composition=requireBoundInstrumentSides(detail.sideGroups,h.bindingId);
  let ticket:TicketHandle|undefined;
  const amend:AmendState=detail.amend.allowed&&(!o.amend||o.readOnly)?{allowed:false,reason:'Open the Blotter in the main window to amend this gas trade.'}:detail.amend;
  return{amend,updatesBlocked:()=>!!ticket&&(ticket.unsaved()||ticket.pending()),view:zone=>{
   const terms:TermSection[]=[{title:'Physical gas instrument',rows:[['Trade',h.tradeReference],['Instrument',h.instrumentReference],['Book',h.book],['Value measure',valueMeasureText(h.measureLabel,h.discounting)]]},...gasInstrumentSections(detail,zone)];
-  return{termsLabel:'Physical overview',terms,history:[{title:'Original booking',rows:[['Booked',displayInstant(h.executedAt,zone)],['Booker',h.trader??''],['Trade date',h.booking.tradeDate??'Unavailable']]},
+  return{termsLabel:'Physical overview',terms,termsContent:(host:HTMLElement)=>renderInstrumentSides(host,composition,{zone,retained:true}),history:[{title:'Original booking',rows:[['Booked',displayInstant(h.executedAt,zone)],['Booker',h.trader??''],['Trade date',h.booking.tradeDate??'Unavailable']]},
    ...(detail.history??[]).map(row=>({title:`Revision ${row.revision}`,rows:[['Effective',displayInstant(String(row.effective_at),zone)],['Reason',row.reason===null?'Original booking':String(row.reason)],['Actor',String(row.actor_id)]] as [string,string][]}))],
    schedules:(host:HTMLElement)=>{
     const position={context:{...context,convention:'trading_workspace_v1'},tradeId:h.tradeId,bindingId:h.bindingId,revision:Number(h.revision),instrumentType:h.instrumentType};

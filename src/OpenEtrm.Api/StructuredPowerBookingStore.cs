@@ -114,6 +114,13 @@ public sealed partial class StructuredPowerBookingStore
         if(positions.Length!=1)throw TradePositionSelection.Unavailable();
         return await Project(connection,frame,positions[0],ct);
     }
+    internal async Task<StructuredPowerBookedTrade> ReadSelected(NpgsqlConnection connection,TradingView view,TradePositionSelection selected,CancellationToken ct)
+    {
+        if(selected.InstrumentType!=OperatingPositions.Type)throw TradePositionSelection.Unavailable();
+        var position=RequireSelectedPosition(await OperatingPositions.Read(connection,database.Manifest,[],[],ct,position:selected));
+        return(await Project(connection,view.CalculationFrame,position,ct)) with{RetainedSource=RetainedSideSource.From(view.CalculationFrame,view.Context)};
+    }
+    internal static OperatingPosition RequireSelectedPosition(ImmutableArray<OperatingPosition> positions)=>positions.Length==1?positions[0]:throw TradePositionSelection.Unavailable();
     public async Task<StructuredPowerTradeDirectory> Directory(NpgsqlConnection connection,InputFrame frame,ImmutableArray<Guid> books,int offset,int limit,CancellationToken ct)
     {
         if(frame.ContextId is null||books.IsDefault||offset<0||limit is <1 or >100)throw Invalid("Select an explicit certified directory scope and bounded page.");
@@ -136,7 +143,8 @@ public sealed partial class StructuredPowerBookingStore
         return new(p.Trade,int.Parse(p.Head.Text("revision"),CultureInfo.InvariantCulture),p.Binding,p.Binding,p.Book.Id("id"),
             p.Head.Id("facility_id"),int.Parse(p.Head.Text("facility_version"),CultureInfo.InvariantCulture),p.Head.Text("effective_at"),
             TradingReference.Trade(p.Head),p.Physical.Text("kind"),p.Physical.Text("facility_code"),p.Physical.Text("facility_name"),p.Book.Text("name"),
-            p.Head.GetProperty("request").Deserialize<StructuredPowerBookRequest>(Json)!,sides);
+            p.Head.GetProperty("request").Deserialize<StructuredPowerBookRequest>(Json)!,sides)
+            {SideGroups=[RetainedInstrumentSidePresentation.Operating(p,programs)]};
     }
     public async Task<StructuredPowerPreviewResult> Value(NpgsqlConnection connection,InputFrame frame,Guid trade,CancellationToken ct)
     {

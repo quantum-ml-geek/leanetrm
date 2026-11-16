@@ -8,7 +8,7 @@ import {valuationReason,type ValuationReason} from './valuation-status.js';
 
 type Api=<T>(path:string,body?:unknown,signal?:AbortSignal)=>Promise<T>;
 const product='physical_gas_transport',convention='physical_gas_fixed_quantity_v4';
-type TransportTrade=Omit<TicketTrade,'draft'>&{draft:TicketDraft|null;lifecycleTarget:{handler:string;scopeId:string;bindingId:string};measureLabel:string;ownershipNote:string;overviewSections:PhysicalOverviewSection[];unavailableReason:ValuationReason|null};
+type TransportTrade=Omit<TicketTrade,'draft'>&{draft:TicketDraft|null;lifecycleTarget:{handler:string;scopeId:string;bindingId:string};measureLabel:string;ownershipNote:string;overviewSections:PhysicalOverviewSection[];unavailableReason:ValuationReason|null;sideGroupsUnavailableReason?:ValuationReason|null};
 
 export async function readTransportView(api:Api,context:Record<string,unknown>,h:Holding,o:{actor:()=>string;lifecycle?:()=>void}):Promise<DetailRead>{
  if(h.instrumentType!==product)throw Error('Select an exact Transport holding.');
@@ -23,12 +23,16 @@ export async function readTransportView(api:Api,context:Record<string,unknown>,h
   !Array.isArray(detail.overviewSections)||!detail.overviewSections.length||detail.draft===null&&(typeof detail.unavailableReason!=='string'||!detail.unavailableReason))
   throw Error('The Transport response did not identify its financial state, value measure and availability. Refresh the Blotter.');
  overviewTermSections(detail.overviewSections,'UTC');
+ if(detail.draft===null&&(detail.sideGroupsUnavailableReason!==detail.unavailableReason||detail.sideGroups!=null||detail.sideGroupsReason!=null)||
+  detail.draft!==null&&detail.sideGroupsUnavailableReason!=null)
+  throw Error('Reread the explicit unavailable Side composition; it cannot be replaced by financial absence or an obsolete state.');
  const unavailable=detail.unavailableReason===null?null:valuationReason(detail.unavailableReason,product);
+ const compositionUnavailable=detail.sideGroupsUnavailableReason==null?null:valuationReason(detail.sideGroupsUnavailableReason,product);
  const certified={...requested,knowledgeMode:'retained',contextId:detail.context.contextId};
  return {amend:{allowed:false,reason:detail.actions.amend.reason},view:zone=>({
   termsLabel:'Transport terms',
   terms:[{title:'Transport',rows:[['Trade',h.tradeReference],['Instrument',h.instrumentReference],['Book',h.book],['Value measure',detail.measureLabel],['Ownership',detail.ownershipNote],
-   ...unavailable?[['Value unavailable',unavailable] as [string,string]]:[]]}],
+   ...unavailable?[['Value unavailable',unavailable] as [string,string]]:[],...compositionUnavailable?[['Side composition unavailable',compositionUnavailable] as [string,string]]:[]]}],
   termsContent:host=>{
    const content=document.createElement('div');host.append(content);let ticket:TicketHandle|undefined;
    if(detail.draft!==null){const ticketHost=document.createElement('div');content.append(ticketHost);

@@ -1,10 +1,72 @@
 """Saved operating-right trades through the owned public application routes."""
 from copy import deepcopy
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 from fractions import Fraction
+import time
 from uuid import uuid4
 from exact_values import fraction
 from preview_client import initial_frame
 from preview_fixture import trade_booking
+
+
+def original_physical_authority(client, query, manifest, selected):
+    """A later grant cannot replace the selected read's original authority."""
+    role=query("SELECT id FROM security.roles WHERE code='trader';")
+    actor=query("SELECT principal_id FROM security.identity_bindings WHERE subject='trader';")
+    assert role and actor and '\n' not in role+actor
+    assert query(f"SELECT EXISTS(SELECT 1 FROM security.role_permissions WHERE(role_id,permission)=('{role}','ReadPhysical'));")=='t'
+    catalog=manifest['catalogId']
+    heads_sql=("SELECT jsonb_build_array("
+        f"(SELECT coalesce(max(publication_order),0) FROM trading.publications WHERE catalog_id='{catalog}'),"
+        f"(SELECT coalesce(max(event_order),0) FROM market_data.knowledge_events WHERE catalog_id='{catalog}'));")
+    for missing in (False,True):
+        temporary,first,successor=(str(uuid4()) for _ in range(3))
+        name='synthetic_operating_side_wait_'+temporary[:8]
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            holder=pool.submit(query,f"SET application_name='{name}';BEGIN;LOCK TABLE market_data.temporal_contexts IN ACCESS EXCLUSIVE MODE;SELECT pg_sleep(3.5);COMMIT;")
+            running=None
+            installed=False
+            try:
+                deadline=time.monotonic()+1.5
+                while query(f"SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE application_name='{name}' AND wait_event='PgSleep');")!='t':
+                    assert time.monotonic()<deadline,'The owned context-read lock did not become active.'
+                    time.sleep(.01)
+                original='' if missing else f"INSERT INTO security.role_grants VALUES('{first}','{actor}','{temporary}','{manifest['tenantId']}','{manifest['workspaceId']}',clock_timestamp()-interval '1 second',clock_timestamp()+interval '1.5 seconds',false);"
+                query(f"BEGIN;DELETE FROM security.role_permissions WHERE(role_id,permission)=('{role}','ReadPhysical');"
+                    f"INSERT INTO security.roles VALUES('{temporary}','synthetic_side_timer_{temporary[:8]}','Synthetic original Side read authority');"
+                    f"INSERT INTO security.role_permissions VALUES('{temporary}','ReadPhysical');"+original+
+                    f"INSERT INTO security.role_grants VALUES('{successor}','{actor}','{temporary}','{manifest['tenantId']}','{manifest['workspaceId']}',clock_timestamp()+interval '2 seconds',clock_timestamp()+interval '30 seconds',false);COMMIT;")
+                installed=True
+                original_until=query(f"SELECT security.grant_until('{actor}','{manifest['tenantId']}','{manifest['workspaceId']}','ReadPhysical',clock_timestamp());")
+                assert (original_until=='-infinity') is missing,'The synthetic entry grant did not isolate the intended original ReadPhysical authority.'
+                epoch,heads=query('SELECT generation FROM security.epoch;'),query(heads_sql)
+                running=pool.submit(client.call,'physical/power-trades/get',selected,expected=403,timeout=12)
+                blocked=False
+                deadline=time.monotonic()+1.2
+                while time.monotonic()<deadline and not running.done():
+                    blocked=query("SELECT EXISTS(SELECT 1 FROM pg_locks l JOIN pg_stat_activity a ON a.pid=l.pid "
+                        "WHERE l.relation='market_data.temporal_contexts'::regclass AND NOT l.granted "
+                        "AND a.usename='preview_runtime' AND a.wait_event_type='Lock');")=='t'
+                    if blocked:break
+                    time.sleep(.01)
+                assert blocked is not missing, 'Original ReadPhysical capture must precede the exact context wait, and absent authority must refuse before it.'
+                running.result(timeout=12);holder.result(timeout=8)
+                assert query('SELECT generation FROM security.epoch;')==epoch
+                assert query(f"SELECT granted_from<=clock_timestamp() AND clock_timestamp()<granted_to FROM security.role_grants WHERE id='{successor}';")=='t'
+                assert client.call('physical/power-trades/get',selected)['retainedSource']['contextId']==selected['context']['contextId'], \
+                    'A new read with the active successor must work without rewriting the selected source.'
+                assert query(heads_sql)==heads,'Readonly Side admission published a market or trading fact.'
+            finally:
+                try:
+                    holder.result(timeout=8)
+                    if running is not None:running.result(timeout=12)
+                finally:
+                    if installed:
+                        query(f"BEGIN;DELETE FROM security.role_grants WHERE id IN('{first}','{successor}');"
+                            f"DELETE FROM security.role_permissions WHERE role_id='{temporary}';DELETE FROM security.roles WHERE id='{temporary}';"
+                            f"INSERT INTO security.role_permissions VALUES('{role}','ReadPhysical');COMMIT;")
+    print('PASS selected operating Side HTTP authority: expired and absent original ReadPhysical refuse despite active successor, unchanged epoch and unchanged publication heads',flush=True)
 
 
 def run_checks(client, query, manifest, plan, *, other_plans=()):
@@ -38,6 +100,11 @@ def run_checks(client, query, manifest, plan, *, other_plans=()):
     assert len({s['sideId'] for s in reopened['sides']})==2
     assert len({s['scheduleId'] for s in reopened['sides']})==2
     assert reopened['terms']==request, 'Reopening preserves the original reviewed command.'
+    before_booking=dict(snapshotId=frame,convention='trading_workspace_v1',knowledgeMode='retained',contextId=catalog['contextId'])
+    retained_target=dict(bindingId=saved['bindingId'],revision=saved['revision'])
+    assert client.call(route+'get',{**selected,**retained_target,'context':before_booking},expected=422)['code']=='position_unavailable', \
+        'An explicit pre-booking cut must not recapture current knowledge to reveal a later operating right.'
+    client.call(route+'valuation',{**selected,**retained_target,'context':before_booking},expected=422)
     directory=client.call(route+'directory',dict(snapshotId=frame,bookIds=[request['bookId']],offset=0,limit=50))
     assert any(t['tradeId']==saved['tradeId'] for t in directory['trades'])
     value=client.call(route+'valuation',selected)
@@ -48,6 +115,27 @@ def run_checks(client, query, manifest, plan, *, other_plans=()):
     facts=client.call('trading/positions',dict(context=context,bookIds=[request['bookId']],portfolioIds=[],offset=0,limit=64))
     fact=next(p for p in facts['positions'] if p['tradeId']==saved['tradeId'])
     assert fact['instrumentType']=='operating_right' and fact['bookedQuantity']=='1'
+    retained_selection=dict(context,knowledgeMode='retained',contextId=facts['context']['contextId'])
+    retained_get={**selected,**retained_target,'context':retained_selection}
+    exact_retained=client.call(route+'get',retained_get)
+    assert exact_retained['context']['contextId']==retained_selection['contextId']
+    assert exact_retained['bindingId']==saved['bindingId'] and exact_retained['revision']==saved['revision']
+    assert exact_retained['sides']==reopened['sides']
+    assert exact_retained['retainedSource']['snapshotId']==frame
+    assert exact_retained['retainedSource']['contextId']==retained_selection['contextId']
+    assert datetime.fromisoformat(exact_retained['retainedSource']['asOf'])==datetime.fromisoformat(facts['asOf'])
+    assert exact_retained['retainedSource']['businessDate']==facts['context']['effectiveOn']
+    assert datetime.fromisoformat(exact_retained['retainedSource']['knownAt'])==datetime.fromisoformat(facts['context']['knownAt'])
+    client.call(route+'get',{**retained_get,'bindingId':str(uuid4())},expected=422)
+    client.call(route+'get',{**retained_get,'revision':2},expected=422)
+    client.call(route+'get',{**retained_get,'snapshotId':str(uuid4())},expected=422)
+    query("CREATE POLICY side_test_hidden_operating_book ON trading.books AS RESTRICTIVE FOR SELECT TO openetrm_runtime USING(false);")
+    try:
+        assert client.call(route+'get',retained_get,expected=422)['code']=='position_unavailable', \
+            'An exact operating Side read with no visible book must remain a structured unavailable result.'
+    finally:
+        query("DROP POLICY side_test_hidden_operating_book ON trading.books;")
+    original_physical_authority(client,query,manifest,retained_get)
     holding=client.call('trading/position',dict(context=context,tradeId=saved['tradeId'],bindingId=saved['bindingId'],revision=1,instrumentType='operating_right'))['holding']
     assert Fraction(holding['presentValue'])==610 and holding['sideSchedules']
     for kind,physical_plan,expected_value,expected_gross in other_plans:
@@ -92,6 +180,10 @@ def run_checks(client, query, manifest, plan, *, other_plans=()):
     assert client.call(route+'hedges',empty,expected=422)['code']=='power_hedge_contract'
     from check_power_market_http import run_checks as check_market_price
     check_market_price(client,request,hedge['tradeId'],context)
+    assert client.call(route+'get',retained_get)==exact_retained, \
+        'Later facility and operating publications must not change the exact retained operating source or Side membership receipt.'
+    assert client.call(route+'get',selected)['sides']==reopened['sides'], \
+        'The explicit-current legacy operating inspector must remain compatible.'
     overlap=deepcopy(request);overlap['operationId']=str(uuid4())
     overlap['plan']['batteryDispatch'][0]['chargeMw']='8'
     overlap['plan']['batteryDispatch'][1]['dischargeMw']='6.48'

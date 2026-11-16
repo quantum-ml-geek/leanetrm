@@ -42,7 +42,7 @@ public sealed partial class TradeReads
             var position=positions[0];
             if(revision is {} requested&&requested!=int.Parse(position.Head.Text("revision"),CultureInfo.InvariantCulture))
                 throw new MarketDataException("position_revision","The selected context does not contain the requested LNG revision.");
-            return new{head=position.Head,physical=position.Physical,delivery=await LngDelivery(connection,view,position,ct)};
+            return await LngTerms(connection,view,position,ct);
         },ct);
     public Task<object> LngTrade(NpgsqlConnection connection,TradingView view,TradePositionReadRequest request,CancellationToken ct)
     {
@@ -51,7 +51,7 @@ public sealed partial class TradeReads
         return ReadBound(connection,view,async()=>
         {
             var position=(await LngPositions.Read(connection,database.Manifest,[],[],ct,selected)).Single();
-            return new{head=position.Head,physical=position.Physical,delivery=await LngDelivery(connection,view,position,ct)};
+            return await LngTerms(connection,view,position,ct);
         },ct);
     }
     // A read of one position needs current trading authority before any frame or trade is selected, so that a principal without it is
@@ -69,7 +69,7 @@ public sealed partial class TradeReads
         return ReadBound(connection,view,async()=>
         {
             var position=(await CrudePositions.Read(connection,database.Manifest,[],[],ct,selected)).Single();
-            return new{head=position.Head,physical=position.Physical,profileName=CrudeProfileName(position),delivery=await CrudeDelivery(connection,view,position,ct)};
+            return await CrudeTerms(connection,view,position,ct);
         },ct);
     }
     public Task<object> CrudeTrade(NpgsqlConnection connection,TradingView view,Guid trade,int? revision,CancellationToken ct)=>
@@ -80,7 +80,7 @@ public sealed partial class TradeReads
             var position=positions[0];
             if(revision is {} requested&&requested!=int.Parse(position.Head.Text("revision"),CultureInfo.InvariantCulture))
                 throw new MarketDataException("position_revision","The selected context does not contain the requested crude revision.");
-            return new{head=position.Head,physical=position.Physical,profileName=CrudeProfileName(position),delivery=await CrudeDelivery(connection,view,position,ct)};
+            return await CrudeTerms(connection,view,position,ct);
         },ct);
     Task<PhysicalDeliveryView> CrudeDelivery(NpgsqlConnection connection,TradingView view,CrudePosition position,CancellationToken ct)=>
         PhysicalDeliveryViews.Contract(connection,database,view.CalculationFrame,position.Fact(),position.TotalQuantity,position.Head.Text("direction"),
@@ -90,6 +90,19 @@ public sealed partial class TradeReads
             "cargo","lng_custody",position.Physical.Text("discharge_custody_name"),[new("lng_actuals","Cargo actuals & reconciliation",false)],ct);
     static string CrudeProfileName(CrudePosition position)=>PhysicalCrudeStore.ProfileName(
         position.Head.TryGetProperty("request",out var request)&&request.TryGetProperty("profile",out var profile)?profile.GetString():null);
+    async Task<object> CrudeTerms(NpgsqlConnection connection,TradingView view,CrudePosition position,CancellationToken ct)
+    {
+        var delivery=await CrudeDelivery(connection,view,position,ct);
+        var programs=await new RetainedScheduleStore(database).LoadPrograms(connection,position.Binding,view.CalculationFrame.ContextId,view.CalculationFrame.At,ct);
+        return new{head=position.Head,physical=position.Physical,profileName=CrudeProfileName(position),delivery,
+            sideGroups=new[]{RetainedInstrumentSidePresentation.Crude(position,programs)}};
+    }
+    async Task<object> LngTerms(NpgsqlConnection connection,TradingView view,LngPosition position,CancellationToken ct)
+    {
+        var delivery=await LngDelivery(connection,view,position,ct);
+        var programs=await new RetainedScheduleStore(database).LoadPrograms(connection,position.Binding,view.CalculationFrame.ContextId,view.CalculationFrame.At,ct);
+        return new{head=position.Head,physical=position.Physical,delivery,sideGroups=new[]{RetainedInstrumentSidePresentation.Lng(position,programs)}};
+    }
     public Task<object> GasTrade(NpgsqlConnection connection,TradingView view,TradePositionReadRequest request,CancellationToken ct)
     {
         var selected=TradePositionSelection.From(request);
@@ -120,8 +133,10 @@ public sealed partial class TradeReads
             ?await new FacilityQuantityStore(database).TradeAllocations(connection,position.Head.Id("trade_id"),ct)
             :JsonSerializer.SerializeToElement(Array.Empty<object>());
         var history=await PreviewDatabase.Rows(connection,"SELECT row_to_json(x)::text FROM(SELECT r.revision,r.instrument_id,r.actor_id,r.effective_at,a.reason FROM trading.gas_trade_revisions r LEFT JOIN trading.gas_amendment_commands a ON(a.catalog_id,a.operation_id,a.changed)=(r.catalog_id,r.operation_id,true) WHERE(r.catalog_id,r.trade_id)=($1,$2) ORDER BY r.revision DESC)x",[database.Manifest.CatalogId,position.Trade],ct);
+        var amend=await GasAmendments.Action(connection,database.Manifest.CatalogId,position.Trade,position.Binding,int.Parse(position.Head.Text("revision"),CultureInfo.InvariantCulture),view.CalculationFrame.At,view.Working,ct);
+        var programs=await new RetainedScheduleStore(database).LoadPrograms(connection,position.Binding,view.CalculationFrame.ContextId,view.CalculationFrame.At,ct);
         return new{head=position.Head,physical=position.Physical,components,indexedCash,facilityAllocations,history,
-            amend=await GasAmendments.Action(connection,database.Manifest.CatalogId,position.Trade,position.Binding,int.Parse(position.Head.Text("revision"),CultureInfo.InvariantCulture),view.CalculationFrame.At,view.Working,ct)};
+            amend,sideGroups=new[]{RetainedInstrumentSidePresentation.Gas(position,programs,components)}};
     }
     public Task<object> Position(NpgsqlConnection connection,TradingView view,TradePositionReadRequest request,CancellationToken ct)
     {
