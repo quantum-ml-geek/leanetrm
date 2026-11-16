@@ -109,6 +109,11 @@ uses a different decomposition from the managed interval calculator. Managed
 commit admission retains the original authority deadline after waits; deferred
 native constraints supplement that supported writer boundary.
 
+Before confirmation, the review shows the observed accrual-through instant,
+previous rounded cumulative fee, new rounded cumulative fee, signed cash
+contribution, currency and due instant. Times use the user's display zone.
+An incomplete fee effect cannot expose an execution control.
+
 ## Qualification boundary
 
 Disposable managed and native checks cover all four principal roles and both
@@ -119,7 +124,13 @@ independent whole-book value/scenario checkpoints and nine actual queued PRICE
 jobs exercise independent principal and cash owners. Populated upgrade checks
 retain the fixed-fee profile and refuse protected predecessor drift.
 
-Actual browser qualification and the integrated runner gate the final combined
-artifact. Broader service laws, custody, transport, commercial storage, correction
+The final combined local artifact passed 185 actual application browser checks
+across all eight principal-role/fee-direction combinations, including exact
+monetary review, phone layout, normal whole-book Risk and lost-response recovery.
+Seven expired unaccepted rows retained null values and explicit unavailable
+reasons while a ninth prospective agreement booked and reopened normally.
+The fixed-fee actual browser regression passed 72 checks. The integrated runner
+and aggregate CI still gate publication qualification for the exact commit.
+Broader service laws, custody, transport, commercial storage, correction
 continuity and economic-horizon risk require their own executable qualification.
 No production schema activation is implied.

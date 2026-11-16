@@ -70,7 +70,18 @@ internal static class GasParkLoanBalanceFeeAdapterChecks
             JsonSerializer.SerializeToElement(new{expectedVersion=1,previousDeterminationId=state.Checkpoint!.Id,
                 through="2032-03-14T11:00:00Z",effectiveAt="2032-03-14T11:00:00Z",businessKey="synthetic_fee",evidence="Synthetic determination"}));
         var outcome=JsonSerializer.SerializeToElement(new{exactNumerator="-72",exactDenominator="25",roundedTotal="-2.88",contribution="0"});
-        _=GasParkLoanActions.Effects(catalog,agreement,request,outcome);
+        var review=JsonSerializer.SerializeToElement(GasParkLoanActions.Effects(catalog,agreement,request,outcome),GasOwnedOperations.Json);
+        if(!review.TryGetProperty("previousCumulativeRoundedFee",out var previous)||previous.GetString()!="-2.88"||
+            review.Text("accruedThrough")!="2032-03-14T11:00:00Z"||review.Text("cumulativeRoundedFee")!="-2.88"||review.Text("independentCash")!="0"||
+            review.GetProperty("dueAt").GetDateTimeOffset()!=DateTimeOffset.Parse("2032-03-15T16:00:00Z"))
+            throw new Exception("A fee review must state its selected through time, previous and new rounded cumulative totals, signed contribution and exact due time.");
+        var later=JsonNode.Parse(agreement.GetRawText())!.AsObject();later["asOf"]="2032-03-14T12:00:00Z";
+        var laterRequest=request with{Selection=JsonSerializer.SerializeToElement(new{expectedVersion=1,previousDeterminationId=state.Checkpoint!.Id,
+            through="2032-03-14T12:00:00Z",effectiveAt="2032-03-14T12:00:00Z",businessKey="synthetic_later_fee",evidence="Synthetic later determination"})};
+        var laterReview=JsonSerializer.SerializeToElement(GasParkLoanActions.Effects(catalog,JsonSerializer.SerializeToElement(later),laterRequest,
+            JsonSerializer.SerializeToElement(new{exactNumerator="-117",exactDenominator="25",roundedTotal="-4.68",contribution="-1.8"})),GasOwnedOperations.Json);
+        if(laterReview.Text("previousCumulativeRoundedFee")!="-2.88"||laterReview.Text("cumulativeRoundedFee")!="-4.68"||laterReview.Text("independentCash")!="-1.8")
+            throw new Exception("Review the new signed fee contribution separately from both cumulative amounts.");
         try
         {
             GasParkLoanActions.Effects(catalog,agreement,request,JsonSerializer.SerializeToElement(new{exactNumerator="-72",exactDenominator="25",roundedTotal="-2.88",contribution="999"}));

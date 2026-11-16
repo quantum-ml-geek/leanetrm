@@ -10,6 +10,12 @@ independent from commercial entitlement, title and cash. The first operating
 profile has local managed, native, upgrade and browser qualification. Integration
 and release gates remain separate from that evidence.
 
+D408 adds an explicitly selected [outstanding-balance elapsed-hour fee
+profile](gas-park-loan-balance-fee.md). Accepted principal events, cumulative fee
+determinations, independent cash and remaining service value retain distinct
+owners. Current-clock price qualification does not establish complete economic
+horizon continuation.
+
 D401 selects [shared lifecycle delivery](lifecycle-delivery.md): operation-specific
 eligibility, native lifecycle coordination, gas ownership/entitlements/borrowing
 and event-aware economic risk. Its delivery gates distinguish implementation from

@@ -14,6 +14,14 @@ admission, existing allocation links and shared UI have local qualification.
 Complete commercial Storage/Transport, further operating laws and integrated
 release checks remain open.
 
+D408 implements [outstanding-balance elapsed-hour fees](gas-park-loan-balance-fee.md)
+with explicit timing, remaining-return plans and cumulative cash rounding. Native
+and managed determination, independent contributions and refunds, shared entry,
+current-clock price scenarios and retained PRICE workers have disposable local
+qualification. Complete economic horizon risk, broader service laws and source
+reconciliation remain separate qualification work. The exact combined artifact
+still requires its integration and release gates.
+
 D404 is implemented for 25 selected main-workbench curve, trading and Risk reads,
 with independent view progress, bounded execution, cancellation admission fences
 and exact authorization/context checks before SSE publication. Local qualification
@@ -43,7 +51,7 @@ instants and exchange option expiry retain their explicit timing and rate inputs
 required purpose bindings and Side-owned rules; omission checks are mandatory
 in the verification runner.
 
-The integrated verification runner requires 189 commands, including required
+The integrated verification runner requires 196 commands, including required
 Park and Loan native, populated-upgrade, retained-worker and browser qualifiers,
 with domain, native database, agent and browser coverage. Local checks at D406
 passed 738 managed core checks and 1,889 frontend checks. The earlier D403

@@ -95,6 +95,15 @@ export function setupLifecycle(root:HTMLElement,o:{api:Api;act:(work:()=>Promise
    if(correction){add('Acknowledged financial revision',d.acknowledgedRevision);add('Current financial revision',d.currentRevision);}
    if(effect){for(const key of ['performedQuantity','quantitySpecification','stockQuantity','returnQuantity','outstandingPrincipal','feeAmount','cashAmount','currency'])add(title(key),effect[key]);
     for(const key of ['effectiveAt','returnAt','feeDueAt','cashDueAt'])if(typeof effect[key]==='string')add(title(key),instant(effect[key]));}
+   if(request.action==='gas.park_loan.fee_determine'){
+    const text=(key:string)=>{const value=effect?.[key];if(typeof value!=='string'||!value.trim())throw Error('Reload the complete cumulative fee review before recording it.');return value;};
+    text('currency');
+    add('Observed accrual through',instant(text('accruedThrough')));
+    add('Previous rounded cumulative fee',text('previousCumulativeRoundedFee'));
+    add('New rounded cumulative fee',text('cumulativeRoundedFee'));
+    add('Signed fee contribution',text('independentCash'));
+    add('Fee due',instant(text('dueAt')));
+   }
    for(const key of ['quantity','amount','businessReference','businessKey','evidence'])add(correction&&d.willChange===false&&key==='quantity'?'Acknowledged quantity':title(key),request.selection[key]);
    for(const key of ['titleAt','availableAt','performedAt','paidAt','effectiveAt'])if(typeof request.selection[key]==='string')add(title(key),instant(request.selection[key] as string));
   }

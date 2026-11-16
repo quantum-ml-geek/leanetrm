@@ -154,6 +154,7 @@ internal sealed class GasParkLoanActions(PreviewDatabase database):ILifecycleAct
             if(native!=expected.ExactTotal||outcome.Number("roundedTotal")!=expected.RoundedTotal.Amount||outcome.Number("contribution")!=expected.Contribution.Amount)
                 throw new MarketDataException("gas_park_loan_context","The independent native and managed cumulative fee determinations disagree.");
             return new{accruedThrough=request.Selection.Text("through"),exactTotal=expected.ExactTotal.ToExactString(),
+                previousCumulativeRoundedFee=state.CumulativeDeterminedTotal.Amount.ToString(),
                 cumulativeRoundedFee=expected.RoundedTotal.Amount.ToString(),independentCash=expected.Contribution.Amount.ToString(),
                 currency=state.Terms.Currency.Code,dueAt=state.Terms.DueAt,principalUnchanged=true};
         }

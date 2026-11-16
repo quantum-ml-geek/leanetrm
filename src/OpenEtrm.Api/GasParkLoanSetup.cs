@@ -92,7 +92,7 @@ internal static partial class GasOwnedSetup
             var previous=determinations.LastOrDefault();var hasPrevious=previous.ValueKind==JsonValueKind.Object;
             forms.Add(GasParkLoanActions.Determine,new("Determine accrued service fee","RecordGasOwnedHoldings",[
                 Version(),Reference("previousDetermination","Previous cumulative determination",!hasPrevious,["previousDeterminationId"],hasPrevious?
-                    [Choice(previous.Id("id").ToString(),"Cumulative fee through "+previous.Text("through"),new{previousDeterminationId=previous.Id("id")})]:[]),
+                    [Choice(previous.Id("id").ToString(),"Rounded cumulative fee "+previous.Text("roundedTotal")+" "+source.GetProperty("terms").Text("currency"),new{previousDeterminationId=previous.Id("id")})]:[]),
                 Instant("through","Observed fee accrual through"),Instant("effectiveAt","Fee determination effective time"),
                 Text("businessKey","Determination business reference"),Text("evidence","Determination evidence")]));
         }

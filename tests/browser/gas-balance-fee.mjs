@@ -54,7 +54,10 @@ async function run(driver){
   await onlyChoice('policyId');await onlyChoice('serviceVersion');
   if(key==='fee_determine'){
    const nullable=await evaluate(`!!document.querySelector('${panel} [name=previousDetermination] option[value="@null"]')`);
-   if(nullable)await set(panel+' [name=previousDetermination]','@null');else await onlyChoice('previousDetermination');
+   if(nullable)await set(panel+' [name=previousDetermination]','@null');else{
+    await onlyChoice('previousDetermination');
+    await check('the previous determination choice names its retained rounded fee and exact currency',`document.querySelector('${panel} [name=previousDetermination]').selectedOptions[0].textContent===${q('Rounded cumulative fee '+c.firstCash+' '+f.currency)}`);
+   }
   }
   if(key==='fee_payment')await onlyChoice('feeId');
   for(const [name,value]of Object.entries(values))await set(panel+' [name="'+name+'"]',['effectiveAt','paidAt','through'].includes(name)?await local(value):value);
@@ -62,8 +65,22 @@ async function run(driver){
   const review=await evaluate("calls.filter(call=>call.path==='/api/lifecycle/preview').at(-1)");
   if(review.status!==200||review.body.target.scopeId!==c.tradeId||review.body.target.bindingId!==c.instrumentId)throw Error('The fee review lost its exact native target.');
   if(key==='fee_determine'){
-   await check('fee cash is reviewed independently of principal performance',"document.querySelector('[data-lifecycle-review]').textContent.includes('fee')||document.querySelector('[data-lifecycle-review]').textContent.includes('Fee')");
+   const first=values.through===f.partialAt,expected={previous:first?'0':c.firstCash,total:first?c.firstCash:c.cumulative,contribution:first?c.firstCash:c.finalCash};
+   const effect=review.result.details.effects;
+   if(effect.previousCumulativeRoundedFee!==expected.previous||effect.cumulativeRoundedFee!==expected.total||effect.independentCash!==expected.contribution||Date.parse(effect.accruedThrough)!==Date.parse(values.through)||Date.parse(effect.dueAt)!==Date.parse(f.feeDueAt))throw Error('The backend fee review changed its explicit cumulative totals, contribution or times: '+JSON.stringify(effect));
+   const display=async at=>evaluate(`new Intl.DateTimeFormat('en-US',{timeZone:'America/Chicago',dateStyle:'medium',timeStyle:'short'}).format(new Date(${q(at)}))`);
+   const facts=await evaluate("Object.fromEntries([...document.querySelectorAll('[data-lifecycle-review] dt')].map(label=>[label.textContent,label.nextElementSibling.textContent]))");
+   if(facts['Previous rounded cumulative fee']!==expected.previous||facts['New rounded cumulative fee']!==expected.total||facts['Signed fee contribution']!==expected.contribution||facts['Observed accrual through']!==await display(values.through)||facts['Fee due']!==await display(f.feeDueAt))throw Error('The person cannot review the exact fee contribution and user-zone times: '+JSON.stringify(facts));
+   if(!first&&facts['Previous cumulative determination']!=='Rounded cumulative fee '+c.firstCash+' '+f.currency)throw Error('The selected previous fee label changed between entry and review: '+JSON.stringify(facts));
+   await check('fee review shows prior and new cumulative totals, signed cash and explicit user-zone times',"document.querySelector('[data-lifecycle-execute]')?.disabled===false");
    await evaluate("document.querySelector('[data-lifecycle-review]').scrollIntoView({block:'center'})");await shot('gas-balance-fee-review');
+   if(lost){
+    await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
+    await evaluate("new Promise(resolve=>requestAnimationFrame(()=>{[...document.querySelectorAll('[data-lifecycle-review] dt')].find(label=>label.textContent==='Observed accrual through').scrollIntoView({block:'start'});requestAnimationFrame(resolve);}))");
+    await check('the live monetary fee review is visible and fits a phone viewport',`${fitsWidth}&&(()=>{const label=[...document.querySelectorAll('[data-lifecycle-review] dt')].find(label=>label.textContent==='Signed fee contribution'),r=label.getBoundingClientRect();return r.top>=0&&r.bottom<=innerHeight&&document.querySelector('[data-lifecycle-execute]').disabled===false;})()`);
+    await shot('gas-balance-fee-mobile');
+    await command('Emulation.setDeviceMetricsOverride',{width:1440,height:1100,deviceScaleFactor:1,mobile:false});await evaluate("document.querySelector('[data-lifecycle-review]').scrollIntoView({block:'center'})");
+   }
   }
   if(lost)await evaluate('window.loseDetermination=true');
   await wait(`document.querySelector('[data-lifecycle-execute]')?.disabled===false&&${idle}`,60000);await click('[data-lifecycle-execute]',60000);
@@ -174,7 +191,6 @@ async function run(driver){
    await check('a completed agreement does not poison an ordinary future booking at the current operating close',`document.querySelector('#snapshot').value===${q(f.closes.flow)}&&calls.findLast(call=>call.path==='/api/tickets/book').status===200`);
   }
  }
- await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await check('the explicit balance-time workflow fits a narrow viewport',fitsWidth);await evaluate("document.querySelector('[data-lifecycle=panel]').scrollIntoView({block:'start'})");await shot('gas-balance-fee-mobile');
 }
 
 if(process.argv.length!==4)throw Error('Use the owned balance-time fee browser qualifier.');

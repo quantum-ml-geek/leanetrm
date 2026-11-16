@@ -5593,3 +5593,35 @@ a parallel financial ledger or infer a movement from title transfer.
 agreements, other ratchet laws, loss/conversion rules and complete optionality
 valuation require their own qualified contracts. See
 [storage facility operations](storage-facility-operations.md).
+
+## D408 · Explicit balance-time fees and cumulative independent cash
+
+**Status:** implemented bounded profile with disposable local qualification;
+the exact combined artifact and release remain separately gated.
+
+**Requirement.** Charge accepted outstanding Park and Loan principal over time,
+preserving principal, service value, fee determinations and bank payments as
+independent facts.
+
+**Decision.** Install `physical_gas_park_loan_balance_time_v1` alongside the
+fixed-fee title-transfer profile. Retain an absolute currency/native-quantity rate,
+elapsed-hour basis, accepted advance start, contractual cutoff, overdue treatment,
+cash due instant, remaining-return plan and cumulative rounding law. Integrate
+accepted partial returns exactly, round cumulative payment totals once and append
+only their signed differences. Each nonzero contribution has an independent cash
+owner; a zero delta records a checkpoint without cash. Explicit restatement after
+a newly accepted backdated return may create a refund without rewriting paid
+cash. Remaining service value subtracts all determined contributions, including
+paid ones; native outstanding cash includes only unpaid amounts.
+
+The shared ticket renders the explicitly selected profile's fields under an exact
+description-selector attestation. It does not submit inactive economic fields.
+Native persistence independently validates rational math, event membership, exact
+previous heads, operation receipts, current authority and original deadlines.
+
+**Boundaries.** An expired unaccepted advance plan is unavailable and cannot
+become zero or an invented actual advance. The cutoff never discharges principal.
+Quantity scaling, source-correction continuity and complete economic horizon
+projection remain unqualified. The economic fence includes source-known future,
+zero-rate, rounded-zero and cash-only states. See the [fee contract and actual
+qualification](gas-park-loan-balance-fee.md).

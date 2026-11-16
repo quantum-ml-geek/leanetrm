@@ -87,7 +87,7 @@ def main():
         closes = {label: state.call(f"SELECT security.register_market_close('{state.catalog}','{manifest['revisionId']}','{uuid4()}',"
             f"'Synthetic balance fee {label}','{session}','{day}','{day}T16:00:00Z',{literal(market['pins'])},{literal(market['members'])});")
             for label, day in [('before', '2020-12-18'), ('flow', '2020-12-20')]}
-        packet = dict(profile=PROFILE, balanceFee=terms('0.004', 'to_even', '0.01'), session=session, closes=closes, cases=cases, futureEntry=future_entry,
+        packet = dict(profile=PROFILE, balanceFee=terms('0.004', 'to_even', '0.01'), currency=state.terms['currency'], session=session, closes=closes, cases=cases, futureEntry=future_entry,
             advanceAt='2020-12-20T10:00:00Z', partialAt='2020-12-20T11:00:00Z', returnAt='2020-12-20T12:00:00Z', feeDueAt='2020-12-23T16:00:00Z',
             **{key: market[key] for key in ['contractId', 'definitionRevisionId']})
         artifacts = ['gas-balance-fee-entry.png', 'gas-balance-fee-review.png', 'gas-balance-fee-mobile.png', 'gas-balance-fee-risk.png']

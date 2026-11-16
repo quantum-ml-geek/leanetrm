@@ -70,17 +70,19 @@ internal static class GasParkLoanSetupChecks
             var refund=Guid.NewGuid();var opposite=Guid.NewGuid();var previous=Guid.NewGuid();
             var balance=JsonSerializer.SerializeToElement(new{implementation="physical_gas_park_loan_balance_time_v1",tradeId=trade,instrumentId=instrument,
                 contextId=context.ContextId,asOf=context.AsOf,stateVersion=9,ownedAccountId=owned,claimAccountId=direction==1?(Guid?)null:claim,
-                terms=new{principalDirection=direction},advance=new{feeId=(Guid?)null},policies=definitions,
+                terms=new{principalDirection=direction,currency="synthetic_currency"},advance=new{feeId=(Guid?)null},policies=definitions,
                 fee=new{unpaid="0",determinations=new[]{
-                    new{id=Guid.NewGuid(),feeId=fee,contribution="-2.88",unpaid="0",through="2041-02-01T10:00:00Z"},
-                    new{id=Guid.NewGuid(),feeId=refund,contribution="0.54",unpaid="0.54",through="2041-02-01T11:00:00Z"},
-                    new{id=previous,feeId=opposite,contribution="-0.54",unpaid="-0.54",through="2041-02-01T12:00:00Z"}}}});
+                    new{id=Guid.NewGuid(),feeId=fee,roundedTotal="-2.88",contribution="-2.88",unpaid="0",through="2041-02-01T10:00:00Z"},
+                    new{id=Guid.NewGuid(),feeId=refund,roundedTotal="-2.34",contribution="0.54",unpaid="0.54",through="2041-02-01T11:00:00Z"},
+                    new{id=previous,feeId=opposite,roundedTotal="-2.88",contribution="-0.54",unpaid="-0.54",through="2041-02-01T12:00:00Z"}}}});
             var setup=GasOwnedSetup.BuildParkLoanSetup(context,target,balance,ownedState,direction==1?null:claimState,policies);
             var determine=setup.Forms["gas.park_loan.fee_determine"].Fields;
             var prior=determine.Single(f=>f.Name=="previousDetermination");
             if(prior.Nullable||prior.Members is not ["previousDeterminationId"]||JsonSerializer.SerializeToElement(prior.Choices.Single().Value).Id("previousDeterminationId")!=previous||
                 determine.Any(field=>field.Name=="amount")||setup.Policies.Single(p=>p.Action=="gas.park_loan.fee_determine").Revision!=2)
                 throw new Exception("Fee determination must select its exact previous cumulative head and distinct action policy without a trusted amount.");
+            if(prior.Choices.Single().Label!="Rounded cumulative fee -2.88 synthetic_currency")
+                throw new Exception("The previous determination choice must name its retained rounded cumulative total and exact currency, not its contribution or raw timestamp.");
             var fees=setup.Forms["gas.park_loan.fee_payment"].Fields.Single(f=>f.Name=="feeId").Choices.Select(c=>c.Id).ToHashSet();
             if(!fees.SetEquals([refund.ToString(),opposite.ToString()]))
                 throw new Exception("Independent refund and charge owners remain selectable when aggregate unpaid cash nets to zero; paid owners stay excluded.");

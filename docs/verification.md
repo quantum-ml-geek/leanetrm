@@ -38,8 +38,8 @@ The gas partition includes the Park and Loan native, populated-upgrade, retained
 price-worker and real application browser qualifiers, alongside its existing
 amendment upgrades and application checks.
 
-The current integrated runner contains 192 commands: 64 shared checks,
-64 isolated application previews and 64 partition-specific native/application
+The current integrated runner contains 196 commands: 64 shared checks,
+64 isolated application previews and 68 partition-specific native/application
 checks. The D404 local checkpoint passed 1,866 frontend checks and 122 Python
 checks. The earlier calendar/lifecycle checkpoint passed 737 managed core checks,
 88 rate checks, 1,806 frontend checks and 121 Python checks; those counts describe
@@ -4573,7 +4573,7 @@ continuous integration runs the complete suite.
 These are synthetic local checks. They do not qualify a Side, trade or cash
 consumer, explicit roll boundaries, or a production activation.
 
-## Park and Loan local qualification (D405)
+## Park and Loan local qualification (D406)
 
 The bounded [commercial profile](gas-park-loan.md) is checked through:
 
@@ -4598,3 +4598,37 @@ changes after preview, knowledge-first payment heads, worker source authority an
 UI time-resolution races. Aggregate CI and exact-release checks remain mandatory;
 local qualification does not activate a production schema or qualify service
 horizon continuation.
+
+## Outstanding-balance fee qualification (D408)
+
+The [balance-time fee contract](gas-park-loan-balance-fee.md) has four required
+consumers in the gas partition:
+
+- `tools/check_gas_park_loan_balance_fee.py` verifies native booking, principal
+  and fee operations, exact rational/cumulative rounding, explicit refunds,
+  authority, immutable operation seals and 26 independent whole-book price and
+  scenario checkpoints with the selected SDK supplied through `DOTNET`.
+- `tools/check_gas_balance_fee_upgrade.py` applies the additive migration over
+  populated fixed-fee agreements, preserves exact prior facts and outcomes,
+  and refuses altered protected producer, probe and privilege contracts.
+- `tools/check_gas_balance_fee_worker.py` executes nine retained PRICE jobs,
+  including the required unavailable-plan refusal, ordinary/report parity,
+  independent paid/refund cash and exact source and authority checks. Economic
+  continuation refuses zero-rate, rounded-zero and principal-complete cash-only
+  scopes; excluded scopes remain unaffected.
+- `tools/check_gas_balance_fee_browser.py` operates shared profile entry,
+  reopening, lifecycle and normal whole-book Risk in an owned application with
+  synthetic data and disposable PostgreSQL. It checks independent service,
+  principal and cash owners, monetary review fields, lost-response recovery,
+  local-time display and phone layout.
+
+The integrated local managed core passed 739 checks, the frontend passed 1,943
+checks with none skipped, and Python passed 142 checks. API and worker builds
+passed with zero warnings or errors; the full API schedule checks and native,
+populated-upgrade and queued-worker consumers passed on stock PostgreSQL 16
+with the pinned .NET SDK. The combined artifact passed 185 actual fee browser
+checks and the 72-check fixed-fee browser regression, including native
+postconditions. Review screenshots show the monetary facts and record control
+on desktop and phone. All owned resources were removed. The complete CI matrix
+still gates the exact commit. These checks do not qualify complete economic
+continuation, quantity scaling, correction adapters or production activation.
