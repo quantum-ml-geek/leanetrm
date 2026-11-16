@@ -1,0 +1,58 @@
+import {copyFile,mkdtemp} from 'node:fs/promises';
+import {dirname,join} from 'node:path';
+import {tmpdir} from 'node:os';
+
+// Invoked only by the owned-preview runner. Every business response in this
+// scenario comes from that preview's API and disposable PostgreSQL database.
+export async function run({command,evaluate,wait,click,set,submit,persona,check,idle,fitsWidth,shot,url}){
+ const artifacts=await mkdtemp(join(tmpdir(),'openetrm-operating-power-'));
+ console.log('OPERATING_POWER_VISUAL_ARTIFACTS='+artifacts);
+ const capture=async name=>{await shot(name);await copyFile(join(dirname(process.argv[2]),name+'.png'),join(artifacts,name+'.png'));};
+ await command('Runtime.enable');await command('Page.enable');await command('Emulation.setDeviceMetricsOverride',{width:1440,height:1080,deviceScaleFactor:1,mobile:false});
+ await command('Page.addScriptToEvaluateOnNewDocument',{source:`window.operatingPowerReads=[];{const send=window.fetch;window.fetch=async function(input,init){const response=await send.call(this,input,init);const path=new URL(String(input),location.href).pathname;if(path.startsWith('/api/physical/power-facilities/')){const entry={path,request:init?.body?JSON.parse(init.body):null,status:response.status,result:await response.clone().json()};window.operatingPowerReads.push(entry);if(path.endsWith('/save')&&response.ok&&window.operatingPowerDropReply){window.operatingPowerDropReply=false;window.operatingPowerUnknown=entry;return new Response(JSON.stringify({code:'preview_error',message:'Synthetic qualification: the committed reply was lost.'}),{status:500,headers:{'Content-Type':'application/json'}});}}return response;};}`});
+ await command('Page.navigate',{url:url+'/'});await wait(idle);await persona('editor');
+ const frame=await evaluate("(async()=>{const w=await(await fetch('/api/workspace')).json();const f=w.frames.filter(f=>w.initialFrameIds.includes(f.id)&&f.at.startsWith('2020-12-15'));if(f.length!==1)throw Error('Expected one original synthetic close.');return f[0].id;})()");
+ await set('#snapshot',frame);await wait(idle);await click('#nav-physical-power');
+ await wait("!document.querySelector('#physical-power-page').hidden&&operatingPowerReads.some(r=>r.path.endsWith('/catalog')&&r.status===200)&&"+idle);
+ await check('operating facilities reuse Scheduling and leave the existing facility workspace intact',"document.querySelector('#page-section').textContent==='SCHEDULING'&&document.querySelectorAll('#nav-facilities').length===1&&document.querySelectorAll('#nav-group-scheduling').length===1&&!document.querySelector('#nav-group-physical')");
+ const control=async title=>evaluate(`(()=>{const host=document.getElementById('physical-power-page'),label=[...host.querySelectorAll('label')].find(n=>n.firstChild?.textContent===${JSON.stringify(title)}),field=label?.querySelector('input,select,textarea');if(!field)throw Error('Missing operating control '+${JSON.stringify(title)});field.setAttribute('data-owned-operating-control',${JSON.stringify(title)});return '#physical-power-page [data-owned-operating-control='+JSON.stringify(${JSON.stringify(title)})+']';})()`);
+ const enter=async(title,value)=>{await set(await control(title),value);await wait(idle);};
+ const press=async title=>{const selector=await evaluate(`(()=>{const host=document.getElementById('physical-power-page'),b=[...host.querySelectorAll('button')].find(n=>n.textContent===${JSON.stringify(title)});if(!b)throw Error('Missing operating action '+${JSON.stringify(title)});b.id='owned-operating-action';return '#owned-operating-action';})()`);await click(selector);};
+ const existing=await evaluate("operatingPowerReads.filter(r=>r.path.endsWith('/list')&&r.status===200).at(-1).result.filter(r=>r.terms.facilityCode==='test_facility_a'&&r.terms.kind==='battery').sort((a,b)=>b.version-a.version)[0]??null");
+ if(existing)await enter('Saved operating facility version',existing.id+'/'+existing.version);else await press('Add operating parameters');
+ await enter('Operating kind','battery');
+ for(const [title,value] of Object.entries({'Existing facility location':'test_facility_a','Operating clock':'test_utc','Native interval':'60','Power quantity (MW)':'test_power_megawatt','Energy quantity (MWh)':'test_power_quantity','Effective from (UTC, ending in Z)':'2031-01-01T00:00:00Z','Effective to (UTC, ending in Z)':'2032-01-01T00:00:00Z'}))await enter(title,value);
+ const parameters={maximumChargeMw:'10.000000000001',maximumDischargeMw:'10',minimumStoredMwh:'0',maximumStoredMwh:'10',chargeEfficiency:'0.9',dischargeEfficiency:'0.9',meterBoundary:'grid_side_ac',lossPolicy:'zero_auxiliary_and_self_discharge',capacityPolicy:'fixed',simultaneousPolicy:'prohibited',chargingOrigin:'grid',throughputPolicy:'uncapped'};
+ for(const [key,value] of Object.entries(parameters))await set('#physical-power-page [data-field='+key+']',value);
+ await evaluate("(()=>{const forms=document.querySelectorAll('#physical-power-page form');forms[0].id='owned-operating-facility-form';forms[1].id='owned-operating-preview-form';})()");
+ await check('unsupported operating parameters stay disabled after busy updates',"[...document.querySelectorAll('#owned-operating-facility-form input[placeholder=\"Coming soon\"]')].length===3&&[...document.querySelectorAll('#owned-operating-facility-form input[placeholder=\"Coming soon\"]')].every(n=>n.disabled)");
+ await submit('#owned-operating-facility-form');
+ await wait("operatingPowerReads.some(r=>r.path.endsWith('/save')&&r.status===200)&&"+idle);
+ await check('the form saves exact physical parameters on the existing reference location',"(()=>{const r=operatingPowerReads.filter(r=>r.path.endsWith('/save')).at(-1);return r.request.facility.terms.facilityCode==='test_facility_a'&&r.request.facility.terms.battery.maximumChargeMw==='10.000000000001'&&!Object.hasOwn(r.request.facility.terms,'rightQuantityCode')&&r.result.facility.version===r.request.expectedVersion+1;})()",'operatingPowerReads.at(-1)');
+ for(const [title,value] of Object.entries({'First operating date':'2031-01-01','First native interval (one-based)':'1','Valuation':'fixed','One complete resource-right quantity for valuation':'test_resource_right_quantity','Valuation currency':'usd','Energy sale/payment pricing':'fixed','Energy sale/payment quote':'test_power_outright','Energy sale/payment price':'100','Charging energy pricing':'fixed','Charging energy quote':'test_power_outright','Charging energy purchase price':'20','Perspective':'resource_right_holder_v1','Value measure':'remaining_operating_value_v1','Discounting':'undiscounted','Monthly payment: calendar days after last delivery day':'18','Monthly payment convention':'monthly_calendar_unadjusted'}))await enter(title,value);
+ for(const [key,value] of Object.entries({at:'2031-01-01T00:00:00Z',storedMwh:'0',cumulativeGridThroughputMwh:'0',terminalMinimumMwh:'0',terminalMaximumMwh:'0'}))await set('#physical-power-page [data-field='+key+']',value);
+ await enter('Supplied interval plan','10,0,1\n0,8.1,1');
+ await check('every supplied-plan field is complete before native preview submission',"document.querySelector('#owned-operating-preview-form').checkValidity()","[...document.querySelector('#owned-operating-preview-form').elements].filter(n=>n.willValidate&&!n.validity.valid).map(n=>({label:n.closest('label')?.firstChild?.textContent,value:n.value,message:n.validationMessage,disabled:n.disabled}))");
+ await submit('#owned-operating-preview-form');
+ await wait("operatingPowerReads.some(r=>r.path.endsWith('/preview')&&r.status===200)&&"+idle);
+ await check('native battery losses produce 610 remaining value through independent gross sides',"(()=>{const r=operatingPowerReads.filter(r=>r.path.endsWith('/preview')&&r.status===200).at(-1).result;return r.valuation.value.numerator==='610'&&r.valuation.value.denominator==='1'&&r.valuation.sides.map(s=>s.grossValue.numerator).join(',')==='810,200'&&r.closingState.quantities[0].quantity.numerator==='0';})()");
+ await check('manual operating plans retain a certified context without invented publication evidence',"(()=>{const r=operatingPowerReads.filter(r=>r.path.endsWith('/preview')&&r.status===200).at(-1).result;return !!r.contextId&&r.valuation.sides.every(s=>s.rows.every(row=>row.evidenceId===null&&row.knownAt===null));})()");
+ await check('the native preview renders backend amounts and limitations',"document.querySelector('#physical-power-page').textContent.includes('610')&&document.querySelector('#physical-power-page').textContent.includes('Historical')===false&&document.querySelector('#error').hidden");
+ await evaluate("document.getElementById('physical-power-page').scrollIntoView({block:'start'})");await capture('operating-power-desktop');
+ await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
+ await check('operating parameter and schedule tables fit a phone',fitsWidth);await capture('operating-power-phone');
+ await command('Emulation.setDeviceMetricsOverride',{width:1440,height:1080,deviceScaleFactor:1,mobile:false});
+ await set('#physical-power-page [data-field=maximumChargeMw]','11');await evaluate('window.operatingPowerDropReply=true');await submit('#owned-operating-facility-form');
+ await wait("!!window.operatingPowerUnknown&&"+idle);
+ await check('a lost reply after native commit leaves the original save recoverable',"[...document.querySelectorAll('#physical-power-page button')].find(b=>b.textContent==='Save operating parameters').disabled&&![...document.querySelectorAll('#physical-power-page button')].find(b=>b.textContent==='Retry original save').parentElement.hidden");
+ await press('Check outstanding save');
+ await check('recovery reads the original durable request receipt instead of issuing another save',"(()=>{const r=operatingPowerReads.filter(r=>r.path.endsWith('/status')).at(-1);return r.request.requestId===operatingPowerUnknown.request.requestId&&r.result.facility.id===operatingPowerUnknown.result.facility.id&&r.result.facility.version===operatingPowerUnknown.result.facility.version;})()");
+ await set('#physical-power-page [data-field=maximumChargeMw]','12');await click('#nav-futures');
+ await check('leaving a changed operating form asks before discarding it',"!document.querySelector('#physical-power-page-prompt').hidden&&document.querySelector('#physical-power-page [data-field=maximumChargeMw]').value==='12'");
+ const keep=await evaluate("(()=>{const b=[...document.querySelectorAll('#physical-power-page-prompt button')].find(b=>b.textContent==='Keep editing');b.id='owned-operating-keep';return '#owned-operating-keep';})()");await click(keep);
+ await check('keeping the form preserves its unsaved parameters',"!document.querySelector('#physical-power-page').hidden&&document.querySelector('#physical-power-page [data-field=maximumChargeMw]').value==='12'");
+ await click('#nav-futures');
+ const leave=await evaluate("(()=>{const b=[...document.querySelectorAll('#physical-power-page-prompt button')].find(b=>b.textContent==='Leave page');b.id='owned-operating-leave';return '#owned-operating-leave';})()");await click(leave);await wait(idle);
+ await persona('viewer');
+ await check('an account without physical-read authority does not inherit the operating form',"document.querySelector('#nav-physical-power').hidden&&[...document.querySelectorAll('#physical-power-page input,#physical-power-page textarea')].every(n=>n.value==='')");
+}

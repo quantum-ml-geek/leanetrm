@@ -54,7 +54,7 @@ public static partial class SideScheduleInspection
    var native=source as ScheduleNativePriceEvidence;
    var lookup=(source as ScheduleDatedPriceEvidence)?.Lookup??native?.Resolution.PeriodSelection?.Lookup;
    var observation=(source as ScheduleContractObservationEvidence)?.Lookup;
-   var lineage=source switch{ScheduleDatedPriceEvidence p=>p.Resolution.Lineage,ScheduleContractObservationEvidence p=>p.Resolution.Lineage,
+   var lineage=source switch{ScheduleOperatingPriceEvidence p=>p.Lineage,ScheduleDatedPriceEvidence p=>p.Resolution.Lineage,ScheduleContractObservationEvidence p=>p.Resolution.Lineage,
     ScheduleNativePriceEvidence p=>p.Resolution.ForwardLineage.Union(p.Resolution.PeriodSelection?.FixingLineage??ImmutableHashSet<ObservationKey>.Empty)
      .Union(p.Resolution.Anchor?.Lineage??ImmutableHashSet<ObservationKey>.Empty),_=>ImmutableHashSet<ObservationKey>.Empty};
    rows.Add(new(Key(address),row.Role,row.Operation,column.Kind,resolved?ExactNumberText.Format(new SignedRatio(column.Values[cell].Numerator,column.Values[cell].Denominator)):null,

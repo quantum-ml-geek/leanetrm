@@ -126,7 +126,7 @@ public static class ScheduleOperations
     // Parameter contracts are closed. All relationships live in edges or typed bindings.
     public static IReadOnlyDictionary<string,string[]> Parameters { get; }=new Dictionary<string,string[]>(StringComparer.Ordinal)
     {
-        ["constant_price"]=["numerator","denominator"], ["price_lookup"]=["selection"],
+        ["constant_price"]=["numerator","denominator"], [OperatingContractScheduleSource.Operation]=["selection"], ["price_lookup"]=["selection"],
         [CurvePriceScheduleSource.Operation]=["selection","policy","from","to"],
         [ContractObservationScheduleSource.Operation]=["selectionAt","sampleAt","observationOrdinal","expiryPolicy","implementation"],
         ["quantity_input"]=["stage"], ["quantity_literal"]=["numerator","denominator"],
@@ -146,6 +146,8 @@ public static class ScheduleOperations
         if(row.Operation is null||row.Parameters is null||!Parameters.TryGetValue(row.Operation,out var keys)||
             !row.Parameters.Keys.Order(StringComparer.Ordinal).SequenceEqual(keys.Order(StringComparer.Ordinal))||row.Parameters.Values.Any(value=>value is null))
             throw ScheduleDefinition.Error("A row has an unsupported operation or a missing/unknown parameter.");
+        if(row.Operation==OperatingContractScheduleSource.Operation&&row.Parameters["selection"]!=OperatingContractScheduleSource.Selection)
+            throw ScheduleDefinition.Error("The operating contract price requires its explicit flat-contract projection policy.");
         if(row.Operation==ContractObservationScheduleSource.Operation)ContractObservationScheduleSource.Require(row);
         if(row.Operation==CurvePriceScheduleSource.Operation)_=CurvePriceScheduleSource.Interval(row);
         if(row.Parameters.TryGetValue("numerator",out var numerator))

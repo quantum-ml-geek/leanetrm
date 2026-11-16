@@ -4673,7 +4673,7 @@ on desktop and phone. All owned resources were removed. The complete CI matrix
 still gates the exact commit. These checks do not qualify complete economic
 continuation, quantity scaling, correction adapters or production activation.
 
-After integrating the current master and facility foundation, migration 0343
+After integrating the current master and facility foundation, migration 0350
 retains the original fee SQL unchanged. Local qualification passes 740 managed
 core, the full API schedule suite, 1,966 frontend and 144 Python checks. Native
 qualification retains all 26 independent whole-book checkpoints; populated

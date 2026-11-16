@@ -6,6 +6,8 @@ using OpenEtrm.MarketData;
 if(args is ["--storage-facility-native",var storageFixture]){await StorageFacilityNativeChecks.RunNative(storageFixture);return;}
 if(args is ["--storage-facility-adapters"]){StorageFacilityAdapterChecks.Run();return;}
 if(args is ["--storage-facility-setup"]){StorageFacilityMetadataChecks.Run();return;}
+if(args is ["--structured-power"]){StructuredPowerChecks.Run();return;}
+if(args is ["--power-hedge"]){StructuredPowerHedgeChecks.Run();return;}
 if(args is ["--assistant-prompts"]){TurnWorkerChecks.Run();AgentToolChecks.Run();await ModelProviderChecks.Run();return;}
 if(args is ["--async-reads"]){AsyncReadContractChecks.Run();await AsyncReadChecks.Run();return;}
 if(args is ["--async-read-contracts"]){AsyncReadContractChecks.Run();return;}
@@ -209,6 +211,7 @@ if (args is ["--schedules"])
 {
     StorageFacilityAdapterChecks.Run();
     StorageFacilityMetadataChecks.Run();
+    StructuredPowerChecks.Run();
     FuturesMarginSourceChecks.Run();
     CashInstrumentChecks.Run();
     CurveDisplayChecks.Run();

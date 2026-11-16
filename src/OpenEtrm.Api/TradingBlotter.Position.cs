@@ -49,6 +49,16 @@ public sealed partial class TradingBlotter
     var optionRows=new List<JsonObject>();await foreach(var unit in options.Units(ct))optionRows.AddRange(unit);
     rows=[..optionRows];
     break;
+   case OperatingPositions.Type:
+    var operating=await OperatingBlotter.Run(connection,database,frame,[],[],ct,selected);
+    var operatingRows=new List<JsonObject>();await foreach(var unit in operating.Units(ct))operatingRows.AddRange(unit);
+    rows=[..operatingRows];
+    break;
+   case RecPositions.Type:
+    var rec=await RecBlotter.Run(connection,database,frame,[],[],ct,selected);
+    var recRows=new List<JsonObject>();await foreach(var unit in rec.Units(ct))recRows.AddRange(unit);
+    rows=[..recRows];
+    break;
    default:throw TradePositionSelection.Unavailable();
   }
   var matching=rows.Where(r=>Guid.Parse(r["tradeId"]!.GetValue<string>())==selected.TradeId&&
