@@ -22,7 +22,7 @@ test('the groups and their pages keep the sidebar order',()=>{
   ['trading','Trading',['futures','options']],
   ['markets','Markets',['market','delivery','interval-series','vol-surfaces','interval-curves']],
   ['risk','Risk',['risk','risk-pnl','risk-scenarios','risk-var','risk-runs']],
-  ['scheduling','Scheduling',['lifecycle','physical-operations','facilities']],
+  ['scheduling','Scheduling',['lifecycle','physical-operations','facilities','physical-power']],
   ['reference','Reference Data',['reference']],
   ['administration','Administration',['jobs','admin','ai']]]);
 });
@@ -152,4 +152,12 @@ test('Reference Data lists the areas of its console, in the console\'s order and
  const [,body]=markup.match(/<div id="nav-reference"[^>]*>(.*?)<\/div>/s);
  assert.deepEqual([...body.matchAll(/<button id="reference-area-([a-z]+)"[^>]*data-area="([a-z]+)"[^>]*title="([^"]+)"/g)].map(([,id,area,name])=>({id:area,name:name.replace('&amp;','&'),same:id===area})),
   consoleAreas.map(a=>({...a,same:true})));
+});
+
+test('operating facilities reuse Scheduling with exact physical read permission',()=>{
+ assert.equal(pageGroup('physical-power'),'Scheduling');
+ assert.equal(navigationGroups.filter(group=>group.pages.includes('physical-power')).length,1);
+ assert.equal(navigationGroups.some(group=>group.id==='physical'),false);
+ assert.equal(pageAvailable('physical-power',['ReadMarketData','ReadPhysical']),true);
+ for(const permissions of [[],['ReadMarketData'],['ReadPhysical'],['ReadMarketData','ReadTrades']])assert.equal(pageAvailable('physical-power',permissions),false);
 });

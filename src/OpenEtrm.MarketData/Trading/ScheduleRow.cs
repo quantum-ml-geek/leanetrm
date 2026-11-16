@@ -17,36 +17,43 @@ public readonly record struct ScheduleRow
 {
     private readonly DatedScheduleRow? dated;
     private readonly IntervalRowBlock? block;
+    private readonly OperatingScheduleRow? operating=null;
+    internal OperatingScheduleRow? Operating=>operating;
     private readonly int offset;
     private readonly DeliveryInterval? physicalInterval;
-    public bool IsValid=>dated is not null||block is not null;
+    public bool IsValid=>dated is not null||block is not null||operating is not null;
     private DatedScheduleRow Dated=>dated??throw new MarketDataException("schedule_row_kind","This row has native interval input references.");
     private IntervalRowBlock Block=>block??throw new MarketDataException("schedule_row_kind","This row has dated contractual payment terms.");
-    public SidePaymentKey Key=>dated?.Key??Block.Month.Payment;
+    public SidePaymentKey Key=>dated?.Key??operating?.Key??Block.Month.Payment;
     public Guid SideId=>Key.SideId;
-    public int Ordinal=>dated?.Ordinal??Block.Month.FirstRowOrdinal+offset;
-    public DeliveryInterval? Interval=>physicalInterval??block?.Month.Intervals[offset];
-    public ScheduleDeliveryWindow DeliveryWindow=>physicalInterval is {} physical?new IntervalScheduleWindow(physical):dated?.DeliveryWindow??new IntervalScheduleWindow(Block.Month.Intervals[offset]);
+    public int Ordinal=>dated?.Ordinal??operating?.Key.Ordinal??Block.Month.FirstRowOrdinal+offset;
+    public DeliveryInterval? Interval=>physicalInterval??operating?.Period.Interval??block?.Month.Intervals[offset];
+    public ScheduleDeliveryWindow DeliveryWindow=>physicalInterval is {} physical?new IntervalScheduleWindow(physical):
+        dated?.DeliveryWindow??new IntervalScheduleWindow(operating?.Period.Interval??Block.Month.Intervals[offset]);
     public DateOnly DeliveryFrom=>Dated.DeliveryFrom;
     public DateOnly DeliveryTo=>Dated.DeliveryTo;
     public DateTimeOffset PaymentAt=>Key.PaymentAt;
     public DateOnly PaymentDate=>DateOnly.FromDateTime(PaymentAt.UtcDateTime);
     public ReferenceKey Currency=>Key.Currency;
-    public Quantity UnitQuantity=>dated?.UnitQuantity??Block.Terms.UnitQuantity;
+    public Quantity UnitQuantity=>dated?.UnitQuantity??operating?.UnitQuantity??Block.Terms.UnitQuantity;
     public ExactQuantity AllocatedQuantity=>Dated.AllocatedQuantity;
-    public ScheduleQuantityReference QuantityReference=>dated?.QuantityReference??new IntervalScheduleQuantity(Block.Terms.Quantity,Block.Month.Intervals[offset]);
+    public ScheduleQuantityReference QuantityReference=>dated?.QuantityReference??(operating is {} source?
+        new OperatingScheduleQuantity(source.Period.Quantity,source.Period.Interval):new IntervalScheduleQuantity(Block.Terms.Quantity,Block.Month.Intervals[offset]));
     public RetainedScheduleRowReference? RetainedReference=>dated?.RetainedReference??(block?.Retained is {} retained?
         new(retained.Definition,retained.NativeRows[Ordinal].Root,retained.NativeRows[Ordinal].CellOrdinal):null);
     public IntervalSchedulePrice? IntervalPrice=>block?.Retained is {} retained&&retained.NativeRows[Ordinal].FixedPrice is {} price?
         new FixedIntervalSchedulePrice(new RetainedFixedPrice(price)):block?.Price;
-    public GeneratedPaymentDate? GeneratedDate=>dated?.GeneratedDate;
-    public PaymentRule? PaymentConvention=>dated is not null?dated.PaymentConvention:Block.Terms.DateRule;
+    public GeneratedPaymentDate? GeneratedDate=>dated?.GeneratedDate??operating?.GeneratedDate;
+    public PaymentRule? PaymentConvention=>dated is not null?dated.PaymentConvention:operating?.Rule??Block.Terms.DateRule;
     public DateTimeOffset? FirstFixingAt=>Dated.FirstFixingAt;
     public FloatingAveraging? Averaging=>Dated.Averaging;
     public SwapObservationCalendar? Calendar=>Dated.Calendar;
     public ImmutableArray<SchedulePriceTerm> Prices=>Dated.Prices;
     public ImmutableArray<SchedulePriceApplication> Applications=>Dated.Applications;
-    public string Implementation=>dated?.Implementation??"interval_side_schedule_v2";
+    public string Implementation=>dated?.Implementation??(operating is not null?OperatingSideTerms.SupportedImplementation:"interval_side_schedule_v2");
+
+    internal ScheduleRow(OperatingScheduleRow row)
+    {dated=null;block=null;offset=0;operating=row;}
 
     internal ScheduleRow(Guid sideId,DateOnly from,DateOnly to,DateTimeOffset paymentAt,ReferenceKey currency,Quantity unitQuantity,
         DateTimeOffset? firstFixingAt,FloatingAveraging? averaging,SwapObservationCalendar? calendar,ImmutableArray<SchedulePriceTerm> prices,

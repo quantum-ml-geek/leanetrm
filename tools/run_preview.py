@@ -61,6 +61,7 @@ def main():
     parser.add_argument('--port', type=int, default=0, help='Loopback HTTP port; 0 chooses an unused port')
     parser.add_argument('--no-build', action='store_true', help='Use already-built assets')
     parser.add_argument('--check', action='store_true', help='Run HTTP integration checks, then clean up')
+    parser.add_argument('--structured-power-check',action='store_true',help='Qualify saved operating facilities and supplied-plan power previews in an owned database')
     parser.add_argument('--power-actual-check',action='store_true',help='Qualify exact collected-price interval settlement sources')
     parser.add_argument('--interval-series-check',action='store_true',help='Qualify audited interval series storage and API')
     parser.add_argument('--close-risk-lease-check',action='store_true',help='Qualify renewable risk ownership, real long completion and recovery faults')
@@ -129,6 +130,9 @@ def main():
     parser.add_argument('--authoring-browser-suite',choices=['curve-objects','contract-pricing-controls','publication-controls','price-authoring-recovery'],help='Run one focused authoring control suite in the owned authoring fixture')
     parser.add_argument('--example', choices=['standard','mixed-gas'], default='standard', help='Explicit synthetic dataset')
     args = parser.parse_args()
+    if args.structured_power_check:
+        args.check=True
+        if args.example!='standard':parser.error('--structured-power-check requires the standard fixture')
     if args.async_workbench_check:
         args.check=True
         if args.example!='standard':parser.error('--async-workbench-check requires the standard fixture')
@@ -624,6 +628,10 @@ def main():
                 from factor_swap_fixture import prepare as prepare_factor
                 prepare_factor(manifest)
         if not args.contract_dates_check:query(security)
+        if args.example=='standard' and (args.structured_power_check or not args.check):
+            query("INSERT INTO security.role_permissions SELECT id,p FROM security.roles CROSS JOIN "
+                  "(VALUES('ReadPhysical'),('ManagePhysicalSetup'),('RunScenario'))x(p) "
+                  "WHERE code='market_data_editor' ON CONFLICT DO NOTHING;")
         query(f"SELECT security.initialize_operating_policies('{manifest["tenantId"]}','{manifest["workspaceId"]}');")
         if args.example=='standard' and (gas_demo or not args.check or args.async_workbench_check or args.factor_history_check or args.parametric_risk_check or args.historical_risk_check or args.monte_carlo_risk_check):
             from factor_history_fixture import seed as seed_history
@@ -857,7 +865,15 @@ def main():
         print(f'PREVIEW_URL={url}',flush=True)
         print('Private synthetic database. Ctrl+C stops the app and removes its owned database.',flush=True)
         if args.check:
-            if args.async_workbench_check:
+            if args.structured_power_check:
+                from check_structured_power import run_checks as check_structured_power
+                check_structured_power(url,query,manifest)
+                if args.browser_check:
+                    target=temporary/'browser-target.json'
+                    target.write_text(json.dumps({'suite':'business_browser_v1','url':url,'runId':run_id}))
+                    browser_process=subprocess.Popen(['node',str(ROOT/'tests/browser/run.mjs'),str(target),str(args.browser.resolve()),'--structured-power'],cwd=ROOT,env=env,start_new_session=True)
+                    if browser_process.wait(timeout=240):raise RuntimeError('Owned structured power browser checks failed')
+            elif args.async_workbench_check:
                 from check_async_workbench_http import run_checks
                 run_checks(url,query,psql,env,manifest)
                 if args.browser_check:

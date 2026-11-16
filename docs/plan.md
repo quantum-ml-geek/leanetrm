@@ -1831,6 +1831,40 @@ named place. Physical cargo logistics and tanker freight need distinct explicit
 contracts. Additional fee types/amounts remain deferred to their first executable
 consumer; no unused catalog is added in this increment.
 
+## Authorized structured power continuation (D412)
+
+The [operating-facility slice](operating-facilities.md) retains supported thermal,
+battery and solar physical parameters on exact existing locations, with supplied
+plan feasibility and independent Side valuation. The current-master port must
+pass its own managed, storage, HTTP and browser checks before qualification.
+
+The next increment is saved trading and hedging plus durable REC inventory:
+
+1. Retain exact operating-right terms and immutable, membership-owned schedules
+   through current trade booking, party/book authorization, command receipts and
+   certified historical reads. Preserve native Instrument/Side PV and existing
+   physical delivery ownership; pin physical facility versions and explicit plan
+   state/quantities without turning a forecast into an actual.
+2. Price saved rights and separately booked financial hedges under one captured
+   market/scenario context. Report gross sides, net value and generic repricing
+   risk using ordinary holdings; hedges do not change physical feasibility.
+3. Persist manually evidenced REC issuance/incoming holdings, exact certificate
+   lots/ranges, allocation/release and transfer/retirement under current authority,
+   exact registry/program/class/purpose references, append-only corrections,
+   request replay and semantic fact idempotency. Reuse the pure range evaluator
+   and native publication/history patterns. Provide the same authorized backend
+   operations to UI and other clients, with retained unknown-outcome recovery.
+4. Qualify independent numerical, temporal, authorization, overlap/conservation,
+   concurrent retry and populated additive-upgrade cases, then exercise saved
+   trade/hedge/inventory workflows in the shared UI. Record actual capability
+   and remaining cash, balancing and settlement bounds.
+
+No optimizer, stochastic dispatch, external registry action, automatic lot
+selection, inventory costing or shared-resource pooling is authorized by this
+increment. The [structured product contract](structured-power-products.md) keeps
+those extensions separate; proposed APIs or new reference seeds alone are not
+implementation evidence.
+
 ## Later scope
 
 Planned facility and transport delivery workflows, each needing its own supported

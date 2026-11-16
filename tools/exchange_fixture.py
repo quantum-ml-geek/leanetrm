@@ -145,13 +145,13 @@ def black76(root):
 
 def crude_reference(R):
     """The crude commodity, its barrel quantity and the Cushing location used by NYMEX CL and LO."""
-    return [f"INSERT INTO ref_data.dimensions VALUES({R},'contract_count',0,0,0,0,0,0,0);",
-      f"INSERT INTO ref_data.units VALUES({R},'option_contract','contract','contract_count');",
+    return [f"INSERT INTO ref_data.dimensions VALUES({R},'certificate',0,0,0,0,0,0,0) ON CONFLICT(catalog_id,revision_id,code) DO NOTHING;",
+      f"INSERT INTO ref_data.units VALUES({R},'option_contract','contract','certificate');",
       f"INSERT INTO ref_data.commodities VALUES({R},'test_crude','Synthetic crude oil','volume');",
       f"INSERT INTO ref_data.commodity_units VALUES({R},'test_crude','petroleum_barrel','volume');",
-      f"INSERT INTO ref_data.measurement_bases VALUES({R},'test_crude_volume','test_crude','volume'),({R},'test_gas_contracts','test_gas','contract_count'),({R},'test_crude_contracts','test_crude','contract_count');",
+      f"INSERT INTO ref_data.measurement_bases VALUES({R},'test_crude_volume','test_crude','volume'),({R},'test_gas_contracts','test_gas','certificate'),({R},'test_crude_contracts','test_crude','certificate');",
       f"INSERT INTO ref_data.quantity_specifications VALUES({R},'test_crude_quantity','test_crude','test_crude_volume','petroleum_barrel','volume'),"
-      f"({R},'nymex_on_contract','test_gas','test_gas_contracts','option_contract','contract_count'),({R},'nymex_lo_contract','test_crude','test_crude_contracts','option_contract','contract_count');"]
+      f"({R},'nymex_on_contract','test_gas','test_gas_contracts','option_contract','certificate'),({R},'nymex_lo_contract','test_crude','test_crude_contracts','option_contract','certificate');"]
 
 def option_reference(R):
     """Option rules, products and series; each series expires at its product's configured time on its confirmed date."""

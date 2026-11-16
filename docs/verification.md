@@ -483,22 +483,26 @@ production-runtime limit.
 
 ## Option strategy viewer (D409)
 
-Runs on 16 November 2026 at the branch head, after merging the option analytics
-branch with master in it up to D407, with synthetic data, on the local machine (macOS 26.6
+Runs on 16 November 2026 at the branch head, after merging master with the
+option analytics (D408) and the operating-facility work (D412) in it, with
+synthetic data, on the local machine (macOS 26.6
 arm64 with 14 logical processors, .NET 10.0.13, Node 24.22.0), from Debug builds. It
 has no PostgreSQL, so the database-backed exchange check ran in a disposable
 PostgreSQL 18 cluster in a container on a separate two-CPU Linux host, from a
-Debug build. The browser suites under `tests/browser` have not been run for
-this change; they run in the pull request's CI.
+Debug build, on the tree before the operating-facility work was merged in.
+Neither machine runs the browser suites under `tests/browser`. The pull
+request's CI ran them on an earlier tree of this branch, before master's D407
+was merged in: its exchange group passed, with the Options suite's 32 checks,
+the Strategy step among them.
 
 | Run | Where | Result |
 | --- | --- | --- |
 | MarketData checks `--option-strategies` | local | exit 0, 24 PASS |
 | MarketData checks `--option-sensitivities`, `--vol-surface`, `--futures-options` | local | exit 0; 8, 19 and 68 PASS |
-| Api checks `--schedules` (with the option request, position and strategy request checks) | local | exit 0, 434 PASS |
+| Api checks `--schedules` (with the option request, position and strategy request checks) | local | exit 0, 436 PASS |
 | Api checks `--async-read-contracts`, `--assistant-workspace` | local | exit 0; 1 and 21 PASS |
-| `npm test --prefix web` | local | 1,924 of 1,925 pass; the other passed when its file was run again |
-| `python3 -m unittest tests.test_ci_impact tests.test_check_all tests.test_migration_identity tests.test_ci_dependencies tests.test_public_routes` | local | 68 OK |
+| `npm test --prefix web` | local | 1,935 pass |
+| `python3 -m unittest tests.test_ci_impact tests.test_check_all tests.test_migration_identity tests.test_ci_dependencies tests.test_public_routes` | local | 69 OK |
 | `run_preview.py --check --exchange-check` | container | exit 0, 368 PASS |
 
 What the local checks cover:
@@ -560,12 +564,12 @@ analysis is an asynchronous read and why the limits are no higher. These are
 observations on one machine, not a performance qualification; CI's runners
 have been about half as fast per thread.
 
-The one web test that failed in the full run is a crude delivery-setup browser
-test whose local browser did not start within 60 s; its file's eleven tests
-pass when run again, and this change does not touch it. The exchange run is of
-this tree, with master's migrations 0339 and 0340 applied before the option
-analytics migration 0341; an earlier run, before they were merged in, also
-passed (exit 0, 363 PASS).
+The exchange run is of
+the tree before master's operating-facility migrations 0342 and 0343 were
+merged in; they follow the option analytics migration 0341, and this change
+adds no migration. It had master's migrations 0339 and 0340 applied before
+0341; an earlier run, before those were merged in, also passed (exit 0, 363
+PASS).
 
 The exchange run covers, against the exchange example with its surface fitted
 at a working snapshot: the setup offering the seven templates at the series'
