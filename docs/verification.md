@@ -4858,7 +4858,7 @@ continuation is implied.
 
 ## Integrated financial Transport qualification (D415)
 
-The combined current-master and service-stack artifact passes 745 managed core
+The earlier combined master and service-stack artifact passes 745 managed core
 checks, the full API schedule suite, 2,044 frontend and 157 Python checks, with
 zero API build warnings/errors. Native qualification passes 32 actual managed
 source/command/value checkpoints, shared current-closed expiry acknowledgement
@@ -4870,9 +4870,25 @@ and native postconditions. The retained-window regression preserves business
 date independently of the UTC valuation date.
 
 Independent source and merge review preserves both parents' contracts and
-verification registrations. The only native change beyond migration 0354
+verification registrations. The only native change beyond migration 0347
 renumbering is the exact protected prompt-helper fingerprint for the approved
 Options identifier; all original metadata/ACL guards and drift refusals remain.
 Disposable synthetic resources were cleaned. First-value market publication,
 aggregate CI and release remain separate gates; no production activation or
 complete economic continuation is implied.
+
+
+## Side alignment integration baseline (D417)
+
+The integration baseline adds the subsequently merged operating-facility and
+certificate workflows to financial Transport. The API build and default
+checks pass before the Side refactor. Financial migration 0354 passes
+its populated upgrade, preserving the predecessor route witnesses and raw facts,
+then executing genuine mixed-reference booking and market-value adoption.
+
+Its protected prompt-helper fingerprint changes only for the five approved
+operating-facility/certificate page identifiers; independently removing those
+identifiers reproduces the earlier helper fingerprint. All original helper
+metadata, owner and privilege guards remain, and altered-helper refusals pass.
+This baseline does not qualify the subsequent instrument/Side and UI changes:
+complete managed, native, price-scenario and actual browser gates remain open.
