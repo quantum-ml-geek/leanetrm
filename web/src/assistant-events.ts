@@ -37,7 +37,7 @@ function target(value:unknown):Target{
   const t=exactly(value,['page','selection','context','kind','label']),c=exactly(t.context,['mode','contextId','frameId']);
   require(typeof t.page==='string'&&readPages.includes(t.page)&&(t.kind==='page'||t.kind==='record'||t.kind==='filter'||t.kind==='proposal'||t.kind==='draft')
     &&(t.kind==='page'?t.selection===null:isObject(t.selection))&&(t.kind!=='record'||t.page==='curves'||t.page==='blotter'||t.page==='jobs')
-    &&(c.mode==='operational'?c.contextId===null&&c.frameId===null:(c.mode==='current'||c.mode==='retained')&&id(c.contextId))&&(c.frameId===null||id(c.frameId))
+    &&(c.mode==='operational'?c.contextId===null&&c.frameId===null:(c.mode==='current'&&(c.contextId===null||id(c.contextId))||c.mode==='retained'&&id(c.contextId)))&&(c.frameId===null||id(c.frameId))
     &&typeof t.label==='string'&&t.label.length>=1&&t.label.length<=200&&!/[\u0000-\u001f\u007f-\u009f]/.test(t.label));
   // A proposal opens a preparation step for review, and a draft the curve a save step saved (D260): each names exactly its turn and step.
   if(t.kind==='proposal'||t.kind==='draft'){const p=exactly(t.selection,['turnId','step']);require(t.page==='custom_curves'&&id(p.turnId)&&positive(p.step));}

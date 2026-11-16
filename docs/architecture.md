@@ -1,12 +1,12 @@
 # Architecture and domain contracts
 
-D411 adds locally qualified [retained chosen routes](gas-transport-routes.md)
+D413 adds locally qualified [retained chosen routes](gas-transport-routes.md)
 over exact native capacity claims and exclusive logical source-plan memberships.
 Managed/native, populated-upgrade and actual browser checks qualify persisted
 route adoption and release. Integrated release, physical performance and financial
 value remain separate.
 
-D410 adds [commercial Transport capacity operations](gas-transport-capacity-operations.md)
+D412 adds [commercial Transport capacity operations](gas-transport-capacity-operations.md)
 over independent exact entitlement, capacity-version and chosen-plan identities.
 Shared gross limits, explicit empty release and retained source/authority
 admission have local managed/native, upgrade and actual browser qualification.
@@ -18,18 +18,18 @@ over independent native ownership and cash. The bounded title-transfer profile
 uses shared entry, lifecycle and current-clock interactive/retained price risk.
 Release qualification and broader service capabilities remain separate.
 
-D407 adds [physical storage assets and activity](storage-facility-operations.md),
+D409 adds [physical storage assets and activity](storage-facility-operations.md),
 independent from commercial entitlement, title and cash. The first operating
 profile has local managed, native, upgrade and browser qualification. Integration
 and release gates remain separate from that evidence.
 
-D408 adds an explicitly selected [outstanding-balance elapsed-hour fee
+D410 adds an explicitly selected [outstanding-balance elapsed-hour fee
 profile](gas-park-loan-balance-fee.md). Accepted principal events, cumulative fee
 determinations, independent cash and remaining service value retain distinct
 owners. Current-clock price qualification does not establish complete economic
 horizon continuation.
 
-D409 adds a separately selected [retained-title parking profile](gas-park-custody.md)
+D411 adds a separately selected [retained-title parking profile](gas-park-custody.md)
 within shared Park and Loan entry. Customer-owned stock, custody reservations
 and ordinary fee cash keep independent identities. Provider custody needs no
 owned inventory or commodity mark. Disposable local qualification covers the
@@ -3099,3 +3099,10 @@ actual-only prefixes and daily price shapes preserve certified correction histor
 [Booked close comparisons](power-booked-roll.md) decompose native contractual PV
 change into fixing, forward marks and capture corrections. Monthly shaping,
 graph worker replay, cash/accounting and ISO finality integration remain separate.
+
+
+D407 makes assistant context acquisition demand-driven and prompt text private to
+an installation. Admission retains selection identity and immutable configuration;
+explicit financial tools acquire one certified context. Exact recorded closes use
+foreign-key references instead of repeated source matrices. See
+[assistant context and prompts](ai-assistant.md#72-pinned-context).

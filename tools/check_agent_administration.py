@@ -226,7 +226,7 @@ def run_checks(query, psql, manifest, environment, admin, viewer, again):
     def save_body(agent_state, **changes):
         body = {'operationId': str(uuid4()), 'agentId': agent_state['id'], 'expectedVersion': agent_state['version'],
                 'description': 'Answers questions about the page it is opened on.',
-                'instructions': 'Quote only values you read.\nSay when something is unavailable.',
+                'instructions': 'Synthetic agent test instructions.\nSynthetic additional instructions.',
                 'modelId': usable, 'modelVersion': version_of(usable), 'reasoning': 'low', 'caching': False,
                 'tools': ['read_current_page', 'read_market_data', 'read_trades', 'navigate'], 'allowedRoles': ['trader', 'risk_analyst'],
                 'limits': {'toolSteps': 8, 'inputTokens': 200000, 'outputTokens': 2048, 'elapsedSeconds': 120, 'readSeconds': 15, 'retries': 2,

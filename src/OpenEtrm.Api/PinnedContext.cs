@@ -23,8 +23,7 @@ public sealed record PinnedContext
     readonly bool rereading;
     public static PinnedContext Current(InputFrame? frame=null)=>new(null,frame);
     public static PinnedContext Retained(ScheduleContext context,InputFrame? frame=null)=>new(context,frame);
-    // Working data as of a context captured earlier at its frame's date, as TradingView.Reread reads trades: a turn's
-    // tool reads bind the context its ask captured and never capture one (docs/ai-assistant.md §7.2).
+    // Working data as of a context captured earlier at its frame's date, as TradingView.Reread reads trades.
     public static PinnedContext Rereading(ScheduleContext context,InputFrame frame)=>frame is {ContextId:null}?new(context,frame,true):throw Missing();
     internal InputFrame? CalculationFrame=>Frame is {} frame?frame with{ContextId=Context?.ContextId}:null;
     public InputFrame RequireFrame()=>CalculationFrame??throw Missing();
@@ -41,6 +40,11 @@ public sealed record PinnedContext
     public async Task Bind(NpgsqlConnection connection,Guid catalog,CancellationToken ct)
     {
         if(Context is not null)await BindExact(connection,catalog,Context,ct);
+        await BindClose(connection,catalog,ct);
+    }
+    // Exact close reconstruction already binds its context before reading the frame; apply the remaining close checks once.
+    internal async Task BindClose(NpgsqlConnection connection,Guid catalog,CancellationToken ct)
+    {
         if(Frame is {Close:{} session,OriginCloseId:{} close})
         {
             await SelectedClose.RequireInForce(connection,catalog,close,ct);

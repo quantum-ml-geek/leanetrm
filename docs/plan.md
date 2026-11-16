@@ -1,6 +1,6 @@
 # Delivery plan and acceptance criteria
 
-D411 locally qualifies [retained chosen routes](gas-transport-routes.md) with
+D413 locally qualifies [retained chosen routes](gas-transport-routes.md) with
 explicit graph/law definitions, complete exact source claims and exclusive
 logical memberships. Correction makes a current assessment unavailable until
 explicit re-adoption, while own release can free stale memberships. Local native,
@@ -14,7 +14,7 @@ deferred source changes, original authority, historical reads and populated
 upgrades. The same frozen application artifact passed 55 route, 64 capacity and
 30 storage browser checks, with desktop, local-zone and phone views reviewed.
 
-D410 implements [commercial Transport capacity operations](gas-transport-capacity-operations.md)
+D412 implements [commercial Transport capacity operations](gas-transport-capacity-operations.md)
 with immutable legal/reference/path scope, complete dated gross limits and
 independent chosen plans. Explicit empty release permits cleanup while retaining
 other breaches. Local managed/native, populated-upgrade and actual browser
@@ -22,7 +22,7 @@ checks passed. Integration/release gates remain open.
 This operating consumer does not enable financial Transport booking, route
 conservation, accepted flow or complete service value.
 
-The D410 checkpoint passed 741 managed core, 1,984 frontend and 146 Python
+The D412 checkpoint passed 741 managed core, 1,984 frontend and 146 Python
 checks, the full API schedule suite, native source/concurrency/receipt/authority
 controls and populated predecessor/drift checks. Actual browser qualification
 passed 64 Transport checks and 30 existing-storage regression checks against
@@ -36,14 +36,14 @@ browser, native financial and populated-upgrade qualifiers passed. Aggregate CI,
 release and service economic-horizon qualification remain open. Broader service
 terms require separately qualified executable profiles.
 
-D407 adds a [storage physical operations consumer](storage-facility-operations.md):
+D409 adds a [storage physical operations consumer](storage-facility-operations.md):
 versioned asset rules, pipeline ports, dated opening evidence and independent
 planned/measured activity. Native persistence, explicit coverage, concurrent plan
 admission, existing allocation links and shared UI have local qualification.
 Complete commercial Storage/Transport, further operating laws and integrated
 release checks remain open.
 
-D408 implements [outstanding-balance elapsed-hour fees](gas-park-loan-balance-fee.md)
+D410 implements [outstanding-balance elapsed-hour fees](gas-park-loan-balance-fee.md)
 with explicit timing, remaining-return plans and cumulative cash rounding. Native
 and managed determination, independent contributions and refunds, shared entry,
 current-clock price scenarios and retained PRICE workers have disposable local
@@ -51,7 +51,7 @@ qualification. Complete economic horizon risk, broader service laws and source
 reconciliation remain separate qualification work. The exact combined artifact
 still requires its integration and release gates.
 
-D409 implements [retained-title parking](gas-park-custody.md) as a distinct
+D411 implements [retained-title parking](gas-park-custody.md) as a distinct
 Park and Loan profile. It preserves customer title through identified-lot
 reservations, accepts provider foreign custody without a stock account, and
 uses ordinary independent fee cash. Native operations, shared entry, browser
@@ -87,7 +87,7 @@ instants and exchange option expiry retain their explicit timing and rate inputs
 required purpose bindings and Side-owned rules; omission checks are mandatory
 in the verification runner.
 
-The integrated verification runner requires 220 commands, including required
+The integrated verification runner requires all selected checks, including required
 Park and Loan native, populated-upgrade, retained-worker and browser qualifiers,
 with domain, native database, agent and browser coverage. Local checks at D406
 passed 738 managed core checks and 1,889 frontend checks. The earlier D403
@@ -1901,6 +1901,14 @@ Extend only after the baseline contracts are demonstrated:
 - Broader calendars, delivery shapes and schedule authoring.
 - Options beyond listed American futures options (D288): other exercise and
   settlement styles, volatility inputs and shocks, and nonlinear model diagnostics.
+- An option strategy viewer on the Options page (D408): legs of one expiry
+  combined from the chain, with profit and loss against the futures price at
+  expiry and at stated earlier instants from an analysis read over the shared
+  layers. Strategies across expiries need a declared relationship between
+  futures months first; futures legs, saved strategies and booking a strategy
+  in one action follow it.
+- Spread-option valuation for storage, tolling and transport, once one of those
+  product lines names it as a consumer.
 - Option-side sibling dependencies, shared exercise groups and an explicit
   contribution/allocation convention that does not double-count the underlying.
 - Physical/financial composite sides with typed gas/power delivery metadata and
@@ -2498,3 +2506,13 @@ consumers keep their explicit statistical method policies. Progressive row
 delivery and retained command recovery keep their separate contracts. Broader
 operation coverage and throughput claims require
 consumer-specific qualification; a transport design alone establishes neither.
+
+
+### Assistant context and prompt configuration (D407)
+
+The local implementation removes automatic market-frame capture and bundled
+assistant guidance. Settings owns versioned application, page, tool and provider-test
+text, with no production seeds. Qualification covers no-data questions, exact requested
+financial reads, retained close aliases, configuration changes, authority and deadline
+fencing, upgrade drift and browser behavior. Hosted configuration, publication and
+rollout remain separate operations; no production activation is implied.

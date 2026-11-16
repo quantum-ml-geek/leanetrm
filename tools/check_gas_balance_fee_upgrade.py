@@ -23,7 +23,7 @@ def run():
             f"FROM trading.{table} x WHERE x.catalog_id='{catalog}') digest" for table in tables) + ')s;')
 
     def before(query, migration):
-        if migration.name != '0340_gas_park_loan_balance_fee.sql':
+        if migration.name != '0343_gas_park_loan_balance_fee.sql':
             return
         from assistant_context import migration_body
         signatures = ['security.book_gas_park_loan(uuid,jsonb,timestamptz)',

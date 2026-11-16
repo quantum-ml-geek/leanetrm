@@ -13,9 +13,9 @@ using OpenEtrm.MarketData.Trading;
 
 namespace OpenEtrm.Api;
 
-/// <summary>A fit of one option product's surface at a working frame, under an explicit vol model.</summary>
+/// <summary>A fit of one option product's surface at a working frame, under an explicit vol model and option sensitivity selection.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record VolSurfaceFitRequest(Guid RequestId,Guid SnapshotId,string Product,string Model,Guid? DefinitionRevisionId=null);
+public sealed record VolSurfaceFitRequest(Guid RequestId,Guid SnapshotId,string Product,string Model,OptionSensitivityRequest Sensitivities,Guid? DefinitionRevisionId=null);
 
 /// <summary>A read of one option product's stored surface at a trading context, under an explicit vol model.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
@@ -25,8 +25,9 @@ public sealed record VolSurfaceReadRequest(FuturesReadRequest Context,string Pro
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record VolSurfaceLibraryRequest(FuturesReadRequest Context,string Model,int Offset,string? Product=null,Guid? DefinitionRevisionId=null);
 
-// A fitted surface as its job's completion records it: the pinned inputs, the canonical bytes and their digest, and the work done.
-internal sealed record VolSurfaceFitOutcome(ImmutableArray<Guid> Inputs,string Surface,string Digest,int Series,int Solves,long ElapsedMs);
+// A fitted surface as its job's completion records it: the pinned inputs, the canonical bytes and their digest, and the work done:
+// the fit's series, solves and time, then the analytics' tree prices and time.
+internal sealed record VolSurfaceFitOutcome(ImmutableArray<Guid> Inputs,string Surface,string Digest,int Series,int Solves,long ElapsedMs,int AnalyticsTreePrices,long AnalyticsMs);
 
 // Volatility surfaces are fitted by jobs of kind vol_surface_fit_v1 on the retained risk-job queue and read from their stored,
 // bitemporal revisions. Admission pins the frame, product, business date, model and actor; the risk worker fits and records.
@@ -49,8 +50,11 @@ internal static class VolSurfaceStore
         var contextId=view.Context.ContextId??throw new MarketDataException("vol_surface_context","The fit requires its captured trading context.");
         // A fit is new work: at a recorded close it requires the close in force for its session and business day (D334).
         if(view.Frame.OriginCloseId is {} close)await SelectedClose.RequireInForce(connection,manifest.CatalogId,close,ct);
+        // The sensitivity selection and the clock its one calendar day is counted on are pinned here, with the fit's other inputs.
+        var sensitivities=OptionSurfaceAnalytics.Pin(body.Sensitivities,view.Frame.Close is {} recorded?await CloseConventions.Read(connection,manifest.CatalogId,recorded,ct):null);
         var request=new JsonObject{["convention"]=Convention,["engineVersion"]=RiskJobs.EngineVersion,["product"]=Product(manifest,body.Product),
-            ["businessDate"]=BusinessDate(view),["model"]=body.Model,["solverPolicy"]=SolverPolicy,["futuresConvention"]=manifest.FuturesConvention};
+            ["businessDate"]=BusinessDate(view),["model"]=body.Model,["solverPolicy"]=SolverPolicy,["futuresConvention"]=manifest.FuturesConvention,
+            ["sensitivities"]=sensitivities};
         var frame=RetainedFrames.Record(selected.Frame with{SwapMarketSelections=null});
         await using var command=ScheduleStore.Command(connection,"SELECT risk.submit_vol_surface_fit($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb)::text",
             manifest.CatalogId,body.RequestId,contextId,manifest.RevisionId,view.Frame.At,request.ToJsonString(),frame.ToJsonString(RiskJobs.Json));
@@ -62,18 +66,9 @@ internal static class VolSurfaceStore
     // context, whether its inputs were revised since, the caller's newest fit job for the key there and whether the caller may fit.
     internal static async Task<object> Read(NpgsqlConnection connection,PreviewDatabase database,TradingView view,VolSurfaceReadRequest body,CancellationToken ct)
     {
-        VolModels.Require(body.Model);
-        var selected=await SelectedInputs(connection,database,view.CalculationFrame,ct,body.DefinitionRevisionId);
-        var manifest=selected.Source.Apply(database.Manifest);
-        var product=Product(manifest,body.Product).ToJsonString();var date=DateOnly.ParseExact(BusinessDate(view),"yyyy-MM-dd",CultureInfo.InvariantCulture);
-        async Task<JsonNode?> Value(string sql,params object[] arguments)
-        {
-            await using var command=ScheduleStore.Command(connection,sql,arguments);
-            return await command.ExecuteScalarAsync(ct) is string text?JsonNode.Parse(text):null;
-        }
-        var (close,at,pins)=Location(selected.Frame);
-        var stored=await Value("SELECT security.read_vol_surface($1,$2,$3::jsonb,$4,$5,$6::uuid,$7,$8)::text",manifest.CatalogId,manifest.RevisionId,product,date,body.Model,close,at,pins);
-        var job=await Value("SELECT risk.vol_surface_fit_job($1,$2,$3::jsonb,$4,$5,$6::uuid,$7,$8)::text",manifest.CatalogId,manifest.RevisionId,product,date,body.Model,close,at,pins);
+        var (manifest,key)=await Locate(connection,database,view,body.Product,body.Model,body.DefinitionRevisionId,ct);
+        var stored=await Value(connection,StoredSurface,key,ct);
+        var job=await Value(connection,"SELECT risk.vol_surface_fit_job($1,$2,$3::jsonb,$4,$5,$6::uuid,$7,$8)::text",key,ct);
         JsonObject? revision=null;
         if(stored is not null)
         {
@@ -85,7 +80,34 @@ internal static class VolSurfaceStore
         var canFit=await PreviewDatabase.HasPermission(connection,"PublishMarketData",ct)&&await PreviewDatabase.HasPermission(connection,"ReadTrades",ct);
         return new JsonObject{["snapshotId"]=view.Frame.Id,["definitionRevisionId"]=manifest.RevisionId,["model"]=body.Model,
             ["solverPolicy"]=stored?["solverPolicy"]?.DeepClone()??SolverPolicy,["state"]=stored is null?"notFitted":"fitted",
-            ["revision"]=revision,["job"]=job,["canFit"]=canFit,["surface"]=stored?["content"]?.DeepClone()};
+            ["revision"]=revision,["job"]=job,["canFit"]=canFit,["surface"]=stored?["content"]?.DeepClone(),
+            // What a fit may select: offered for the page to send back, with the clocks a working snapshot may name.
+            ["sensitivities"]=new JsonObject{["offered"]=JsonSerializer.SerializeToNode(OptionSurfaceAnalytics.Offered,RiskJobs.Json),
+                ["clocks"]=JsonSerializer.SerializeToNode(TradingPnlReport.Clocks(),RiskJobs.Json),["clockRequired"]=view.Frame.Close is null}};
+    }
+
+    // The stored surface itself for a product at the view's location, or none: what another read scales or draws from.
+    internal static async Task<VolSurfaceResult?> Surface(NpgsqlConnection connection,PreviewDatabase database,TradingView view,string product,string model,
+        Guid? definitionRevisionId,CancellationToken ct)=>
+        (await Value(connection,StoredSurface,(await Locate(connection,database,view,product,model,definitionRevisionId,ct)).Key,ct))?["content"].Deserialize<VolSurfaceResult>(Json);
+
+    private const string StoredSurface="SELECT security.read_vol_surface($1,$2,$3::jsonb,$4,$5,$6::uuid,$7,$8)::text";
+    // The key a product's surface and its fit job are read by at a view: the exact product version, the business date and the
+    // model, at the close the frame is (or none), its valuation instant and its pins.
+    private static async Task<(PreviewManifest Manifest,object[] Key)> Locate(NpgsqlConnection connection,PreviewDatabase database,TradingView view,string product,string model,
+        Guid? definitionRevisionId,CancellationToken ct)
+    {
+        VolModels.Require(model);
+        var selected=await SelectedInputs(connection,database,view.CalculationFrame,ct,definitionRevisionId);
+        var manifest=selected.Source.Apply(database.Manifest);
+        var (close,at,pins)=Location(selected.Frame);
+        return(manifest,[manifest.CatalogId,manifest.RevisionId,Product(manifest,product).ToJsonString(),
+            DateOnly.ParseExact(BusinessDate(view),"yyyy-MM-dd",CultureInfo.InvariantCulture),model,close,at,pins]);
+    }
+    private static async Task<JsonNode?> Value(NpgsqlConnection connection,string sql,object[] arguments,CancellationToken ct)
+    {
+        await using var command=ScheduleStore.Command(connection,sql,arguments);
+        return await command.ExecuteScalarAsync(ct) is string text?JsonNode.Parse(text):null;
     }
 
     // The surfaces stored at or before the view's bound context, the view's own first and then newest business date first, each
@@ -169,13 +191,21 @@ internal static class VolSurfaceStore
         await using(var bind=ScheduleStore.Command(connection,"SELECT risk.bind($1,$2)",id,lease))await bind.ExecuteScalarAsync(ct);
         await using var database=new PreviewDatabase(manifest,source);
         var data=await RetainedFrames.ReadBoundJobInputs(database,connection,frame,revision,ReferenceReadScope.DefinitionClosure,ct);
+        var plan=OptionSurfaceAnalytics.Plan(request["sensitivities"],frame.At);
+        // Calibration and analytics value under the job's one certified context, as a portfolio valuation does.
+        var context=PinnedContext.Exact((await new KnowledgeStore(catalog).Read(connection,frame.ContextId!.Value,ct)).Context);
+        var snapshot=MarketSnapshotBinding.Bind(data.Snapshot(frame),frame.ContextId.Value,SchedulePreview.ParseAt(context.KnownAt));
         var elapsed=Stopwatch.StartNew();
-        var fitted=await VolSurfaceFit.Compute(connection,database,data,frame,data.Snapshot(frame),product["code"]!.GetValue<string>(),model,ct);
+        var fitted=await VolSurfaceFit.Compute(connection,database,data,frame,snapshot,product["code"]!.GetValue<string>(),model,ct);
         elapsed.Stop();
+        var analysing=Stopwatch.StartNew();
+        var analysed=await OptionSurfaceAnalytics.Attach(connection,database,data,frame,snapshot,context,fitted,plan,ct);
+        analysing.Stop();
         await transaction.CommitAsync(ct);
-        var surface=JsonSerializer.Serialize(fitted.Result,Json);
-        return new(fitted.ObservationIds,surface,Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(surface))),
-            fitted.Result.Series.Length,fitted.Result.Series.Count(s=>s.Series.Outcome==FuturesOptionPricing.SolvedMode),elapsed.ElapsedMilliseconds);
+        var surface=JsonSerializer.Serialize(analysed.Surface,Json);
+        return new(analysed.ObservationIds,surface,Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(surface))),
+            fitted.Result.Series.Length,fitted.Result.Series.Count(s=>s.Series.Outcome==FuturesOptionPricing.SolvedMode),elapsed.ElapsedMilliseconds,
+            analysed.TreePrices,analysing.ElapsedMilliseconds);
     }
 
     // Records the outcome and completes the job's attempt in one transaction.
@@ -184,7 +214,8 @@ internal static class VolSurfaceStore
         var command=source.CreateCommand("SELECT risk.finish_vol_surface_fit($1,$2,$3,$4::jsonb,$5,$6::jsonb)");
         command.Parameters.AddWithValue(id);command.Parameters.AddWithValue(lease);command.Parameters.AddWithValue(fit.Inputs.ToArray());
         command.Parameters.AddWithValue(fit.Surface);command.Parameters.AddWithValue(fit.Digest);
-        command.Parameters.AddWithValue(JsonSerializer.Serialize(new{series=fit.Series,solves=fit.Solves,elapsedMs=fit.ElapsedMs}));
+        command.Parameters.AddWithValue(JsonSerializer.Serialize(new{series=fit.Series,solves=fit.Solves,elapsedMs=fit.ElapsedMs,
+            analyticsTreePrices=fit.AnalyticsTreePrices,analyticsMs=fit.AnalyticsMs}));
         return command;
     }
 
