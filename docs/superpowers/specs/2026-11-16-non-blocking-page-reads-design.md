@@ -129,10 +129,12 @@ records what that read touches; several pages in the table below have no such
 recording today, and adding it is part of moving them.
 
 **Session read slots.** The session gate is today what limits a session to one
-database connection for ordinary requests. Ungated reads take one of four
+database connection for ordinary requests. Ungated reads take one of two
 per-session slots instead, and wait for one within the request deadline rather
-than being refused. The bound is a process limit beside the existing ones and
-must fit the hosted connection budget.
+than being refused. The bound is a fixed contract value like the channel's two
+active reads, not a configuration value. It is two because the hosted
+application pool is capped at eight connections; a session then uses at most
+four at once across both transports.
 
 **Session preparation.** A handler that assigns session state is not a read for
 this purpose and stays `Locked`. Where an existing HTTP read first prepares the
@@ -255,7 +257,7 @@ Each step amends D404's record in `docs/decisions.md` and
   over the channel, extending the existing async workbench check.
 - **Independence.** An ordinary session request completes while an ungated read
   of the same session waits in the database, for HTTP as D404 already checks
-  for the channel. A fifth concurrent ungated read of one session waits for a
+  for the channel. A third concurrent ungated read of one session waits for a
   slot and then completes.
 - **Fences.** A profile switch or sign-in expiry during an ungated read refuses
   its result, as does a permission revoked between execution and publication.
@@ -284,7 +286,7 @@ test names and the measurement tooling; the next free decision number.
 - An ungated HTTP read authorizes again in a fresh transaction before it
   answers, as `Concurrent` does, rather than relying on the read's own
   transaction alone.
-- Four ungated reads per session at once, waiting rather than refusing.
+- Two ungated reads per session at once, waiting rather than refusing.
 - The channel's failed events carry the full HTTP refusal, under a new
   protocol identifier.
 
