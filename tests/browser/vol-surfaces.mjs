@@ -156,8 +156,11 @@ export async function run({command,evaluate,wait,click,set,persona,check,idle,fi
   await evaluate('window.loseNextFit=true');await click('#vol-fit-here');
   await settled(`${calls('vol-surfaces/fit')}.length===1&&!document.querySelector('#vol-fit-retry').hidden`,30000);
   const lost=await evaluate(`${calls('vol-surfaces/fit')}.at(-1)`);
-  await check('Calibrate submits the product and model at the selected close under a fresh request id',
-   q(Object.keys(lost.body).sort().join()==='definitionRevisionId,model,product,requestId,snapshotId'&&lost.body.definitionRevisionId===failed.body.definitionRevisionId&&lost.body.product==='nymex_lo'&&lost.body.model===model&&
+  // The fit states its sensitivity selection in full: the selection the read offered, sent back unchanged, with the clock chosen.
+  const selection=lost.body.sensitivities??{};
+  await check('Calibrate submits the product, the model and the offered sensitivity selection with the chosen clock at the selected close under a fresh request id',
+   q(Object.keys(lost.body).sort().join()==='definitionRevisionId,model,product,requestId,sensitivities,snapshotId'&&lost.body.definitionRevisionId===failed.body.definitionRevisionId&&lost.body.product==='nymex_lo'&&lost.body.model===model&&
+    JSON.stringify({...selection,clock:undefined})===JSON.stringify({...failed.answer.sensitivities.offered,clock:undefined})&&selection.clock?.code==='UTC'&&failed.answer.sensitivities.clockRequired===true&&
     lost.body.snapshotId===unfitted.body.context.snapshotId&&/^[0-9a-f-]{36}$/.test(lost.body.requestId)&&lost.status===200&&['queued','running'].includes(lost.answer.state)));
   await check('a lost calibration response keeps the request to retry, and offers no fresh calibration meanwhile',
    "!!document.querySelector('#vol-fit-retry').offsetParent&&!document.querySelector('#vol-fit').offsetParent&&document.querySelector('#vol-fit-here')?.disabled===true&&/not confirmed/.test(document.querySelector('#vol-fit-failure').textContent)",
