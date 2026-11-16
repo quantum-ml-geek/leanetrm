@@ -18,9 +18,9 @@ internal sealed record AsyncReadEmpty;
 internal sealed record AsyncReadJob(Guid Id);
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 internal sealed record AsyncReadArchive(string Method,int Limit,string? Before,Guid? Id);
-internal sealed record AsyncReadInput(string Operation,object Body,Guid? SnapshotId,ImmutableArray<string> Permissions,FuturesReadRequest? Context=null);
-internal sealed record AsyncReadPlan(AsyncReadInput Input,Func<CancellationToken,Task<AsyncReadOutcome>> Execute);
-internal sealed record AsyncReadOutcome(object Value,Func<NpgsqlConnection,CancellationToken,Task> Recheck);
+internal sealed record ReadInput(string Operation,object Body,Guid? SnapshotId,ImmutableArray<string> Permissions,FuturesReadRequest? Context=null);
+internal sealed record ReadPlan(ReadInput Input,Func<CancellationToken,Task<ReadOutcome>> Execute);
+internal sealed record ReadOutcome(object Value,Func<NpgsqlConnection,CancellationToken,Task> Recheck);
 internal sealed class AsyncReadException(int status,string code,string message):Exception(message)
 {
     internal int Status=>status;
@@ -33,13 +33,13 @@ internal static class AsyncReadContract
 {
     internal static readonly JsonSerializerOptions Json=new(JsonSerializerDefaults.Web)
     {AllowDuplicateProperties=false,Converters={new ExactDecimalJsonConverter()}};
-    internal static AsyncReadInput Decode(AsyncReadRequest request)
+    internal static ReadInput Decode(AsyncReadRequest request)
     {
         if(request.Body.ValueKind!=JsonValueKind.Object)throw Invalid();
         T Body<T>()=>request.Body.Deserialize<T>(Json)??throw Invalid();
-        AsyncReadInput Market(object body,Guid snapshot)=>snapshot!=Guid.Empty?
+        ReadInput Market(object body,Guid snapshot)=>snapshot!=Guid.Empty?
             new(request.Operation,body,snapshot,["ReadMarketData"]):throw Invalid();
-        AsyncReadInput Trading(object body,FuturesReadRequest? context,bool risk=false)=>context is {SnapshotId:var snapshot}&&snapshot!=Guid.Empty?
+        ReadInput Trading(object body,FuturesReadRequest? context,bool risk=false)=>context is {SnapshotId:var snapshot}&&snapshot!=Guid.Empty?
             new(request.Operation,body,snapshot,risk?["ReadTrades","ReadMarketData","RunScenario"]:["ReadTrades","ReadMarketData"],context):throw Invalid();
         switch(request.Operation)
         {

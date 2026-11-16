@@ -10,7 +10,7 @@ namespace OpenEtrm.Api;
 
 internal sealed record AsyncReadError(string Code,string Message);
 internal sealed record AsyncReadFailure(string Operation,Guid RequestId,string ExceptionType,string? Method,string? SqlState);
-internal sealed record AsyncReadCompletion(AsyncReadRequest Request,AsyncReadPlan Plan,string State,JsonElement? Result,AsyncReadError? Error,
+internal sealed record AsyncReadCompletion(AsyncReadRequest Request,ReadPlan Plan,string State,JsonElement? Result,AsyncReadError? Error,
     Func<NpgsqlConnection,CancellationToken,Task>? Recheck=null);
 
 // Ephemeral reads for the workbench. This channel retains request hashes,
@@ -58,7 +58,7 @@ internal sealed class AsyncReadChannel:IAsyncDisposable
         if(JsonSerializer.SerializeToUtf8Bytes(request,JsonSerializerOptions.Web).Length>MaximumRequestBytes)
             throw Refusal(413,"async_request_size","The read request exceeds the request limit.");
     }
-    internal void Submit(AsyncReadRequest request,AsyncReadPlan plan)
+    internal void Submit(AsyncReadRequest request,ReadPlan plan)
     {
         Validate(request);
         if(request.ChannelId!=Id||request.Operation!=plan.Input.Operation)throw Refusal(422,"async_request","The request and selected input frame must match.");
@@ -85,7 +85,7 @@ internal sealed class AsyncReadChannel:IAsyncDisposable
             else using(ExecutionContext.SuppressFlow())pending.Work=Task.Run(()=>Evaluate(request,plan,pending));
         }
     }
-    async Task Evaluate(AsyncReadRequest request,AsyncReadPlan plan,Pending pending)
+    async Task Evaluate(AsyncReadRequest request,ReadPlan plan,Pending pending)
     {
         AsyncReadCompletion completion;
         try

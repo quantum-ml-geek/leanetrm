@@ -21,7 +21,7 @@ internal sealed class AsyncReads(PreviewDatabase database,CancellationToken stop
             }
         }
     }
-    internal void Map(RouteGroupBuilder api,Func<HttpContext,PreviewSession> session,Func<PreviewSession,AsyncReadInput,AsyncReadPlan> prepare)
+    internal void Map(RouteGroupBuilder api,Func<HttpContext,PreviewSession> session,Func<PreviewSession,ReadInput,ReadPlan> prepare)
     {
         PreviewSession ReadSession(HttpContext context)=>PageSession(context,session);
         api.MapPost("/async-reads/channels",async(HttpContext c)=>
@@ -106,7 +106,7 @@ internal sealed class AsyncReads(PreviewDatabase database,CancellationToken stop
             return owner;
         }
     }
-    Task Authorize(Owner owner,AsyncReadInput? input,CancellationToken ct,
+    Task Authorize(Owner owner,ReadInput? input,CancellationToken ct,
         Func<Npgsql.NpgsqlConnection,CancellationToken,Task>? recheck=null,Func<CancellationToken,Task>? publish=null)=>
         database.WithIdentity(owner.Profile,null,async(connection,t)=>
     {

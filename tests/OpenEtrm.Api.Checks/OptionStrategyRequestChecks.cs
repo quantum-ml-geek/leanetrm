@@ -59,7 +59,7 @@ internal static class OptionStrategyRequestChecks
 
         var channel=Guid.NewGuid();
         var wire=JsonSerializer.SerializeToNode(request,AsyncReadContract.Json)!.AsObject();
-        AsyncReadInput Decode(JsonNode body)=>AsyncReadContract.Decode(new(channel,Guid.NewGuid(),"options.strategy.analyze.v1",JsonSerializer.SerializeToElement(body)));
+        ReadInput Decode(JsonNode body)=>AsyncReadContract.Decode(new(channel,Guid.NewGuid(),"options.strategy.analyze.v1",JsonSerializer.SerializeToElement(body)));
         var admitted=Decode(wire);
         if(admitted.Body is not OptionStrategyAnalyzeRequest decoded||decoded.Legs.Length!=2||decoded.Legs[1]!=request.Legs[1]||decoded.Prices!=request.Prices||!decoded.Instants.SequenceEqual(request.Instants)||
             decoded.Valuation!=request.Valuation||decoded.Sensitivities!=request.Sensitivities||admitted.SnapshotId!=Context.SnapshotId||admitted.Context!=Context||

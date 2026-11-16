@@ -2687,7 +2687,7 @@ api.MapPost("/settings/ai/providers/test",(HttpContext c,TestRequest body)=>Lock
 }));
 // Each admitted operation captures immutable selection under the gate. Its
 // business read and fresh identity transaction execute only in the worker.
-AsyncReadPlan PrepareAsyncRead(PreviewSession session,AsyncReadInput input)
+ReadPlan PrepareRead(PreviewSession session,ReadInput input)
 {
     var profile=Profile(session);var digest=hosted is null?null:session.Digest;
     Task<T> AsReader<T>(string permission,Func<NpgsqlConnection,CancellationToken,Task<T>> read,CancellationToken ct)=>
@@ -2700,7 +2700,7 @@ AsyncReadPlan PrepareAsyncRead(PreviewSession session,AsyncReadInput input)
             var read=await marketReads.Evaluate(connection,pin,curve.Curve,t,curve.IncludeWorkspace,curve.ContractDisplay);
             var result=AsyncReadProjections.Curve(read,pin,curve,curve.IncludeWorkspace?workspace(read.Workspace??throw new InvalidOperationException("The requested workspace projection is missing."),true):null);
             var source=read.InputSelection.Source;var observations=read.InputSelection.ObservationIds;
-            return new AsyncReadOutcome(result,async(publication,cancellation)=>
+            return new ReadOutcome(result,async(publication,cancellation)=>
             {
                 await pin.Bind(publication,database.Manifest.CatalogId,cancellation);
                 await MarketBundle.Require(publication,source.Apply(database.Manifest),cancellation);
@@ -2719,7 +2719,7 @@ AsyncReadPlan PrepareAsyncRead(PreviewSession session,AsyncReadInput input)
         return new(input,ct=>AsReader("ReadMarketData",async(connection,t)=>
         {
             var points=await marketReads.History(connection,pin,frames,history.Curve,history.ContractId,history.SeriesId,policy,t,aliases,anchors);
-            return new AsyncReadOutcome(AsyncReadProjections.History(points,pin,history,policy),
+            return new ReadOutcome(AsyncReadProjections.History(points,pin,history,policy),
                 (publication,cancellation)=>pin.Bind(publication,database.Manifest.CatalogId,cancellation));
         },ct));
     }
@@ -2729,7 +2729,7 @@ AsyncReadPlan PrepareAsyncRead(PreviewSession session,AsyncReadInput input)
         return new(input,ct=>AsReader("ReadMarketData",async(connection,t)=>
         {
             var curves=await marketReads.CurveShapes(connection,pin,shapes.Curves,t,shapes.ContractDisplay);
-            return new AsyncReadOutcome(pin.Context is {} context?new{curves,context}:(object)new{curves},
+            return new ReadOutcome(pin.Context is {} context?new{curves,context}:(object)new{curves},
                 (publication,cancellation)=>pin.Bind(publication,database.Manifest.CatalogId,cancellation));
         },ct));
     }
@@ -2744,7 +2744,7 @@ AsyncReadPlan PrepareAsyncRead(PreviewSession session,AsyncReadInput input)
             await MarketBundle.RequireReferenceVisibility(connection,database.Manifest,t);
             var version=await BlotterFreshness.Read(connection,database.Manifest,context,selection,t);
             await RequireReadAccess(connection,t);
-            return new AsyncReadOutcome(new{version},async(publication,cancellation)=>
+            return new ReadOutcome(new{version},async(publication,cancellation)=>
             {
                 if(retained is not null)await retained.Bind(publication,database.Manifest.CatalogId,cancellation);
                 await RequireReadAccess(publication,cancellation);
@@ -2775,7 +2775,7 @@ AsyncReadPlan PrepareAsyncRead(PreviewSession session,AsyncReadInput input)
         {
             var completed=await ExecuteTrading(profile,()=>selection,context,operation,ct,
                 scenario:scenario,headTrade:head,expectedConvention:convention,combinedWorkspace:combined,hostedDigest:digest);
-            return new AsyncReadOutcome(completed.Result,async(publication,cancellation)=>
+            return new ReadOutcome(completed.Result,async(publication,cancellation)=>
             {
                 await completed.View.Bind(publication,database.Manifest.CatalogId,cancellation);
                 await TradingContext.Bind(publication,database.Manifest.CatalogId,completed.View.CalculationFrame,completed.View.Context,cancellation);
@@ -2796,13 +2796,13 @@ AsyncReadPlan PrepareAsyncRead(PreviewSession session,AsyncReadInput input)
     return new(input,ct=>AsReader("RunScenario",async(connection,t)=>
     {
         var value=await JobRead(connection,t);var ids=AsyncReadJobs.Ids(value);
-        return new AsyncReadOutcome(value,async(publication,cancellation)=>
+        return new ReadOutcome(value,async(publication,cancellation)=>
         {
             foreach(var id in ids)await RiskJobs.Read(publication,database.Manifest.CatalogId,id,cancellation,expectedConvention:PortfolioRiskPreview.Convention);
         });
     },ct));
 }
-Task<object> AsyncPortfolioRead(AsyncReadInput input,NpgsqlConnection connection,PreviewData data,InputFrame frame,CancellationToken ct)=>input.Body switch
+Task<object> AsyncPortfolioRead(ReadInput input,NpgsqlConnection connection,PreviewData data,InputFrame frame,CancellationToken ct)=>input.Body switch
 {
     PortfolioRiskCatalogRequest body when input.Operation=="portfolio.risk.statistical.setup.v1"=>portfolioRisk.StatisticalSetup(connection,data,frame,body,ct),
     PortfolioRiskCatalogRequest body=>portfolioRisk.Catalog(connection,data,frame,body,ct),
@@ -2817,7 +2817,7 @@ Task<object> AsyncPortfolioRead(AsyncReadInput input,NpgsqlConnection connection
     _=>throw AsyncReadContract.Invalid()
 };
 var asyncReads=new AsyncReads(database,app.Lifetime.ApplicationStopping,hosted is not null,app.Logger);
-asyncReadServices.Add(asyncReads);asyncReads.Map(api,Session,PrepareAsyncRead);
+asyncReadServices.Add(asyncReads);asyncReads.Map(api,Session,PrepareRead);
 }
 var files=new PhysicalFileProvider(webRoot);
 app.UseDefaultFiles(new DefaultFilesOptions {FileProvider=files});
@@ -2853,6 +2853,9 @@ public sealed partial class PreviewSession
     // session's digest in hosted mode, otherwise random, so it reveals nothing of the session's cookie.
     public string Digest {get;}
     public SemaphoreSlim Gate {get;}=new(1,1);
+    // Ordinary reads that execute outside the gate share these slots; a further read waits for one.
+    public const int MaximumReads=2;
+    internal SemaphoreSlim Reads {get;}=new(MaximumReads,MaximumReads);
     internal SemaphoreSlim BlotterWait {get;}=new(1,1);
     public string? Profile {get;set;}
     public ScheduleContext? MarketContext {get;set;}

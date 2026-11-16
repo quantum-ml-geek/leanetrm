@@ -6,7 +6,8 @@ using OpenEtrm.MarketData;
 if(args is ["--structured-power"]){StructuredPowerChecks.Run();return;}
 if(args is ["--power-hedge"]){StructuredPowerHedgeChecks.Run();return;}
 if(args is ["--assistant-prompts"]){TurnWorkerChecks.Run();AgentToolChecks.Run();await ModelProviderChecks.Run();return;}
-if(args is ["--async-reads"]){AsyncReadContractChecks.Run();await AsyncReadChecks.Run();return;}
+if(args is ["--async-reads"]){AsyncReadContractChecks.Run();await AsyncReadChecks.Run();await UngatedReadChecks.Run();return;}
+if(args is ["--ungated-reads"]){await UngatedReadChecks.Run();return;}
 if(args is ["--async-read-contracts"]){AsyncReadContractChecks.Run();return;}
 if(args is ["--calendar-authoring"]){CalendarAuthoringSchemaChecks.Run();return;}
 if(args is ["--published-clock"]){PublishedClockChecks.Run();return;}
