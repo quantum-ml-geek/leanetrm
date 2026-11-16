@@ -43,10 +43,10 @@ export async function run({command,evaluate,wait,click,persona,check,idle,fitsWi
   await settled(`document.querySelectorAll('.options-product').length>1&&${idle}`,30000);
   await check('the page is titled Options under Trading, names the working snapshot it reads and chooses no product',
    `document.querySelector('#page-title').textContent==='Options'&&document.querySelector('#page-section').textContent==='TRADING'&&
-    document.querySelector('${page} .vol-eyebrow').textContent==='Working snapshot'&&/2026/.test(document.querySelector('#options-here').textContent)&&
+    document.querySelector('${page} .options-eyebrow').textContent==='Working snapshot'&&/2026/.test(document.querySelector('#options-here').textContent)&&
     [...document.querySelectorAll('.options-product')].map(c=>c.dataset.product).sort().join()==='nymex_lo,nymex_on'&&!document.querySelector('.options-product[aria-pressed=true]')&&
     !!document.querySelector('#options-placeholder').offsetParent&&${calls('vol-surfaces/read')}.length===0`,
-   `[document.querySelector('#page-title').textContent,document.querySelector('${page} .vol-hero').textContent,${state}]`);
+   `[document.querySelector('#page-title').textContent,document.querySelector('${page} .options-hero').textContent,${state}]`);
   await check('the page opens on the chain, offers Positions, and Strategy says Coming soon',
    `document.querySelector('#options-view-chain').getAttribute('aria-pressed')==='true'&&!document.querySelector('#options-view-positions').disabled&&
     (b=>b.disabled&&/Coming soon/.test(b.textContent))(document.querySelector('#options-view-strategy'))`);
@@ -61,7 +61,7 @@ export async function run({command,evaluate,wait,click,persona,check,idle,fitsWi
     (p=>p.status===200&&p.body.model==='smile_quadratic_log_moneyness_v1'&&Array.isArray(p.answer.held))(${calls('options/positions')}.at(-1))`,
    `${calls('options/positions')}.at(-1)`);
   await check('the chain opens on the first live expiry with one row per strike it lists and the at-the-money strike marked',
-   `document.querySelectorAll('#options-expiries .vol-close-chip').length===${live.length}&&
+   `document.querySelectorAll('#options-expiries .options-expiry').length===${live.length}&&
     document.querySelector('#options-expiries [aria-current=true]').dataset.expiry===${q(first.expiryAt)}&&
     document.querySelectorAll('#options-chain tbody tr').length===${listed.size}&&
     [...document.querySelectorAll('#options-chain tr.options-atm')].map(r=>r.dataset.strike).join()===${q(first.atTheMoneyStrike??'')}&&

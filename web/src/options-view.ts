@@ -33,7 +33,7 @@ export function setupOptions(o:{api:Api;context:()=>FuturesReadRequest;zone:()=>
  const root=document.getElementById('options-page')!;root.dataset.ownControls='';
 
  // The close in view, with the page's views beside it.
- const hero=el('header','vol-hero'),hereKind=el('span','vol-eyebrow'),hereTitle=el('h2','vol-here');hereTitle.id='options-here';
+ const hero=el('header','options-hero'),hereKind=el('span','options-eyebrow'),hereTitle=el('h2','options-here');hereTitle.id='options-here';
  const heroText=el('div');heroText.append(hereKind,hereTitle);
  const views=el('div','options-views');views.setAttribute('role','group');views.setAttribute('aria-label','Views');
  const chainView=button('options-view','Chain','options-view-chain'),positionsView=button('options-view','Positions','options-view-positions');
@@ -120,7 +120,7 @@ export function setupOptions(o:{api:Api;context:()=>FuturesReadRequest;zone:()=>
   const surface=shown!.surface!,expiries=chainExpiries(surface);
   if(!expiries.some(e=>e.expiryAt===expiryAt))expiryAt=expiries[0]?.expiryAt??'';
   expiryBar.replaceChildren(...expiries.map(expiry=>{
-   const chip=button('vol-close-chip',expiryLabel(expiry));chip.dataset.expiry=expiry.expiryAt;
+   const chip=button('options-expiry',expiryLabel(expiry));chip.dataset.expiry=expiry.expiryAt;
    if(expiry.expiryAt===expiryAt)chip.setAttribute('aria-current','true');else chip.onclick=()=>{expiryAt=expiry.expiryAt;selected='';renderChain();};
    return chip;
   }));

@@ -53,10 +53,12 @@ browser('the chain draws the stored surface: calls mirrored about the strike, th
  return {idle,state:state(),expiry:$('#options-expiries [aria-current=true]').dataset.expiry===expiry,strikes:all('#options-chain tbody tr').map(r=>r.dataset.strike),
   atTheMoney:all('#options-chain tr.options-atm').map(r=>r.dataset.strike),call3:cells('3','call'),put3:cells('3','put'),
   inTheMoney:all('#options-chain td.options-itm').map(td=>td.dataset.series).filter((code,i,list)=>list.indexOf(code)===i),
-  missing:[missing.dataset.series,missing.textContent,missing.title],facts:$('#options-facts').textContent,basis:/option_sensitivities_layers_v1/.test($('#options-basis').textContent)&&/Risk reports keep theirs/.test($('#options-basis').textContent)};
+  missing:[missing.dataset.series,missing.textContent,missing.title],facts:$('#options-facts').textContent,
+  // The hero and expiry chips are the page's own: another page's suites find theirs by class.
+  own:[all('.vol-hero,.vol-eyebrow,.vol-here,.vol-close-chip').length,$('.options-hero .options-eyebrow').textContent,all('.options-expiry').length],basis:/option_sensitivities_layers_v1/.test($('#options-basis').textContent)&&/Risk reports keep theirs/.test($('#options-basis').textContent)};
 `,{idle:{state:'idle',products:['synthetic_on','synthetic_lo'],chosen:0,placeholder:true,reads:0},state:'fitted',expiry:true,strikes:['3','3.25'],atTheMoney:['3'],
  call3:['2','-0.004120','0.001634','1.988','0.52','45.1%','0.167'],put3:['0.167','45.1%','-0.48','1.988','0.001634','-0.004120',''],inTheMoney:['p325'],
- missing:['c325','—','Estimates at the half, whole and double bump did not agree'],facts:'Underlying futureng_f27Settlement3.01ExpiryJan 26, 2027, 7:30 PMDays to expiry102.1',basis:true});
+ missing:['c325','—','Estimates at the half, whole and double bump did not agree'],own:[0,'Working snapshot',1],facts:'Underlying futureng_f27Settlement3.01ExpiryJan 26, 2027, 7:30 PMDays to expiry102.1',basis:true});
 
 browser('a chosen series can be booked or opened on its surface, and a product with no surface says so and links to where it is calibrated',`
  await options.open('synthetic_on');await tick();
