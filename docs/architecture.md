@@ -404,6 +404,18 @@ composition booking, future replacement amendments and independent indexed
 consideration through the existing FloatingSide. These preserve contractual net
 MTM and do not admit started-delivery cash lifecycle operations.
 
+D405 adds [versioned operating facilities](operating-facilities.md) and bounded
+supplied-plan thermal toll, battery and solar calculation through independent
+Side schedules. Physical operating parameters extend exact existing locations;
+trade entitlement, guarantees, state and prices stay separate. The pure REC
+kernel distinguishes evidenced issued ownership from modeled energy. The
+current-master port is in qualification. The authorized next increment adds
+saved operating contracts, common-context financial hedging and durable manual
+REC ownership/transfer/retirement operations with native authorization, exact
+relationships, certified history and idempotent commands. No optimizer or external
+registry submission is included. [Structured power](structured-power-products.md)
+and [contract conventions](power-contract-conventions.md) record the boundaries.
+
 D229 integrates PPA bindings into the common blotter and interactive/queued
 portfolio risk, with an explicit pending-meter policy and distinct value measure.
 Heat-rate examples use the existing typed factor contract and independent

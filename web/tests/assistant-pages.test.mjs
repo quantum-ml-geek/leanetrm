@@ -402,3 +402,8 @@ test('Looking at says which physical instrument revision, tab, gas day and stage
  assert.equal(shows({physical:{...physical,tab:'cash',day:null,obligationId:null,stage:null}}),'Selected physical instrument, revision 2 · Billing & corrections. Unsaved edits are not sent.');
  assert.equal(shows({}),'Physical instrument operations under the header context. Unsaved edits are not sent.');
 });
+
+
+test('operating facilities report a distinct page without unsaved browser terms',()=>{
+ assert.deepEqual(pageReport({page:'physical-power'}),{page:'physical_power',selection:{}});
+});

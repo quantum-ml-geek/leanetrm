@@ -34,9 +34,17 @@ LIFECYCLE_PORTFOLIO={f'tools/{name}.py' for name in (
     'check_gas_operator_physical_value','check_gas_operator_ordinary_value','check_gas_known_cashout')}
 OPTION_VALUE_APPS={'tools/check_lifecycle_valuation_browser.py'}
 AGENT_SETTINGS_BROWSER={'tools/check_agent_operating_settings.py'}
+OPERATING_FACILITIES={'tools/check_operating_facilities.py'}
 
 
 class CheckAllTests(unittest.TestCase):
+    def test_structured_power_storage_and_http_run_in_physical_partition(self):
+        for group in GROUPS:
+            commands=[]
+            run_checks(Path('/pg'),Path('/dotnet'),Path('/browser'),group=group,run=lambda command,**options:commands.append(command))
+            selected=[command for command in commands if OPERATING_FACILITIES.intersection(command) or '--structured-power-check' in command]
+            self.assertEqual(len(selected),2 if group=='physical' else 0)
+
     def test_async_workbench_checks_are_required_in_workspace_partition(self):
         for group in GROUPS:
             commands = []
@@ -379,7 +387,7 @@ class CheckAllTests(unittest.TestCase):
         self.assertEqual(set().union(*(set(value) for value in groups.values())), set(complete))
         margin={f'tools/check_futures_margin_{part}.py' for part in ('sources','adoption','projection_sources')}|{'tools/check_trading_business_date.py'}
         def shared(command):
-            return 'tools/run_preview.py' not in command and not (margin|LIFECYCLE_NATIVE|GAS_AMENDMENTS|LIFECYCLE_PORTFOLIO|OPTION_VALUE_APPS|AGENT_SETTINGS_BROWSER).intersection(command)
+            return 'tools/run_preview.py' not in command and not (margin|LIFECYCLE_NATIVE|GAS_AMENDMENTS|LIFECYCLE_PORTFOLIO|OPTION_VALUE_APPS|AGENT_SETTINGS_BROWSER|OPERATING_FACILITIES).intersection(command)
         for name, selected in groups.items():
             with self.subTest(group=name):
                 # Each group starts from a clean checkout, including restores,
