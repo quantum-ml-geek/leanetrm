@@ -53,6 +53,7 @@ internal static class AsyncReadContract
             case "trading.blotter.v1":var blotter=Body<FuturesBlotterRequest>();return Trading(blotter,blotter.Context);
             case "futures.editor.v1":var future=Body<FuturesEditorRequest>();return Trading(future,future.Context);
             case "swaps.editor.v1":var swap=Body<SwapEditorRequest>();return Trading(swap,swap.Context);
+            case "options.strategy.analyze.v1":var strategy=Body<OptionStrategyAnalyzeRequest>();return Trading(strategy,strategy.Context);
             case "portfolio.risk.scope.v1":var scope=Body<RiskScopeRequest>();return Trading(scope,scope.Context,true);
             case "portfolio.risk.catalog.v1":case "portfolio.risk.statistical.setup.v1":var catalog=Body<PortfolioRiskCatalogRequest>();return Trading(catalog,catalog.Context,true);
             case "portfolio.risk.calculate.v1":var risk=Body<PortfolioRiskRequest>();return Trading(risk,risk.Context,true);

@@ -140,10 +140,10 @@ internal sealed class FuturesOptionMarket
     {
         var receipts=Receipts;
         return new(positions.Count(p=>p.OpenLots!=default&&Reason(p) is null),receipts.Length+OptionFailures.Count,
-            receipts.Count(r=>r.Mode==FuturesOptionPricing.SolvedMode),receipts.Count(r=>r.Mode==ImpliedVolatility.FallbackMode),
-            // A solved series prices the tree at both bracket ends and once per halving; the fallback once at the bracket's foot.
-            receipts.Sum(r=>r.Mode==FuturesOptionPricing.SolvedMode?r.Iterations!.Value+2:1));
+            receipts.Count(r=>r.Mode==FuturesOptionPricing.SolvedMode),receipts.Count(r=>r.Mode==ImpliedVolatility.FallbackMode),CalibrationTreePrices(receipts));
     }
+    // A solved series prices the tree at both bracket ends and once per halving; the fallback once at the bracket's foot.
+    internal static int CalibrationTreePrices(IEnumerable<FuturesOptionCalibrationReceipt> receipts)=>receipts.Sum(r=>r.Mode==FuturesOptionPricing.SolvedMode?r.Iterations!.Value+2:1);
 }
 
 // The calibration of a set of option series from one snapshot's unshocked base: the bindings of the series that

@@ -5752,7 +5752,7 @@ value they state are unchanged.
   from the fitted smile; volatility in Risk; rho; scheduled fitting; assistant
   reading of the page.
 
-## D409 · Physical storage assets and independently tracked activity
+## D414 · Physical storage assets and independently tracked activity
 
 **Status:** implemented operating profile with local managed, native, upgrade and
 browser qualification. Integration and release checks remain separate gates.
@@ -5774,6 +5774,108 @@ a parallel financial ledger or infer a movement from title transfer.
 agreements, other ratchet laws, loss/conversion rules and complete optionality
 valuation require their own qualified contracts. See
 [storage facility operations](storage-facility-operations.md).
+
+## D409 · A strategy of option legs on one expiry is analysed by a read, and Options draws it
+
+2026-11-16. Scope decided by the owner on 15 November 2026: legs on one option
+expiry and one underlying future; no futures legs, saved strategies or booking
+a strategy in one action. Takes the strategy viewer and its analysis read from
+the items D408 left open. Option valuation, the stored surface, Risk reports,
+trading P&L and every value they state are unchanged.
+
+- **One expiry.** Every leg of a strategy is a listed series of one product
+  that expires at one instant on one underlying future, each series on one
+  leg, in whole lots bought or sold. Anything else is refused
+  (`strategy_legs`, `strategy_expiry`, `strategy_underlying`). A relationship
+  between two futures months is never inferred, so one price axis never
+  carries two.
+- **At expiry.** Rule `option_expiry_exercise_value_v1`, named by the request:
+  an option in the money at expiry is exercised or assigned and is worth its
+  intrinsic value, any other nothing. It is not a tree price, since the model
+  refuses a valuation at or after expiry, and it records no lifecycle event.
+  The payoff is each leg's exercise value less its entry price, times its
+  multiplier and signed lots, stated over futures prices from zero upward. It
+  is piecewise linear with a corner at each strike, so the net premium, the
+  largest profit and the largest loss with whether each is bounded, and the
+  breakevens are solved exactly in rational arithmetic and reported once,
+  half-even at 18 places (`exact_rational_half_even_18_v1`). A breakeven is one
+  price, a range where the payoff is zero, or every price from one upward. The
+  curve is exact at each requested price and at each strike between them.
+- **Before expiry.** One curve per requested instant, from the valuation
+  instant to before the legs' instruction cutoff while one is ahead, or else
+  their expiry, which is as far as the option model values a series; a later
+  instant is refused (`strategy_curve_instant`). At each price, ordinary instrument PV of the legs
+  under a scenario that moves the underlying future to that price, the
+  calculation clock to the instant (`frozen_absolute_inputs_forward_clock_v1`)
+  and every leg's held volatility by the stated shift, less the premium paid
+  ([valuation layers](valuation-context-layers.md)). The legs are one-contract
+  holdings of their series, as a fit values them, scaled by signed lots
+  outside the PV. No pricer or payoff approximation is added.
+- **Legs that do not solve.** Legs are calibrated by the calibration valuation
+  uses, under the stated valuation policy. A leg valued at intrinsic, or one
+  that did not calibrate, is said on its row, and the strategy then has no
+  dated curve (`option_at_intrinsic`, `strategy_leg_uncalibrated`): none is
+  drawn from the legs that did solve. A sample the valuation refuses, such as
+  a shifted volatility it cannot price, refuses the dated curves with its
+  code. The payoff at expiry needs no volatility and is still returned. Only
+  those refuse the curves; anything else wrong with what was asked fails the
+  read.
+- **Value and sensitivities.** The strategy's value, delta, gamma, vega and
+  theta are its legs' figures under the request's
+  `option_sensitivities_layers_v1` selection, each times its multiplier and
+  signed lots, added. The legs share one underlying future, so the sums are
+  sums on one axis; a sum with a missing member is missing. A recorded close
+  counts its day on its convention's clock and a working snapshot names one,
+  as a fit does.
+- **Stated in full.** `POST /api/options/strategy/analyze` names the context,
+  product, expiry, legs with entry prices, the price range as bounds and a
+  point count, the instants, the volatility shift in points, the valuation
+  policy, the sensitivity selection and the expiry rule, and echoes them with
+  the layer conventions it ran under and the work done. Price points are
+  evenly spaced exact decimals; a range that does not divide that way is
+  refused, never moved (`strategy_price_range`).
+- **Bounded.** At most 4 legs, 41 price points and 3 dated curves; a request
+  beyond one is refused `strategy_limit`, not cut down. A leg is at most
+  100,000 lots (`strategy_leg_lots`) and the volatility shift at most 100
+  points (`strategy_volatility_shift`). The limits come from the measurement in
+  [verification](verification.md#option-strategy-viewer-d409): one tree price
+  is tens of milliseconds, and an analysis at every limit is about 500 of them
+  for its curves (492 scenario prices and one base price per leg for each
+  set). The curves are valued in up to four sets side by side, each over a
+  market of its own, as a fit's expiries are.
+- **Asynchronous.** The analysis is admitted on the asynchronous read channel
+  as `options.strategy.analyze.v1` (D404), which the page uses; the ordinary
+  endpoint keeps the ordinary request limit.
+- **Templates and offers.** `POST /api/options/strategy/setup` reads the
+  product's stored surface and offers, for one expiry: the call spread, put
+  spread, straddle, strangle, iron condor, butterfly and risk reversal, each
+  with its legs or the code of why it has none
+  (`listed_strike_offsets_from_at_the_money_v1`: strikes are counted in the
+  strikes the expiry lists, from the at-the-money strike the surface states,
+  and a strike or series that is not listed refuses the template rather than
+  taking a nearer one); a price range six listed strikes either side of the
+  money at 21 points; the valuation instant and the same local time on each
+  later calendar date before the instant curves stop at, with whether that
+  list is complete; and the policies an analysis names. Days
+  are counted on the close convention's clock, or at a working snapshot on the
+  clock the surface's own fit named, so a strategy's day is its chain's. An
+  offer is for sending back: an analysis accepts what it is given, offered or
+  not.
+- **Options.** The Strategy view takes legs from a template or from the
+  chain's selected series at the settlement shown, lets the person change
+  side, lots and entry price, and draws the stated payoff: a solid expiry line
+  filled in the gain tone above zero and the loss tone below, dashed dated
+  curves told apart by dash as well as colour, and marks at the settled
+  futures price and each breakeven. The page computes nothing. A strategy's
+  legs are kept per product and expiry until the context changes. An analysis
+  a newer choice replaces is cancelled.
+- **Reads only.** Both reads are for readers of trades and market data. They
+  book nothing and store nothing, and no agent tool calls them.
+- **Still open.** Strategies across expiries, which need a declared
+  relationship between futures months; futures legs; saved strategies; booking
+  a strategy in one action; spread, storage, tolling and transport models;
+  valuing options from the fitted smile; volatility in Risk; rho; scheduled
+  fitting; assistant reading of the page.
 
 ## D410 · Explicit balance-time fees and cumulative independent cash
 

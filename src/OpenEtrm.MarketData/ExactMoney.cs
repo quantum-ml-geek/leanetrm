@@ -28,6 +28,7 @@ public sealed record ExactMoney
     public static ExactMoney Parse(string value,ReferenceKey currency)
     {var(n,d)=ExactNumberText.Parse(value);return new(n,d,currency);}
     public string ToExactString()=>ExactNumberText.Format(value);
+    internal SignedRatio Ratio=>value;
     public static ExactMoney FromMoney(Money money) => new(money.Amount.ScaledValue, ExactDecimal.WorkingScale, money.Currency);
     internal static ExactMoney FromFraction(BigInteger numerator,BigInteger denominator,ReferenceKey currency)=>new(numerator,denominator,currency);
     public ExactMoney Add(ExactMoney other)

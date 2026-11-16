@@ -70,6 +70,8 @@ test('dispatchers own distinct stable channel identities across disconnect and r
 
 test('route descriptors cover explicit read operations, preserve bodies and never admit commands or arbitrary paths',()=>{
   const body=curveBody();assert.deepEqual(asyncReadRequest('evaluate',body),{operation:'curve.evaluate.v1',body});
+  assert.deepEqual(asyncReadRequest('options/strategy/analyze',body),{operation:'options.strategy.analyze.v1',body});
+  for(const path of ['options/strategy/setup','options/positions','options/book'])assert.equal(asyncReadRequest(path,body),undefined,path);
   assert.equal(asyncReadRequest('portfolio/risk/jobs',{}),undefined);
   assert.equal(asyncReadRequest('portfolio/risk/jobs/'+snapshotId+'/cancel',{}),undefined);
   for(const path of ['profile','market/context','futures/book','corrections','toString','constructor','/evaluate','evaluate?x=1','https://synthetic.invalid/evaluate'])assert.equal(asyncReadRequest(path,body),undefined,path);

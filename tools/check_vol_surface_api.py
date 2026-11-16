@@ -177,6 +177,101 @@ def run_checks(url, query, manifest, *, run_worker, worker_login):
           c.call('options/positions', {'context': {'snapshotId': frame['id'], 'convention': OPTION, 'knowledgeMode': 'current'}, 'model': 'smile_unknown_v1'},
                  expected=422)['code'] == 'vol_model_unknown')
 
+    # A strategy of legs on one expiry. Its setup is offered from the stored surface; its analysis is sent what was offered,
+    # calibrates the legs as valuation does, and books and stores nothing.
+    context = {'snapshotId': frame['id'], 'convention': OPTION, 'knowledgeMode': 'current'}
+    by_series = {s['series']['code']: s for s in surface['series']}
+    def at_the_money(expiry):
+        return {s['series']['right'] for s in solved if s['series']['expiryAt'] == expiry['expiryAt'] and s['series']['strike'] == expiry['atTheMoneyStrike']}
+    live = next((e for e in surface['expiries'] if e['status'] == 'fitted' and at_the_money(e) == {'call', 'put'}), None)
+    check('an expiry has a solved call and put at its at-the-money strike', live is not None, [e['expiryAt'] for e in surface['expiries']])
+    setup = c.call('options/strategy/setup', {'context': context, 'product': PRODUCT, 'model': MODEL, 'expiryAt': live['expiryAt']}, timeout=TIMEOUT)
+    templates = {t['id']: t for t in setup['templates']}
+    straddle, offered = templates['straddle'], setup['offered']
+    check('a strategy setup offers each template\'s legs at the series\' settlements, or the code of why it has none, from the stored surface',
+          setup['state'] == 'fitted' and list(templates) == ['call_spread', 'put_spread', 'straddle', 'strangle', 'iron_condor', 'butterfly', 'risk_reversal']
+          and all((t['legs'] is None) != (t['refusal'] is None) for t in setup['templates'])
+          and all(t['refusal']['code'] in ('strategy_template_strike', 'strategy_template_series') for t in setup['templates'] if t['refusal'])
+          and [(leg['right'], leg['strike'], leg['side'], leg['lots']) for leg in straddle['legs']] == [(right, live['atTheMoneyStrike'], 'buy', 1) for right in ('call', 'put')]
+          and all(leg['entryPrice'] == by_series[leg['series']]['series']['settlement'] for t in setup['templates'] if t['legs'] for leg in t['legs'])
+          and setup['atTheMoneyStrike'] == live['atTheMoneyStrike'] and setup['underlyingSeries'] == live['underlyingCode']
+          and setup['templateRule'] == 'listed_strike_offsets_from_at_the_money_v1', setup['templates'])
+    check('the setup offers a price range, the days to expiry on the surface\'s clock and the policies an analysis names',
+          setup['clock'] == {'source': 'surface', 'zone': 'UTC'} and offered['sensitivities']['clock']['code'] == 'UTC'
+          and offered['sensitivities']['policy'] == SENSITIVITY_POLICY and offered['expiryRule'] == 'option_expiry_exercise_value_v1'
+          and datetime.fromisoformat(offered['instants'][0]) == datetime.fromisoformat(frame['at']) and offered['selectedInstants'] == offered['instants'][:1]
+          and all(datetime.fromisoformat(b).timestamp() - datetime.fromisoformat(a).timestamp() == 86400 for a, b in zip(offered['instants'], offered['instants'][1:]))
+          and datetime.fromisoformat(offered['instants'][-1]) < datetime.fromisoformat(offered['instantsBefore']) <= datetime.fromisoformat(live['expiryAt'])
+          and Decimal(offered['prices']['lower']) < Decimal(live['atTheMoneyStrike']) < Decimal(offered['prices']['upper']) and offered['prices']['points'] == 21
+          and setup['limits'] == {'legs': 4, 'points': 41, 'curves': 3, 'lots': 100000, 'volatilityShiftPoints': 100}, offered)
+
+    def analyse(legs, expected=200, **changes):
+        return c.call('options/strategy/analyze', {'context': context, 'product': PRODUCT, 'expiryAt': live['expiryAt'],
+                                                   'legs': [{'series': leg['series'], 'side': leg['side'], 'lots': leg['lots'], 'entryPrice': leg['entryPrice']} for leg in legs],
+                                                   'prices': {**offered['prices'], 'points': 11}, 'instants': offered['selectedInstants'], 'volatilityShiftPoints': '0',
+                                                   'valuation': offered['valuation'], 'sensitivities': offered['sensitivities'], 'expiryRule': offered['expiryRule'], **changes},
+                      expected=expected, timeout=TIMEOUT)
+    stored = revisions(PRODUCT)
+    analysis = analyse(straddle['legs'])
+    strike, paid = Decimal(live['atTheMoneyStrike']), sum(Decimal(leg['entryPrice']) for leg in straddle['legs'])
+    multiplier = Decimal(analysis['legs'][0]['multiplier'])
+    expiry = analysis['expiry']
+    check('a straddle\'s payoff at expiry is exact: its premium, its largest loss at the strike, no bound on its profit and a breakeven either side',
+          expiry['rule'] == 'option_expiry_exercise_value_v1' and Decimal(expiry['netPremium']['amount']) == paid * multiplier and expiry['netPremium']['direction'] == 'debit'
+          and expiry['maximumProfit'] == {'amount': None, 'bounded': False} and Decimal(expiry['maximumLoss']['amount']) == -paid * multiplier and expiry['maximumLoss']['bounded']
+          and [(Decimal(b['lower']), Decimal(b['upper'])) for b in expiry['breakevens']] == [(strike - paid, strike - paid), (strike + paid, strike + paid)]
+          and next(Decimal(p['profitAndLoss']) for p in expiry['curve'] if Decimal(p['price']) == strike) == -paid * multiplier, expiry)
+    check('each leg is calibrated as its series was fitted, and the strategy\'s value is its legs\' times multiplier and lots',
+          all(leg['state'] == 'solved' and leg['reason'] is None and leg['impliedVolatility'] == by_series[leg['series']]['series']['marketVolatility']
+              and leg['settlement'] is not None and leg['delta']['value'] is not None
+              and (figure(by_series[leg['series']], 'delta') is None or abs(Decimal(leg['delta']['value']) - figure(by_series[leg['series']], 'delta')) <= Decimal('0.02'))
+              for leg in analysis['legs'])
+          and Decimal(analysis['strategy']['value']['amount']) == sum(Decimal(leg['value']) * multiplier for leg in analysis['legs'])
+          and all((analysis['strategy'][m]['amount'] is None) != (analysis['strategy'][m]['missing'] is None) for m in figures)
+          and (analysis['currency'], analysis['quantityUnit'], analysis['underlyingSeries']) == ('USD', 'MMBtu (IT)', live['underlyingCode']), (analysis['legs'], analysis['strategy']))
+    dated = analysis['dated']
+    check('the dated curve at the valuation instant values the legs at each price point, and passes near the premium at the settled futures price',
+          dated['state'] == 'valued' and len(dated['curves']) == 1 and datetime.fromisoformat(dated['curves'][0]['at']) == datetime.fromisoformat(frame['at'])
+          and len(dated['curves'][0]['points']) == 11 and all(Decimal(p['value']) - paid * multiplier == Decimal(p['profitAndLoss']) for p in dated['curves'][0]['points'])
+          and all(Decimal(p['profitAndLoss']) >= next(Decimal(q['profitAndLoss']) for q in expiry['curve'] if q['price'] == p['price']) for p in dated['curves'][0]['points']), dated)
+    check('the analysis echoes what it was asked and the policies it ran under, with its limits and the work done',
+          analysis['request'] == {'prices': {**offered['prices'], 'points': 11}, 'instants': [dated['curves'][0]['at']], 'volatilityShiftPoints': '0'}
+          and analysis['policies']['valuation'] == offered['valuation'] and analysis['policies']['sensitivities']['policy'] == SENSITIVITY_POLICY
+          and analysis['policies']['sensitivities']['clockZone'] == 'UTC' and analysis['policies']['expiryRule'] == offered['expiryRule']
+          and analysis['policies']['volatilityShift'] == {'convention': 'absolute_annualized_volatility_parent_additive_v1', 'size': '0'}
+          and analysis['limits'] == setup['limits'] and analysis['work']['calibrationTreePrices'] > 0 and analysis['work']['valuationTreePrices'] >= 22
+          and analysis['work']['treePrices'] == analysis['work']['calibrationTreePrices'] + analysis['work']['valuationTreePrices']
+          and analysis['work']['curveSets'] == 4 and analysis['context']['effectiveOn'] == DAY, (analysis['request'], analysis['policies'], analysis['work']))
+    print(f"WORKLOAD option strategy analysis: 2 legs, 11 points, 1 curve, {analysis['work']['calibrationTreePrices']} calibration and "
+          f"{analysis['work']['valuationTreePrices']} valuation tree prices in {analysis['work']['elapsedMs']} ms", flush=True)
+    shifted = analyse(straddle['legs'], volatilityShiftPoints='5')
+    check('a volatility shift raises a long straddle\'s dated curve, never lowering a point, and leaves its payoff at expiry alone',
+          shifted['dated']['state'] == 'valued' and shifted['policies']['volatilityShift']['size'] == '0.05' and shifted['expiry'] == expiry
+          and all(Decimal(a['profitAndLoss']) >= Decimal(b['profitAndLoss']) for a, b in zip(shifted['dated']['curves'][0]['points'], dated['curves'][0]['points']))
+          and any(Decimal(a['profitAndLoss']) > Decimal(b['profitAndLoss']) for a, b in zip(shifted['dated']['curves'][0]['points'], dated['curves'][0]['points'])),
+          shifted['dated'])
+    other = next((s for s in solved if s['series']['expiryAt'] != live['expiryAt']), None)
+    leg = straddle['legs'][0]
+    for code, changes in (('strategy_limit', {'legs': [{**leg, 'series': f'synthetic_{n}'} for n in range(5)]}), ('strategy_limit', {'prices': {**offered['prices'], 'points': 42}}),
+                          ('strategy_limit', {'instants': offered['instants'][:4]} if len(offered['instants']) >= 4 else {'prices': {**offered['prices'], 'points': 42}}),
+                          ('strategy_leg_series', {'legs': [{**leg, 'series': 'synthetic_unlisted'}]}), ('strategy_curve_instant', {'instants': [offered['instantsBefore']]}),
+                          ('strategy_price_range', {'prices': {**offered['prices'], 'lower': '0'}}), ('strategy_price_range', {'prices': {**offered['prices'], 'points': 4, 'upper': str(Decimal(offered['prices']['lower']) + 1)}}),
+                          ('option_policy', {'valuation': {**offered['valuation'], 'calibrationFallback': 'none'}}), ('strategy_expiry_rule', {'expiryRule': 'synthetic_other_rule'}),
+                          ('option_sensitivity_policy', {'sensitivities': {**offered['sensitivities'], 'clock': None}}),
+                          *((('strategy_expiry', {'legs': [leg, {**leg, 'series': other['series']['code']}]}),) if other else ())):
+        refused = analyse(changes.pop('legs', straddle['legs']), expected=422, **changes)
+        check(f'an analysis beyond a limit or outside the offer is refused, not cut down: {code}', refused['code'] == code, refused)
+    unvalued = next((s for s in intrinsic if s['series']['expiryAt'] == live['expiryAt'] and s['series']['settlement'] is not None), None)
+    if unvalued:
+        mixed = analyse([leg, {'series': unvalued['series']['code'], 'side': 'sell', 'lots': 1, 'entryPrice': unvalued['series']['settlement']}])
+        check('a leg valued at intrinsic is said on its row and refuses the dated curves; the payoff at expiry is still stated',
+              mixed['dated'] == {'state': 'refused', 'reason': 'option_at_intrinsic', 'message': mixed['dated']['message'], 'curves': []} and mixed['dated']['message']
+              and [row['state'] for row in mixed['legs']] == ['solved', 'at_intrinsic'] and mixed['legs'][1]['reason'] == 'option_at_intrinsic'
+              and mixed['legs'][1]['delta'] == {'value': None, 'missing': 'option_at_intrinsic'} and mixed['legs'][0]['delta']['value'] is not None
+              and mixed['strategy']['delta'] == {'amount': None, 'missing': 'incomplete'} and mixed['strategy']['value']['amount'] is not None
+              and len(mixed['expiry']['curve']) >= 11 and mixed['expiry']['netPremium']['direction'] in ('debit', 'credit', 'none'), mixed)
+    check('a strategy analysis stores no surface revision', revisions(PRODUCT) == stored, revisions(PRODUCT))
+
     refit = fit()
     run_worker()
     again = job(refit['jobId'])

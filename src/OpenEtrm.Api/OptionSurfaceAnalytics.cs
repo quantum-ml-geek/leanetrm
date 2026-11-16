@@ -67,7 +67,7 @@ internal static class OptionSurfaceAnalytics
             read.Bump.GammaRelativeTolerance,selection.VolatilityBump,read.Clock?.Source,read.Clock?.Zone,day?.At));
     }
 
-    private static OptionSensitivitySelection Select(string? policy,PnlBumpSelection? bump,string? volatilityBump)
+    internal static OptionSensitivitySelection Select(string? policy,PnlBumpSelection? bump,string? volatilityBump)
     {
         if(policy!=FuturesOptionSensitivities.Policy||volatilityBump!=VolatilityBump)
             throw Error($"Select the {FuturesOptionSensitivities.Policy} policy and a volatility bump of {VolatilityBump}.");
@@ -93,18 +93,7 @@ internal static class OptionSurfaceAnalytics
         {
             ct.ThrowIfCancellationRequested();
             var bindings=expiry.ToImmutableDictionary(o=>o.Id,o=>calibrations.Bindings[o.Id]);
-            var solved=expiry.Where(o=>bindings[o.Id].Calibration is SolvedVolatility).ToArray();
-            PreparedConnectedPortfolioRisk? prepared=null;
-            if(solved.Length>0)
-            {
-                var portfolio=ValuationPortfolio.FromTrades(FuturesOptionSensitivities.UnitHoldings(solved),new(ValuationMeasure.PresentValue,
-                    ImmutableDictionary<Guid,FuturesMarketBinding>.Empty,null){OptionBindings=bindings});
-                var dependencies=portfolio.Declare(snapshot).SelectMany(c=>c.Dependencies).Distinct().ToImmutableArray();
-                var market=await CustomCurves.PrepareMarket(connection,database,data,frame,snapshot,context,portfolio.Instruments,dependencies,
-                    CustomCurves.MarketPreparation.ValuationDependencies,ct);
-                prepared=RiskEngine.PrepareConnected(market.Valuation,market.Bindings,[portfolio],market.Authority,ct);
-            }
-            expiries.Add((prepared,bindings));
+            expiries.Add((await Prepare(connection,database,data,frame,snapshot,context,[..expiry],bindings,ct),bindings));
         }
         // The expiries are independent and their valuation touches no connection, so they are valued in parallel, as the
         // series' calibrations are. Every outcome is kept in expiry order and the first failure in that order is the fit's,
@@ -121,6 +110,22 @@ internal static class OptionSurfaceAnalytics
             Series=[..fitted.Result.Series.Select(s=>analytics.TryGetValue(s.Series.Code,out var found)?s with{Analytics=found}:s)]};
         return(surface,[..fitted.ObservationIds.Concat(RolledDiscountPoints(calibrations,fitted.Listed,analytics,codes,snapshot,plan.Day)).Distinct().Order()],
             calibrations.Bindings.Values.Sum(b=>b.TreePrices)-before);
+    }
+
+    // Those of the series of one underlying future that solved for a volatility, as one-contract holdings over their own
+    // prepared market; none when no series solved. Each call prepares a market of its own, so its valuations share no
+    // graph with another call's and may run beside them.
+    internal static async Task<PreparedConnectedPortfolioRisk?> Prepare(NpgsqlConnection connection,PreviewDatabase database,PreviewData data,InputFrame frame,
+        MarketSnapshot snapshot,ScheduleContext context,ImmutableArray<FuturesOptionInstrument> series,ImmutableDictionary<Guid,FuturesOptionMarketBinding> bindings,CancellationToken ct)
+    {
+        var solved=series.Where(o=>bindings[o.Id].Calibration is SolvedVolatility).ToArray();
+        if(solved.Length==0)return null;
+        var portfolio=ValuationPortfolio.FromTrades(FuturesOptionSensitivities.UnitHoldings(solved),new(ValuationMeasure.PresentValue,
+            ImmutableDictionary<Guid,FuturesMarketBinding>.Empty,null){OptionBindings=bindings});
+        var dependencies=portfolio.Declare(snapshot).SelectMany(c=>c.Dependencies).Distinct().ToImmutableArray();
+        var market=await CustomCurves.PrepareMarket(connection,database,data,frame,snapshot,context,portfolio.Instruments,dependencies,
+            CustomCurves.MarketPreparation.ValuationDependencies,ct);
+        return RiskEngine.PrepareConnected(market.Valuation,market.Bindings,[portfolio],market.Authority,ct);
     }
 
     // A theta discounts each series' expiry from the day's instant, which rolls the calibration's factor by the curve's
