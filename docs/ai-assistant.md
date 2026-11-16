@@ -44,7 +44,7 @@ through the API and on the Administration › AI tabs: a provider's card records
 attests and enables it, and a model's card records capabilities under the efforts its
 provider's applied mapping states and enables it. Model Enable is the first consumer of
 a provider's enabled state; calls will consume both. Test, through the API, sends one
-fixed synthetic prompt through the model's adapter and records the call, its outcome,
+installation-configured test prompt through the model's adapter and records the call, its outcome,
 usage by dimension and exact cost (`token_cost_v1`) under the agent worker's generation
 (§5.1, §5.3, §7.4, §9). A provider's card tests one of its models, retaining a test whose
 outcome was not confirmed, and the Providers tab shows each vendor's endpoint, marked when
@@ -625,33 +625,36 @@ qualification remains open.
 
 ### 7.2 Pinned context
 
-- The ask names the knowledge mode (current, or the exact retained context id) and the
-  As of frame id when one is selected, as trading reads do, except that it never names
-  an earlier capture over working data: a frame of the session's current market
-  context (`snapshot_missing`), current only while no historical context is selected,
-  a retained context only when it is the selected one. Working data is captured at
-  its frame's date, so an ask over it names a frame (`snapshot_missing`). Anything
-  else is `context_required`; the ask never falls back.
-- The turn's immutable **pinned-context record** (knowledge mode, captured or retained
-  context id, resolved cutoff and, with a frame, its exact pin set: frame id, name, At,
-  observation ids, the observations it froze, curve-contract selections, swap market
-  selections and whether it resolves the latest correction) is its snapshot identity;
-  the worker reads only it, and tool reads rebuild the page's frame from it.
-- **Working data.** After admission (§7.4) creates the turn queued, the asking request
-  captures once in the user's context and its own short transaction and writes the
-  record with the fencing token, within the request's deadline and cancellation. A
-  failed capture fails the turn with the page read's error, and no other cutoff is
-  tried; an abort or the deadline fails it `request_cancelled`, and any other failure
-  `agent_runtime_unavailable`. Terminal writes use an independent cancellation scope.
-  Tool reads never capture.
-- **Reserve.** Each admitted working-data ask permanently uses one of the catalog's
+- Admission retains the exact selected knowledge mode, optional retained context ID,
+  page report and optional frame identity. It does not serialize market inputs,
+  capture a financial context, read the page or run a tool. A question can be answered
+  without a market selection. An unapplied historical selection remains unavailable.
+- The worker keeps the immutable selected frame in memory. Navigation during a turn
+  cannot substitute another frame or historical context. Worker replacement interrupts
+  unfinished turns; it never reconstructs an unresolved turn from later UI state.
+- A requested financial tool acquires one certified context under the original
+  person's current authority and the turn's fencing token. Current knowledge is
+  captured at that first financial request, at the selected frame's business date or
+  explicit facility operating date. Retained knowledge uses the selected exact
+  certificate. Subsequent financial reads share that context and disclose its cutoff.
+  Missing selection or authority produces a structured refusal. Cancellation, session
+  expiry and the turn deadline bound acquisition as well as execution.
+- Ordinary discovery, screen controls, navigation and administrative operations do
+  not acquire financial context. Discovering a specific financial operation explicitly
+  acquires the certificate needed to construct its input. Current-only execution and
+  financial-context requirements are separate operation classifications.
+- Recorded closes retain an immutable exact foreign-key relationship and the selected
+  frame ID, including historical aliases. Their source matrices are not copied into
+  each turn. Working frames retain bounded exact pins only when requested. Retained
+  programs and reviewed proposals continue to resolve their original inputs.
+- **Reserve.** Each first financial read over working data permanently uses one of the catalog's
   4096 retained contexts. The assistant captures through a wrapper that, under lock
   730849102, refuses with `knowledge_budget_reserved` when fewer than the runtime
   set's reserve would remain, keeping it for page captures. Reclaiming stays open
   (O07).
 - Tools take no context, snapshot or workspace inputs. Each read binds the turn's
   pinned context exactly as its record names it, at its recorded cutoff: over working
-  data the context the ask captured, as of the turn's frame, as trades re-read an
+  data the context the first financial request captured, as of the turn's frame, as trades re-read an
   earlier capture; under a historical view its retained context. Current-only
   definitions (TOU products, power hours) run only under a working-data pin
   (`power_historical` otherwise), bind no context and are labeled with their recorded
@@ -761,7 +764,7 @@ The tool set is fixed; each tool is switched on per agent version.
   terms), a preference outside the turn's pins, a result starts from the default (3
   places for money and quantities, 4 for prices, 6 for factors). One corpus of
   payloads, starting ticks and formats, and displays is asserted by both the managed
-  and the page's checks. The preamble requires quoting only returned values and
+  and the page's checks. Installation guidance can require quoting returned values and
   deriving none. Prose is model output; cards are the exact channel.
 - **Navigation targets** are issued by the server; the model never composes one. A
   target is a page report plus the pinned context: one of the pages the assistant reads,
@@ -810,7 +813,7 @@ The tool set is fixed; each tool is switched on per agent version.
   (`turn_active`) and the runtime set's workspace limit (`workspace_turn_limit`). It
   also interrupts, exactly once, any turn still non-terminal past its elapsed limit
   plus the admission deadline, marking its open calls `usage_unknown`. A queued turn
-  still without a pinned-context record at the admission deadline fails with
+  that has not started at the admission deadline fails with
   `ask_incomplete`. Every ending frees both slots.
 - Agent work uses its own runtime and authenticator pools per scope on the existing
   logins, never the UI pools; workspace concurrency stays below their size, and each
@@ -828,12 +831,14 @@ The tool set is fixed; each tool is switched on per agent version.
   transiently.
 - **Fencing.** Every worker write is a narrow security-definer operation presenting
   the turn's fencing token, held only in the admitting process (the database stores
-  its digest). The record write is accepted only from queued without a record, the
-  start only from queued, content writes and call opens only while running. Call
+  its digest). Context resolution requires a running turn and records the first
+  financial request's exact input, returning that record for an identical retry.
+  A different input conflicts. Start requires queued; content writes and call opens
+  require running. Call
   close, usage, cost and terminal events are accepted in any non-terminal state
   without a request context, so accounting finishes after revocation or session end.
-  From cancel requested the only endings are cancelled or interrupted; a record write or
-  start that finds cancel requested ends the turn cancelled instead. A refused
+  From cancel requested the only endings are cancelled or interrupted; context resolution
+  is refused, and start ends the turn cancelled instead. A refused
   publication is recorded, and the turn then ends only failed `access_changed` or
   interrupted. A write with a stale token or generation is rejected with
   `agent_runtime_unavailable`, a write the turn's state does not accept (such as an end
@@ -909,10 +914,20 @@ The tool set is fixed; each tool is switched on per agent version.
 
 ### 7.6 Prompt and conversation memory
 
-- The system prompt is a fixed preamble (quote only values returned in this turn,
-  derive none, say when something is unavailable, navigate only to issued targets,
-  treat earlier turns as history), then the version's instructions, then tool
-  definitions. Instructions cannot replace the preamble.
+- Settings → AI → Prompts configures application, page and tool guidance for the
+  installation. The system prompt contains only the admitted application guidance,
+  agent-version instructions and page guidance, in that order. Each enabled tool's
+  description comes only from its admitted tool guidance. Formal schemas and enforced
+  business constraints remain application contracts.
+- No production prompt text or default guidance is bundled or seeded. Optional
+  guidance absent at admission is omitted, including when an administrator adds it
+  later. Exact immutable versions and absence are pinned per turn. Administrators can
+  inspect and revise every scope; installations supply and privately retain their own
+  text. Existing saved guidance is preserved by upgrades.
+- There is no automatic page read, digest, operation discovery or market-data read.
+  Model tool requests are driven by the question and configured instructions. A page
+  report contains selection identity for an explicitly requested read; it is not a
+  copy of the DOM or visible table data and is not appended to the initial prompt.
 - A follow-up sends each earlier turn's question and stored answer as text, labeled as
   earlier, with its pinned context and terminal state; incomplete answers are marked
   and a turn without answer text sends question and outcome. Earlier tool reads and
@@ -1095,11 +1110,11 @@ credential entries read only "key replaced".
   attestation resumes calls, never Attest alone. The tab states that enabling sends
   users' questions and visible data to the vendor account, that its owner may see them,
   and that its spending limit is the only cumulative cap.
-- **Test** sends one fixed synthetic prompt without workspace data or tools to a
+- **Test** sends the configured provider-test question and optional instructions, without workspace data or tools, to a
   priced model the administrator picks, on a qualified provider; either may be
   disabled. Temperature and reasoning are validated as for a version; output is capped
   at the test limit; there is one attempt. The record opens in the administrator's
-  context under `ManageModelProviders` and pins its price before any byte is sent; a
+  context under `ManageModelProviders` and pins its price and exact prompt versions before any byte is sent. An unconfigured test question is refused with `page_prompt_required`; completed retries retain their original outcomes. A
   per-test token held by the handler closes it without a request context, under an
   independent scope at the test deadline or an abort (`limit_elapsed`,
   `request_cancelled`). A same-identity retry returns the outcome or
@@ -1327,12 +1342,12 @@ synthetic data and the fake provider. The cases that coverage does not imply:
   delegated authority with `security.market_access(<catalog>, 'ReadMarketData')`,
   false without a delegation and true with one, for an agent created through
   `ManageAgents`.
-- **Context:** selection and navigation changes mid-turn leave reads on the pinned
-  context and asked page; an abort after admission, a capture held on lock 730849102
-  past the deadline and a failed record write each free the slot; a profile switch and
+- **Context:** selection and navigation changes mid-turn leave reads on the original
+  selection and asked page; only a requested financial read acquires a context.
+  Captures held on lock 730849102 recheck authority before committing. A profile switch and
   session end, during a turn and during a silent call, cancel it with `session_ended`
-  and still record usage; refused asks add no retained context, and the reserve
-  refuses an ask while a page capture succeeds; with an empty manifest a party step is
+  and still record usage; text-only and refused asks add no retained context, and the reserve
+  refuses financial context acquisition while a page capture succeeds; with an empty manifest a party step is
   refused and the turn still completes.
 - **Custody and egress:** credentials appear in no SQL parameter, audit row, response,
   log, event or fake request body; a wrong key file, a ciphertext moved to another
@@ -1425,8 +1440,8 @@ check proves equal (§7.1); Navigate follows the read tools and refuses a handle
 not issue, or a page the delegator cannot open, as `tool_arguments_invalid`; and a call
 whose tool requests would take the turn past its steps has none of them run (§7.5).
 
-**Read tool decisions** (D184, decided on the owner's delegation): working-data reads
-bind the context the ask captured, never capturing or taking lock 730849102, and
+**Read tool decisions** (D184, with acquisition superseded by D405): working-data reads
+share the context acquired by the first requested financial tool, and
 current-only definitions bind none (§7.2); contract definitions are read with the
 schedule library and exposed as `market_data.contract_definitions_v1`; page reports name
 one id per navigable view and are refused at ask, in the API, before admission (§8);
@@ -1618,7 +1633,7 @@ for the bounded fill grammar, remaining fields and verification boundaries.
 D336 makes exact frame observation reads bounded by issued pins under the same
 server authority and temporal contract. It changes no assistant tool/event shape
 or grants. A published walkthrough is an intended plan, not browser completion;
-the fixed preamble requires that distinction. See [exact observation reads](exact-observation-reads.md).
+the response contract preserves that distinction. See [exact observation reads](exact-observation-reads.md).
 
 
 D344 exposes existing choice encodings in the page's `fillEvidence` guidance and

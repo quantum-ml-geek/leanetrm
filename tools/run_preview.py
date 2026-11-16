@@ -292,6 +292,9 @@ def main():
                 reference,market,security,manifest=add_in_term_fixture(reference,market,security,manifest)
         query((ROOT/'db/bootstrap.sql').read_text())
         for migration in sorted((ROOT/'db/migrations').glob('[0-9][0-9][0-9][0-9]_*.sql')):
+            if migration.name[:4] in ('0338','0339'):
+                from check_assistant_prompt_upgrade import run_checks as check_assistant_prompt_upgrade
+                check_assistant_prompt_upgrade(query,migration)
             if args.scheduled_swap_check and migration.name=='0297_retained_swap_schedule_reads.sql':
                 from check_retained_swap_schedule_reads import predecessor_readers
                 predecessor_readers(query)

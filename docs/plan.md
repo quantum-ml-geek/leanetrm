@@ -29,7 +29,7 @@ instants and exchange option expiry retain their explicit timing and rate inputs
 required purpose bindings and Side-owned rules; omission checks are mandatory
 in the verification runner.
 
-The integrated verification runner requires 185 commands, including 64 isolated
+The integrated verification runner requires 186 commands, including 64 isolated
 application previews, with domain, native database, populated-upgrade, agent and
 browser coverage. Local integration checks passed 737 managed core checks,
 88 rate checks and 28 owned lifecycle browser checks at the D403 checkpoint.
@@ -2433,3 +2433,13 @@ consumers keep their explicit statistical method policies. Progressive row
 delivery and retained command recovery keep their separate contracts. Broader
 operation coverage and throughput claims require
 consumer-specific qualification; a transport design alone establishes neither.
+
+
+### Assistant context and prompt configuration (D405)
+
+The local implementation removes automatic market-frame capture and bundled
+assistant guidance. Settings owns versioned application, page, tool and provider-test
+text, with no production seeds. Qualification covers no-data questions, exact requested
+financial reads, retained close aliases, configuration changes, authority and deadline
+fencing, upgrade drift and browser behavior. Hosted configuration, publication and
+rollout remain separate operations; no production activation is implied.

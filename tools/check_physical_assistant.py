@@ -76,7 +76,7 @@ def run_checks(url, query, manifest, fake, demo, dotnet, environment, owned_root
     turn,results,original=ask([('read_workspace_page',{'page':'facility_quantities'}),('navigate',{'page':'gas_setup','target':None})],
                              before_read=lambda:correction.append(facility_source('90',demo['sourceId'])))
     view=results[0]['directory']['data']
-    check('an admitted facility question keeps the prior quantity when a late correction arrives before its read',view['facts']['source']['quantity']=='100')
+    check('a requested facility read captures the correction available at that first read',view['facts']['source']['quantity']=='90')
     check('facility questions use the explicit operating date without a pricing snapshot',
           turn['context']['frameId'] is None and view['context']['effectiveOn']==demo['operationsOn'])
     check('dated facility questions cannot issue navigation that drops their operating date','target' not in results[0] and results[1]['code']=='page_selection_unavailable')
@@ -125,7 +125,7 @@ def run_checks(url, query, manifest, fake, demo, dotnet, environment, owned_root
     try:
         _,results,_=ask([('read_workspace_page',{'page':'facility_quantities'}),preview_allocations,('propose_page_action',operation('facilities.quantities.record_v1',prepared[0]))],
                         knowledge={'mode':'retained','contextId':turn['context']['contextId'],'frameId':None})
-        check('historical facility questions preserve the earlier source and refuse proposed writes',results[0]['directory']['data']['facts']['source']['quantity']=='100' and results[2]['code']=='power_historical')
+        check('historical facility questions preserve the first-read source after later corrections and refuse proposed writes',results[0]['directory']['data']['facts']['source']['quantity']=='90' and results[2]['code']=='power_historical')
         check('a historical question cannot preview an allocation under the working-read exception',results[1]['code']=='historical_read_only')
         owner.call('assistant/actions/authorize',reference,expected=422)
     finally:owner.call('market/current',{})

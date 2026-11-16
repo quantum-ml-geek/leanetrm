@@ -37,6 +37,18 @@ AGENT_SETTINGS_BROWSER={'tools/check_agent_operating_settings.py'}
 
 
 class CheckAllTests(unittest.TestCase):
+    def test_assistant_prompt_and_demand_checks_are_required(self):
+        commands = []
+        run_checks(Path('/pg'), Path('/dotnet'), Path('/browser'), group='assistant',
+                   run=lambda command, **options: commands.append(command))
+        self.assertEqual(sum('--assistant-prompts' in command for command in commands), 1)
+        workspace = [c for c in commands if '--assistant-workspace-check' in c]
+        self.assertEqual(len(workspace), 1)
+        self.assertIn('--browser-check', workspace[0])
+        preview = (ROOT / 'tools/run_preview.py').read_text()
+        self.assertIn("migration.name[:4] in ('0338','0339')", preview)
+        self.assertIn('check_assistant_prompt_upgrade(query,migration)', preview)
+
     def test_async_workbench_checks_are_required_in_workspace_partition(self):
         for group in GROUPS:
             commands = []
@@ -293,7 +305,7 @@ class CheckAllTests(unittest.TestCase):
         self.assertEqual(executed, expected)
         schedule_commands = [c for c in commands if '--project' in c and 'Api.Checks' in c[c.index('--project') + 1]]
         self.assertEqual([c[-2:] for c in schedule_commands],
-                         [['--', flag] for flag in ('--context-resolution', '--schedules', '--async-reads', '--published-clock', '--calendar-authoring', '--gas-ticket', '--historical-risk', '--monte-carlo-risk', '--close-risk', '--automation',
+                         [['--', flag] for flag in ('--context-resolution', '--schedules', '--async-reads', '--assistant-prompts', '--published-clock', '--calendar-authoring', '--gas-ticket', '--historical-risk', '--monte-carlo-risk', '--close-risk', '--automation',
                            '--live-calculation', '--reference-intake', '--preview-data', '--side-observation-compatibility',
                            '--lifecycle-actions','--economic-risk-contract','--lifecycle-schedule-contract','--gas-owned-setup',
                           '--shared-native-markets','--derivative-methods','--gas-accepted-order','--lifecycle-residual-currencies','--gas-operator-contract')])

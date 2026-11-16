@@ -38,7 +38,7 @@ Every partition retains fresh-checkout preparation and the shared checks; the
 required aggregate waits for all fourteen partitions. The command-union checks require
 each owned consumer exactly once across the matrix.
 
-The current integrated runner contains 185 commands: 64 shared checks,
+The current integrated runner contains 186 commands: 65 shared checks,
 64 isolated application previews and 57 partition-specific native/application
 checks. The D404 local checkpoint passed 1,866 frontend checks and 122 Python
 checks. The earlier calendar/lifecycle checkpoint passed 737 managed core checks,
@@ -1278,7 +1278,7 @@ variable names a trap:
   and tests run under it. No request waits for the worker's connection: with its backend
   stopped, a test still runs under the generation, and the worker keeps its lock.
 - **The request:** a test sends exactly one request to the Messages path, with the key
-  only in its `x-api-key` header. It carries the fixed synthetic prompt without workspace
+  only in its `x-api-key` header. It carries the configured synthetic prompt without workspace
   data or tools, within the test output limit and at the chosen effort.
 - **Outcomes:**
   - success, at an end of turn, at the output limit and when served by an accepted
@@ -1714,20 +1714,20 @@ and the worker with a session of its own holding the agent-worker lock):
 Turns over HTTP (`tools/check_agent_turn_http.py`, in the same run after the SQL turn
 checks, through the API against the loopback fake provider):
 
-- **Asking:** an ask is admitted, pinned over working data at its frame and run by the
+- **Asking:** a text-only ask is admitted without acquiring market inputs and run by the
   worker to completion, keeping the streamed answer and closing its call with the usage
   the stream reported before the terminal event. Its one request carries the key only
-  in its header, and sends the fixed preamble with the version's instructions, the
+  in its header, and sends the pinned installation and agent instructions, the
   question, the version's output limit and effort, and, for a version without tools,
   none; this check's agents have none, and the tool checks below give theirs. The turn
-  records the frame's exact pins. A repeat answers with its turn as it stands and sends
+  retains its selected frame identity but no pins, financial context or capture time. A repeat answers with its turn as it stands and sends
   nothing. A follow-up sends the earlier turn as history, labeled with its ending and
-  pinned context, before the question. An answer streamed in many deltas at once is
+  context state (including no acquired context), before the question. An answer streamed in many deltas at once is
   coalesced and published whole and in order, in pieces of at most 2,048 bytes.
-- **Knowledge:** working data is asked only at a frame of the session
-  (`snapshot_missing` without one or for another). While a historical view is
-  selected, its retained context is asked with a frame of it, pinned as named with the
-  frame's pins and capturing nothing, and working data is refused, as is any retained
+- **Knowledge:** a supplied frame must belong to the session (`snapshot_missing`
+  for another); a conceptual question needs no frame. While a historical view is
+  selected, its retained context is asked with a frame of it, retained as a selection
+  without copying inputs, and working data is refused, as is any retained
   context the session has not selected (`context_required`).
 - **Refusals:** an ask without a covering grant (`grant_required`) or while a turn is
   active (`turn_active`) is refused, as are a question too long (`question_too_long`)
@@ -4585,3 +4585,40 @@ A complete `tools/check_all.py` run was not performed locally on the final code;
 continuous integration runs the complete suite.
 These are synthetic local checks. They do not qualify a Side, trade or cash
 consumer, explicit roll boundaries, or a production activation.
+
+## Requested assistant context and private prompt configuration (D405)
+
+Local verification on 2026-11-16 uses disposable PostgreSQL databases, synthetic
+prompt text and loopback model providers. The managed `--assistant-prompts`
+checks pass: prompt composition contains only configured text; absent tool
+guidance stays empty; all five provider mappings omit absent optional system
+instructions. An oversized synthetic close retains separate selected-frame and
+exact-close identities without copying its input matrix.
+
+`--assistant-workspace-check --browser-check` passes 64 integration and 43
+browser checks. Coverage includes questions and administrative reads without
+financial acquisition, exact requested financial reads, recorded-close proposals,
+historical aliases, explicit human authorization, and application/page/tool
+configuration. An in-flight configuration edit cannot change the prompt or add
+guidance absent at admission. Both migrations refuse helper definition or privilege
+drift; populated upgrade checks preserve existing prompt rows exactly and add no
+default guidance.
+
+The provider and administration modules of `--assistant-check` pass: provider,
+model catalog, qualification, model version, configured connectivity test,
+agent administration and grant checks. `--assistant-runtime-check --browser-check`
+exits successfully with 108 native turn, 22 HTTP turn, 65 HTTP tool, 20 stream,
+44 usage and 295 owned browser checks. Permission refusal
+before the first financial read retains no context or business sources;
+source-based replay checks still protect earlier financial evidence, including
+inherited conversation sources.
+
+`--physical-assistant-check --browser-check` passes 51 business scenarios and nine
+browser checks. Facility quantities use corrections available at the first
+requested read; retained reads preserve that certificate after subsequent
+corrections. Gas operations retain their selected day and native authorization.
+The complete frontend suite passes 1,867 tests with none skipped. The verification
+runner's 27 contract tests pass and require the managed prompt checks, workspace
+browser checks and migration checks. Independent adversarial review found no
+remaining findings. These results establish local synthetic behavior; hosted
+prompt configuration, publication and deployment remain separate operations.

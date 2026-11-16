@@ -5517,3 +5517,30 @@ remain usable. Preserve existing financial write identities, retained Risk job
 admission/reconciliation and progressive row streams. This decision does not
 expand numerical qualification or authorize merging or deployment; qualification
 and the pull request record the implemented operations and remaining limits.
+
+
+## D405 — Requested assistant context and installation-owned prompts
+
+Assistant admission retains selection identity and configured prompt versions only.
+It does not read the page, serialize a market frame or capture financial knowledge.
+A financial tool request acquires the selected context once, with original actor,
+session, deadline and worker-generation fencing. Current knowledge is certified at
+that first financial request; retained knowledge stays at its explicitly selected
+certificate. Exact-operation discovery can acquire the certificate necessary to
+construct the financial request. Broad discovery and presentation remain independent
+of financial inputs. Current-only execution does not imply context-free execution.
+
+Exact recorded-close relationships replace repeated source-matrix copies for this
+consumer, preserving historical frame aliases separately. Existing retained frames,
+results and completed operation retries remain readable. No booked input or selected
+close is substituted, and no production database is rewritten by this change.
+
+Application, agent, page and tool guidance are installation-owned immutable settings.
+Missing optional guidance adds nothing; absence is pinned as well as configured
+versions. No production instructions or prompt defaults ship in public source or
+migrations. Provider connectivity tests also use configured text and retain its exact
+versions. Only explicitly synthetic test configuration belongs in verification fixtures.
+Formal tool schemas, business constraints, authorization and separate human approval
+remain enforced in code and cannot be overridden by any prompt.
+
+Publication and deployment remain separate from local implementation and qualification.
