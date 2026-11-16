@@ -1,6 +1,6 @@
 # Operating facilities and supplied-plan valuation
 
-Status: bounded local implementation (D406). Managed checks, 43 disposable
+Status: bounded local implementation (D406). Managed checks, 44 disposable
 database cases and owned HTTP qualification pass on the current base. Browser component tests qualify form transport, recovery and desktop/phone
 layout. Thirteen owned live-server browser checks also pass native save/reopen,
 pricing, lost-response recovery, leave guards and account isolation. The
@@ -146,7 +146,7 @@ another generation certificate.
 The current checks cover managed API reference and valuation behavior, 20 thermal
 cases, 16 battery cases and 16 common operating-Side cases, plus the solar-output
 and REC-inventory behavior groups. The dedicated
-[storage check](../tools/check_operating_facilities.py) passes 43 cases in a new
+[storage check](../tools/check_operating_facilities.py) passes 44 cases in a new
 disposable stock PostgreSQL cluster. It covers exact references, canonical
 business-fact no-ops, expected-head races, command replay, rollback, old knowledge cutoffs, known future
 versions, historical read-only behavior, revoked authority and expiry after lock

@@ -20,7 +20,7 @@ def run_checks(url, query, manifest):
         assert len(selected) == 1, f'Expected the exact synthetic reference {code}.'
         return selected[0]
 
-    power = one(catalog['powerQuantities'], 'operating_power_mw')
+    power = one(catalog['powerQuantities'], 'test_power_megawatt')
     energy = one(catalog['energyQuantities'], 'test_power_quantity')
     right = one(catalog['rightQuantities'], 'test_resource_right_quantity')
     one(catalog['locations'], 'test_facility_a')
