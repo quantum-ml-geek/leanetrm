@@ -27,6 +27,7 @@ internal static class RecForwardChecks
   if(risk.Base.Amount!=ExactDecimal.Parse("1000")||risk.Up.Amount!=ExactDecimal.Parse("1100")||risk.Down.Amount!=ExactDecimal.Parse("900"))throw new Exception("One hundred certificates must scale independent 50-minus-40 sides once and shock the selected market consistently.");
   var retained=new RetainedRecForwardInstrument(Guid.NewGuid(),instrument.Product,instrument.VintageFrom,instrument.VintageTo,unit,quote.Currency,
    [..instrument.Sides.Select(s=>new RetainedOperatingMember(s.Side.Id,s.Coefficient,BookedSideProgram.Compile(ScheduleDefinitionCompiler.Generate(s.Side))))]);
+  RetainedInstrumentContractChecks.Rec(retained);
   void Refuse(Side physicalSide,Side cashSide)
   {
    try{_=new RetainedRecForwardInstrument(Guid.NewGuid(),instrument.Product,instrument.VintageFrom,instrument.VintageTo,unit,quote.Currency,
@@ -48,6 +49,8 @@ internal static class RecForwardChecks
   var retainedTrade=new Trade(Guid.NewGuid(),trade.BookId,[new(Guid.NewGuid(),retained,new(ExactDecimal.Parse("100"),q.Key))]);
   var reopened=RiskEngine.Calculate(model,snapshot,ValuationPortfolio.FromTrades([retainedTrade],setup),[bump],RiskEngine.NumericalPolicy).Factors.Single().Totals.Single();
   if(reopened.Base!=risk.Base||reopened.Up!=risk.Up||reopened.Down!=risk.Down)throw new Exception("Retained certificate schedules must preserve native unit scaling and factor scenarios.");
+  try{retained.PV(new SideValuationContext(snapshot with{ValuationAt=interval.Start},setup.Discounting!));throw new Exception("A started REC instrument must reject direct Side-context PV.");}
+  catch(MarketDataException error)when(error.Code=="rec_delivery_lifecycle"){}
   if(physical.GenerateSchedule().Rows.Single().Key.Timing!=ValueTimingKind.Instant)throw new Exception("Certificate delivery is a physical mark with an instant boundary.");
   Console.WriteLine("PASS REC forward: exact product/vintage, independently retained physical/cash sides and one-time native count scaling");return 1;
  }

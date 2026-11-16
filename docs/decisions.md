@@ -356,6 +356,7 @@ remaining bounds are recorded with the executable consumers in the linked contra
 | D334 | Close by regional session; the latest close for a session and business day is in force | Owner decisions and implementation recorded in [regional closes](regional-closes.md); design calls await review. Refines D162 and D219: a close names an exact versioned close session (clock, local cutoff, business calendar, curves) and an explicit business day, and its UTC instant is the session cutoff on that day. For each session and business day the close with the highest publication order is in force, evaluated on read; earlier ones are history and are refused for new work (`close_replaced`). A close must carry exactly its session's curves; nothing is carried forward. Recording needs a per-session grant. Every view, historical ones included, reads the close in force; this lifts only the knowledge-time checks on the close and its pins and is a recorded exception to the knowledge-cutoff rule. Saved results keep their exact close; pilot reports disclose replacement, while portfolio-job disclosure and historical worker close-session binding remain documented limitations. Each person's chosen session is remembered; no session is chosen for anyone. Only recorded closes are closes; unrecorded snapshots are working data offered separately, and built-in demo frames are seeded as session closes. Existing closes are retired and deployments reseeded (migration 0202 refuses a non-empty close history). Implemented in the repository; hosted activation requires separate qualification |
 
 | D412 | Keep consumed facility parameters separate from saved operating rights, their independent Sides and evidenced REC ownership | Decided 2026-11-16; [facility contract](operating-facilities.md), [trading and inventory contract](structured-power-trading.md), [details](#d412--operating-facility-versions-and-supplied-plan-previews). Extend exact reference locations with consumed physical/model parameters. Book complete exclusive supplied-plan rights through retained membership-owned schedules; compare separately booked financial hedges under shared scenarios. Standalone REC forwards own delivery/consideration Sides; durable manual inventory uses exact serial evidence, delivery capacity, certified history and idempotent commands. GUI consumers use those same authorized operations. Optimization and external registry submission remain separate. |
+| D413 | Require concrete Side composition for every instrument except futures and exchange-traded options | Decided 2026-11-16; [contract](instrument-contracts.md#mandatory-composition-boundary-d413), [implementation gates](plan.md#mandatory-side-composition-d413), [details](#d413--mandatory-concrete-side-composition). All instruments derive from Instrument. Non-exempt products compose independently scheduled concrete Side subclasses, including retained-program and claim paths. Share fixed/floating economics without bypassing Side PV; combine explicit signed memberships and apply trade quantity once. Operating assembly selects independent terms through one managed API/UI contract. Implementation and qualification are in progress; legacy identities and accepted outcomes remain unchanged. |
 
 ## Proposed implementation choices
 
@@ -5751,3 +5752,44 @@ value they state are unchanged.
   declared relationship between futures months; futures legs; valuing options
   from the fitted smile; volatility in Risk; rho; scheduled fitting; assistant
   reading of the page.
+
+## D413 — Mandatory concrete Side composition
+
+**Decided 2026-11-16.** Every financial instrument derives from `Instrument`.
+Only `FuturesContract` and exchange-traded `FuturesOptionInstrument` may be
+Side-free. Every other instrument, including cash claims, physical claims and
+retained-program implementations, composes one or more concrete subclasses of
+abstract `Side`. Each Side owns immutable whole-term terms, declared inputs,
+schedule behavior and inherited PV. Booked valuation executes its exact retained
+schedule; program storage is not another exemption from Side.
+
+Fixed/floating prices and payment mechanics are reusable economics. Concrete
+Sides retain the behavior required by their asset, delivery or cash contract;
+the common evaluator must not select a product formula through role/slot switches.
+An instrument combines membership-signed Side results, and its Trade binding
+applies external typed quantity exactly once. Shared feasibility calculations
+produce typed operating quantities and state, never nested Side/Instrument PV.
+
+The operating assembly contract is `operating_side_composition_v2`. Its preview
+request explicitly selects either this composition or the unchanged legacy
+valuation when pricing is requested. The composition carries one to eight ordered
+independent Sides,
+stable keys, names, quantity sources, coefficients `1`/`-1`, delivery/payment kinds,
+prices and applicable per-Side payment rules, with at least one plan-linked Side.
+Whole-horizon literal rights are payment-only, consumed once in the first native
+interval with payment from the first operating month under the explicit rule.
+They do not imply periodic capacity fees. The eight-Side admission bound
+matches the existing native composition limit. Repeated sources remain independent
+obligations; missing economic choices refuse. API and UI use the same managed
+contract. Saved-v2 admission must independently verify its original terms,
+sealed programs, exact relationships, current authority and certified history.
+It must preserve full-right facility exclusion across versions/profiles.
+
+**Status:** the power/REC increment and its required common adapters are in
+implementation and qualification. The universal rule does not qualify another
+product family. Existing legacy JSON,
+definition identities and first-outcome receipts remain unchanged. This decision
+does not add shared-resource pooling, optimization, started-delivery valuation,
+cash settlement or another generic event/persistence framework. Completion needs
+the independent composition, numerical, retained-reopen, native rejection,
+authorization and temporal checks in [the plan](plan.md#mandatory-side-composition-d413).

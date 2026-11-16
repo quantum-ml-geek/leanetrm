@@ -8,6 +8,25 @@ using OpenEtrm.MarketData.Trading;
 // Published identity encodings are a contract independent of CLR inheritance.
 internal static class RetainedInstrumentContractChecks
 {
+    internal static void Operating(RetainedOperatingInstrument instrument)=>Require(instrument,new JsonObject
+    {
+        ["contract"]="retained_operating_right_v1",["Currency"]=JsonNode.Parse(DefinitionIdentity.CanonicalTerm(instrument.Currency)),
+        ["Members"]=OperatingMembers(instrument.Members),["Resource"]=JsonNode.Parse(DefinitionIdentity.CanonicalTerm(instrument.Resource)),
+        ["UnitQuantity"]=JsonNode.Parse(DefinitionIdentity.CanonicalTerm(instrument.UnitQuantity))
+    },string.Join('/',instrument.Members.Select(m=>m.ProgramDigest)));
+    internal static void Rec(RetainedRecForwardInstrument instrument)=>Require(instrument,new JsonObject
+    {
+        ["contract"]="retained_rec_forward_v1",["Currency"]=JsonNode.Parse(DefinitionIdentity.CanonicalTerm(instrument.Currency)),
+        ["Members"]=OperatingMembers(instrument.Members),["Product"]=JsonNode.Parse(DefinitionIdentity.CanonicalTerm(instrument.Product)),
+        ["UnitQuantity"]=JsonNode.Parse(DefinitionIdentity.CanonicalTerm(instrument.UnitQuantity)),
+        ["VintageFrom"]=instrument.VintageFrom.ToString("yyyy-MM-dd"),["VintageTo"]=instrument.VintageTo.ToString("yyyy-MM-dd")
+    },string.Join('/',instrument.Members.Select(m=>m.ProgramDigest)));
+    private static JsonArray OperatingMembers(IEnumerable<RetainedOperatingMember> members)
+    {
+        var values=new JsonArray();
+        foreach(var m in members)values.Add(new JsonObject{["contract"]="retained_operating_member_v1",["Coefficient"]=m.Coefficient.ToString(),["ProgramDigest"]=m.ProgramDigest});
+        return values;
+    }
     internal static void Gas(RetainedGasInstrument instrument)
     {
         var members = new JsonArray();

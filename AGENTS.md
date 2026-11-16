@@ -82,6 +82,19 @@ choices. Update the decision record when a decision changes.
   identical outputs; dependencies identify affected work, not exposure amounts.
 - Use an unmodified database and public, reproducible dependencies.
 - Retain independent, reusable sides and explicit instrument memberships.
+- Every financial instrument derives from `Instrument`. Only `FuturesContract`
+  and exchange-traded `FuturesOptionInstrument` may be leaf instruments without
+  Sides. Every other instrument composes one or more concrete subclasses of the
+  abstract `Side`, including retained-program, cash and physical-claim instruments.
+  Each Side owns its immutable whole-term parameters, schedule generation or
+  exact retained schedule, declared inputs and inherited PV contract. An
+  instrument combines explicit signed memberships; Trade applies its external
+  typed quantity once. Fixed/floating pricing mechanics are reusable economics,
+  not a substitute for concrete asset-specific Side behavior. Retained executable
+  programs must execute through a concrete Side implementation, never bypass
+  Side with an instrument-level program loop. A shared operating plan produces
+  typed quantities/state only; it contains no peer Sides or instrument PV.
+  Follow `docs/instrument-contracts.md` and its composition acceptance gates.
 - Apply shocks to immutable market scenarios, never to individual trades.
 - Treat pricers as black boxes with declared dependencies and explicit inputs.
 - This valuation boundary is non-negotiable: Instruments and Sides resolve their

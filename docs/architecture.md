@@ -1,5 +1,14 @@
 # Architecture and domain contracts
 
+D413 makes concrete Side composition mandatory for every financial instrument
+except futures and exchange-traded options. All instruments derive from
+`Instrument`; every other product must compose independently scheduled concrete
+`Side` subclasses and combines their signed PVs. Retained execution is a Side
+implementation, and shared operating plans supply quantities/state without
+nested Side or Instrument PV. The power/REC increment and its required common
+adapters are in progress; see [the contract](instrument-contracts.md) and
+[acceptance gates](plan.md#mandatory-side-composition-d413).
+
 D406 adds locally qualified [Park and Loan commercial booking](gas-park-loan.md)
 over independent native ownership and cash. The bounded title-transfer profile
 uses shared entry, lifecycle and current-clock interactive/retained price risk.
@@ -834,9 +843,12 @@ Portfolio
 
 Instrument
   FuturesContract: exact immutable futures-series reference; typed LotSize
-  SidedInstrument: explicit side memberships where composition is contractual
+  FuturesOptionInstrument: exchange-traded option unit economics
+  SidedInstrument: every other financial product; nonempty concrete Side memberships
     Side reference, signed coefficient, role and order
-    Side definition: index/curve, observation/averaging and payment conventions
+    Concrete Side: immutable terms, declared inputs, schedule and PV implementation
+      Shared fixed/floating economics; asset-specific behavior where required
+      Exact retained program execution belongs to a Side
     Separate resolved pricing bindings and generated dated schedules
 ```
 
@@ -876,9 +888,10 @@ These are distinct concepts:
   managed `ForwardContract` composes fixed/indexed sides with external signed
   size. See [unit instruments and trade bindings](instrument-contracts.md) for
   identity, reuse, storage compatibility and the persisted-forward boundary.
-- `SidedInstrument` retains one or more independent sides through explicit
-  memberships where the product actually requires composition, including the
-  current fixed/floating financial swap. A simple contract needs no artificial side.
+- `SidedInstrument` retains one or more independently scheduled concrete Sides
+  through explicit memberships. Only futures and exchange-traded options are
+  Side-free products. Simplicity, a single cash amount or retained-program storage
+  does not exempt another financial instrument from this boundary (D413).
 - Coefficients and ordering belong to instrument memberships. They do not make a
   new side definition merely because another instrument uses different weights.
 - Signed booked quantities belong to the trade's instrument bindings, with an
@@ -1362,8 +1375,9 @@ valuation contract without knowing the side's internal algorithm.
 
 Persist versioned definitions and type identifiers through explicit schemas,
 rather than serializing arbitrary runtime objects. Deriving a class does not
-permit loading tenant-provided executable code. Cache resolved schedules where
-their complete inputs agree instead of regenerating them for every `PV()` call.
+permit loading tenant-provided executable code. Booked Sides load their exact
+retained schedules; they do not regenerate contractual geometry on read. Cache
+execution results only where their complete inputs and context agree.
 
 ### 3.4 Instrument-owned connections between sides
 

@@ -96,6 +96,7 @@ def run_checks(client, query, manifest, plan, *, other_plans=()):
     overlap['plan']['batteryDispatch'][0]['chargeMw']='8'
     overlap['plan']['batteryDispatch'][1]['dischargeMw']='6.48'
     assert client.call(route+'book',overlap,expected=409,timeout=60)['code']=='operating_right_overlap'
+    check_composition(client,query,manifest,request,route,frame,context)
     # Exact retained reopening cannot substitute a new facility revision or a new
     # plan, and a historical view cannot admit another contractual right.
     client.call('market/context/retained',dict(contextId=value['contextId'],selection='latest_correction'))
@@ -112,3 +113,59 @@ def run_checks(client, query, manifest, plan, *, other_plans=()):
     return dict(tradeId=saved['tradeId'],tradeReference=reopened['tradeReference'],facilityId=reopened['facilityId'],
         facilityVersion=reopened['facilityVersion'],bookId=request['bookId'],snapshotId=frame,
         hedge=dict(tradeId=hedge['tradeId'],tradeReference=held_hedge['tradeReference'],bookId=request['bookId'],curveCode=future_contract['curve']))
+
+
+def check_composition(client,query,manifest,legacy,route,frame,context):
+    from datetime import date,timedelta
+    request=deepcopy(legacy);request['operationId']=str(uuid4())
+    request['reason']='Synthetic independent operating Side assembly'
+    plan=request['plan'];financial=plan['valuation']
+    day=(date.fromisoformat(plan['grid']['operatingDate'])+timedelta(days=10)).isoformat()
+    plan['grid']['operatingDate']=day;plan['batteryState']['at']=day+'T00:00:00Z'
+    def side(key,name,source,price,coefficient,days,kind='payment'):
+        return dict(key=key,name=name,quantitySource=source,coefficient=coefficient,kind=kind,price=deepcopy(price),
+            paymentRule=dict(financial['paymentRule'],days=days) if kind=='payment' else None)
+    plan['valuation']=None
+    plan['composition']=dict(implementation='operating_side_composition_v2',perspective=financial['perspective'],measure=financial['measure'],
+        currencyCode=financial['currencyCode'],rightQuantityCode=financial['rightQuantityCode'],discounting=False,sides=[
+        side('output','Synthetic output','discharging_energy',financial['energyPrice'],'1',18,'delivery'),
+        side('charging','Synthetic charging','charging_energy',financial['chargingPrice'],'-1',18),
+        side('fee_a','Synthetic fee','grid_throughput',dict(financial['energyPrice'],fixedPrice='1'),'-1',7),
+        side('fee_b','Synthetic fee','grid_throughput',dict(financial['energyPrice'],fixedPrice='2'),'-1',25),
+        side('access','Synthetic access','horizon_right',dict(financial['energyPrice'],quoteCode='test_resource_right_quote',fixedPrice='5'),'-1',10)])
+    expected=Fraction(5507,10)
+    preview=client.call(route+'preview',request)
+    assert fraction(preview['valuation']['value'])==expected
+    saved=client.call(route+'book',request,timeout=60)
+    assert saved['changed'] and client.call(route+'book',request)==saved
+    exact=dict(snapshotId=frame,tradeId=saved['tradeId'])
+    reopened=client.call(route+'get',exact)
+    assert reopened['terms']==request and len(reopened['sides'])==5
+    assert len({s['sideId'] for s in reopened['sides']})==5
+    value=client.call(route+'valuation',exact)['valuation']
+    assert fraction(value['value'])==expected
+    assert [s['coefficient'] for s in value['sides']]==['1','-1','-1','-1','-1']
+    assert value['sides'][2]['rows'][0]['paymentAt']!=value['sides'][3]['rows'][0]['paymentAt']
+    assert value['sides'][0]['rows'][0]['paymentAt']==value['sides'][0]['rows'][0]['interval']['end']
+    ordinary=client.call('trading/position',dict(context=context,tradeId=saved['tradeId'],bindingId=saved['bindingId'],revision=1,instrumentType='operating_right'))['holding']
+    assert Fraction(ordinary['presentValue'])==expected and ordinary['sideSchedules'] is True
+    duplicate=deepcopy(request);duplicate['operationId']=str(uuid4())
+    assert client.call(route+'book',duplicate,timeout=60)['tradeId']==saved['tradeId']
+    # A changed sign is a different contract and cannot spend the same exclusive resource right.
+    conflict=deepcopy(duplicate);conflict['operationId']=str(uuid4());conflict['plan']['composition']['sides'][2]['coefficient']='1'
+    assert client.call(route+'book',conflict,expected=409,timeout=60)['code']=='operating_right_overlap'
+    reused=deepcopy(request);reused['operationId']=str(uuid4())
+    next_day=(date.fromisoformat(day)+timedelta(days=1)).isoformat()
+    reused['plan']['grid']['operatingDate']=next_day;reused['plan']['batteryState']['at']=next_day+'T00:00:00Z'
+    same=deepcopy(reused['plan']['composition']['sides'][2]);same['key']='fee_reused'
+    reused['plan']['composition']['sides'].append(same)
+    repeated=client.call(route+'book',reused,timeout=60)
+    repeated_read=client.call(route+'get',dict(snapshotId=frame,tradeId=repeated['tradeId']))
+    assert repeated_read['sides'][2]['sideId']==repeated_read['sides'][5]['sideId']
+    repeated_value=client.call(route+'valuation',dict(snapshotId=frame,tradeId=repeated['tradeId']))['valuation']
+    assert fraction(repeated_value['value'])==Fraction(5326,10) and len(repeated_value['sides'])==6
+    repeated_holding=client.call('trading/position',dict(context=context,tradeId=repeated['tradeId'],bindingId=repeated['bindingId'],revision=1,instrumentType='operating_right'))['holding']
+    assert Fraction(repeated_holding['presentValue'])==Fraction(5326,10)
+    from check_operating_composition_authority import run_checks as check_authority
+    check_authority(query,manifest,request,saved)
+    print('PASS operating Side assembly HTTP: repeated display names/sources, five concrete schedules, delivery, independent dates, exact saved PV, replay and exclusivity',flush=True)

@@ -1,5 +1,43 @@
 # Unit instruments and trade bindings
 
+## Mandatory composition boundary (D413)
+
+Every financial instrument derives from `Instrument`. The only products allowed
+to have no Sides are `FuturesContract` and exchange-traded
+`FuturesOptionInstrument`. Every other instrument composes a nonempty ordered
+collection of concrete subclasses of abstract `Side`. A single cash amount,
+physical claim or retained program does not create another exception.
+
+Each Side owns its immutable whole-term contractual parameters, declared inputs,
+schedule behavior and `PV` implementation. An unbooked Side generates its own
+schedule. A booked Side executes its exact retained schedule without regenerating
+contractual geometry from current terms. Retained-program execution is an
+implementation of a concrete Side; an instrument must not bypass Side by valuing
+raw programs directly. Instrument PV combines membership-signed Side results.
+
+Choose a concrete Side for its delivery, cash, fee or asset-specific behavior.
+Fixed versus floating describes pricing economics. Reuse proven fixed/floating
+price and payment mechanisms inside the appropriate Side implementation rather
+than copying them, adding product switches to the common evaluator or treating
+all physical behavior as a price-mode variant. A new asset label alone does not
+justify another class; a supported behavioral contract does.
+
+Membership identity includes the exact Side reference, occurrence/order,
+coefficient and any explicitly supported normalization. Two Sides may consume the
+same quantity source while retaining different prices, delivery/payment dates
+and schedules. They remain separate contributions. A Side contains neither peer
+Sides nor an Instrument whose PV it calls. Shared operating feasibility produces
+typed quantity/state outputs consumed by those Sides; it adds no separate PV.
+
+This is a mandatory implementation boundary. The current D413 increment covers
+power, REC and their required common adapters; its retained-program, claim and
+operating assembly paths must satisfy the same rule before that increment is
+described as qualified. The rule alone establishes no capability or qualification
+for another product family. Existing booking versions and retained identities
+remain readable under their original financial and authorization contracts.
+
+## Trade ownership
+
 Trade owns an ordered collection of `TradeInstrument` values. Each binding has a
 stable occurrence key, an immutable Instrument reference and an external signed
 typed Quantity. Independent fills or amended obligations can reference the same
@@ -25,8 +63,8 @@ Currency remains part of the money type. Portfolio evaluation rejects a result
 with another context, currency or quantity basis before scaling or aggregation.
 `UnitMoney` remains the context-independent per-unit value used for execution
 basis. Existing `Value(UnitValuationContext)` and rich side-context PV methods
-are bridged by the common entry point; new leaf models can implement typed PV
-without introducing sides or an unused discount provider.
+are bridged by the common entry point. New products obey the composition boundary
+above; a generic PV test double is not another admissible leaf product.
 
 `Declare(context)` supplies model version, complete market dependencies, quantity
 basis and output currency. Declarations enable shared scenarios and unaffected
@@ -56,11 +94,12 @@ then reaches every consumer through normal PV evaluation. The dependency graph
 retains price construction and exact source identity; curve labels, instrument
 IDs and repeated holdings do not create extra market factors.
 
-Only instruments declaring `SupportsQuantityScaling` can enter this unit-based
-trade/portfolio path. This means linear scaling in booked size, not linearity in
-prices. A nonlinear market model can still scale by contract count. A
-quantity-dependent payoff needs an explicitly supported alternative before
-admission; it cannot silently use unit scaling.
+`SupportsQuantityScaling` declares linear scaling in booked size, not linearity
+in prices. A nonlinear market model can still scale by contract count. The
+separate `SupportsFixedUnitBinding` capability admits an explicitly validated
+single unit without enabling multiplication. Complete exclusive operating rights
+use that bounded capability. A quantity-dependent payoff needs an explicitly
+supported binding contract; it cannot silently use unit scaling.
 
 ## Futures contracts and execution
 
@@ -125,6 +164,16 @@ objects claim the same ID. Calculation reuse does not merge trades, accounts or
 events; accounting/clearing netting remains a separate operation.
 
 ## Verification
+
+Composition qualification must exercise concrete Side inheritance, nonempty and
+independently scheduled memberships, exact retained execution, signed membership
+and trade quantity application, shared quantity sources with different economic
+terms, and deterministic base/up/down portfolio PV. API and native admission
+must agree on the same closed composition, exact references and supported bounds.
+Malformed or missing members, duplicate member keys, conflicting definitions
+under one Side ID and cross-context inputs refuse. Valid reuse of a Side or
+quantity source remains explicit. Neither templates nor product slots may
+silently supply a direction, price or payment convention.
 
 Managed checks cover a PV-only model without a product adapter, shared unit values
 across books, repeated instrument occurrences in one trade, incorrect units,

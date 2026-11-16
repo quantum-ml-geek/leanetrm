@@ -14,8 +14,9 @@ internal static class OperatingBookChecks
         var date=new DateOnly(2041,1,1);var end=date.AddMonths(1);var payment=Fixture.Utc("2041-02-18T00:00:00Z");
         var power=f.Quotes[2];var gas=f.Quotes[0];var index=f.R("power_index");
         var direct=f.Direct("operating_power",f.K(5),power.Key,SettlementKind.Index) with{Settlement=new(SettlementKind.Index,index,null)};
-        var model=f.Model(curves:f.Curves.Add(direct));
-        var raw=f.Snapshot();var snapshot=(raw with{Selections=raw.Selections.Add(f.Select(5,QuoteKind.Outright,"power_out","60"))}).WithKnowledge(Guid.NewGuid(),raw.ValuationAt);
+        var model=f.Model(curves:f.Curves.Add(direct).Add(f.Direct("operating_fuel",f.K(2),gas.Key,SettlementKind.Index)));
+        var fuelMark=f.Select(2,QuoteKind.Outright,"gas_out","3");fuelMark=fuelMark with{Input=new(f.S(8),InputUse.Variable),Observation=fuelMark.Observation with{Series=f.S(8)}};
+        var raw=f.Snapshot();var snapshot=(raw with{Selections=raw.Selections.Add(f.Select(5,QuoteKind.Outright,"power_out","60")).Add(fuelMark)}).WithKnowledge(Guid.NewGuid(),raw.ValuationAt);
         var resource=new AssetKey(f.Revision,"synthetic_thermal");var plan=new OperatingPlanReference(f.Revision,Guid.NewGuid(),1);
         var energyPort=new OperatingOutputPort(plan,resource,OperatingOutputKind.EnergyOutput,power.Quantity);
         var fuelPort=new OperatingOutputPort(plan,resource,OperatingOutputKind.FuelInput,gas.Quantity);
@@ -26,7 +27,7 @@ internal static class OperatingBookChecks
         OperatingSideTerms Terms(QuoteSpecification quote,OperatingOutputPort port,CurveRequest? curve)=>new(rightQuantity,quote,rule,ComponentKind.Payment,
             [new(interval,date,end,new(port,null),curve)],OperatingSideTerms.SupportedImplementation,calendar);
         var output=new FloatingSide(Guid.NewGuid(),Terms(power,energyPort,new(f.C("operating_power"),f.K(5))));
-        var fuel=new FloatingSide(Guid.NewGuid(),Terms(gas,fuelPort,new(f.C("future"),f.K(1))));
+        var fuel=new FloatingSide(Guid.NewGuid(),Terms(gas,fuelPort,new(f.C("operating_fuel"),f.K(2))));
         var variable=new FixedSide(Guid.NewGuid(),Terms(power,energyPort,null),new FlatPrice(new(ExactDecimal.Parse("2"),power)));
         var right=new OperatingRightInstrument(Guid.NewGuid(),resource,rightQuantity,power.Currency,[new(output,one),new(fuel,minus),new(variable,minus)]);
         if(right.SupportsQuantityScaling)throw new Exception("A complete constrained operating right must not declare arbitrary linear quantity scaling.");
@@ -79,6 +80,7 @@ internal static class OperatingBookChecks
         var reopenedPortfolio=ValuationPortfolio.FromTrades([new Trade(Guid.NewGuid(),book,[new(Guid.NewGuid(),reopened,rightQuantity)])],
             setup with{OperatingQuantities=ImmutableDictionary<Guid,OperatingQuantityInputs>.Empty});
         var powerBump=new QuoteBump(new(f.S(7),InputUse.Variable),power.Key,PriceUnit.FromQuote(power),ExactDecimal.Parse("1"),QuoteBump.Convention);
+        RetainedProgramSideChecks.Operating(reopened,model,snapshot,powerBump);
         var result=RiskEngine.Calculate(model,snapshot,portfolio,[powerBump],RiskEngine.NumericalPolicy);
         var reopenedRisk=RiskEngine.Calculate(model,snapshot,reopenedPortfolio,[powerBump],RiskEngine.NumericalPolicy);
         Equal(reopenedRisk.Factors.Single().Totals.Single().Base,"185");
@@ -86,6 +88,7 @@ internal static class OperatingBookChecks
         Equal(reopenedRisk.Factors.Single().Totals.Single().Down,"180");
         var started=(snapshot with{ValuationAt=interval.Start}).WithKnowledge(Guid.NewGuid(),interval.Start);
         Reject("operating_delivery_lifecycle",()=>reopened.PV(new UnitValuationContext(started,setup)));
+        Reject("operating_delivery_lifecycle",()=>reopened.PV(new SideValuationContext(started,setup.Discounting!)));
         var totals=result.Factors.Single().Totals.Single();
         Equal(totals.Base,"185");Equal(totals.Up,"185");Equal(totals.Down,"185");
         var physical=result.Factors.Single().Positions.Single(p=>p.TradeId==operatingTrade.Id);

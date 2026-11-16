@@ -1,5 +1,14 @@
 # Side schedule evaluation
 
+D413 makes the Side boundary mandatory for every financial instrument except
+futures and exchange-traded options. Concrete Side subclasses own schedule and
+PV behavior, including exact retained-program execution. Shared fixed/floating
+economics are reusable mechanisms; they do not exhaust the supported Side types.
+Instrument PV combines explicit signed memberships, and Trade scales once.
+Coupled operating plans supply typed quantity/state inputs without containing
+Sides or calling another Instrument PV. The conversion and operating assembly
+qualification are tracked in [the plan](plan.md#mandatory-side-composition-d413).
+
 Status: design accepted for the local implementation trial (2026-10-28), amended
 to retain executable schedules at booking (2026-10-29). This
 record specifies the contract, not completion evidence. Current executable scope

@@ -1,13 +1,14 @@
 import {setupStructuredPowerTrades} from './structured-power-trades-view.js';
+import {setupOperatingSideCards,type OperatingCompositionCatalog} from './structured-power-sides-view.js';
 import {amountText,prepareAmountDisplay} from './amount-display.js';
 
-import {operatingPrice,StructuredPowerPendingStore,comingSoonFields,facilityTerms,operatingParameterFields,structuredPreviewRequest,type OperatingField,type OperatingPriceContract,type StructuredPowerKind,type StructuredPowerPins,type StructuredPowerVersion} from './structured-power-model.js';
+import {StructuredPowerPendingStore,comingSoonFields,facilityTerms,operatingParameterFields,structuredPreviewRequest,type OperatingField,type OperatingPriceContract,type StructuredPowerKind,type StructuredPowerPins,type StructuredPowerVersion} from './structured-power-model.js';
 
 type Api=<T>(path:string,body?:unknown)=>Promise<T>;
 type Choice={code:string;label:string};
 type QuantityChoice=Choice&{commodityCode:string;unitCode:string;dimensionCode:string};
 type QuoteChoice=Choice&{quantityCode:string;currencyCode:string;multiplier:string};
-type Catalog={pins:StructuredPowerPins;locations:Choice[];clocks:Choice[];kinds:(Choice&{intervalMinutes:number[]})[];powerQuantities:QuantityChoice[];energyQuantities:QuantityChoice[];fuelQuantities:QuantityChoice[];rightQuantities:QuantityChoice[];currencies:Choice[];quotes:QuoteChoice[];priceContracts?:OperatingPriceContract[];operatingBookingClockCodes?:string[];paymentImplementation:string;canSave:boolean;canPreview:boolean};
+type Catalog=OperatingCompositionCatalog&{pins:StructuredPowerPins;locations:Choice[];clocks:Choice[];kinds:(Choice&{intervalMinutes:number[]})[];powerQuantities:QuantityChoice[];energyQuantities:QuantityChoice[];fuelQuantities:QuantityChoice[];rightQuantities:QuantityChoice[];currencies:Choice[];quotes:QuoteChoice[];priceContracts?:OperatingPriceContract[];operatingBookingClockCodes?:string[];paymentImplementation:string;canSave:boolean;canPreview:boolean};
 type Fraction={numerator:string;denominator:string};
 type Quantity=Fraction&{specification:{code:string}};
 type Money=Fraction&{currency:{code:string}};
@@ -73,24 +74,15 @@ export function setupStructuredPower(host:HTMLElement,o:Options){
  const priceEnabled=select(previewForm,'Valuation');options(priceEnabled,[{code:'none',label:'Feasibility and quantities only'},{code:'fixed',label:'Independent side prices; explicitly undiscounted'}]);
  const priceFields=grid();previewForm.append(priceFields);
  const right=select(priceFields,'One complete resource-right quantity for valuation'),currency=select(priceFields,'Valuation currency');
- const saleMode=select(priceFields,'Energy sale/payment pricing'),saleContract=select(priceFields,'Energy sale/payment market contract'),saleQuote=select(priceFields,'Energy sale/payment quote'),salePrice=input(priceFields,'Energy sale/payment price');
- const chargeMode=select(priceFields,'Charging energy pricing'),chargeContract=select(priceFields,'Charging energy market contract'),chargeQuote=select(priceFields,'Charging energy quote'),chargePrice=input(priceFields,'Charging energy purchase price');
- const fuelMode=select(priceFields,'Fuel pricing'),fuelContract=select(priceFields,'Fuel market contract'),fuelQuote=select(priceFields,'Fuel quote'),fuelPrice=input(priceFields,'Fuel price');
- const fuelBasis=select(priceFields,'Fuel pricing quantity');options(fuelBasis,[{code:'guaranteed',label:'Contract guaranteed fuel'},{code:'consumption',label:'Modeled consumption fuel'}]);
  const perspective=select(priceFields,'Perspective');options(perspective,[{code:'resource_right_holder_v1',label:'Holder of the complete operating right'}]);
  const measure=select(priceFields,'Value measure');options(measure,[{code:'remaining_operating_value_v1',label:'Remaining operating value; excludes historical P&L and opening cost basis'}]);
  const discounting=select(priceFields,'Discounting');options(discounting,[{code:'undiscounted',label:'Explicitly undiscounted'}]);
- const paymentDays=input(priceFields,'Monthly payment: calendar days after last delivery day','number');paymentDays.min='0';paymentDays.step='1';
- const paymentPolicy=select(priceFields,'Monthly payment convention');options(paymentPolicy,[{code:'monthly_calendar_unadjusted',label:'Calendar days after last delivery day; no date adjustment'}]);
- const variablePrice=input(priceFields,'Optional variable fee per native energy unit');variablePrice.required=false;
- const variableBasis=select(priceFields,'Variable fee quantity (only with fee)');variableBasis.required=false;
- const accessQuote=select(priceFields,'Optional access fee quote per complete right');accessQuote.required=false;
- const accessPrice=input(priceFields,'Optional access fee for this preview horizon');accessPrice.required=false;
- const accessBasis=select(priceFields,'Access fee period (only with fee)');options(accessBasis,[{code:'preview_horizon_once_v1',label:'Once for the complete supplied preview horizon'}]);accessBasis.required=false;
+ const sidesHost=el('div');sidesHost.style.gridColumn='1/-1';priceFields.append(sidesHost);
+ const sideCards=setupOperatingSideCards(sidesHost,{catalog:()=>catalog,context:()=>({kind:selectedKind(),energy:energy.value,fuel:fuel.value,right:right.value,currency:currency.value}),changed:()=>{previewDirty=true;clearResult();}});
  const previewButton=el('button','Preview');previewButton.type='submit';previewForm.append(previewButton);
  const output=card('Preview result');output.hidden=true;
  function sync(){tradeWorkspace?.sync();host.inert=o.busy();saveButton.disabled=!catalog?.canSave||!!pending.command;add.disabled=!catalog?.canSave||!!pending.command;previewButton.disabled=!catalog?.canPreview||!saved||dirty;recovery.hidden=!pending.command;refresh.disabled=false;}
- function clearResult(){tradeWorkspace?.invalidate();output.hidden=true;output.replaceChildren(el('h3','Preview result'));}
+ function clearResult(){generation++;tradeWorkspace?.invalidate();output.hidden=true;output.replaceChildren(el('h3','Preview result'));}
  function selectedKind():StructuredPowerKind|undefined{return ['battery','thermal','solar'].includes(kind.value)?kind.value as StructuredPowerKind:undefined;}
  function renderFields(parent:HTMLElement,map:Map<string,HTMLInputElement|HTMLSelectElement>,fields:readonly OperatingField[],values:Record<string,unknown>={}){
   parent.replaceChildren();map.clear();for(const descriptor of fields){let control:HTMLInputElement|HTMLSelectElement;
@@ -100,47 +92,25 @@ export function setupStructuredPower(host:HTMLElement,o:Options){
   }
  }
  function capture(map:Map<string,HTMLInputElement|HTMLSelectElement>,fields:readonly OperatingField[]){return Object.fromEntries(fields.map(f=>{const value=map.get(f.key)!.value;return [f.key,f.type==='integer'?Number(value):f.optional&&value===''?null:value];}));}
- const priceKey=(value:Pick<OperatingPriceContract,'curveCode'|'contractId'>)=>JSON.stringify([value.curveCode,value.contractId]);
- function priceChoices(){if(!catalog)return;const quotes=(quantity:string)=>catalog!.quotes.filter(x=>x.quantityCode===quantity&&(!currency.value||x.currencyCode===currency.value));
-  for(const [control,quantity] of [[saleQuote,energy.value],[chargeQuote,energy.value],[fuelQuote,fuel.value],[accessQuote,right.value]] as const){const selected=control.value;options(control,quotes(quantity),selected);}accessQuote.required=false;
-  for(const [mode,contract,quantity] of [[saleMode,saleContract,energy.value],[chargeMode,chargeContract,energy.value],[fuelMode,fuelContract,fuel.value]] as const){
-   const rows=(catalog.priceContracts??[]).filter(row=>row.quantityCode===quantity&&(!currency.value||row.currencyCode===currency.value));
-   options(contract,rows.map(row=>({code:priceKey(row),label:row.label})),contract.value);
-   options(mode,[{code:'fixed',label:'Fixed agreed value'},...(rows.length?[{code:'selected_contract_flat_v1',label:'Selected market contract applied flat across supplied intervals'}]:[])],mode.value);
-  }
-  showPricing();
- }
- function showPricing(){const pricing=priceEnabled.value==='fixed',k=selectedKind();priceFields.hidden=!pricing;for(const node of priceFields.querySelectorAll<HTMLInputElement|HTMLSelectElement>('input,select'))node.disabled=!pricing;
-  for(const [mode,contract,quote,price,active] of [[saleMode,saleContract,saleQuote,salePrice,true],[chargeMode,chargeContract,chargeQuote,chargePrice,k==='battery'],[fuelMode,fuelContract,fuelQuote,fuelPrice,k==='thermal']] as const){
-   for(const control of [mode,contract,quote,price]){control.parentElement!.parentElement!.hidden=!active;control.disabled=!pricing||!active;}
-   for(const control of [quote,price]){control.parentElement!.parentElement!.hidden=!active||mode.value!=='fixed';control.disabled=!pricing||!active||mode.value!=='fixed';}
-   contract.parentElement!.parentElement!.hidden=!active||mode.value!=='selected_contract_flat_v1';contract.disabled=!pricing||!active||mode.value!=='selected_contract_flat_v1';
-  }
-  fuelBasis.parentElement!.parentElement!.hidden=k!=='thermal';fuelBasis.disabled=!pricing||k!=='thermal';
- }
+ function priceChoices(){sideCards.refresh();showPricing();}
+ function showPricing(){const pricing=priceEnabled.value==='fixed';priceFields.hidden=!pricing;for(const control of [right,currency,perspective,measure,discounting])control.disabled=!pricing;sideCards.setEnabled(pricing);}
  function kindChanged(values:Record<string,unknown>={}){const k=selectedKind();renderFields(parameters,controls,k?operatingParameterFields(k):[],values);renderFields(stateFields,stateControls,k?dynamic[k]:[]);
   options(minutes,(catalog?.kinds.find(x=>x.code===k)?.intervalMinutes??[]).map(n=>({code:String(n),label:`${n} minutes`})),minutes.value);
   power.parentElement!.parentElement!.hidden=k==='solar';power.disabled=k==='solar';power.required=k!=='solar';
   fuel.parentElement!.parentElement!.hidden=k!=='thermal';fuel.disabled=k!=='thermal';fuel.required=k==='thermal';
   unsupported.replaceChildren();for(const title of k?comingSoonFields(k):[]){const control=el('input');control.disabled=true;control.placeholder='Coming soon';field(unsupported,`${title} · Coming soon`,control);}
   planHelp.textContent=k==='battery'?'One row per interval: charge MW, discharge MW, available power fraction.':k==='thermal'?'One row per interval: online/offline, output MW, available MW, startup instruction UTC (blank except a start).':k==='solar'?'One row per interval: production MWh, required delivery MWh (blank for as-produced). Fixed-profile plans support quantity exposure only; balancing valuation is Coming soon.':'Choose an operating kind.';
-  options(variableBasis,k?[{code:k==='battery'?'grid_charge_plus_discharge':k==='thermal'?'energy_output':'payment_energy',label:k==='battery'?'Grid charging plus discharging energy':k==='thermal'?'Energy output':'Payment energy'}]:[]);variableBasis.required=false;showPricing();clearResult();
+  showPricing();clearResult();
  }
  function apply(value:StructuredPowerVersion){saved=value;newId='';const t=value.terms;location.value=t.facilityCode;kind.value=t.kind;clock.value=t.clockCode;power.value=t.powerQuantityCode??'';energy.value=t.energyQuantityCode;fuel.value=t.fuelQuantityCode??'';effectiveFrom.value=value.effectiveFrom;effectiveTo.value=value.effectiveTo;kindChanged((t[t.kind]??{}) as Record<string,unknown>);minutes.value=String(t.intervalMinutes);versionSelect.value=`${value.id}/${value.version}`;dirty=false;priceChoices();sync();status.textContent=`Saved ${label(t.kind)} parameters · version ${value.version}.`;}
- async function newFacility(){bindIdentity();if(pending.command)throw Error('Resolve the outstanding save before adding another operating facility.');saved=undefined;newId=crypto.randomUUID();form.reset();previewForm.reset();kindChanged();dirty=true;sync();status.textContent='Choose an existing location and explicit operating parameters. No new location is created.';clearResult();}
+ async function newFacility(){bindIdentity();if(pending.command)throw Error('Resolve the outstanding save before adding another operating facility.');saved=undefined;newId=crypto.randomUUID();form.reset();previewForm.reset();sideCards.reset();kindChanged();dirty=true;sync();status.textContent='Choose an existing location and explicit operating parameters. No new location is created.';clearResult();}
  function bodyVersion():StructuredPowerVersion{if(!saved&&!newId)throw Error('Choose a saved version or add operating parameters first.');if(!catalog)throw Error('Load the selected market context.');const k=selectedKind();if(!k)throw Error('Choose an operating kind.');return {id:saved?.id??newId,version:(saved?.version??0)+1,effectiveFrom:effectiveFrom.value,effectiveTo:effectiveTo.value,
   terms:facilityTerms(catalog.pins,k,{facilityCode:location.value,clockCode:clock.value,intervalMinutes:Number(minutes.value),powerQuantityCode:k==='solar'?null:power.value,energyQuantityCode:energy.value,fuelQuantityCode:k==='thermal'?fuel.value:null},capture(controls,operatingParameterFields(k)))};}
  async function sendSave(){bindIdentity();const owner=pendingIdentity,outstanding=pending,command=outstanding.command;if(!command)return;const key=o.source().contextKey;const previous=outstanding.sending();requestStore.save(owner,outstanding);sync();try{const receipt=await o.api<Receipt>(command.path,{...command.body,requestId:command.operationId});outstanding.clear();requestStore.save(owner,outstanding);if(owner!==o.identity()||key!==o.source().contextKey)return;await load();apply(receipt.facility);status.textContent=receipt.changed?'Operating parameters saved.':'The same operating parameters already existed.';}catch(error){outstanding.failed((error as {code?:string}).code,previous);requestStore.save(owner,outstanding);sync();throw error;}}
  form.onsubmit=event=>{event.preventDefault();void o.act(async()=>{bindIdentity();if(!form.reportValidity())return;const source=o.source();pending.begin(prefix+'save',{snapshotId:source.snapshotId,expectedVersion:saved?.version??0,facility:bodyVersion()});await sendSave();});};
- form.oninput=()=>{dirty=true;clearResult();sync();};kind.onchange=()=>{kindChanged();dirty=true;sync();};currency.onchange=()=>{priceChoices();clearResult();};for(const control of [power,energy,fuel])control.onchange=()=>{priceChoices();dirty=true;sync();};right.onchange=()=>{priceChoices();clearResult();};priceEnabled.onchange=()=>{showPricing();clearResult();};for(const mode of [saleMode,chargeMode,fuelMode])mode.onchange=()=>{showPricing();clearResult();};
- function sidePrice(mode:HTMLSelectElement,contract:HTMLSelectElement,quote:HTMLSelectElement,price:HTMLInputElement){return operatingPrice(mode.value,quote.value,price.value,(catalog?.priceContracts??[]).find(row=>priceKey(row)===contract.value)??null);}
- function valuation(){if(priceEnabled.value==='none')return null;if(priceEnabled.value!=='fixed')throw Error('Choose feasibility only or explicit fixed-price valuation.');const k=selectedKind();return {perspective:perspective.value,measure:measure.value,currencyCode:currency.value,rightQuantityCode:right.value,discounting:discounting.value!=='undiscounted',
-  paymentRule:{frequency:'monthly',rule:'days_after_period_end',days:Number(paymentDays.value),dayOfMonth:null,dayBasis:'calendar_days',shortMonth:null,adjustment:'unadjusted',calendar:null,implementation:catalog!.paymentImplementation},
-  energyPrice:sidePrice(saleMode,saleContract,saleQuote,salePrice),chargingPrice:k==='battery'?sidePrice(chargeMode,chargeContract,chargeQuote,chargePrice):null,
-  fuelPrice:k==='thermal'?sidePrice(fuelMode,fuelContract,fuelQuote,fuelPrice):null,fuelQuantityBasis:k==='thermal'?fuelBasis.value:null,
-  accessQuoteCode:accessPrice.value?accessQuote.value||null:null,accessPrice:accessPrice.value||null,accessFeeBasis:accessPrice.value?accessBasis.value||null:null,
-  variablePrice:variablePrice.value||null,variableQuantityBasis:variablePrice.value?variableBasis.value||null:null,startupQuoteCode:null,startupPrice:null,startupFeeBasis:null};}
- function planRequest(){if(!saved||dirty)throw Error('Save the operating parameters before previewing them.');if(!previewForm.reportValidity())throw Error('Complete the supplied plan and explicit pricing choices.');return structuredPreviewRequest({snapshotId:o.source().snapshotId,facilityId:saved.id,facilityVersion:saved.version,kind:saved.terms.kind,operatingDate:operatingDate.value,firstInterval:Number(firstInterval.value),state:capture(stateControls,dynamic[saved.terms.kind]),plan:plan.value,valuation:valuation()});}
+ form.oninput=()=>{dirty=true;clearResult();sync();};kind.onchange=()=>{kindChanged();dirty=true;sync();};currency.onchange=()=>{priceChoices();clearResult();};for(const control of [power,energy,fuel])control.onchange=()=>{priceChoices();dirty=true;sync();};right.onchange=()=>{priceChoices();clearResult();};priceEnabled.onchange=()=>{showPricing();clearResult();};;
+ function composition(){if(priceEnabled.value==='none')return undefined;if(priceEnabled.value!=='fixed')throw Error('Choose feasibility only or an explicit Side composition.');return {implementation:catalog!.compositionImplementation,perspective:perspective.value,measure:measure.value,currencyCode:currency.value,rightQuantityCode:right.value,discounting:discounting.value!=='undiscounted',sides:sideCards.capture()};}
+ function planRequest(){if(!saved||dirty)throw Error('Save the operating parameters before previewing them.');if(!previewForm.reportValidity())throw Error('Complete the supplied plan and explicit pricing choices.');return structuredPreviewRequest({snapshotId:o.source().snapshotId,facilityId:saved.id,facilityVersion:saved.version,kind:saved.terms.kind,operatingDate:operatingDate.value,firstInterval:Number(firstInterval.value),state:capture(stateControls,dynamic[saved.terms.kind]),plan:plan.value,valuation:null,composition:composition()});}
  previewForm.onsubmit=event=>{event.preventDefault();void o.act(async()=>{const source=o.source(),token=++generation,request=planRequest();const result=await o.api<Preview>(prefix+'preview',request);if(token!==generation||source.contextKey!==o.source().contextKey)return;await renderResult(result,token,source.contextKey);});};
  previewForm.oninput=()=>{previewDirty=true;clearResult();};
  function table(parent:HTMLElement,headers:string[],rows:string[][]){const wrap=el('div');wrap.className='table-wrap';const node=el('table'),head=el('thead'),heading=el('tr');for(const title of headers)heading.append(el('th',title));head.append(heading);node.append(head);const body=el('tbody');for(const values of rows){const row=el('tr');for(const text of values)row.append(el('td',text));body.append(row);}node.append(body);wrap.append(node);parent.append(wrap);}
@@ -149,7 +119,7 @@ export function setupStructuredPower(host:HTMLElement,o:Options){
   if(token!==generation||contextKey!==o.source().contextKey)return;
   output.replaceChildren(el('h3','Preview result'));output.hidden=false;
   if(value){output.append(el('p',`Remaining operating value: ${amountText(fraction(value.value),'money')} ${value.currency.code}`));table(output,['Side','Sign','Gross value','Signed contribution'],value.sides.map(side=>[label(side.name),side.coefficient,amountText(fraction(side.grossValue),'money'),amountText(fraction(side.contribution),'money')]));
-   for(const side of value.sides){const details=el('details');details.append(el('summary',`${label(side.name)} · ${catalog?.quotes.find(q=>q.code===side.quote.code)?.label??side.quote.code} · gross side schedule`));table(details,['Interval start UTC','Interval end UTC','Payment UTC','Quantity','Native quantity','Price','Gross amount'],side.rows.map(row=>[row.interval.start,row.interval.end,row.paymentAt,amountText(fraction(row.quantity),'quantity'),row.quantity.specification.code,amountText(fraction(row.price),'price'),amountText(fraction(row.amount),'money')]));output.append(details);}}
+   for(const side of value.sides){const details=el('details');details.append(el('summary',`${label(side.name)} · ${catalog?.quotes.find(q=>q.code===side.quote.code)?.label??side.quote.code} · gross side schedule`));table(details,['Interval start UTC','Interval end UTC','Value UTC','Quantity','Native quantity','Price','Gross amount'],side.rows.map(row=>[row.interval.start,row.interval.end,row.paymentAt,amountText(fraction(row.quantity),'quantity'),row.quantity.specification.code,amountText(fraction(row.price),'price'),amountText(fraction(row.amount),'money')]));output.append(details);}}
   table(output,['Interval start UTC','Interval end UTC','Quantity','Value','Native quantity'],result.intervals.flatMap(row=>row.quantities.map(q=>[row.interval.start,row.interval.end,label(q.name),amountText(fraction(q.quantity),'quantity'),q.quantity.specification.code])));
   if(result.closingState){const state=result.closingState;note(output,`Closing state at ${state.at}${state.commitment?` · ${state.commitment} · elapsed ${state.elapsedMinutes} minutes · starts used ${state.startsUsed}`:''}`);table(output,['Closing state quantity','Value','Native quantity'],state.quantities.map(q=>[label(q.name),amountText(fraction(q.quantity),'quantity'),q.quantity.specification.code]));}
   for(const text of result.limitations)note(output,text);
@@ -162,9 +132,9 @@ export function setupStructuredPower(host:HTMLElement,o:Options){
  }
  function contextChanged(){tradeWorkspace?.reset();bindIdentity();generation++;catalog=undefined;versions=[];saved=undefined;dirty=false;previewDirty=false;newId='';clearResult();
   form.reset();previewForm.reset();parameters.replaceChildren();controls.clear();stateFields.replaceChildren();stateControls.clear();unsupported.replaceChildren();
-  for(const control of [versionSelect,location,kind,clock,minutes,power,energy,fuel,right,currency,saleMode,saleContract,chargeMode,chargeContract,fuelMode,fuelContract,saleQuote,chargeQuote,fuelQuote,accessQuote])control.replaceChildren();
+  for(const control of [versionSelect,location,kind,clock,minutes,power,energy,fuel,right,currency])control.replaceChildren();
   for(const control of host.querySelectorAll<HTMLInputElement|HTMLTextAreaElement>('input,textarea'))control.value='';
-  priceEnabled.value='';showPricing();sync();status.textContent='Load operating facilities under the selected context.';}
+  sideCards.reset();priceEnabled.value='';showPricing();sync();status.textContent='Load operating facilities under the selected context.';}
  if(o.trading){const target=card('Saved operating-right trades');tradeWorkspace=setupStructuredPowerTrades(target,{api:o.api,act:o.act,busy:o.busy,source:o.source,identity:o.identity,plan:planRequest,changed:()=>sync(),available:o.trading.available,canHedge:o.trading.canHedge,admission:()=>({available:!!saved&&!!catalog?.operatingBookingClockCodes?.includes(saved.terms.clockCode),reason:!saved?'Select an exact saved facility for operating-right booking.':'Saved operating-right booking for this clock · Coming soon.'}),committed:()=>{previewDirty=false;},openTrade:o.trading.openTrade});}
  showPricing();sync();return {load,sync,selectedTrade:()=>tradeWorkspace?.selected(),plan:planRequest,reset:contextChanged,contextChanged,unconfirmed:()=>{bindIdentity();return !!pending.command||!!tradeWorkspace?.unconfirmed();},unsaved:()=>{bindIdentity();return !!pending.command||dirty||previewDirty||!!tradeWorkspace?.unsaved();},open:async(locationCode?:string)=>{await load();if(locationCode)location.value=locationCode;host.scrollIntoView({block:'start'});}};
 }

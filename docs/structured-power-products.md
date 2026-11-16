@@ -22,6 +22,13 @@ Only consumed physical parameters are saved; guarantees, entitlement, state,
 dispatch, prices and fees remain explicit preview inputs. Unsupported planned
 fields appear disabled as **Coming soon**.
 
+D413 additionally requires concrete Side composition and an explicit operating
+assembly contract. That refactor is in progress, separately from the qualified
+D412 supplied-plan profile below. Fixed/floating pricing is shared economics;
+the concrete Side owns its asset/delivery/payment behavior and retained schedule.
+The [instrument contract](instrument-contracts.md) applies to previews, booked
+programs and ordinary portfolio valuation alike.
+
 The managed supplied-plan preview validates thermal commitment/fuel and battery
 state paths, and resolves solar entitlement and delivery/payment quantities.
 Ordinary independent payment Sides own the schedules and price typed outputs
@@ -152,7 +159,9 @@ Use **toll** as a commercial composition: pay for a specified resource right,
 with explicit output entitlement and operating responsibilities. Reuse ordinary
 payment and delivery Side behavior where it fits; resource-specific production
 and state rules remain versioned managed implementations. A shared composition
-does not require a universal resource algorithm or a subclass per technology.
+does not require a universal resource algorithm. Concrete Side subclasses own
+the supported resource-specific behavior and reuse common pricing/schedule
+mechanisms; instrument subclasses must not encode every combination of Sides.
 Keep industry product names in entry: an ordinary solar agreement is offered as
 a PPA; use a solar output-right/toll classification only where its actual rights
 support it. Financial reference payoffs and physical operating control remain

@@ -55,7 +55,7 @@ those future examples.
 
 | Existing owner | Current capability | Reuse boundary |
 | --- | --- | --- |
-| [Instrument and Side](../src/OpenEtrm.MarketData/Trading/Instruments.cs), [unit contracts](instrument-contracts.md) | Immutable unit economics, external typed binding quantities, declared dependencies and common PV | Lifecycle references the exact binding; it does not replace pricing or add a second editable booked quantity. Leaf instruments need no artificial Side. |
+| [Instrument and Side](../src/OpenEtrm.MarketData/Trading/Instruments.cs), [unit contracts](instrument-contracts.md) | Immutable unit economics, external typed binding quantities, declared dependencies and common PV | Lifecycle references the exact binding; it does not replace pricing or add a second editable booked quantity. Only futures and exchange-traded options are Side-free financial products (D413). |
 | [RetainedProgramInstrument](../src/OpenEtrm.MarketData/Trading/RetainedProgramInstrument.cs) | Common retained gas/crude PV execution | Keep native identity bytes and declared markets. This is not an operational ledger. |
 | [Side plans](side-plans.md) | Whole-term Side parameters and instrument-owned typed connections | Physical outputs can feed multiple explicit cash/fee inputs. A Side does not own other Side objects or resolve its peers. |
 | [CrudeReceiptCash](../src/OpenEtrm.MarketData/Crude/CrudeReceiptCash.cs), [CrudeCashLedger](../src/OpenEtrm.MarketData/Crude/CrudeCashLedger.cs), [operations](physical-crude-operations.md) | Certified quantity receipts, bounded title/inventory/dispatch, partial invoices/payments and record corrections | Extract matching allocation/conservation mechanisms only after golden checks. Preserve fixed contractual quantity, cumulative rounding, explicit directions and existing invoice/reversal restrictions. Separate-master delivery-to-cash still refuses. |
@@ -334,7 +334,7 @@ not automatically widened to shared receipts by this proposed ownership model.
 classDiagram
     Trade "1" *-- "1..*" TradeInstrument : owns bindings
     TradeInstrument "*" --> "1" Instrument : immutable definition
-    Instrument "1" o-- "0..*" SideMembership : explicit composition
+    Instrument "1" o-- "1..*" SideMembership : explicit physical composition
     SideMembership --> Side : exact retained terms
     TradeInstrument "1" *-- "0..*" DeliverySchedule : owned per physical membership
     DeliverySchedule "*" --> "1" Side : retained terms
@@ -437,7 +437,9 @@ profile's coincident receipt/title rule and current payment ordering remain inta
 
 The shared lifecycle planner consumes an existing declared schedule/capability.
 It does not require every Instrument to generate artificial delivery or cash
-events. Futures margining remains its own explicit contract.
+events. This lifecycle capability boundary is separate from D413's mandatory
+Side composition: another instrument cannot bypass Side because it lacks a
+qualified operational action. Futures margining remains its own explicit contract.
 
 ## Commodity-specific evidence and reference data
 

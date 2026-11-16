@@ -5,6 +5,52 @@ ordinary retained Side valuation, a price hedge report and manually evidenced
 certificate inventory. The implementation has separate native admission and
 managed calculation contracts. A saved facility alone creates no trade.
 
+## Explicit Side assembly (D413)
+
+Status: accepted contract; implementation and qualification in progress.
+
+The optional preview `composition` selects `operating_side_composition_v2` while
+legacy `valuation` is null. It explicitly states perspective, measure, currency,
+complete-right quantity and discounting policy, then one to eight ordered
+Sides. Each Side has a stable key, name, quantity source, coefficient,
+`payment`/`delivery` kind, price and its own payment rule or explicit null for a
+delivery. The legacy valuation request remains a separate unchanged version.
+No price, direction or payment convention is inferred from resource kind, role
+name or slot. Several Sides may price the same source with different terms.
+The bounded complete-right profile admits coefficients `1` and `-1` and requires
+at least one Side linked to a plan output. `horizon_right` supplies one literal
+complete-right quantity, consumed once in the first native interval, for an
+independently priced payment Side; delivery kind is refused for this source.
+Its monthly payment uses the first operating month's end and the Side's explicit
+payment rule. It is not a periodic capacity fee. A composition containing only
+those payments is not admitted.
+
+| Plan | Admitted quantity sources |
+| --- | --- |
+| Battery | `charging_energy`, `discharging_energy`, `grid_throughput` |
+| Thermal toll | `energy_output`, `guaranteed_fuel`, `consumption_fuel` |
+| Solar | `energy_output`, `payment_energy` |
+| Whole-horizon payment | `horizon_right`, exactly once per selected Side |
+
+Guaranteed and modeled consumption use distinct typed ports even when they have
+the same native unit. Several Sides consuming one output do not create additional
+physical production, fuel use or stored energy. The initial price profile remains
+explicitly undiscounted, with fixed or selected-contract flat prices and monthly,
+unadjusted calendar-day payment rules; delivery Sides use native interval ends.
+
+Every member is a concrete subclass of abstract `Side`, owns its complete
+immutable schedule and implements Side PV. Shared fixed/floating mechanics may
+be reused; the instrument combines only signed Side contributions. A retained
+program is executed by its concrete Side. Common feasibility outputs supply
+typed quantities to all members without invoking a Side or Instrument PV.
+
+The GUI must prepare this same explicit contract and invalidate review after
+composition or context edits. Native saved-v2 admission and populated upgrade
+qualification remain required before this section can claim saved-v2 support.
+Independent Side dates do not enable started delivery, shared-resource pooling,
+optimization, invoices or payment processing. The qualified legacy profile and
+its existing numerical oracles remain documented below.
+
 ## Operating-right booking
 
 `supplied_operating_right_trade_v1` books one complete specified thermal toll,
@@ -178,7 +224,8 @@ python3 tools/run_preview.py --check --structured-power-check \
 ```
 
 Local qualification on 2026-11-16 used the pinned .NET 10.0.402 SDK and Node
-24.7.0, stock PostgreSQL 16.14 and 18.1, and an owned Chrome profile:
+24.7.0, stock PostgreSQL 16.14 and 18.1, and an owned Chrome profile. These results
+record the D412 legacy profile; they do not qualify the D413 assembly increment:
 
 | Check | Verified result |
 | --- | --- |

@@ -21,7 +21,9 @@ public static class TradingInstant
 public abstract record Side
 {
     public Guid Id { get; }
-    [IdentityField] public SideCalendarPolicy CalendarPolicy { get; }
+    private readonly SideCalendarPolicy? calendarPolicy;
+    [IdentityField] public SideCalendarPolicy CalendarPolicy => calendarPolicy ??
+        throw new MarketDataException("retained_side_calendar", "This Side executes the calendar policies sealed in its retained program; it cannot author a replacement calendar.");
     [System.Text.Json.Serialization.JsonIgnore]
     public ScheduleDefinition? RetainedSchedule { get; internal init; }
     internal RetainedSideSchedule? RetainedPlan { get; init; }
@@ -38,7 +40,13 @@ public abstract record Side
         if (id == Guid.Empty)
             throw new MarketDataException("side_definition", "A side requires an exact identity.");
         Id = id;
-        CalendarPolicy=calendarPolicy??throw new MarketDataException("side_calendar_policy","Supply the Side's explicit versioned calendar bindings.");
+        this.calendarPolicy=calendarPolicy??throw new MarketDataException("side_calendar_policy","Supply the Side's explicit versioned calendar bindings.");
+    }
+    // A retained program already owns its exact calendar rules and resolved grid.
+    protected Side(Guid id)
+    {
+        if(id==Guid.Empty)throw new MarketDataException("side_definition","A side requires an exact identity.");
+        Id=id;
     }
 }
 
@@ -140,8 +148,22 @@ public abstract record SidedInstrument : Instrument
         if(state is not SwapBindingValuation { Settlement: not null, Discounting: not null } || !SupportsSettlement)
             throw new MarketDataException("settlement_scope","This instrument does not support the supplied binding valuation state.");
     }
+    private ImmutableArray<SideMembership> sides;
+    private readonly Lazy<ImmutableArray<SideMembership>>? composedSides;
     [IdentityField]
-    public ImmutableArray<SideMembership> Sides { get; internal init; }
+    public ImmutableArray<SideMembership> Sides
+    {
+        get
+        {
+            return sides.IsDefaultOrEmpty?composedSides!.Value:sides;
+        }
+        internal init
+        {
+            if(composedSides is not null)
+                throw new MarketDataException("instrument_definition","Retained Side memberships derive from sealed members and cannot be replaced independently.");
+            sides=RequireSides(value);
+        }
+    }
     public ImmutableArray<CurveRequest> Dependencies =>
         Sides.SelectMany(m => m.Side.Dependencies).Distinct().ToImmutableArray();
     public ImmutableArray<CurveRequest> DependenciesAt(MarketSnapshot snapshot) =>
@@ -149,11 +171,24 @@ public abstract record SidedInstrument : Instrument
 
     protected SidedInstrument(Guid id, ImmutableArray<SideMembership> sides) : base(id)
     {
-        if (id == Guid.Empty || sides.IsDefaultOrEmpty || sides.Any(m => m is null || m.Side is null))
+        this.sides=RequireSides(sides);
+    }
+    // Derived retained projections preserve their existing economic identity
+    // fields and assemble the corresponding concrete Sides after validating them.
+    protected SidedInstrument(Guid id):base(id)
+    {
+        sides=[];
+        composedSides=new(()=>RequireSides(ComposeSides()),LazyThreadSafetyMode.ExecutionAndPublication);
+    }
+    protected virtual ImmutableArray<SideMembership> ComposeSides()=>
+        throw new MarketDataException("instrument_definition","This instrument requires explicit concrete Side memberships.");
+    private ImmutableArray<SideMembership> RequireSides(ImmutableArray<SideMembership> sides)
+    {
+        if (Id == Guid.Empty || sides.IsDefaultOrEmpty || sides.Any(m => m is null || m.Side is null))
             throw new MarketDataException("instrument_definition", "An instrument requires an exact identity and at least one valid side membership.");
-        if(sides.Any(m=>m.QuantityRatio is not null)&&this is not (ScheduledFinancialSwap or CrossCommodityScheduledSwap or OpenEtrm.MarketData.Gas.GasCompositionInstrument))
+        if(sides.Any(m=>m.QuantityRatio is not null)&&this is not (ScheduledFinancialSwap or CrossCommodityScheduledSwap or OpenEtrm.MarketData.Gas.GasCompositionInstrument or IRetainedProgramComposition))
             throw new MarketDataException("instrument_definition","Quantity-ratio memberships require the scheduled swap contract version.");
-        Sides = sides;
+        return sides;
     }
 
     public override UnitPricingContract Declare(UnitValuationContext context)=>

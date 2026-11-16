@@ -176,6 +176,8 @@ public sealed class UnitValuationContext
         return sideContexts.Get(provider,declaration,BindingState,operating,()=>
         {
             var context=pricing.Context(provider,declaration.Dependencies,cancellation,Inputs).WithBindingState(BindingState);
+            if(pricing.NativeProgramBasis is {} basis&&pricing.NativeIntervalScenario is {} scenario)
+                context=context.WithRetainedPrograms(basis,scenario,cancellation);
             return operating is null?context:context.WithOperatingQuantities(operating);
         });
     }

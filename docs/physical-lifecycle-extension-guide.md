@@ -16,6 +16,14 @@ object names do not justify a parallel persistence or event framework.
 
 ## Start with the contract and current consumers
 
+The [mandatory instrument contract](instrument-contracts.md#mandatory-composition-boundary-d413)
+applies before selecting a lifecycle extension. Futures and exchange-traded
+options are the only financial products without Sides. Retained programs, cash
+claims and physical claims must execute through concrete Side implementations.
+Fixed/floating economics are shared mechanisms; each concrete Side retains its
+own supported behavior, schedule and PV. A common quantity/feasibility model is
+not a Side container or a second valuation engine.
+
 1. Read `AGENTS.md`, architecture sections 3, 5 and 7, the lifecycle design, and
    the current product's implemented contract. Identify what is agreed versus
    proposed, the actual caller and an executable baseline. Do not select a missing
