@@ -56,6 +56,7 @@ DO $$DECLARE t text;BEGIN
   EXECUTE format('ALTER TABLE ref_data.%I FORCE ROW LEVEL SECURITY',t);
   EXECUTE format('CREATE POLICY scoped_read ON ref_data.%I FOR SELECT TO openetrm_runtime USING(security.reference_access(catalog_id,''ReadMarketData'') AND security.reference_version_visible(catalog_id,revision_id))',t);
   EXECUTE format('CREATE POLICY scoped_insert ON ref_data.%I FOR INSERT TO openetrm_runtime WITH CHECK(security.reference_access(catalog_id,''WriteReferenceData''))',t);
+  EXECUTE format('CREATE POLICY current_insert ON ref_data.%I AS RESTRICTIVE FOR INSERT TO openetrm_runtime WITH CHECK(security.current_write_context())',t);
   EXECUTE format('GRANT SELECT,INSERT ON ref_data.%I TO openetrm_runtime,openetrm_security_owner',t);
  END LOOP;
 END$$;
@@ -90,6 +91,7 @@ ALTER TABLE market_data.rec_valuation_assignments FORCE ROW LEVEL SECURITY;
 CREATE POLICY scoped_read ON market_data.rec_valuation_assignments FOR SELECT TO openetrm_runtime
  USING(security.market_access(catalog_id,'ReadMarketData') AND security.market_fact_visible(catalog_id,revision_id,NULL));
 CREATE POLICY scoped_insert ON market_data.rec_valuation_assignments FOR INSERT TO openetrm_runtime WITH CHECK(security.market_access(catalog_id,'WriteMarketDefinitions'));
+CREATE POLICY current_insert ON market_data.rec_valuation_assignments AS RESTRICTIVE FOR INSERT TO openetrm_runtime WITH CHECK(security.current_write_context());
 GRANT SELECT,INSERT ON market_data.rec_valuation_assignments TO openetrm_runtime,openetrm_security_owner;
 
 CREATE TABLE trading.rec_forward_instruments(
