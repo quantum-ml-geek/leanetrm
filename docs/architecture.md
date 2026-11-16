@@ -1,6 +1,6 @@
 # Architecture and domain contracts
 
-D413 makes concrete Side composition mandatory for every financial instrument
+D417 makes concrete Side composition mandatory for every financial instrument
 except futures and exchange-traded options. All instruments derive from
 `Instrument`; every other product must compose independently scheduled concrete
 `Side` subclasses and combines their signed PVs. Retained execution is a Side
@@ -8,7 +8,29 @@ implementation, and shared operating plans supply quantities/state without
 nested Side or Instrument PV. The power/REC increment and its required common
 adapters are implemented with bounded managed, native and owned HTTP qualification;
 see [the contract](instrument-contracts.md) and
-[acceptance gates](plan.md#mandatory-side-composition-d413).
+[acceptance gates](plan.md#mandatory-side-composition-d417).
+The integrated current Transport whole-rights owner also uses a concrete claim
+Side, retaining its exact signed mark, horizon/expiry and independently held fee
+cash under the existing financial contract.
+
+D416 implements the selected first [financial Transport rights and fixed-fee
+contract](gas-transport-financial.md). Direct signed whole-package values,
+independent ordinary cash and explicit expiry retain separate owners. Native, managed and actual browser consumers have local qualification, including
+explicit expiry recovery and independent cash. First-value market publication,
+integrated upstream qualification and release remain separate gates.
+
+D413 adds locally qualified [retained chosen routes](gas-transport-routes.md)
+over exact native capacity claims and exclusive logical source-plan memberships.
+Managed/native, populated-upgrade and actual browser checks qualify persisted
+route adoption and release. Integrated release, physical performance and financial
+value remain separate.
+
+D415 adds [commercial Transport capacity operations](gas-transport-capacity-operations.md)
+over independent exact entitlement, capacity-version and chosen-plan identities.
+Shared gross limits, explicit empty release and retained source/authority
+admission have local managed/native, upgrade and actual browser qualification.
+Integrated release remains separate. Physical transport, title, cash and financial
+Transport value retain separate contracts.
 
 D406 adds locally qualified [Park and Loan commercial booking](gas-park-loan.md)
 over independent native ownership and cash. The bounded title-transfer profile
@@ -910,7 +932,7 @@ These are distinct concepts:
 - `SidedInstrument` retains one or more independently scheduled concrete Sides
   through explicit memberships. Only futures and exchange-traded options are
   Side-free products. Simplicity, a single cash amount or retained-program storage
-  does not exempt another financial instrument from this boundary (D413).
+  does not exempt another financial instrument from this boundary (D417).
 - Coefficients and ordering belong to instrument memberships. They do not make a
   new side definition merely because another instrument uses different weights.
 - Signed booked quantities belong to the trade's instrument bindings, with an

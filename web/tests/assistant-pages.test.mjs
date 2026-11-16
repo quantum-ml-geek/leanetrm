@@ -1,5 +1,11 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+test('Transport capacity reports its own explicitly unsupported assistant page',()=>{
+ assert.deepEqual(pageReport({page:'facilities',facilitySection:'transport',businessDate:'2032-03-14',facilityLedger:'unrelated-physical-ledger'}),{page:'transport_capacity',selection:{}});
+});
+test('Route plans report their own explicitly unsupported assistant page without a physical ledger',()=>{
+ assert.deepEqual(pageReport({page:'facilities',facilitySection:'route',businessDate:'2032-03-14',facilityLedger:'unrelated-physical-ledger'}),{page:'transport_route_plans',selection:{}});
+});
 test('a proposed curve and a saved draft wait for explicit review on an idle unchanged page',async()=>{
  const {targetAction}=await import('../dist/assistant-pages.js');
  assert.equal(targetAction({live:true,changesContext:false,unsaved:false,review:true}),'go');
@@ -296,11 +302,11 @@ test('PPA bookings reports the inspected PPA or the listed book, which the assis
 });
 
 test('a new trade in the Blotter\'s panel is reported by its product, and no unsent entry is read',()=>{
-  for(const [product,id] of [[null,'blotter_new_trade'],['futures','blotter_new_future'],['swaps','blotter_new_swap'],['ppa','blotter_new_ppa'],['gas','blotter_new_gas'],['park-loan','blotter_new_park_loan'],['crude','blotter_new_crude'],['lng','blotter_new_lng'],['options','blotter_new_option']])
+  for(const [product,id] of [[null,'blotter_new_trade'],['futures','blotter_new_future'],['swaps','blotter_new_swap'],['ppa','blotter_new_ppa'],['gas','blotter_new_gas'],['transport','blotter_new_transport'],['park-loan','blotter_new_park_loan'],['crude','blotter_new_crude'],['lng','blotter_new_lng'],['options','blotter_new_option']])
     assert.deepEqual(pageReport({page:'futures',...open,risk:false,trade:null,entry:{product},view:blotter}),{page:id,selection:{},layout});
   const names={curve:String,table:String},current={mode:'current',frameId:frame,frameLabel:'18 Dec 2020'};
   for(const [id,shown] of [['blotter_new_trade','A new trade is being started: no product is chosen yet. The assistant does not read a trade being entered.'],
-    ['blotter_new_future','A new future is being entered. The assistant does not read a trade being entered.'],['blotter_new_swap','A new swap is being entered. The assistant does not read a trade being entered.'],['blotter_new_ppa','A new PPA is being entered. The assistant does not read a trade being entered.'],['blotter_new_gas','A new physical gas trade is being entered. The assistant does not read a trade being entered.'],['blotter_new_crude','A new physical crude trade is being entered. The assistant does not read a trade being entered.'],['blotter_new_lng','A new physical LNG cargo is being entered. The assistant does not read a trade being entered.'],['blotter_new_option','A new futures option is being entered. The assistant does not read a trade being entered.']]){
+    ['blotter_new_future','A new future is being entered. The assistant does not read a trade being entered.'],['blotter_new_swap','A new swap is being entered. The assistant does not read a trade being entered.'],['blotter_new_ppa','A new PPA is being entered. The assistant does not read a trade being entered.'],['blotter_new_gas','A new physical gas trade is being entered. The assistant does not read a trade being entered.'],['blotter_new_transport','A new Transport agreement is being entered. The assistant does not read a trade being entered.'],['blotter_new_crude','A new physical crude trade is being entered. The assistant does not read a trade being entered.'],['blotter_new_lng','A new physical LNG cargo is being entered. The assistant does not read a trade being entered.'],['blotter_new_option','A new futures option is being entered. The assistant does not read a trade being entered.']]){
     const expected=shown.replace('The assistant does not read a trade being entered.', ['blotter_new_trade','blotter_new_future','blotter_new_swap'].includes(id)?'The assistant can inspect available terms, preview explicit drafts and prepare changes for your authorization.':'The assistant does not read a trade being entered.');
     const view=lookingAt({page:id,selection:{}},current,names);
     assert.deepEqual([view.page,view.shows,view.supported],['Blotter',expected,['blotter_new_trade','blotter_new_future','blotter_new_swap'].includes(id)],id);
@@ -428,12 +434,14 @@ test('REC ticket and saved structured inspectors report identity with real Blott
  assert.deepEqual(ticket,{page:'blotter_new_rec',selection:{},layout});
 });
 
-test('a selected Park and Loan permits questions and identifies its unavailable trade read',()=>{
-  const report=pageReport({page:'futures',...open,risk:false,trade:{tradeId:trade,instrumentType:'physical_gas_park_loan',revision:1,reference:'TR-000009'},entry:null,view:blotter});
+test('a selected unqualified gas service permits questions and identifies its unavailable trade read',()=>{
+  for(const kind of ['physical_gas_park_loan','physical_gas_park_custody','physical_gas_transport']){
+  const report=pageReport({page:'futures',...open,risk:false,trade:{tradeId:trade,instrumentType:kind,revision:1,reference:'TR-000009'},entry:null,view:blotter});
   assert.equal(report.page,'blotter');
-  assert.equal(report.selection.instrumentType,'physical_gas_park_loan');
+  assert.equal(report.selection.instrumentType,kind);
   const seen=lookingAt(report,{mode:'current',frameId:frame,frameLabel:'Synthetic close'},{curve:String,table:String},{trade:'TR-000009'});
   assert.equal(seen.askable,true);
   assert.equal(seen.supported,false);
   assert.equal(seen.shows,'Trade TR-000009, revision 1. The assistant does not read this trade.');
+  }
 });

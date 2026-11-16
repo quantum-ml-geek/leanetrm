@@ -1,7 +1,7 @@
 import {mountOperationFields} from './operation-fields.js';
 import type {GasForm,GasOwnedSetup,GasOwnedUiOptions} from './gas-owned-lifecycle.js';
 
-function mountForm(root:HTMLElement,definition:GasForm,o:GasOwnedUiOptions,kind:'custodyObservation'|'custodyPayment',label:string,record:(selection:Record<string,unknown>)=>Promise<void>){
+function mountForm(root:HTMLElement,definition:GasForm,o:GasOwnedUiOptions,kind:'custodyObservation'|'custodyPayment'|'transportPayment',label:string,record:(selection:Record<string,unknown>)=>Promise<void>){
  const section=document.createElement('details'),heading=document.createElement('summary');heading.textContent=definition.label;section.append(heading);
  const form=document.createElement('form');form.className='lifecycle-form';form.dataset[kind]='';form.dataset.lifecyclePermission=definition.permission;section.append(form);
  const fields=document.createElement('fieldset');fields.className='schedule-fields';fields.disabled=!o.permission(definition.permission);form.append(fields);
@@ -24,14 +24,23 @@ export function mountCustodyObservation(root:HTMLElement,setup:GasOwnedSetup,o:G
 }
 
 export function mountCustodyPayment(root:HTMLElement,setup:GasOwnedSetup,o:GasOwnedUiOptions){
+ return mountPayment(root,setup,o,'gas_park_custody');
+}
+
+export function mountTransportPayment(root:HTMLElement,setup:GasOwnedSetup,o:GasOwnedUiOptions){
+ return mountPayment(root,setup,o,'gas_transport_financial');
+}
+
+function mountPayment(root:HTMLElement,setup:GasOwnedSetup,o:GasOwnedUiOptions,handler:'gas_park_custody'|'gas_transport_financial'){
  const definition=setup.configuration.payment,target=setup.target;
- if(!definition||definition.permission!=='AmendTrade'||target?.handler!=='gas_park_custody')throw Error('Read the accepted custody cash owner and ordinary payment fields.');
- return mountForm(root,definition,o,'custodyPayment','Record observed payment',async selection=>{
+ if(!definition||definition.permission!=='AmendTrade'||target?.handler!==handler)throw Error('Read the exact independent cash owner and ordinary payment fields.');
+ const transport=handler==='gas_transport_financial';
+ return mountForm(root,definition,o,transport?'transportPayment':'custodyPayment','Record observed payment',async selection=>{
   const keys=['snapshotId','knowledgeMode','tradeId','bindingId','allocationId','expectedRevision','paidAt','amount','policy'];
   if(Object.keys(selection).length!==keys.length||keys.some(key=>!Object.hasOwn(selection,key))||selection.snapshotId!==setup.context.snapshotId||
    selection.knowledgeMode!=='current'||selection.tradeId!==target.scopeId||typeof selection.bindingId!=='string'||!selection.bindingId||
    typeof selection.allocationId!=='string'||!selection.allocationId||!Number.isSafeInteger(selection.expectedRevision)||(selection.expectedRevision as number)<0)
    throw Error('Reread this agreement’s exact accepted cash owner, payment allocation and captured source.');
-  await o.queue('cash-payments/record',{...selection,operationId:crypto.randomUUID()},'Record observed custody fee payment');
+  await o.queue('cash-payments/record',{...selection,operationId:crypto.randomUUID()},transport?'Record observed Transport fee payment':'Record observed custody fee payment');
  });
 }

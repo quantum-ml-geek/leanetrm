@@ -31,7 +31,7 @@ public sealed record FacilityQuantityChoice(Guid ObligationId,Guid TradeId,int T
 
 public sealed class FacilityQuantityStore(PreviewDatabase database)
 {
-    public const string Convention="facility_business_date_end_utc_v1";
+    public const string Convention=OperationalBusinessContext.Convention;
     private static MarketDataException Invalid()=>new("facility_quantity_input","Choose an explicit facility context and complete native-quantity command.");
 
     private static DateOnly Day(FacilityQuantityContext context)
@@ -42,24 +42,13 @@ public sealed class FacilityQuantityStore(PreviewDatabase database)
     internal async Task<(ScheduleContext Context,DateTimeOffset At,bool Working)> ResolveContext(NpgsqlConnection c,
         FacilityQuantityContext request,ScheduleContext? selected,CancellationToken ct)
     {
-        var day=Day(request);var store=new KnowledgeStore(database.Manifest.CatalogId);ScheduleContext context;
+        _=Day(request);
         await Authorize(c,ct);
-        var working=request.KnowledgeMode=="current"&&request.Retained is null&&selected is null;
-        if(working)context=(await store.Capture(c,new(request.EffectiveOn,null,"current"),ct)).Context;
-        else if(request.KnowledgeMode=="retained"&&request.Retained is {} retained&&selected is not null&&
-            retained.ContextId==selected.ContextId&&retained.EffectiveOn==request.EffectiveOn)
-            context=await store.Retained(c,retained,ct);
-        else throw new MarketDataException("temporal_context","Use the selected working context or the exact historical context applied in the header.");
-        // The selected contract reads the entire UTC business date; it is separate
-        // from native gas-day geometry and never selects a pricing snapshot.
-        var at=UserTime.EndOfDay(day,"UTC");
-        return(context,at,working);
+        return await new OperationalBusinessContext(database).Resolve(c,request,selected,"facility_quantity_input",ct);
     }
     internal async Task BindResolved(NpgsqlConnection c,(ScheduleContext Context,DateTimeOffset At,bool Working) scope,CancellationToken ct)
     {
-        await PinnedContext.BindExact(c,database.Manifest.CatalogId,scope.Context,ct);
-        await using var bind=ScheduleStore.Command(c,"SELECT security.use_trading_context($1,$2)",database.Manifest.CatalogId,scope.At);
-        await bind.ExecuteNonQueryAsync(ct);
+        await new OperationalBusinessContext(database).BindResolved(c,scope,ct);
     }
     internal async Task<(ScheduleContext Context,DateTimeOffset At,bool Working)> Bind(NpgsqlConnection c,
         FacilityQuantityContext request,ScheduleContext? selected,CancellationToken ct)

@@ -26,6 +26,7 @@ import {productTickets} from './product-tickets.js';
 import {setupGasConfiguration} from './gas-setup-editor.js';
 import {setupGasTicket} from './gas-trade-view.js';
 import {setupParkLoanTicket} from './park-loan-trade-view.js';
+import {setupTransportTicket} from './transport-trade-view.js';
 import {optionConvention,setupOptionTicket} from './futures-option-view.js';
 import {setupVolSurfaces} from './vol-surface-view.js';
 import {setupOptions} from './options-view.js';
@@ -261,7 +262,7 @@ async function api<T>(path:string,body?:unknown,signal?:AbortSignal):Promise<T>{
  selectedSignal?.throwIfAborted();
  return payload;
 }
-function pageStatus(){return page==='rec-inventory'?'REC inventory · exact certificate serials and supplied evidence.':page==='physical-power'?'Operating facilities · exact saved parameters and supplied-plan pricing.':page==='lifecycle'?'Lifecycle actions and policies at the selected close.':page==='physical-operations'?'Delivery work for the instrument you choose.':page==='facilities'?'Facilities · shared quantities, allocations and operating limits.':page==='dashboard'?'Dashboard · widgets read at the selected market date and context.':page==='crude-setup'?'Crude delivery setup · exact delivery and pricing bindings.':page==='gas-setup'?'Gas delivery setup · immutable drafts and explicit publication.':page==='crude'?'Physical crude · fixed contractual standard volume.':page==='gas'?'Physical gas · reference-backed delivery points and independent delivery dates.':page==='delivery'?'Delivery prices · selected delivery dates and knowledge cutoff.':page==='ppa'?'PPA bookings · exact selected inputs and certified knowledge.':page==='interval-series'?'Interval data · working data, known at the chosen time.':page==='interval-curves'?'Hourly / sub-hourly prices · marks from the selected market date; shapes and actuals known at the chosen time.':page==='custom-curves'?'Curve builder · selected market context.':page==='vol-surfaces'?'Vol surfaces · stored fits at the selected market date and knowledge cutoff.':page==='options'?'Options · chains from the surface calibrated at the selected close.':page==='risk'?'Risk jobs and retained reports · current authority.':page==='jobs'?'Jobs and infrastructure · current authority.':page==='futures'?'Trading blotter · saved market inputs.':page==='admin'?'Workspace identity and access administration.':page==='ai'?'Page-assistant settings · current authority.':page==='schedules'?'Schedules and symbolic date mappings.':page==='configuration'?'Configure contract pricing and exact publication sources.':result?`Prices for ${instant(result.at)}`:select('snapshot').value?'Choose a curve to get started.':'Choose a curve and a market date to get started.';}
+function pageStatus(){return page==='rec-inventory'?'REC inventory · exact certificate serials and supplied evidence.':page==='physical-power'?'Operating facilities · exact saved parameters and supplied-plan pricing.':page==='lifecycle'?'Lifecycle actions and policies at the selected close.':page==='physical-operations'?'Delivery work for the instrument you choose.':page==='facilities'?'Facilities · physical operations, allocations, Transport capacity and route plans.':page==='dashboard'?'Dashboard · widgets read at the selected market date and context.':page==='crude-setup'?'Crude delivery setup · exact delivery and pricing bindings.':page==='gas-setup'?'Gas delivery setup · immutable drafts and explicit publication.':page==='crude'?'Physical crude · fixed contractual standard volume.':page==='gas'?'Physical gas · reference-backed delivery points and independent delivery dates.':page==='delivery'?'Delivery prices · selected delivery dates and knowledge cutoff.':page==='ppa'?'PPA bookings · exact selected inputs and certified knowledge.':page==='interval-series'?'Interval data · working data, known at the chosen time.':page==='interval-curves'?'Hourly / sub-hourly prices · marks from the selected market date; shapes and actuals known at the chosen time.':page==='custom-curves'?'Curve builder · selected market context.':page==='vol-surfaces'?'Vol surfaces · stored fits at the selected market date and knowledge cutoff.':page==='options'?'Options · chains from the surface calibrated at the selected close.':page==='risk'?'Risk jobs and retained reports · current authority.':page==='jobs'?'Jobs and infrastructure · current authority.':page==='futures'?'Trading blotter · saved market inputs.':page==='admin'?'Workspace identity and access administration.':page==='ai'?'Page-assistant settings · current authority.':page==='schedules'?'Schedules and symbolic date mappings.':page==='configuration'?'Configure contract pricing and exact publication sources.':result?`Prices for ${instant(result.at)}`:select('snapshot').value?'Choose a curve to get started.':'Choose a curve and a market date to get started.';}
 const errorMessage=(error:unknown)=>error instanceof Error?error.message:'Something went wrong. Please refresh the page.';
 function showFailure(error:unknown){text('error',errorMessage(error));$('error').hidden=false;text('status','Please check the message above.');}
 function clearFailure(){$('error').hidden=true;if(!busy)text('status',pageStatus());}
@@ -1145,7 +1146,8 @@ function setHostMode(mode:string){
 }
 const bootstrapPath='bootstrap?includeFrames=false';
 const startupBootstrapPath=bootstrapPath+'&includeAccess=true';
-async function profileChoices(initial?:ProfileChoices){const boot=initial??await api<ProfileChoices>(bootstrapPath);deadlines.read(boot.requestDeadlines);setHostMode(boot.mode);$('preview-access').hidden=hostedPilot;$('sign-out').hidden=!hostedPilot;choose('profile',[...boot.profiles,...boot.customProfiles.filter(p=>!boot.profiles.some(base=>base.id===p.id))].map(p=>({value:p.id,name:p.name})),currentProfile);const name=select('profile').selectedOptions[0]?.textContent??'Current user';text('profile-label',name);text('profile-avatar',name.slice(0,1));text('profile-title',name);text('profile-access','Current permissions: '+(permissions.length?permissions.map(p=>friendly(p.replace(/([a-z])([A-Z])/g,'$1 $2'))).join(', '):'No workspace access'));$('profile-open').setAttribute('aria-label','Profile · '+name);}
+function renderProfileIdentity(){const name=[...select('profile').options].find(option=>option.value===currentProfile)?.textContent??'Current user';text('profile-label',name);text('profile-avatar',name.slice(0,1));text('profile-title',name);text('profile-access','Current permissions: '+(permissions.length?permissions.map(p=>friendly(p.replace(/([a-z])([A-Z])/g,'$1 $2'))).join(', '):'No workspace access'));$('profile-open').setAttribute('aria-label','Profile · '+name);}
+async function profileChoices(initial?:ProfileChoices){const boot=initial??await api<ProfileChoices>(bootstrapPath);deadlines.read(boot.requestDeadlines);setHostMode(boot.mode);$('preview-access').hidden=hostedPilot;$('sign-out').hidden=!hostedPilot;choose('profile',[...boot.profiles,...boot.customProfiles.filter(p=>!boot.profiles.some(base=>base.id===p.id))].map(p=>({value:p.id,name:p.name})),currentProfile);renderProfileIdentity();}
 $('sign-out').onclick=()=>void (async()=>{if(!await mayLeaveForDialog('You were not signed out'))return;await act(async()=>{futures.ended('signed_out');try{await api('logout',{});}catch(error){await blotterBack();throw error;}location.assign('/auth');});})();
 // A sign-out or account change that failed after it ended the popped-out Blotter shows the Blotter here again, read afresh, rather than an empty page.
 async function blotterBack(){if(page==='futures'&&select('snapshot').value){futures.reset('read');await futures.load();}}
@@ -1153,6 +1155,7 @@ async function loadIdentity(initialAccess?:unknown){
   cancelCurveRead();pageRead?.controller.abort();pageRead=undefined;readClient.reset();
   closeConventionDefaults.invalidate();
   parkLoan.reset();$('park-loan-page').hidden=true;
+  transportTicket.reset();$('transport-page').hidden=true;
   recInventory.reset();$('rec-inventory-page').hidden=true;structuredPower.reset();$('physical-power-page').hidden=true;lifecycle.reset();$('lifecycle-page').hidden=true;physicalOperations.reset();$('physical-operations-page').hidden=true;deliverySetup.reset();referenceConsole.reset();curveWorkspace.reset();customCurves.reset();$('custom-curves-page').hidden=true;volSurfaces.reset(true);$('vol-surfaces-page').hidden=true;optionChains.reset();$('options-page').hidden=true;riskJobs.reset();riskViewsNav.reset();$('risk-page').hidden=true;facilities.reset();$('facilities-page').hidden=true;jobs.reset();$('jobs-page').hidden=true;dashboard.reset();$('dashboard-page').hidden=true;
 
   deliveryPrices.reset();intervalSeries.reset();intervalCurves.reset();ppa.reset();gas.reset();crude.reset();lng.reset();$('lng-page').hidden=true;gasSetup.reset();crudeSetup.reset();$('crude-setup-page').hidden=true;$('gas-setup-page').hidden=true;$('gas-page').hidden=true;$('crude-page').hidden=true;referenceEditor.reset();$('delivery-page').hidden=true;$('interval-series-page').hidden=true;$('interval-curves-page').hidden=true;parties.reset();unitConverter.reset();futures.reset(null);blotterViews={listed:[],shown:null};renderBlotterViews();power.reset();touProducts.reset();schedules.reset();dateEditor.reset();priceSetup.reset();curveDefinitions.reset();$('curve-definitions-page').hidden=true;scheduleWorkspace?.reset();administration.reset();aiSettings.reset();agentGrants.reset();contextDirty=false;$('parties-page').hidden=true;$('power-page').hidden=true;$('futures-page').hidden=true;$('blotter-away').hidden=true;$('no-access-page').hidden=true;
@@ -1205,7 +1208,7 @@ select('close-session').onchange=()=>{
   clearPrices();renderFrames('');await openNewestClose();
  },'closes');
 };
-$('open').onclick=()=>void (async()=>{if(!await mayLeaveForDialog('The user was not switched'))return;await profileAction($('open'),async()=>{text('environment-context-note','Current workspace · exact selected inputs');const next=select('profile').value;futures.ended('account_changed');savedPreferences.invalidate();try{await api('profile',{profile:next});}catch(error){await blotterBack();throw error;}currentProfile=next;await loadIdentity();await profileChoices();$<HTMLDialogElement>('profile-dialog').close();});})();
+$('open').onclick=()=>void (async()=>{if(!await mayLeaveForDialog('The user was not switched'))return;await profileAction($('open'),async()=>{text('environment-context-note','Current workspace · exact selected inputs');const next=select('profile').value;futures.ended('account_changed');savedPreferences.invalidate();try{await api('profile',{profile:next});}catch(error){await blotterBack();throw error;}currentProfile=next;try{await loadIdentity();}finally{renderProfileIdentity();}await profileChoices();$<HTMLDialogElement>('profile-dialog').close();});})();
 // A newly selected As of close replaces what the previous one showed, and the badge takes its basis afresh.
 function closeChanged(){
   recInventory.reset();structuredPower.contextChanged();
@@ -1301,7 +1304,7 @@ async function currentInputs(){recInventory.reset();structuredPower.contextChang
 async function useBusinessDateCurrent(){
   if(page!=='facilities')throw Error('Use an operating business date in Facilities.');
   const effectiveOn=$<HTMLInputElement>('date-context-on').value;
-  if(!effectiveOn)throw Error('Choose an explicit business date for physical facilities.');
+  if(!effectiveOn)throw Error('Choose an explicit business date for these operations.');
   await currentInputs();
   await dateEditor.initialize(effectiveOn);
   await facilities.load();
@@ -1353,6 +1356,7 @@ const crude=setupPhysicalCrude({api,act,zone:()=>prefs.timeZone,busy:()=>busy,so
 const lng=setupPhysicalLng({api,act,zone:()=>prefs.timeZone,busy:()=>busy,canBook:()=>can('BookTrade'),source:()=>({snapshotId:frame().id}),historical:()=>contextDirty||!!historicalContext(),actor:()=>administrationScope+':'+currentProfile,onBooked:ticketBooked});
 const gas=setupGasTicket({api,source:()=>({snapshotId:frame().id}),historical:()=>contextDirty||!!historicalContext(),actor:()=>administrationScope+':'+currentProfile,instant,zone:()=>prefs.timeZone,onBooked:ticketBooked});
 const parkLoan=setupParkLoanTicket({api,source:()=>({snapshotId:frame().id}),historical:()=>contextDirty||!!historicalContext(),actor:()=>administrationScope+':'+currentProfile,instant,zone:()=>prefs.timeZone,onBooked:ticketBooked});
+const transportTicket=setupTransportTicket({api,source:()=>({snapshotId:frame().id}),historical:()=>contextDirty||!!historicalContext(),actor:()=>administrationScope+':'+currentProfile,instant,zone:()=>prefs.timeZone,onBooked:ticketBooked});
 // Vol surfaces read the option product's stored surface at the applied context; a fit is admitted only in the current workspace.
 // The applied trading context an option read is made at, and the close or working snapshot the header reads at.
 const optionContext=()=>{
@@ -1422,6 +1426,7 @@ const tickets=productTickets({
  ppa:{root:$('ppa-page'),begin:()=>ppa.begin(frame().at),inspect:id=>ppa.inspect(frame().at,id),reset:ppa.reset,unsaved:ppa.unsaved,pending:ppa.pending,sync:ppa.sync},
  gas,
  'park-loan':parkLoan,
+ transport:transportTicket,
  options:optionTicket,
 });
 async function ticketBooked(tradeId:string):Promise<void>{if(tickets.active())await futures.bookedExternal(tradeId);}
@@ -1731,7 +1736,16 @@ async function selectRetained(contextId:string){
 async function restorePlace(origin:Place){
   const c=origin.context;
   if(c.mode!=='unapplied')await selectContext(c.mode==='current'?{mode:'current',contextId:null,frameId:c.frameId,businessDate:c.businessDate}:{mode:'retained',contextId:c.contextId,frameId:c.frameId});
-  if(origin.page==='facilities'){await setPage('facilities');await facilities.load(origin.report.selection.ledgerId as string|null??'',false);return;}
+  if(origin.page==='facilities'){
+    await setPage('facilities');
+    if(origin.report.page==='facility_quantities')await facilities.load(origin.report.selection.ledgerId as string|null??'',false);
+    else{
+      const section=({facility_definitions:'definitions',facility_activity:'activity',transport_capacity:'transport',transport_route_plans:'route'} as const)[origin.report.page as 'facility_definitions'|'facility_activity'|'transport_capacity'|'transport_route_plans'];
+      if(!section)throw Error('The original operations workspace is not supported.');
+      await facilities.open(section);
+    }
+    return;
+  }
   if(readPages.includes(origin.report.page))await showTarget(origin.report.page,origin.report.selection);else await showPage(origin.page);
 }
 function tableName(code:string){

@@ -6,6 +6,7 @@ import {actorTransport,PendingCommand,restoreTradeRequest,type RequestCommand} f
 import {acceptOffer,acceptPreview,addSide,applyLookup,draftOf,dropLookup,newTicket,nextPreview,removeSide,resolveChoice,setValue,setCalendarPolicy,ticketOf,type FieldValue,type TicketState,type TicketSide} from './ticket-model.js';
 import {previewed,reasonOf,type SchedulePanel} from './ticket-preview.js';
 import type {GasMeasures} from './lifecycle-text.js';
+import type {LifecycleTarget} from './lifecycle-model.js';
 import type {FacilityAllocationTrack,ScheduleView,TicketChoice,TicketDescription,TicketDraft,TicketField,TicketLookup,TicketPreview,TicketReceipt,TicketTrade,TradeActions} from './ticket-types.js';
 
 // Runs one deal ticket against the ticket routes (docs/deal-ticket.md). A new ticket reads the choices each field lists, previews the whole
@@ -15,7 +16,7 @@ type Api=<T>(path:string,body?:unknown,signal?:AbortSignal)=>Promise<T>;
 type Opened={tradeId:string;bindingId:string;revision:number;product?:string};
 type NewEntry={booked:(receipt:{tradeId:string})=>void;amending?:Opened};
 // instant is the page's formatter for the instants the ticket shows.
-export type TicketOptions={api:Api;context:()=>Record<string,unknown>;product:string;instant:(at:string)=>string;zone:()=>string;actor:()=>string;readOnly?:boolean;presentation?:'schedules'|'terms';onAmend?:()=>void;sideSchedule?:(host:HTMLElement,side:TicketSide,slot:number,view:TicketView,context:Record<string,unknown>)=>()=>void}&({opened:Opened}|({opened?:undefined}&NewEntry));
+export type TicketOptions={api:Api;context:()=>Record<string,unknown>;product:string;instant:(at:string)=>string;zone:()=>string;actor:()=>string;readOnly?:boolean;requireRetainedChoices?:boolean;retainedTarget?:LifecycleTarget;presentation?:'schedules'|'terms';onAmend?:()=>void;sideSchedule?:(host:HTMLElement,side:TicketSide,slot:number,view:TicketView,context:Record<string,unknown>)=>()=>void}&({opened:Opened}|({opened?:undefined}&NewEntry));
 
 export type TicketHandle={unsaved():boolean;pending():boolean;destroy():void};
 
@@ -417,6 +418,25 @@ export function setupTicket(host:HTMLElement,o:TicketOptions):TicketHandle{
    scheduleContext={...requested,snapshotId:r.snapshotId,knowledgeMode:'retained',contextId:r.context.contextId};
   }
   if(descriptionSelectors().length){d=await selectedDescription(r.draft,lifetime.signal);if(!current())return;}
+  if(o.retainedTarget){
+   const expected=o.retainedTarget,target=r.lifecycleTarget;
+   if(!o.readOnly||expected.scopeId!==o.opened?.tradeId||expected.bindingId!==o.opened?.bindingId||
+    target?.handler!==expected.handler||target.scopeId!==expected.scopeId||target.bindingId!==expected.bindingId)
+    throw Error('The saved terms reply did not retain the exact retained target. Refresh the selected agreement.');
+  }
+  if(o.requireRetainedChoices){
+   const fields=d!.tradeFields.filter(field=>field.choices!==null),labels=r.retainedChoices;
+   const invalid=()=>Error('Reread the exact retained choice labels for these saved terms; new-entry discovery cannot replace them.');
+   if(!o.readOnly||!o.opened||d!.sides.length||r.draft.sides.length||!labels||typeof labels!=='object'||Array.isArray(labels)||
+    Object.keys(labels).length!==fields.length||Object.keys(labels).some(id=>!fields.some(field=>field.id===id)))throw invalid();
+   for(const field of fields){
+    const list=labels[field.id],choice=list?.[0];
+    if(!Array.isArray(list)||list.length!==1||!choice||Object.keys(choice).length!==2||typeof choice.value!=='string'||
+     choice.value!==r.draft.trade[field.id]||!choice.value||typeof choice.label!=='string'||!choice.label.trim())throw invalid();
+   }
+   for(const key of Object.keys(choices))delete choices[key];
+   for(const field of fields)choices[field.id]=structuredClone(labels[field.id]);
+  }
   state=ticketOf(d!,r.draft);actions=o.readOnly?{...r.actions,record:{allowed:false,reason:'This trade window is read only.'}}:r.actions;quantityPolicy=r.quantityPolicy??undefined;
   if(mode==='booked'&&o.sideSchedule){
    sideSlots=r.sideSlots;
@@ -487,7 +507,7 @@ export function setupTicket(host:HTMLElement,o:TicketOptions):TicketHandle{
     else state=newTicket(d);
     opened=sent();
    }
-   draw();void readChoices(listed());
+   draw();if(!o.requireRetainedChoices)void readChoices(listed());
   }catch(error){fail(error);drawBooking();}
  }
  view.inert=!!entry&&blocked();
