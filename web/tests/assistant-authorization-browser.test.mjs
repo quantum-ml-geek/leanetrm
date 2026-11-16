@@ -13,7 +13,7 @@ test('assistant authorization and page prompts require explicit human controls',
       window.api=async(path,body)=>{calls.push({path,body:structuredClone(body)});
         if(path==='assistant/actions/review')return {operation:'admin.update_v1',page:'users_access',body:{name:'<img src=x onerror=alert(1)>',enabled:true},parameters:{},context:{mode:'current',cutoff:'2026-01-01T00:00:00Z',frameId:null},status:'awaiting_user_approval'};
         if(path==='assistant/actions/authorize')return {name:'Synthetic updated account'};
-        if(path==='settings/ai/page-prompts')return {pages:[{id:'curves',name:'Curves & prices'}],configuration:{maximumLength:6000,prompts:[{page:'curves',version:3,instructions:'Synthetic existing guidance.'}]}};
+        if(path==='settings/ai/page-prompts')return {pages:[{id:'application',name:'Application',kind:'application'},{id:'curves',name:'Curves & prices',kind:'page'},{id:'tool:read_page_digest',name:'read_page_digest',kind:'tool'},{id:'provider_test:question',name:'Question',kind:'provider_test'}],configuration:{maximumLength:6000,prompts:[{page:'curves',version:3,instructions:'Synthetic existing guidance.'}]}};
         if(failSave){failSave=false;throw Object.assign(Error('Synthetic uncertain response'),{code:'response_unknown'});}return {version:4};
       };
       window.actions=(await import('/assistant-actions.js')).setupAssistantActions({api,identity:()=>identity,changed:async()=>{}});
@@ -28,6 +28,10 @@ test('assistant authorization and page prompts require explicit human controls',
     assert.deepEqual(await evaluate("calls.find(c=>c.path.endsWith('/authorize')).body"),{turnId:'a1000000-0000-0000-0000-000000000001',step:2},'authorization identifies the retained proposal and cannot replace its payload');
     await evaluate(`(async()=>{actions.reset();window.prompts=(await import('/page-prompts.js')).setupPagePrompts({api,identity:()=>identity,busy:()=>false,act:async work=>{try{await work();}catch{}}});await prompts.load();})()`);
     assert.equal(await evaluate("calls.filter(c=>c.path.endsWith('/save')).length"),0);
+    assert.deepEqual(await evaluate('[...document.querySelectorAll("#ai-prompt-page optgroup")].map(g=>g.label)'),['Application','Pages','Tools','Provider test']);
+    assert.equal(await evaluate('document.querySelector("#ai-prompt-instructions").value'),'','a new installation scope has no bundled guidance');
+    assert.match(await evaluate('document.querySelector("#ai-prompt-version").textContent'),/Nothing is added/);
+    await evaluate('document.querySelector("#ai-prompt-page").value="curves";document.querySelector("#ai-prompt-page").dispatchEvent(new Event("change"))');
     await evaluate('document.querySelector("#ai-prompt-instructions").value="Synthetic revised guidance.";document.querySelector("#ai-prompt-instructions").dispatchEvent(new Event("input"));document.querySelector("#ai-prompt-form").requestSubmit();new Promise(r=>setTimeout(r,20))');
     await evaluate('prompts.reset();prompts.load()');
     assert.equal(await evaluate('document.querySelector("#ai-prompt-instructions").value'),'Synthetic revised guidance.','a restored uncertain save shows the exact guidance its retry will send');

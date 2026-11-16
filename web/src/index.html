@@ -463,13 +463,13 @@
     <div id="admin-grant-history-card" class="card" hidden><h2>Recent agent grant changes</h2><p class="field-help">Latest 100 grants and ends of grants in this workspace, newest first. A person’s new grant to an agent replaces their earlier one. Earlier records remain in storage.</p><div id="admin-grant-history" class="table-wrap"></div></div>
   </section>
   <section id="ai-page" hidden aria-label="AI settings">
-    <div class="tabs" role="tablist" aria-label="AI settings"><button id="ai-tab-usage" type="button" class="ai-tab" role="tab" aria-selected="false" aria-controls="ai-usage">Usage</button><button id="ai-tab-models" type="button" class="ai-tab active" role="tab" aria-selected="true" aria-controls="ai-models">Models &amp; prices</button><button id="ai-tab-providers" type="button" class="ai-tab" role="tab" aria-selected="false" aria-controls="ai-providers">Providers</button><button id="ai-tab-agents" type="button" class="ai-tab" role="tab" aria-selected="false" aria-controls="ai-agents">Agents</button><button id="ai-tab-prompts" type="button" class="ai-tab" role="tab" aria-selected="false" aria-controls="ai-prompts">Page prompts</button></div>
+    <div class="tabs" role="tablist" aria-label="AI settings"><button id="ai-tab-usage" type="button" class="ai-tab" role="tab" aria-selected="false" aria-controls="ai-usage">Usage</button><button id="ai-tab-models" type="button" class="ai-tab active" role="tab" aria-selected="true" aria-controls="ai-models">Models &amp; prices</button><button id="ai-tab-providers" type="button" class="ai-tab" role="tab" aria-selected="false" aria-controls="ai-providers">Providers</button><button id="ai-tab-agents" type="button" class="ai-tab" role="tab" aria-selected="false" aria-controls="ai-agents">Agents</button><button id="ai-tab-prompts" type="button" class="ai-tab" role="tab" aria-selected="false" aria-controls="ai-prompts">Prompts</button></div>
     <section id="ai-prompts" role="tabpanel" aria-labelledby="ai-tab-prompts" hidden>
-      <div class="card"><h2>Page prompts</h2><p>Configure how the assistant helps on each page. Prompts guide its work; permissions, explicit financial choices and user authorization still apply. Assign the Assistant prompt editor role to delegate this configuration.</p>
-        <form id="ai-prompt-form"><label>Page<select id="ai-prompt-page"></select></label><p id="ai-prompt-version" class="field-help"></p>
-          <label>Page guidance<textarea id="ai-prompt-instructions" rows="12" spellcheck="true"></textarea></label>
-          <p class="field-help">Leave the guidance empty to use the application and agent instructions alone. Saved versions are retained for the questions that used them.</p>
-          <div class="actions"><button id="ai-prompt-save" type="submit">Save page prompt</button><button id="ai-prompt-retry" type="button" class="secondary" hidden>Retry same save</button><button id="ai-prompt-discard" type="button" class="secondary" hidden>Discard saved request</button></div>
+      <div class="card"><h2>Prompts</h2><p>Configure application, page, tool and provider-test text for this installation. No assistant prompt text is bundled. Prompts guide its work; permissions, explicit financial choices and user authorization still apply. Assign the Assistant prompt editor role to delegate this configuration.</p>
+        <form id="ai-prompt-form"><label>Scope<select id="ai-prompt-page"></select></label><p id="ai-prompt-version" class="field-help"></p>
+          <label>Guidance<textarea id="ai-prompt-instructions" rows="12" spellcheck="true"></textarea></label>
+          <p class="field-help">Blank optional guidance is omitted; provider tests require a question. Agent instructions are configured on the Agents tab. Saved versions are retained for the questions that used them.</p>
+          <div class="actions"><button id="ai-prompt-save" type="submit">Save prompt</button><button id="ai-prompt-retry" type="button" class="secondary" hidden>Retry same save</button><button id="ai-prompt-discard" type="button" class="secondary" hidden>Discard saved request</button></div>
         </form><p id="ai-prompt-status" role="status"></p>
       </div>
     </section>
@@ -527,7 +527,7 @@
           <div class="schedule-actions"><button type="submit">Record terms</button></div></form>
         <form id="ai-attest-form" class="ai-price"><h4>Attest</h4><p id="ai-attest-statement"></p><label class="ai-none"><input id="ai-attest-confirm" type="checkbox" aria-describedby="ai-attest-statement"> I make this attestation</label>
           <div class="schedule-actions"><button type="submit" class="secondary">Attest</button></div></form>
-        <form id="ai-test-form" class="ai-price"><h4>Test</h4><p class="field-help">Test sends one fixed synthetic prompt, without workspace data or tools, once to the model you choose, and records its outcome, usage and cost. It works whether or not the provider and the model are enabled.</p>
+        <form id="ai-test-form" class="ai-price"><h4>Test</h4><p class="field-help">Test sends the provider-test question and optional instructions configured under Prompts, without workspace data or tools, once to the model you choose. It records the outcome, usage and cost and works whether or not the provider and the model are enabled.</p>
           <label>Model<select id="ai-test-model"></select></label><label>Reasoning effort<select id="ai-test-effort"></select></label><p id="ai-test-note" class="field-help" hidden></p>
           <div class="schedule-actions"><button type="submit">Test</button></div></form>
         <h4>Last test</h4><p id="ai-test-summary" class="field-help"></p><div id="ai-test-table" class="table-wrap"></div></div>

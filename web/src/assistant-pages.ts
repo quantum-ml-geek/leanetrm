@@ -96,9 +96,9 @@ export function pageReport(state:PageState):PageReport{
 // What Looking at showed, kept to compare with the page at send: the report it shows whole, the Blotter's layout too, and its context.
 export const lookingKey=({report,context}:{report:PageReport;context:PageContext})=>JSON.stringify([report.page,report.selection,report.layout??null,report.view??null,report.focus??null,context]);
 
-// The knowledge an ask pins: working data only at a chosen As of frame, the selected historical view with or without one.
-export function askKnowledge(context:PageContext,page?:string){
-  if(context.mode==='unapplied'||context.mode==='current'&&!context.frameId&&!(page==='facility_quantities'&&context.businessDate)&&!['users_access','settings_ai','jobs','risk_jobs','delivery_prices','interval_series'].includes(page??''))return undefined;
+// The selection an ask retains. A financial tool validates any frame it requires when requested.
+export function askKnowledge(context:PageContext){
+  if(context.mode==='unapplied')return undefined;
   return context.mode==='current'?{mode:'current',contextId:null,frameId:context.frameId}:{mode:'retained',contextId:context.contextId,frameId:context.frameId};
 }
 
@@ -110,6 +110,7 @@ const pageNames:Record<string,string>={lifecycle:'Lifecycle',physical_operations
 export const reportedPages:readonly string[]=Object.freeze(Object.keys(pageNames));
 const dimensions:Record<string,string>={portfolio:'portfolio',book:'book',market:'market',contract:'contract',instrumentType:'instrument type',commodity:'commodity'};
 const counted=(n:number,noun:string)=>`${n} ${noun}${n===1?'':'s'}`;
+const unreadTrade=(report:PageReport)=>report.page==='blotter'&&report.selection.view==='trade'&&report.selection.instrumentType==='physical_gas_park_loan';
 const joined=(names:string[])=>names.length>1?`${names.slice(0,-1).join(', ')} and ${names.at(-1)}`:names[0];
 export type Names={curve:(code:string)=>string;table:(code:string)=>string};
 
@@ -125,7 +126,7 @@ function shows(report:PageReport,names:Names,trade?:string){
     case 'reference_data':return s.table===''?'No table is shown yet':names.table(String(s.table))+(s.search?` · rows matching “${s.search}”`:'');
     case 'parties':return s.kind==='legal_entity'?'Legal entities':'Counterparties';
     case 'blotter':{
-      if(s.view==='trade'){if(!trade)throw inconsistent();return `Trade ${trade}, revision ${s.revision}`;}
+      if(s.view==='trade'){if(!trade)throw inconsistent();return `Trade ${trade}, revision ${s.revision}`+(unreadTrade(report)?'. The assistant does not read this trade.':'');}
       const books=(s.bookIds as string[]).length,portfolios=(s.portfolioIds as string[]).length;
       const scope=books||portfolios?[books?counted(books,'book'):'',portfolios?counted(portfolios,'portfolio'):''].filter(Boolean).join(', '):'every book you can read';
       return `${s.mode==='pivot'?`Totals by ${joined((s.groupBy as string[]).map(d=>dimensions[d]))}`:'Trade rows'} · ${scope}`;
@@ -164,7 +165,7 @@ function shows(report:PageReport,names:Names,trade?:string){
 function contextLine(context:PageContext){
   if(context.mode==='unapplied')return 'Historical selection not applied · apply it to ask about it';
   const frame=context.frameLabel?`As of ${context.frameLabel}`:'';
-  if(context.mode==='current')return `Working data · ${context.businessDate?`Operating date ${context.businessDate}`:frame||'choose an As of date to ask about it'}`;
+  if(context.mode==='current')return `Working data · ${context.businessDate?`Operating date ${context.businessDate}`:frame||'no As of date selected'}`;
   return `Historical view · ${context.effectiveOn}, as known at ${context.knownAtLabel} · ${frame||'no As of date chosen'}`;
 }
 // Looking at's line for the Blotter's layout: its details and charts open or closed, and the window it is in.
@@ -178,13 +179,13 @@ function riskViewName(report:PageReport){
 }
 // Looking at: the page, what it shows, the Blotter's layout where it reports one, and the context the next question will pin, or that the
 // page is not read.
-export function lookingAt(report:PageReport,context:PageContext,names:Names,extra:{trade?:string;digest?:boolean}={}){
+export function lookingAt(report:PageReport,context:PageContext,names:Names,extra:{trade?:string}={}){
   if(!Object.hasOwn(pageNames,report.page))throw inconsistent();
   // A page whose report names no selection yet, Reference data before it shows a table or PPA bookings before it lists a
   // book, has nothing to be asked from.
   const named=!(report.page==='reference_data'&&report.selection.table===''||report.page==='ppa'&&report.selection.view==='ppa_book'&&!(report.selection.bookIds as string[]).length);
-  return {page:report.page==='risk_jobs'?`${pageNames.risk_jobs} · ${riskViewName(report)}`:pageNames[report.page],shows:shows(report,names,extra.trade)+(report.focus?.tradeIds.length?` · ${counted(report.focus.tradeIds.length,'selected position')}`:report.focus?.pivotCell?' · Selected pivot cell':'')+(extra.digest?' · The server will read a page digest.':''),...(report.layout?{layout:layoutLine(report.layout)}:{}),context:contextLine(context),supported:readPages.includes(report.page)||unopened.includes(report.page),
-    askable:named&&askKnowledge(context,report.page)!==undefined};
+  return {page:report.page==='risk_jobs'?`${pageNames.risk_jobs} · ${riskViewName(report)}`:pageNames[report.page],shows:shows(report,names,extra.trade)+(report.focus?.tradeIds.length?` · ${counted(report.focus.tradeIds.length,'selected position')}`:report.focus?.pivotCell?' · Selected pivot cell':''),...(report.layout?{layout:layoutLine(report.layout)}:{}),context:contextLine(context),supported:!unreadTrade(report)&&(readPages.includes(report.page)||unopened.includes(report.page)),
+    askable:named&&askKnowledge(context)!==undefined};
 }
 
 // A target changes context when its pinned knowledge or As of frame is not what the page has selected.

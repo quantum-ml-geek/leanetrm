@@ -93,7 +93,7 @@ delivery capacity described below.
 
 ## Evidence-backed inventory
 
-Migration 0341 adds the current manual inventory consumer, not an external
+Migration 0343 adds the current manual inventory consumer, not an external
 registry client. Accounts bind exact books, legal entities and registry account
 references. Destinations bind exact counterparty versions and registry accounts.
 Registry, product, class, program, eligibility assignment, evidence source and
@@ -159,7 +159,10 @@ disabled **Coming soon** states and persist no unused parameters.
 
 The assistant accepts identity-only context on these new pages and saved-product
 inspectors. It does not read their financial forms, submit their commands or
-reinterpret them as an existing swap product.
+reinterpret them as an existing swap product. An explicitly reported background
+Blotter view keeps its existing authorized numerical overview under the selected
+frame and knowledge context. That overview reads ordinary server positions;
+unsupported saved-product details and unsaved form terms remain unread.
 
 Managed checks use independent numerical expectations and malformed-program
 refusals. Disposable PostgreSQL checks cover reference admission, helper drift,
@@ -186,8 +189,8 @@ Local qualification on 2026-11-16 used the pinned .NET 10.0.402 SDK and Node
 | REC inventory | 27 native behavior groups pass, including certified corrections, original-fact reassertion and concurrent first-outcome replay. |
 | REC forward native admission | Authority, raw-table denial, exact assignment coverage, JSON shape, payment timing and sealed-program requirements pass. |
 | Owned API workflow | Thermal 760, solar 500 and fixed battery 610 reopen at their independent expected PVs. The selected outright battery returns 34.495 with price delta 8.1. REC evidence conserves 100 issued as 60 transferred plus 40 retired; cross-account delivery-capacity admission and release pass. |
-| User interface | 1,918 frontend checks and 24 live API-backed browser checks pass; financial desktop/phone screenshots were inspected. |
-| Repository checks | 141 Python checks and the standalone dependency boundary pass. |
+| User interface | 1,921 frontend checks and 25 live API-backed browser checks pass; financial desktop/phone screenshots were inspected. |
+| Repository checks | 142 Python checks and the standalone dependency boundary pass. |
 
 Optimization, stochastic flexibility, external registry submission, automatic
 issuance, shared-resource dispatch and broader settlement remain separate

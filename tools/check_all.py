@@ -18,6 +18,7 @@ CHECK_PROJECTS = (
     ('tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj', ('--schedules',)),
     ('tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj', ('--power-hedge',)),
     ('tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj', ('--async-reads',)),
+    ('tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj', ('--assistant-prompts',)),
     ('tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj', ('--published-clock',)),
     ('tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj', ('--calendar-authoring',)),
     ('tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj', ('--gas-ticket',)),

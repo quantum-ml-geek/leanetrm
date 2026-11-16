@@ -19,7 +19,7 @@ public sealed class MessagesAdapter(HttpMessageHandler handler,ModelTransportLim
     public const string Protocol="messages",Mapping="messages_v1";
     public static readonly Uri Endpoint=new("https://api.anthropic.com/v1/messages");
     // Adaptive thinking is always requested, so every model this mapping serves takes an explicit effort.
-    static readonly string[] Efforts=["low","medium","high","xhigh","max"];
+    static readonly ImmutableArray<string> Efforts=["low","medium","high","xhigh","max"];
 
     public async IAsyncEnumerable<ModelEvent> Stream(ModelRequest request,string key,[EnumeratorCancellation] CancellationToken ct)
     {
@@ -36,15 +36,7 @@ public sealed class MessagesAdapter(HttpMessageHandler handler,ModelTransportLim
     // Refuses a request this adapter cannot send as given, before anything is sent: an invalid identifier,
     // a reasoning effort it does not send (parameter_required), or a key it cannot use. A malformed
     // request is a defect in its caller.
-    public static void Validate(ModelRequest request,string key)
-    {
-        if(!ModelTarget.Valid(request.Model.Identifier))throw new ModelCallException("model_identifier_invalid",ModelCatalog.Refusal("model_identifier_invalid"));
-        if(request.Parameters.Reasoning is not {} effort||!Efforts.Contains(effort))throw new ModelCallException("parameter_required","Choose one of the model's documented reasoning efforts.");
-        ArgumentOutOfRangeException.ThrowIfLessThan(request.Parameters.MaxOutputTokens,1);
-        if(request.Messages.IsDefaultOrEmpty||request.Tools.IsDefault||request.Model.AcceptedServed.IsDefault||request.System.Length==0||request.Messages[^1] is ModelReply)
-            throw new ArgumentException("A request has a system instruction, lists its tools and accepted identifiers, and ends with the user's text or tool results.",nameof(request));
-        if(!ModelProviders.KeyFormat().IsMatch(key))throw new ModelCallException("credential_unavailable","The provider key cannot be used.");
-    }
+    public static void Validate(ModelRequest request,string key)=>ModelAdapters.ValidateRequest(request,key,Efforts);
 
     // Every parameter whose vendor default could change behavior or billing is sent: adaptive thinking
     // with its text omitted, an explicit effort, standard-only capacity and global inference. Sampling
@@ -56,19 +48,20 @@ public sealed class MessagesAdapter(HttpMessageHandler handler,ModelTransportLim
         Validate(request,key);
         var (model,parameters)=(request.Model.Identifier,request.Parameters);
         var messages=new JsonArray(request.Messages.Select(m=>(JsonNode?)Message(m,model)).ToArray());
-        var system=new JsonObject{["type"]="text",["text"]=request.System};
+        var system=request.System.Length==0?null:new JsonObject{["type"]="text",["text"]=request.System};
         if(parameters.Caching)
         {
             // Explicit five-minute breakpoints: one after the tools and system prompt, one after the conversation.
-            system["cache_control"]=Breakpoint();
+            if(system is not null)system["cache_control"]=Breakpoint();
             messages[^1]!["content"]!.AsArray()[^1]!["cache_control"]=Breakpoint();
         }
         var body=new JsonObject
         {
-            ["model"]=model,["max_tokens"]=parameters.MaxOutputTokens,["stream"]=true,["system"]=new JsonArray(system),["messages"]=messages,
+            ["model"]=model,["max_tokens"]=parameters.MaxOutputTokens,["stream"]=true,["messages"]=messages,
             ["thinking"]=new JsonObject{["type"]="adaptive",["display"]="omitted"},["output_config"]=new JsonObject{["effort"]=parameters.Reasoning},
             ["service_tier"]="standard_only",["inference_geo"]="global"
         };
+        if(system is not null)body["system"]=new JsonArray(system);
         if(!request.Tools.IsEmpty)
         {
             body["tools"]=new JsonArray(request.Tools.Select(t=>(JsonNode?)new JsonObject{["name"]=t.Name,["description"]=t.Description,["input_schema"]=JsonNode.Parse(t.InputSchema.GetRawText())}).ToArray());

@@ -33,7 +33,7 @@ def run_checks(query, manifest):
     print('PASS operating schedule storage: explicit flat contract source grammar rejects inference, fallback and missing selection',flush=True)
 
 def before_migration(query, migration):
-    if migration.name!='0343_operating_retained_programs.sql':
+    if migration.name!='0345_operating_retained_programs.sql':
         return
     body=migration_body(migration.read_text())
     # The function set is the migration's exact declared predecessor contract.

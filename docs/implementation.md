@@ -1,6 +1,6 @@
 # Current implementation record
 
-## Park and Loan commercial profile (D405)
+## Park and Loan commercial profile (D406)
 
 The [first Park and Loan profile](gas-park-loan.md) books explicit title-transfer
 agreements through the shared ticket. It supports all four service and commercial
@@ -23,7 +23,7 @@ profiles, broader return terms and other gas services remain work.
 Local checks include 68 real application browser assertions, 20 independent native
 whole-book PV/scenario checkpoints and a populated schema upgrade with nine
 predecessor-drift refusals. All 738 managed core checks and all 1,889 frontend
-checks passed. The required runner contains 189 commands.
+checks passed. The required runner contains 190 commands.
 Aggregate CI, merge and deployment remain separate. No production resource was
 used for this qualification.
 

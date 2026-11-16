@@ -62,7 +62,7 @@ class Fixture:
              **limits):
         return self.admin.call(f'{AGENTS}/save', {
             'operationId': str(uuid4()), 'agentId': agent_state['id'], 'expectedVersion': agent_state['version'],
-            'description': 'Answers questions about the page it is opened on.', 'instructions': 'Quote only values you read.',
+            'description': 'Answers questions about the page it is opened on.', 'instructions': 'Synthetic agent instructions.',
             'modelId': model_id, 'modelVersion': self.version_of(model_id), 'reasoning': 'low', 'caching': False, 'tools': list(tools),
             'allowedRoles': list(roles),
             'limits': {'toolSteps': 8, 'inputTokens': 200000, 'outputTokens': 2048, 'elapsedSeconds': 120, 'readSeconds': 15, 'retries': 2, 'historyTurns': 20, **limits}, 'grantDays': days})
