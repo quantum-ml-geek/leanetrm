@@ -60,7 +60,7 @@ export async function sidePhone(driver,host,artifact){
  await driver.command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
  const member=host+' [data-instrument-side-slot]',disclosure=member+' details:not([open])>summary';
  if(await driver.evaluate(`!!document.querySelector(${q(disclosure)})`))await driver.click(disclosure);
- await driver.evaluate(`document.querySelector(${q(member)}).scrollIntoView({block:'start'})`);
+ await driver.evaluate(`document.querySelector(${q(member)}).querySelector('h4').scrollIntoView({block:'center'})`);
  await driver.check('the phone capture shows an actual Side role and its exact terms',`(()=>{
   const card=document.querySelector(${q(member)}),visible=node=>{if(!node)return false;const box=node.getBoundingClientRect();return box.width>0&&box.top>=0&&box.bottom<=document.documentElement.clientHeight&&node.contains(document.elementFromPoint(box.left+box.width/2,box.top+box.height/2));};
   return !!card&&[card.querySelector('h4'),card.querySelector('.field-help'),card.querySelector('.side-term')].every(visible);
