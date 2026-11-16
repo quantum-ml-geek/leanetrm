@@ -90,16 +90,11 @@ internal sealed class AsyncReadChannel:IAsyncDisposable
         AsyncReadCompletion completion;
         try
         {
-            using var visibility=new AsyncReadVisibility();
-            var outcome=await plan.Execute(pending.Cancellation.Token);pending.Cancellation.Token.ThrowIfCancellationRequested();
+            var outcome=await AsyncReadVisibility.Observed(plan).Execute(pending.Cancellation.Token);pending.Cancellation.Token.ThrowIfCancellationRequested();
             var bytes=JsonSerializer.SerializeToUtf8Bytes(outcome.Value,AsyncReadContract.Json);
             if(bytes.Length>MaximumResultBytes)throw Refusal(422,"async_result_size","The read result exceeds the response limit.");
             using var json=JsonDocument.Parse(bytes);
-            var evidence=visibility.Seal();var recheck=outcome.Recheck;
-            completion=new(request,plan,"completed",json.RootElement.Clone(),null,async(connection,ct)=>
-            {
-                await recheck(connection,ct);await evidence.Require(connection,ct);
-            });
+            completion=new(request,plan,"completed",json.RootElement.Clone(),null,outcome.Recheck);
         }
         catch(OperationCanceledException){completion=new(request,plan,"cancelled",null,new("request_cancelled","The read was cancelled or exceeded its time limit."));}
         catch(Exception e)

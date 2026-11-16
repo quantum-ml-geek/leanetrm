@@ -111,7 +111,7 @@ The two transports run a definition as follows.
 | --- | --- | --- |
 | Admit | Wait for a session read slot, take the gate, capture, release. | Take the gate, capture, release, answer 202. |
 | Execute | In the request, no gate held. | On a detached worker with explicit inputs only. |
-| Publish | Take the gate; require the sign-in unexpired and the profile unchanged; in a fresh transaction require the permissions and run the definition's recheck; write the response. | As D404: gate, the channel's profile, context and live selection unchanged, authorize, recheck with the worker's sealed evidence, write the event. |
+| Publish | Take the gate; require the sign-in unexpired and the profile unchanged; in a fresh transaction require the permissions, the definition's recheck and the sealed evidence; write the response. | As D404: gate, the channel's profile, context and live selection unchanged, authorize, recheck with the sealed evidence, write the event. |
 
 The HTTP column is the contract the existing `Concurrent` helper already
 applies to the progressive trading workspace and the Blotter row stream,
@@ -123,18 +123,19 @@ The Blotter row stream keeps its path and its fence. The channel column is
 D404's behaviour, reached through the definition instead of a second
 hand-written handler.
 
-The sealed evidence collector (`AsyncReadVisibility`) stays a channel
-mechanism. A read may be given a channel operation only once the collector
-records what that read touches; several pages in the table below have no such
-recording today, and adding it is part of moving them.
+Both transports publish on the sealed evidence the collector
+(`AsyncReadVisibility`) records: an ordinary answer can wait for the gate just
+as a channel result waits for delivery. A read may be ungated or given a
+channel operation only once the collector records what that read touches;
+several pages in the table below have no such recording today, and adding it is
+part of moving them.
 
 **Session read slots.** The session gate is today what limits a session to one
 database connection for ordinary requests. Ungated reads take one of two
 per-session slots instead, and wait for one within the request deadline rather
 than being refused. The bound is a fixed contract value like the channel's two
 active reads, not a configuration value. It is two because the hosted
-application pool is capped at eight connections; a session then uses at most
-four at once across both transports.
+application pool is capped at eight connections.
 
 **Session preparation.** A handler that assigns session state is not a read for
 this purpose and stays `Locked`. Where an existing HTTP read first prepares the

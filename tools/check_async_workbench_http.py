@@ -273,4 +273,31 @@ def run_checks(url, query, psql, environment, manifest):
     finally:
         for grant in saved:
             query(f"UPDATE security.role_grants SET granted_to='{grant['until']}'::timestamptz WHERE id='{grant['id']}';")
+    # An ordinary read's answer waits for the session gate. Authority that ends in that wait, after the read's own
+    # transaction has finished with it intact, must still refuse the answer.
+    GATE='LOCK presentation.dashboard_layouts IN ACCESS EXCLUSIVE MODE'
+    saved=json.loads(query(f"SELECT json_agg(json_build_object('id',id,'until',granted_to)) FROM security.role_grants WHERE principal_id={principal};"))
+    try:
+        def answering():
+            def reading():
+                query(f"UPDATE security.role_grants SET granted_to=clock_timestamp()+interval '8 seconds' WHERE principal_id={principal};")
+                thread,held=background('portfolio/risk',risk,expected=403);waiting(1)
+                gated,_=background('dashboard/layout',None)
+                deadline=time.monotonic()+6
+                while query("SELECT count(*) FROM pg_locks WHERE relation='presentation.dashboard_layouts'::regclass AND NOT granted;")!='1':
+                    assert time.monotonic()<deadline,'The gated request did not hold the session gate'
+                    time.sleep(.025)
+                return thread,held,gated
+            thread,held,gated=holding(psql,environment,LOCK,reading)
+            assert query(f"SELECT bool_and(granted_to>clock_timestamp()+interval '3 seconds') FROM security.role_grants WHERE principal_id={principal};")=='t','The read needs its authority while it executes'
+            deadline=time.monotonic()+12
+            while query(f"SELECT bool_and(granted_to<clock_timestamp()) FROM security.role_grants WHERE principal_id={principal};")!='t':
+                assert time.monotonic()<deadline,'The owned Risk role did not expire'
+                time.sleep(.05)
+            return thread,held,gated
+        thread,held,gated=holding(psql,environment,GATE,answering);thread.join(timeout=20);gated.join(timeout=20)
+        check('authority that ends while an ordinary read waits to answer refuses it',(held.get('value') or {}).get('code')=='access_denied')
+    finally:
+        for grant in saved:
+            query(f"UPDATE security.role_grants SET granted_to='{grant['until']}'::timestamptz WHERE id='{grant['id']}';")
     print(f'{passed} asynchronous workbench HTTP checks passed.',flush=True)

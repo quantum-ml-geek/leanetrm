@@ -1453,7 +1453,6 @@ api.MapPost("/reference/commit",(HttpContext c,ReferenceCommitRequest body)=>Ref
 api.MapGet("/market/contract-display",()=>Results.Ok(new{version=CurveDisplay.Version,choices=new[]{
     new{value=CurveDisplay.All,label="All recorded contracts · show status"},
     new{value=CurveDisplay.Live,label="Live contracts at selected close"}}}));
-// The same pin, identity and permission as /evaluate, for the contract prices of several curves in one read; a selected context is stated as there.
 api.MapPost("/market/input-curve-shapes",(HttpContext c,CurveInspectionsRequest body)=>Locked(c,async session=>
 {
     var pin=Pin(session,body.SnapshotId);
@@ -1702,7 +1701,7 @@ async Task<T> Concurrent<T>(HttpContext c,FuturesReadRequest body,Func<PreviewSe
     {
         completed=await read(session,()=>
         {
-            // Authenticate before validating the selected frame, as every
+            // Authenticate before validating the selected frame, as a gated
             // trading read does. Release only after immutable capture.
             selection=Capture(session,body);session.Gate.Release();held=false;
             return selection;
@@ -2604,8 +2603,8 @@ api.MapPost("/settings/ai/providers/test",(HttpContext c,TestRequest body)=>Lock
     c.Items["model_admin_attempted"]=true;
     return Results.Ok(await providerTests.Run(database,Profile(session),body,c.RequestAborted,(CancellationToken)c.Items["client_aborted"]!));
 }));
-// Each admitted operation captures immutable selection under the gate. Its
-// business read and fresh identity transaction execute only in the worker.
+// The one definition of each registered read: it captures an immutable selection under the gate, and the plan it
+// returns reads in its own identity transaction with no gate held, on a channel worker or in an ordinary request.
 ReadPlan PrepareRead(PreviewSession session,ReadInput input)
 {
     var profile=Profile(session);var digest=hosted is null?null:session.Digest;
@@ -2728,28 +2727,36 @@ Task<object> AsyncPortfolioRead(ReadInput input,NpgsqlConnection connection,Prev
     _=>throw AsyncReadContract.Invalid()
 };
 // The ordinary route of a registered read (docs/async-reads.md). The session gate covers its capture and the
-// authorization before its answer, never its database work. A delegated assistant invocation stays inside the gate,
-// where its own guards apply and nothing is authorized a second time.
-async Task<IResult> ServeRead(HttpContext c,string operation,object body)
+// authorization before its answer, never its database work. That authorization requires the exact sources and books
+// the read touched, as the response channel's does. A delegated assistant invocation stays inside the gate, where
+// its own guards apply and nothing is authorized a second time. `prepare` is session preparation the capture needs,
+// done in the capture's own gate hold.
+async Task<IResult> ServeRead(HttpContext c,string operation,object body,Func<PreviewSession,CancellationToken,Task>? prepare=null)
 {
     var input=AsyncReadContract.Input(operation,body,exactSelection:false);
+    async Task<ReadPlan> Capture(PreviewSession session)
+    {
+        if(prepare is not null)await prepare(session,c.RequestAborted);
+        return PrepareRead(session,input);
+    }
     if(c.Features.Get<AssistantInvocation>() is not null)
-        return await Locked(c,async session=>Results.Ok((await PrepareRead(session,input).Execute(c.RequestAborted)).Value));
+        return await Locked(c,async session=>Results.Ok((await (await Capture(session)).Execute(c.RequestAborted)).Value));
     var session=Session(c);var digest=hosted is null?null:session.Digest;
-    return Results.Ok(await UngatedRead.Run(session,captured=>PrepareRead(captured,input),
+    return Results.Ok(await UngatedRead.Run(session,async captured=>AsyncReadVisibility.Observed(await Capture(captured)),
         (profile,plan,outcome,ct)=>ReadAuthority.Require(database,profile,digest,plan.Input.Permissions,ct,outcome.Recheck),c.RequestAborted));
 }
 // Each route keeps its own refusal of a missing selection; PrepareRead is the one definition of the read itself.
 T Selected<T>(T body,FuturesReadRequest? context,string code,string message)=>context is null?throw new MarketDataException(code,message):body;
 api.MapPost("/evaluate",(HttpContext c,BuildRequest body)=>ServeRead(c,"curve.evaluate.v1",body));
+// The same pin, identity and permission as /evaluate, for the contract prices of several curves in one read; a selected context is stated as there.
 api.MapPost("/market/curve-shapes",(HttpContext c,CurveShapesRequest body)=>ServeRead(c,"curve.shapes.v1",body));
-api.MapPost("/history",async(HttpContext c,HistoryRequest body)=>
+// Frame discovery assigns session state, so this route does it under the gate that captures the read: a live update
+// between the two cannot leave the capture unprepared. The channel refuses an unprepared session instead.
+api.MapPost("/history",(HttpContext c,HistoryRequest body)=>ServeRead(c,"curve.history.v1",body,async(session,ct)=>
 {
-    // Frame discovery assigns session state, so it stays a gated step of this route; the channel refuses an unprepared session.
     HistoryRevisionPolicy.Require(body.RevisionPolicy);
-    await Locked(c,async session=>{if(!session.HasDiscoveredFrames)await RefreshFrames(session,c.RequestAborted);return Results.Empty;});
-    return await ServeRead(c,"curve.history.v1",body);
-});
+    if(!session.HasDiscoveredFrames)await RefreshFrames(session,ct);
+}));
 api.MapPost("/trading/freshness",(HttpContext c,FuturesReadRequest body)=>ServeRead(c,"trading.freshness.v1",body));
 api.MapPost("/trading/directory",(HttpContext c,FuturesReadRequest body)=>ServeRead(c,"trading.directory.v1",body));
 api.MapPost("/trading/positions",(HttpContext c,TradingPositionsRequest body)=>ServeRead(c,"trading.positions.v1",

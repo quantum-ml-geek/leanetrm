@@ -54,6 +54,14 @@ internal sealed class AsyncReadVisibility:IDisposable
     readonly HashSet<AsyncReadCalendar> calendars=[];
     readonly HashSet<AsyncReadInstrument> instruments=[];
     internal AsyncReadVisibility(){prior=current.Value;current.Value=this;}
+    // The plan run while its exact coordinates are collected: its outcome's recheck then also requires them, in the
+    // same fresh publication transaction, whichever transport discloses the result.
+    internal static ReadPlan Observed(ReadPlan plan)=>plan with{Execute=async ct=>
+    {
+        using var visibility=new AsyncReadVisibility();
+        var outcome=await plan.Execute(ct);var evidence=visibility.Seal();var recheck=outcome.Recheck;
+        return outcome with{Recheck=async(connection,t)=>{await recheck(connection,t);await evidence.Require(connection,t);}};
+    }};
     internal static void Bundle(PreviewManifest manifest)=>current.Value?.Capture(manifest,true);
     internal static void Reference(PreviewManifest manifest)=>current.Value?.Capture(manifest,false);
     internal static void Books(Guid catalog,IEnumerable<Guid> ids)

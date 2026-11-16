@@ -5864,7 +5864,9 @@ copy D404 left beside each ordinary handler is removed.
 An ordinary route of a covered read captures under the session gate, executes
 without it, and takes the gate again to answer. Before answering it requires the
 sign-in unexpired and the profile unchanged and, in a fresh identity
-transaction, the read's permissions, the sign-in and the read's own recheck.
+transaction, the read's permissions, the sign-in, the read's own recheck and
+the sealed evidence of the exact sources and books it touched, as the channel
+does.
 One slow read therefore no longer delays the other requests of its session. Two
 such reads run per session at once and a further one waits within its request
 deadline; the bound is a fixed contract value sized to the hosted application
@@ -5873,13 +5875,15 @@ pool of eight connections, not a configuration value.
 The session match of an ordinary read is sign-in and profile only. Its inputs
 are an immutable capture of the snapshot the request named, so a later context
 change or live update does not make its result wrong, and the page discards a
-result it no longer wants. Sealed publication evidence stays a channel
-mechanism, where a result waits on a detached worker.
+result it no longer wants. Its answer can wait for the gate as a channel result
+waits for delivery, so it is disclosed on the same evidence.
 
 A delegated assistant invocation runs the same definition inside the session
 gate, as before, and remains refused on the channel. A handler that assigns
-session state is not such a read: frame discovery stays a gated step of the
-ordinary `history` route, and the channel still refuses an unprepared session.
+session state is not such a read: the ordinary `history` route discovers frames
+in the gate hold that captures its read, and the channel still refuses an
+unprepared session. The freshness version, which the `trading/changes` waiter
+also computes, keeps a second form.
 The progressive `trading/workspace` request and the Blotter row stream keep
 their existing gate release and recheck.
 

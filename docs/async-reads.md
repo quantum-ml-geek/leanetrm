@@ -48,16 +48,18 @@ The 18 admitted operations cover these existing consumers:
 
 ## One definition, two transports
 
-Each admitted read is written once, as a capture of the session's selection, an
+Each admitted read has one definition: a capture of the session's selection, an
 execution on a connection bound to the captured identity, and a recheck of what
-it read. Its ordinary route and its channel operation both run that definition;
-neither carries a second copy.
+it read. Its ordinary route and its channel operation both run that definition.
+Two reads still have a second form beside it: the freshness version that the
+`trading/changes` waiter also computes, and the progressive `trading/workspace`
+request.
 
 | Step | Ordinary HTTP | Response channel |
 | --- | --- | --- |
 | Admit | Wait for one of the session's two read slots, take the session gate, capture, release. | Take the gate, capture, release, answer 202. |
 | Execute | In the request, with no gate held. | On a detached worker with explicit inputs. |
-| Publish | Take the gate; require the sign-in unexpired and the profile unchanged; in a fresh transaction require the read's permissions, the sign-in and the read's recheck; answer. | Take the gate; require the channel's profile, context and live selection unchanged; authorize the same way with the worker's sealed evidence; write the event. |
+| Publish | Take the gate; require the sign-in unexpired and the profile unchanged; in a fresh transaction require the read's permissions, the sign-in, the read's recheck and its sealed evidence; answer. | Take the gate; require the channel's profile, context and live selection unchanged; authorize the same way; write the event. |
 
 An ordinary read therefore no longer delays another request of its session, and
 a profile switch or an ended sign-in during it refuses its answer as
@@ -65,14 +67,16 @@ a profile switch or an ended sign-in during it refuses its answer as
 named, so a later context change does not alter the result; the page discards a
 result it no longer wants. The capture precedes the read's identity transaction,
 as channel submission already does, so a request that names a frame its session
-does not hold is refused for that before its permission is examined.
+does not hold is refused for that before its permission is examined. The
+statistical archive routes likewise refuse a malformed page request first.
 
 A third ordinary read of one session waits for a slot within its request
-deadline; it is not refused. Sealed publication evidence remains a channel
-mechanism. A delegated assistant invocation runs the same definition inside the
-session gate, without the second authorization, and is still refused on the
-channel. `history` discovers its session's frames as a gated step of its
-ordinary route; the channel refuses an unprepared session with
+deadline; it is not refused. Both transports seal the exact sources, references
+and books a read touched and require them again at publication, within the
+evidence bounds below. A delegated assistant invocation runs the same definition
+inside the session gate, without the second authorization, and is still refused
+on the channel. `history` discovers its session's frames in the gate hold that
+captures its ordinary read; the channel refuses an unprepared session with
 `async_workspace_not_ready`. The progressive `trading/workspace` request and the
 Blotter row stream keep their own gate release and recheck.
 

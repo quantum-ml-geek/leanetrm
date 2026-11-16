@@ -34,6 +34,8 @@ internal static class UngatedReadChecks
         await FailuresRelease();
         await CancelledWaitDoesNotCapture();
         await MissingProfileRefuses();
+        await PreparationHoldsTheGate();
+        await ObservedReadRequiresItsEvidence();
         Console.WriteLine("PASS ungated reads: gate released while executing, publication authorized under the gate, two per session, profile and sign-in fences, release on failure and cancellation");
     }
     static async Task ExecutesOutsideTheGate()
@@ -43,7 +45,7 @@ internal static class UngatedReadChecks
         var read=UngatedRead.Run(session,captured=>
         {
             capturedUnderGate=ReferenceEquals(captured,session)&&session.Gate.CurrentCount==0;
-            return Plan(async ct=>{order.Add("execute");entered.SetResult();await release.Task.WaitAsync(ct);return value;});
+            return Task.FromResult(Plan(async ct=>{order.Add("execute");entered.SetResult();await release.Task.WaitAsync(ct);return value;}));
         },(profile,plan,outcome,ct)=>
         {
             authorized++;order.Add("authorize");
@@ -64,7 +66,7 @@ internal static class UngatedReadChecks
         Task<object> Start(int number)=>UngatedRead.Run(session,_=>
         {
             Interlocked.Increment(ref captures);
-            return Plan(async ct=>{if(Interlocked.Increment(ref executing)==PreviewSession.MaximumReads)both.SetResult();await releases[number].Task.WaitAsync(ct);return number;});
+            return Task.FromResult(Plan(async ct=>{if(Interlocked.Increment(ref executing)==PreviewSession.MaximumReads)both.SetResult();await releases[number].Task.WaitAsync(ct);return number;}));
         },Allowed,CancellationToken.None);
         var first=Start(0);var second=Start(1);await both.Task.WaitAsync(Limit);
         var third=Start(2);await Task.Delay(100);
@@ -77,7 +79,7 @@ internal static class UngatedReadChecks
     static async Task ChangedProfileRefuses()
     {
         var session=Session();var entered=Signal();var release=Signal();var authorized=false;
-        var read=UngatedRead.Run(session,_=>Plan(async ct=>{entered.SetResult();await release.Task.WaitAsync(ct);return new{};}),
+        var read=UngatedRead.Run(session,_=>Task.FromResult(Plan(async ct=>{entered.SetResult();await release.Task.WaitAsync(ct);return new{};})),
             (_,_,_,_)=>{authorized=true;return Task.CompletedTask;},CancellationToken.None);
         await entered.Task.WaitAsync(Limit);
         await session.Gate.WaitAsync();session.Profile="risk";session.Gate.Release();release.SetResult();
@@ -87,7 +89,7 @@ internal static class UngatedReadChecks
     static async Task EndedSignInRefuses()
     {
         var session=Session(new("synthetic",DateTimeOffset.UtcNow.AddMilliseconds(150)));var authorized=false;
-        var read=UngatedRead.Run(session,_=>Plan(async ct=>{await Task.Delay(400,ct);return new{};}),
+        var read=UngatedRead.Run(session,_=>Task.FromResult(Plan(async ct=>{await Task.Delay(400,ct);return new{};})),
             (_,_,_,_)=>{authorized=true;return Task.CompletedTask;},CancellationToken.None);
         await Refused<PreviewDeniedException>(read,"A read must not answer after its sign-in ended.");
         if(authorized||!Free(session))throw new Exception("A read must not answer after its sign-in ended.");
@@ -98,9 +100,9 @@ internal static class UngatedReadChecks
         var session=Session();
         await Refused<InvalidOperationException>(UngatedRead.Run(session,_=>throw new InvalidOperationException("capture"),Allowed,CancellationToken.None),message);
         if(!Free(session))throw new Exception(message);
-        await Refused<InvalidOperationException>(UngatedRead.Run(session,_=>Plan(_=>throw new InvalidOperationException("execute")),Allowed,CancellationToken.None),message);
+        await Refused<InvalidOperationException>(UngatedRead.Run(session,_=>Task.FromResult(Plan(_=>throw new InvalidOperationException("execute"))),Allowed,CancellationToken.None),message);
         if(!Free(session))throw new Exception(message);
-        await Refused<InvalidOperationException>(UngatedRead.Run(session,_=>Plan(_=>Task.FromResult<object>(new{})),
+        await Refused<InvalidOperationException>(UngatedRead.Run(session,_=>Task.FromResult(Plan(_=>Task.FromResult<object>(new{}))),
             (_,_,_,_)=>throw new InvalidOperationException("authorize"),CancellationToken.None),message);
         if(!Free(session))throw new Exception(message);
     }
@@ -110,7 +112,7 @@ internal static class UngatedReadChecks
         Task<object> Start(CancellationToken ct)=>UngatedRead.Run(session,_=>
         {
             Interlocked.Increment(ref captures);
-            return Plan(async token=>{if(Interlocked.Increment(ref executing)==PreviewSession.MaximumReads)both.SetResult();await release.Task.WaitAsync(token);return new{};});
+            return Task.FromResult(Plan(async token=>{if(Interlocked.Increment(ref executing)==PreviewSession.MaximumReads)both.SetResult();await release.Task.WaitAsync(token);return new{};}));
         },Allowed,ct);
         var first=Start(CancellationToken.None);var second=Start(CancellationToken.None);await both.Task.WaitAsync(Limit);
         using var cancelled=new CancellationTokenSource();cancelled.Cancel();
@@ -122,8 +124,32 @@ internal static class UngatedReadChecks
     static async Task MissingProfileRefuses()
     {
         var session=Session();session.Profile=null;var captured=false;
-        await Refused<PreviewDeniedException>(UngatedRead.Run(session,_=>{captured=true;return Plan(_=>Task.FromResult<object>(new{}));},Allowed,CancellationToken.None),
+        await Refused<PreviewDeniedException>(UngatedRead.Run(session,_=>{captured=true;return Task.FromResult(Plan(_=>Task.FromResult<object>(new{})));},Allowed,CancellationToken.None),
             "A session without a profile cannot read.");
         if(captured||!Free(session))throw new Exception("A session without a profile cannot read.");
+    }
+    // A read whose capture first prepares its session, as history discovers frames, does both in one gate hold.
+    static async Task PreparationHoldsTheGate()
+    {
+        var session=Session();var preparing=Signal();var prepared=Signal();
+        var read=UngatedRead.Run(session,async _=>{preparing.SetResult();await prepared.Task;return Plan(_=>Task.FromResult<object>(new{}));},Allowed,CancellationToken.None);
+        await preparing.Task.WaitAsync(Limit);
+        if(session.Gate.Wait(0)){session.Gate.Release();throw new Exception("A capture that prepares its session must hold the gate until it has captured.");}
+        prepared.SetResult();await read.WaitAsync(Limit);
+        if(!Free(session))throw new Exception("A prepared read must release its gate and slot.");
+    }
+    // An ordinary read's recheck requires the exact sources and books it touched, as the response channel's does.
+    static async Task ObservedReadRequiresItsEvidence()
+    {
+        var rechecked=0;
+        ReadOutcome Outcome()=>new(new{},(_,_)=>{rechecked++;return Task.CompletedTask;});
+        var quiet=await AsyncReadVisibility.Observed(new(Input,_=>Task.FromResult(Outcome()))).Execute(CancellationToken.None);
+        await quiet.Recheck(null!,CancellationToken.None);
+        if(rechecked!=1)throw new Exception("An observed read must keep its own recheck.");
+        var observed=await AsyncReadVisibility.Observed(new(Input,_=>{AsyncReadVisibility.Books(Guid.NewGuid(),[Guid.NewGuid()]);return Task.FromResult(Outcome());})).Execute(CancellationToken.None);
+        // The recorded book scope can only be required on a connection; reaching for it proves the evidence is part of the recheck.
+        try{await observed.Recheck(null!,CancellationToken.None);}
+        catch(Exception)when(rechecked==2){return;}
+        throw new Exception("An observed read's recheck must also require what the read recorded.");
     }
 }
