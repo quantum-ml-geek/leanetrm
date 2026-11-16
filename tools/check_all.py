@@ -172,10 +172,19 @@ def run_checks(pg_bin, dotnet, browser, *, group='all', run=subprocess.run):
         '--cash-payment-status','--gas-instant-ingress','--lifecycle-context-ingress'):
         check('managed custody '+flag,[str(dotnet),'run','--no-restore','--project',
             'tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj','--',flag],suite='managed')
+    for flag in ('--gas-transport-capacity-adapters','--gas-transport-capacity-source',
+        '--gas-transport-capacity-metadata','--operational-business-context'):
+        check('managed Transport capacity '+flag,[str(dotnet),'run','--no-restore','--project',
+            'tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj','--',flag],suite='managed')
     for helper in ('check_storage_facility','check_storage_facility_upgrade'):
         check(helper,[sys.executable,f'tools/{helper}.py','--pg-bin',str(pg_bin)],suite='physical')
     check('physical facility authoring and measured activity in the application',
         [sys.executable,'tools/check_storage_facility_browser.py','--pg-bin',str(pg_bin),'--dotnet',str(dotnet),
+         '--browser',str(browser),'--no-build'],suite='physical')
+    for helper in ('check_gas_transport_capacity','check_gas_transport_capacity_upgrade'):
+        check(helper,[sys.executable,f'tools/{helper}.py','--pg-bin',str(pg_bin)],suite='physical')
+    check('commercial Transport capacity operations in the application',
+        [sys.executable,'tools/check_gas_transport_capacity_browser.py','--pg-bin',str(pg_bin),'--dotnet',str(dotnet),
          '--browser',str(browser),'--no-build'],suite='physical')
     for kind in ('physical','cash'):
         check('native '+kind+' option models in the application',[sys.executable,'tools/check_lifecycle_valuation_browser.py',

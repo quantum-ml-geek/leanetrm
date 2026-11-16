@@ -179,7 +179,7 @@ internal static class GasParkCustodyAdapter
     {
         var value=row.GetProperty(field);if(value.ValueKind!=JsonValueKind.String)throw Invalid();
         var text=value.GetString()!;
-        return GasParkCustodyText.Key(text,"gas_custody_source")==text?text:throw Invalid();
+        return GasOperationText.Key(text,"gas_custody_source")==text?text:throw Invalid();
     }
     static string Text(JsonElement row,string field){var value=row.GetProperty(field);return value.ValueKind==JsonValueKind.String&&!string.IsNullOrWhiteSpace(value.GetString())?value.GetString()!:throw Invalid();}
     static DateTimeOffset Instant(JsonElement row,string field)=>TradingInstant.Parse(Text(row,field),"gas_custody_source");

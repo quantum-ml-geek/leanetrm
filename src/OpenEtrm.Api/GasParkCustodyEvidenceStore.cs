@@ -30,8 +30,8 @@ internal static class GasParkCustodyEvidenceStore
         try
         {
             var selected=request.Selection.Deserialize<GasParkCustodyEvidenceSelection>(GasOwnedOperations.Json)??throw Invalid();
-            var quantity=ExactDecimal.Parse(selected.Quantity);var key=GasParkCustodyText.Key(selected.SourceKey,"gas_custody_input");
-            var evidence=GasParkCustodyText.Evidence(selected.Evidence,"gas_custody_input");
+            var quantity=ExactDecimal.Parse(selected.Quantity);var key=GasOperationText.Key(selected.SourceKey,"gas_custody_input");
+            var evidence=GasOperationText.Evidence(selected.Evidence,"gas_custody_input");
             if(selected.ExpectedRevision<0||selected.Kind is not("custody_agreement" or "custody_receipt" or "custody_return")||
                 quantity.CompareTo(default)<0||!TradingInstant.IsSupported(selected.ObservedAt))throw Invalid();
             return request with{Selection=JsonSerializer.SerializeToElement(selected with{SourceKey=key,Quantity=quantity.ToString(),Evidence=evidence},GasOwnedOperations.Json)};

@@ -5665,3 +5665,36 @@ is unavailable even with a zero fee. Current-clock price qualification does not
 qualify generated closes, cross-clock P&L or complete economic horizon risk;
 source-known zero, future-effective, completed and cash-only states require
 the same explicit continuation fence. See the [contract](gas-park-custody.md).
+
+## D410 · Explicit gross transport capacity across shared paths
+
+**Status:** locally qualified capacity operating consumer; financial Transport
+booking and deployment qualification remain open.
+
+**Requirement.** Validate shared commercial entitlement, eligible points and
+routes throughout explicit operating intervals, independently of physical
+evidence, title, custody and cash.
+
+**Decision.** The first capacity law uses complete versioned dated rate limits,
+gross receipt quantity for agreement/receipt/route claims and gross delivery
+quantity for delivery-point claims. Each explicit stage interval has a uniform
+rate per actual elapsed hour. Evaluate every rate and limit boundary exactly;
+alternate paths cannot multiply their parent capacity. Report actual breaches,
+while a prospective replacement requires feasibility. A separately selected
+empty release can remove only its own claims while retaining other breaches.
+Missing coverage refuses rather than selecting a financial or operational fallback.
+
+The current consumer is a manually declared entitlement with exact book, party,
+reference and direct-path relationships. Independent chosen plans share every
+parent/point/path limit. Revising limits retains earlier claims and exposes
+breaches; replacing one plan releases only that plan's earlier claims. Complete
+source generations, immutable typed facts and exact retry receipts govern
+admission. Any latest-known future-effective head freezes new changes at the
+earlier business context. Earlier facts can be acknowledged without reinstating
+their heads. See the [operating contract](gas-transport-capacity-operations.md)
+and [wire boundary](gas-transport-capacity-api.md).
+
+**Boundaries.** This component does not establish route conservation, fuel,
+loss, transit, asset linepack, financial booking or any valuation. Those
+consumers require their own explicit qualified policies and complete current
+authority. See [Transport implementation status](gas-transport.md).

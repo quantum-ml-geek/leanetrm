@@ -5,6 +5,11 @@ using OpenEtrm.Api;
 using OpenEtrm.MarketData;
 if(args is ["--storage-facility-native",var storageFixture]){await StorageFacilityNativeChecks.RunNative(storageFixture);return;}
 if(args is ["--storage-facility-adapters"]){StorageFacilityAdapterChecks.Run();return;}
+if(args is ["--gas-transport-capacity-adapters"]){GasTransportCapacityAdapterChecks.Run();return;}
+if(args is ["--operational-business-context"]){OperationalBusinessContextChecks.Run();return;}
+if(args is ["--gas-transport-capacity-source"]){GasTransportCapacitySourceChecks.Run();return;}
+if(args is ["--gas-transport-capacity-metadata"]){GasTransportCapacityMetadataChecks.Run();GasTransportCapacityPresentationChecks.Run();return;}
+if(args is ["--gas-transport-capacity-normalize",var transportInput,var transportOutput]){GasTransportCapacityPacket.Normalize(transportInput,transportOutput);return;}
 if(args is ["--storage-facility-setup"]){StorageFacilityMetadataChecks.Run();return;}
 if(args is ["--async-reads"]){AsyncReadContractChecks.Run();await AsyncReadChecks.Run();return;}
 if(args is ["--async-read-contracts"]){AsyncReadContractChecks.Run();return;}
@@ -220,6 +225,11 @@ if(args is ["--blotter-stream"]){await BlotterStreamChecks.Run();return;}
 if (args is ["--schedules"])
 {
     StorageFacilityAdapterChecks.Run();
+    GasTransportCapacityAdapterChecks.Run();
+    OperationalBusinessContextChecks.Run();
+    GasTransportCapacitySourceChecks.Run();
+    GasTransportCapacityMetadataChecks.Run();
+    GasTransportCapacityPresentationChecks.Run();
     StorageFacilityMetadataChecks.Run();
     FuturesMarginSourceChecks.Run();
     CashInstrumentChecks.Run();

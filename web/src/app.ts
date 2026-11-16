@@ -257,7 +257,7 @@ async function api<T>(path:string,body?:unknown,signal?:AbortSignal):Promise<T>{
  selectedSignal?.throwIfAborted();
  return payload;
 }
-function pageStatus(){return page==='lifecycle'?'Lifecycle actions and policies at the selected close.':page==='physical-operations'?'Delivery work for the instrument you choose.':page==='facilities'?'Facilities · shared quantities, allocations and operating limits.':page==='dashboard'?'Dashboard · widgets read at the selected market date and context.':page==='crude-setup'?'Crude delivery setup · exact delivery and pricing bindings.':page==='gas-setup'?'Gas delivery setup · immutable drafts and explicit publication.':page==='crude'?'Physical crude · fixed contractual standard volume.':page==='gas'?'Physical gas · reference-backed delivery points and independent delivery dates.':page==='delivery'?'Delivery prices · selected delivery dates and knowledge cutoff.':page==='ppa'?'PPA bookings · exact selected inputs and certified knowledge.':page==='interval-series'?'Interval data · working data, known at the chosen time.':page==='interval-curves'?'Hourly / sub-hourly prices · marks from the selected market date; shapes and actuals known at the chosen time.':page==='custom-curves'?'Curve builder · selected market context.':page==='vol-surfaces'?'Vol surfaces · stored fits at the selected market date and knowledge cutoff.':page==='risk'?'Risk jobs and retained reports · current authority.':page==='jobs'?'Jobs and infrastructure · current authority.':page==='futures'?'Trading blotter · saved market inputs.':page==='admin'?'Workspace identity and access administration.':page==='ai'?'Page-assistant settings · current authority.':page==='schedules'?'Schedules and symbolic date mappings.':page==='configuration'?'Configure contract pricing and exact publication sources.':result?`Prices for ${instant(result.at)}`:select('snapshot').value?'Choose a curve to get started.':'Choose a curve and a market date to get started.';}
+function pageStatus(){return page==='lifecycle'?'Lifecycle actions and policies at the selected close.':page==='physical-operations'?'Delivery work for the instrument you choose.':page==='facilities'?'Facilities · physical operations, allocations and Transport capacity.':page==='dashboard'?'Dashboard · widgets read at the selected market date and context.':page==='crude-setup'?'Crude delivery setup · exact delivery and pricing bindings.':page==='gas-setup'?'Gas delivery setup · immutable drafts and explicit publication.':page==='crude'?'Physical crude · fixed contractual standard volume.':page==='gas'?'Physical gas · reference-backed delivery points and independent delivery dates.':page==='delivery'?'Delivery prices · selected delivery dates and knowledge cutoff.':page==='ppa'?'PPA bookings · exact selected inputs and certified knowledge.':page==='interval-series'?'Interval data · working data, known at the chosen time.':page==='interval-curves'?'Hourly / sub-hourly prices · marks from the selected market date; shapes and actuals known at the chosen time.':page==='custom-curves'?'Curve builder · selected market context.':page==='vol-surfaces'?'Vol surfaces · stored fits at the selected market date and knowledge cutoff.':page==='risk'?'Risk jobs and retained reports · current authority.':page==='jobs'?'Jobs and infrastructure · current authority.':page==='futures'?'Trading blotter · saved market inputs.':page==='admin'?'Workspace identity and access administration.':page==='ai'?'Page-assistant settings · current authority.':page==='schedules'?'Schedules and symbolic date mappings.':page==='configuration'?'Configure contract pricing and exact publication sources.':result?`Prices for ${instant(result.at)}`:select('snapshot').value?'Choose a curve to get started.':'Choose a curve and a market date to get started.';}
 const errorMessage=(error:unknown)=>error instanceof Error?error.message:'Something went wrong. Please refresh the page.';
 function showFailure(error:unknown){text('error',errorMessage(error));$('error').hidden=false;text('status','Please check the message above.');}
 function clearFailure(){$('error').hidden=true;if(!busy)text('status',pageStatus());}
@@ -1282,7 +1282,7 @@ async function currentInputs(){priceSetup.reset();lifecycle.reset();physicalOper
 async function useBusinessDateCurrent(){
   if(page!=='facilities')throw Error('Use an operating business date in Facilities.');
   const effectiveOn=$<HTMLInputElement>('date-context-on').value;
-  if(!effectiveOn)throw Error('Choose an explicit business date for physical facilities.');
+  if(!effectiveOn)throw Error('Choose an explicit business date for these operations.');
   await currentInputs();
   await dateEditor.initialize(effectiveOn);
   await facilities.load();
@@ -1682,7 +1682,16 @@ async function selectRetained(contextId:string){
 async function restorePlace(origin:Place){
   const c=origin.context;
   if(c.mode!=='unapplied')await selectContext(c.mode==='current'?{mode:'current',contextId:null,frameId:c.frameId,businessDate:c.businessDate}:{mode:'retained',contextId:c.contextId,frameId:c.frameId});
-  if(origin.page==='facilities'){await setPage('facilities');await facilities.load(origin.report.selection.ledgerId as string|null??'',false);return;}
+  if(origin.page==='facilities'){
+    await setPage('facilities');
+    if(origin.report.page==='facility_quantities')await facilities.load(origin.report.selection.ledgerId as string|null??'',false);
+    else{
+      const section=({facility_definitions:'definitions',facility_activity:'activity',transport_capacity:'transport'} as const)[origin.report.page as 'facility_definitions'|'facility_activity'|'transport_capacity'];
+      if(!section)throw Error('The original operations workspace is not supported.');
+      await facilities.open(section);
+    }
+    return;
+  }
   if(readPages.includes(origin.report.page))await showTarget(origin.report.page,origin.report.selection);else await showPage(origin.page);
 }
 function tableName(code:string){

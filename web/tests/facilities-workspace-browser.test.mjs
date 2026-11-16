@@ -42,3 +42,33 @@ test('reloading Facilities exposes an original native request even when its sele
  assert.equal(await evaluate("document.querySelector('[data-facility-ops=status]').disabled"),false);
  assert.equal(await evaluate("document.querySelector('[data-facility-ops=retry]').disabled"),false,'retry retains its own original source and native authority independently of a new read');
 }));
+
+test('a Transport-only reader opens entitlement capacity without hidden physical-facility reads',{skip:!browserAvailable,timeout:browserTestTimeout},()=>withBrowserPage(markup,async evaluate=>{
+ await evaluate(`(async()=>{
+  window.calls=[];window.errors=[];
+  const context={contextId:'synthetic-transport-context',effectiveOn:'2032-03-14',knownAt:'2032-03-14T20:00:00Z'};
+  const api=async(path,body)=>{calls.push({path,body});if(path==='gas/transport/capacity/directory')return{ownerId:'opaque-transport-owner',context,at:'2032-03-14T23:59:59.999999Z',entitlements:[],forms:{},configuration:{},overviewSections:[],tables:[],canRecord:false,canConfigure:false,historical:false};throw Error('Unexpected hidden read '+path);};
+  window.workspace=(await import('/facilities-workspace.js')).setupFacilities({api,act:async work=>{try{await work();}catch(error){errors.push(error.message);}},busy:()=>false,zone:()=> 'UTC',identity:()=> 'synthetic-transport-reader',context:()=>({effectiveOn:'2032-03-14',knowledgeMode:'current',retained:null,convention:'facility_business_date_end_utc_v1'}),permission:name=>['ReadMarketData','ReadTrades','ReadGasOperations'].includes(name),changed(){},tradeInspection:()=>null,openTrade:async()=>{}});
+  await workspace.load().catch(error=>errors.push(error.message));
+ })()`);
+ assert.deepEqual(await evaluate('errors'),[]);
+ assert.equal(await evaluate('workspace.section()'),'transport');
+ assert.deepEqual(await evaluate('calls.map(call=>call.path)'),['gas/transport/capacity/directory']);
+ assert.equal(await evaluate("document.querySelector('#transport-capacity-workspace').hidden"),false);
+ assert.match(await evaluate("document.querySelector('[data-facilities-view=transport]').textContent"),/Transport capacity/);
+ const denied=await evaluate("workspace.open('definitions').then(()=>'',error=>error.message)");
+ assert.match(denied,/permission/i);
+ assert.deepEqual(await evaluate('calls.map(call=>call.path)'),['gas/transport/capacity/directory']);
+}));
+
+test('changing the operating context preserves the selected Transport tab and reads only that consumer',{skip:!browserAvailable,timeout:browserTestTimeout},()=>withBrowserPage(markup,async evaluate=>{
+ await evaluate(`(async()=>{
+  window.calls=[];window.errors=[];const context={contextId:'synthetic-context',effectiveOn:'2032-03-14',knownAt:'2032-03-14T20:00:00Z'};
+  const api=async(path,body)=>{calls.push({path,body});if(path==='facilities/quantities/directory')return{ownerId:'owner',context,at:'2032-03-14T23:59:59Z',ledgers:[],choices:[],hasMore:false,choicesTruncated:false,canRecord:true,canConfigure:true};if(path==='gas/transport/capacity/directory')return{ownerId:'owner',context,at:'2032-03-14T23:59:59.999999Z',entitlements:[],forms:{},configuration:{},overviewSections:[],tables:[],canRecord:true,canConfigure:true,historical:false};throw Error('Unexpected '+path);};
+  window.workspace=(await import('/facilities-workspace.js')).setupFacilities({api,act:async work=>{try{await work();}catch(error){errors.push(error.message);}},busy:()=>false,zone:()=> 'UTC',identity:()=> 'operator',context:()=>({effectiveOn:'2032-03-14',knowledgeMode:'current',retained:null,convention:'facility_business_date_end_utc_v1'}),permission:()=>true,changed(){},tradeInspection:()=>null,openTrade:async()=>{}});
+  await workspace.load();document.querySelector('[data-facilities-view=transport]').click();await new Promise(resolve=>setTimeout(resolve,30));workspace.reset();await workspace.load();
+ })()`);
+ assert.equal(await evaluate('workspace.section()'),'transport');
+ assert.deepEqual(await evaluate('calls.map(call=>call.path)'),['facilities/quantities/directory','gas/transport/capacity/directory','gas/transport/capacity/directory']);
+ assert.deepEqual(await evaluate('errors'),[]);
+}));

@@ -1,5 +1,20 @@
 # Delivery plan and acceptance criteria
 
+D410 implements [commercial Transport capacity operations](gas-transport-capacity-operations.md)
+with immutable legal/reference/path scope, complete dated gross limits and
+independent chosen plans. Explicit empty release permits cleanup while retaining
+other breaches. Local managed/native, populated-upgrade and actual browser
+checks passed. Integration/release gates remain open.
+This operating consumer does not enable financial Transport booking, route
+conservation, accepted flow or complete service value.
+
+The D410 checkpoint passed 741 managed core, 1,984 frontend and 146 Python
+checks, the full API schedule suite, native source/concurrency/receipt/authority
+controls and populated predecessor/drift checks. Actual browser qualification
+passed 64 Transport checks and 30 existing-storage regression checks against
+the same API, SQL and shared UI artifact. These results qualify the declared
+operating consumer, not the remaining financial or physical Transport products.
+
 D406 locally qualifies a bounded [Park and Loan consumer](gas-park-loan.md):
 explicit booking, native advance and partial return, independent fee cash, shared
 ticket and lifecycle forms, and ordinary/retained current-clock price risk. Real
@@ -58,7 +73,7 @@ instants and exchange option expiry retain their explicit timing and rate inputs
 required purpose bindings and Side-owned rules; omission checks are mandatory
 in the verification runner.
 
-The integrated verification runner requires 196 commands, including required
+The integrated verification runner requires 220 commands, including required
 Park and Loan native, populated-upgrade, retained-worker and browser qualifiers,
 with domain, native database, agent and browser coverage. Local checks at D406
 passed 738 managed core checks and 1,889 frontend checks. The earlier D403

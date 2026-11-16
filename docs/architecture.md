@@ -1,5 +1,12 @@
 # Architecture and domain contracts
 
+D410 adds [commercial Transport capacity operations](gas-transport-capacity-operations.md)
+over independent exact entitlement, capacity-version and chosen-plan identities.
+Shared gross limits, explicit empty release and retained source/authority
+admission have local managed/native, upgrade and actual browser qualification.
+Integrated release remains separate. Physical transport, title, cash and financial
+Transport value retain separate contracts.
+
 D406 adds locally qualified [Park and Loan commercial booking](gas-park-loan.md)
 over independent native ownership and cash. The bounded title-transfer profile
 uses shared entry, lifecycle and current-clock interactive/retained price risk.

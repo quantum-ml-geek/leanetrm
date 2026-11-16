@@ -1,5 +1,8 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+test('Transport capacity reports its own explicitly unsupported assistant page',()=>{
+ assert.deepEqual(pageReport({page:'facilities',facilitySection:'transport',businessDate:'2032-03-14',facilityLedger:'unrelated-physical-ledger'}),{page:'transport_capacity',selection:{}});
+});
 test('a proposed curve and a saved draft wait for explicit review on an idle unchanged page',async()=>{
  const {targetAction}=await import('../dist/assistant-pages.js');
  assert.equal(targetAction({live:true,changesContext:false,unsaved:false,review:true}),'go');

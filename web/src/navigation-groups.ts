@@ -27,7 +27,7 @@ export function pageGroup(page:string):string{
 export function pageAvailable(page:string,permissions:string[]):boolean{
  const has=(...needed:string[])=>needed.every(permission=>permissions.includes(permission));
  switch(page){
-  case 'facilities':return has('ReadMarketData','ReadTrades','ReadFacilityQuantities');
+  case 'facilities':return has('ReadMarketData','ReadTrades')&&(has('ReadFacilityQuantities')||has('ReadGasOperations'));
   // Vol surfaces read option products, which trade readers see.
   case 'lifecycle':case 'physical-operations':case 'futures':case 'ppa':case 'gas':case 'crude':case 'vol-surfaces':return has('ReadMarketData','ReadTrades');
   case 'dashboard':case 'market':case 'custom-curves':case 'curve-definitions':case 'delivery':case 'interval-series':case 'interval-curves':
