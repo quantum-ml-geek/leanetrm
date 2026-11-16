@@ -179,15 +179,15 @@ Local qualification on 2026-11-16 used the pinned .NET 10.0.402 SDK and Node
 
 | Check | Verified result |
 | --- | --- |
-| Managed core and targeted API checks | 771 core checks; retained operating/REC programs, independent Side selection and exact hedge-result checks pass. |
+| Managed core and targeted API checks | 772 core checks; retained operating/REC programs, independent Side selection and exact hedge-result checks pass. |
 | Facility persistence | 44 native cases, including capped storage, concurrent retries, stale heads, certified reads and authority expiry after waits. |
 | Retained program upgrade | Sixteen predecessor helpers reject altered execution/security metadata; supplied-plan source grammar admits only the explicit flat-contract profile. |
 | Operating native admission | 30 behavior groups pass, including exact fuel/storage/solar quantities and closed parameter types. |
 | REC inventory | 27 native behavior groups pass, including certified corrections, original-fact reassertion and concurrent first-outcome replay. |
 | REC forward native admission | Authority, raw-table denial, exact assignment coverage, JSON shape, payment timing and sealed-program requirements pass. |
 | Owned API workflow | Thermal 760, solar 500 and fixed battery 610 reopen at their independent expected PVs. The selected outright battery returns 34.495 with price delta 8.1. REC evidence conserves 100 issued as 60 transferred plus 40 retired; cross-account delivery-capacity admission and release pass. |
-| User interface | 1,894 frontend checks and 24 live API-backed browser checks pass; financial desktop/phone screenshots were inspected. |
-| Repository checks | 140 Python checks and the standalone dependency boundary pass. |
+| User interface | 1,918 frontend checks and 24 live API-backed browser checks pass; financial desktop/phone screenshots were inspected. |
+| Repository checks | 141 Python checks and the standalone dependency boundary pass. |
 
 Optimization, stochastic flexibility, external registry submission, automatic
 issuance, shared-resource dispatch and broader settlement remain separate
