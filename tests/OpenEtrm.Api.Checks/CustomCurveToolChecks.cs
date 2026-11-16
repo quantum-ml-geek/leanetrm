@@ -121,7 +121,7 @@ internal static class CustomCurveToolChecks
                 // Refused before any claim: the curve open with unsaved edits, and a historical pin.
                 var open=reads with{PageReport=JsonSerializer.SerializeToElement(new{page="custom_curves",selection=new{curve=curve.ToString(),unsaved=true}})};
                 Refused(await phase.Ask(phase.Input(renamed with{Name="Synthetic over unsaved edits"},curve),open),"custom_curve_open_unsaved",false);
-                var historical=reads with{Pin=TurnPin.From(JsonSerializer.SerializeToElement(new{mode="retained",requestedContextId=reads.Pin.ContextId,frameId=(Guid?)null,
+                var historical=reads with{Selection=TurnPin.From(JsonSerializer.SerializeToElement(new{mode="retained",requestedContextId=reads.Pin.ContextId,frameId=(Guid?)null,
                     contextId=reads.Pin.ContextId,cutoff=reads.Pin.Cutoff,recordedAt=reads.Pin.Cutoff}),JsonSerializer.SerializeToElement<object?>(null),database.Manifest.CatalogId,database.Manifest)};
                 Refused(await phase.Ask(phase.Input(definition with{Code=definition.Code+"_h"},null),historical),"historical_read_only",false);
                 Console.WriteLine("PASS a save of the curve the page reports open with unsaved edits, or under a historical pin, is refused before any claim");

@@ -1,9 +1,9 @@
 import {PendingCommand} from './pending-command.js';
 type Api=<T>(path:string,body?:unknown)=>Promise<T>;
 type Version={page:string;version:number;instructions:string;recorded_at:string};
-type Directory={pages:{id:string;name:string}[];configuration:{maximumLength:number;prompts:Version[]}};
+type Directory={pages:{id:string;name:string;kind:'application'|'page'|'tool'|'provider_test'}[];configuration:{maximumLength:number;prompts:Version[]}};
 export function promptRequest(page:string,expectedVersion:number,instructions:string){
-  if(!page||!Number.isSafeInteger(expectedVersion)||expectedVersion<0)throw Error('Choose a page and reload its current prompt version.');
+  if(!page||!Number.isSafeInteger(expectedVersion)||expectedVersion<0)throw Error('Choose a prompt scope and reload its current prompt version.');
   return {page,expectedVersion,instructions};
 }
 export function setupPagePrompts(options:{api:Api;act:(work:()=>Promise<void>)=>Promise<void>;busy:()=>boolean;identity:()=>string}){
@@ -24,7 +24,7 @@ export function setupPagePrompts(options:{api:Api;act:(work:()=>Promise<void>)=>
   function select(){
     const latest=directory?.configuration.prompts.filter(v=>v.page===page.value).sort((a,b)=>b.version-a.version)[0];
     version=latest?.version??0;instructions.value=latest?.instructions??'';dirty=false;
-    get('ai-prompt-version').textContent=latest?`Version ${version}. New questions use this version; earlier questions keep their original prompt.`:'No page guidance configured. The application and agent instructions still apply.';
+    get('ai-prompt-version').textContent=latest?`Version ${version}. New questions use this version; earlier questions keep their original prompt.`:'No guidance configured for this scope. Nothing is added to the prompt.';
     sync();
   }
   function sync(){
@@ -40,7 +40,10 @@ export function setupPagePrompts(options:{api:Api;act:(work:()=>Promise<void>)=>
     const next=await options.api<Directory>('settings/ai/page-prompts');
     if(started!==generation||identity!==options.identity())return;
     directory=next;instructions.maxLength=next.configuration.maximumLength;
-    page.replaceChildren(...next.pages.map(p=>new Option(p.name,p.id)));
+    page.replaceChildren(...Object.entries({application:'Application',page:'Pages',tool:'Tools',provider_test:'Provider test'}).map(([kind,label])=>{
+      const group=document.createElement('optgroup');group.label=label;
+      group.append(...next.pages.filter(p=>p.kind===kind).map(p=>new Option(p.name,p.id)));return group;
+    }));
     if(next.pages.some(p=>p.id===chosen))page.value=chosen;
     select();
     if(pending.command){
@@ -56,7 +59,7 @@ export function setupPagePrompts(options:{api:Api;act:(work:()=>Promise<void>)=>
     try{await options.api(command.path,{...command.body,operationId:command.operationId});}
     catch(error){if(identity===options.identity()){pending.failed((error as {code?:string}).code,uncertain);store();}sync();throw error;}
     if(identity!==options.identity())return;
-    pending.clear();store();dirty=false;get('ai-prompt-status').textContent='Page prompt saved.';sync();await load();
+    pending.clear();store();dirty=false;get('ai-prompt-status').textContent='Prompt saved.';sync();await load();
   }
   page.onchange=select;instructions.oninput=()=>{dirty=true;sync();};
   get<HTMLFormElement>('ai-prompt-form').onsubmit=event=>{event.preventDefault();void options.act(async()=>{

@@ -1,6 +1,7 @@
 """Page operations, explicit human approvals and versioned page guidance; newly owned synthetic preview only."""
 import json
 import time
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from uuid import uuid4
 from assistant_context import Contexts, holding, waiting
@@ -45,6 +46,11 @@ def run_checks(url, query, manifest, fake, trap, psql, environment):
     editor.call('settings/ai/agents', expected=403)
     editor.call(prompt_path + '/save', {'operationId': str(uuid4()), 'page': 'risk_jobs', 'expectedVersion': 0, 'instructions': 'Synthetic risk guidance.'})
 
+    application = 'Synthetic installation instructions.'
+    tool_guide = 'Synthetic operation discovery instructions.'
+    for scope, text in (('application', application), ('tool:discover_page_operations', tool_guide)):
+        admin.call(prompt_path + '/save', {'operationId': str(uuid4()), 'page': scope, 'expectedVersion': 0, 'instructions': text})
+
     owner_login = 'synthetic_assistant_admin_' + stamp
     owner = client('admin')
     owner.call('admin/create', {'operationId': str(uuid4()), 'login': owner_login, 'name': 'Synthetic assistant administrator', 'kind': 'human',
@@ -67,6 +73,17 @@ def run_checks(url, query, manifest, fake, trap, psql, environment):
     check('adding the digest tool never silently widens an existing workspace grant', denied['code'] == 'grant_required')
     frame = initial_frame(owner.call('workspace/navigation'), '2020-12-18')
 
+    fake.respond(stream(recording(identifier, text='Synthetic conceptual answer.')))
+    conceptual = owner.call('assistant/turns/ask', {'operationId': str(uuid4()), 'conversationId': None, 'agentId': agent['id'], 'version': 1,
+        'question': 'Explain a synthetic concept without reading business data.', 'pageReport': {'page': 'users_access', 'selection': {}},
+        'knowledge': {'mode': 'current', 'contextId': None, 'frameId': frame['id']}})['turn']
+    deadline = time.monotonic() + 20
+    while query(f"SELECT state FROM assistant.turns WHERE id='{conceptual['id']}';") not in ('completed', 'failed', 'cancelled', 'interrupted'):
+        assert time.monotonic() < deadline, 'conceptual turn did not finish'
+        time.sleep(.05)
+    check('a text-only question neither copies market inputs nor captures a financial context',
+          query(f"SELECT state='completed' AND pins IS NULL AND context_id IS NULL AND recorded_at IS NULL FROM assistant.turns WHERE id='{conceptual['id']}';") == 't')
+
     def ask(requests, page='users_access', session=None, state=None, frame_id=None, operational=False, report=None, knowledge=None, question=None):
         session = session or owner
         state = state or agent
@@ -88,6 +105,16 @@ def run_checks(url, query, manifest, fake, trap, psql, environment):
         results = [json.loads(part['content']) for part in calls[-1]['messages'][-1]['content'] if part['type'] == 'tool_result']
         return current, results, calls
 
+    park_report = {'page': 'blotter', 'selection': {'view': 'trade', 'mode': None, 'bookIds': None, 'portfolioIds': None,
+        'groupBy': None, 'measures': None, 'tradeId': str(uuid4()), 'instrumentType': 'physical_gas_park_loan', 'revision': 1},
+        'layout': {'pane': {'details': True, 'charts': False}, 'poppedOut': False},
+        'view': {'mode': 'trades', 'bookIds': [], 'portfolioIds': [], 'groupBy': [], 'measures': [], 'primaryMeasure': None},
+        'focus': {'tradeIds': [], 'pivotCell': None}}
+    park_turn, park_results, _ = ask([('read_current_page', {})], report=park_report)
+    check('a selected Park and Loan admits questions and refuses its unqualified read without financial acquisition',
+          park_results[0]['code'] == 'page_not_supported'
+          and query(f"SELECT pins IS NULL AND context_id IS NULL AND recorded_at IS NULL FROM assistant.turns WHERE id='{park_turn['id']}';") == 't')
+
     turn, results, calls = ask([('read_current_page', {}), ('discover_page_operations', {'page': 'users_access', 'operation': 'admin.update_v1'})])
     check('an administrator page is read through its ordinary authorized directory', 'directory' in results[0] and 'data' in results[0]['directory'])
     check('operation discovery returns the actual handler request contract', results[1]['operations'][0]['input']['body']['contract'] == 'AdminUpdate')
@@ -98,10 +125,48 @@ def run_checks(url, query, manifest, fake, trap, psql, environment):
           and discovery['swaps.book_v1']['effect'] == 'requires_user_approval'
           and discovery['admin.update_v1']['effect'] == 'requires_user_approval'
           and discovery['swaps.catalog_v1']['effect'] == 'read_or_preview')
-    check('the admitted page guidance reaches the provider after the fixed policy', prompt['instructions'] in calls[0]['system'][0]['text'])
+    check('only the admitted application, agent and page guidance reaches the provider',
+          calls[0]['system'][0]['text'] == application + '\n\nSynthetic agent instructions.\n\n' + prompt['instructions'])
+    check('tool guidance is explicitly configured and absent guidance remains empty',
+          {t['name']: t['description'] for t in calls[0]['tools']} == {name: tool_guide if name == 'discover_page_operations' else '' for name in tools})
+    check('a pure administrative read and broad discovery do not acquire market context',
+          query(f"SELECT context_id IS NULL AND pins IS NULL FROM assistant.turns WHERE id='{turn['id']}';") == 't')
+    check('application and tool guidance pins include explicit absence',
+          query(f"SELECT count(*) FROM assistant.turn_instruction_pins WHERE turn_id='{turn['id']}';") == str(len(tools)+1)
+          and query(f"SELECT version IS NULL FROM assistant.turn_instruction_pins WHERE turn_id='{turn['id']}' AND scope='tool:navigate';") == 't')
     check('the turn pins the exact page prompt version', query(f"SELECT version FROM assistant.turn_prompt_pins WHERE turn_id='{turn['id']}';") == '1')
     admin.call(prompt_path + '/save', {**prompt, 'operationId': str(uuid4()), 'expectedVersion': 1, 'instructions': 'Synthetic next guidance.'})
     check('later prompt edits do not alter an admitted turn', query(f"SELECT version FROM assistant.turn_prompt_pins WHERE turn_id='{turn['id']}';") == '1')
+
+    # Edits during a provider wait affect the next question, including guidance that was absent at admission.
+    release = threading.Event()
+    before = len(fake.received)
+    fake.respond(stream('', release, tool_use(identifier, [('pinned_prompt_read', 'discover_page_operations', {'page': 'users_access', 'operation': None})])),
+                 stream(recording(identifier, text='Synthetic unchanged prompt answer.')))
+    pending = owner.call('assistant/turns/ask', {'operationId': str(uuid4()), 'conversationId': None, 'agentId': agent['id'], 'version': 1,
+        'question': 'Inspect synthetic operation metadata.', 'pageReport': {'page': 'users_access', 'selection': {}},
+        'knowledge': {'mode': 'current', 'contextId': None, 'frameId': None}})['turn']
+    try:
+        deadline = time.monotonic() + 20
+        while len(fake.received) == before:
+            assert time.monotonic() < deadline, 'provider did not receive the pending question'
+            time.sleep(.05)
+        for scope, version, text in (('application', 1, 'Synthetic revised application guidance.'),
+                                     ('tool:discover_page_operations', 1, 'Synthetic revised discovery guidance.'),
+                                     ('tool:navigate', 0, 'Synthetic newly configured navigation guidance.')):
+            admin.call(prompt_path + '/save', {'operationId': str(uuid4()), 'page': scope, 'expectedVersion': version, 'instructions': text})
+    finally:
+        release.set()
+    deadline = time.monotonic() + 20
+    while query(f"SELECT state FROM assistant.turns WHERE id='{pending['id']}';") == 'running':
+        assert time.monotonic() < deadline, 'pending question did not finish'
+        time.sleep(.05)
+    pending_calls = [json.loads(r['body']) for r in fake.received[before:]]
+    check('application and tool guidance, including explicit absence, remain fixed across an in-flight edit',
+          len(pending_calls) == 2 and pending_calls[0]['system'] == pending_calls[1]['system']
+          and pending_calls[0]['tools'] == pending_calls[1]['tools']
+          and pending_calls[1]['system'][0]['text'].startswith(application + '\n\n')
+          and next(t['description'] for t in pending_calls[1]['tools'] if t['name'] == 'navigate') == '')
 
     for page in ('dashboard', 'vol_surfaces'):
         admin.call(prompt_path + '/save', {'operationId': str(uuid4()), 'page': page, 'expectedVersion': 0, 'instructions': 'Synthetic identity-only guidance.'})
@@ -132,7 +197,7 @@ def run_checks(url, query, manifest, fake, trap, psql, environment):
         'knowledge': {'mode': 'current', 'contextId': None, 'frameId': frame['id']}}, expected=422)
     check('facility questions require their operating date rather than borrowing a financial frame', missing_date['code'] == 'snapshot_missing')
     listed = admin.call(prompt_path)['pages']
-    check('the entire API page catalog is accepted by SQL prompt admission', all(query(f"SELECT assistant.is_prompt_page('{p['id']}');") == 't' for p in listed))
+    check('the entire API page catalog is accepted by SQL prompt admission', all(query(f"SELECT assistant.is_prompt_scope('{p['id']}');") == 't' for p in listed))
 
     _, entry_results, _ = ask([('read_workspace_page', {'page': 'blotter_new_swap'})], page='blotter_new_swap')
     swap_operations = {op['id']: op for op in entry_results[0]['operations']}
@@ -275,7 +340,12 @@ def run_checks(url, query, manifest, fake, trap, psql, environment):
         with ThreadPoolExecutor(max_workers=1) as executor:
             def blocked():
                 future = executor.submit(owner.call, 'assistant/actions/authorize', {'turnId': expires_turn['id'], 'step': 1}, expected=403)
-                waiting(query, 1, 'security.apply_administration')
+                try:
+                    waiting(query, 1, 'security.apply_administration')
+                except AssertionError:
+                    if future.done():
+                        raise AssertionError(('authorization returned before the held command', future.result()))
+                    raise
                 time.sleep(3.1)
                 return future
             future = holding(psql, environment, f"SELECT principal_id FROM security.workspace_memberships WHERE principal_id='{target['id']}' FOR UPDATE", blocked)
@@ -310,5 +380,45 @@ def run_checks(url, query, manifest, fake, trap, psql, environment):
     # Discovery itself is scoped; no secret replacement or arbitrary request primitive enters a model contract.
     _, results, _ = ask([('discover_page_operations', {'page': 'settings_ai', 'operation': 'settings.ai.providers.key_v1'})])
     check('provider credential replacement is absent from the assistant catalog', results[0]['operations'] == [])
+    # Exact close input sets are referenced, including a selected historical alias.
+    from close_session_fixture import record as record_close
+    source = next(f for f in owner.call('workspace')['frames'] if f['id'] == frame['id'])
+    close = record_close(client('approver'), source, 'Synthetic assistant close')
+    owner.call('workspace/navigation')
+    close_report = {'page': 'curves', 'selection': {'view': 'curves', 'curve': None}}
+    close_turn, close_results, _ = ask([('read_page_digest', {'mode': 'overview'})], report=close_report, frame_id=close['id'])
+    check('requested close reads retain an exact foreign key and no duplicated source matrix',
+          'Curves: ' in close_results[0]['result']['text']
+          and json.loads(query(f"SELECT pins::text FROM assistant.turns WHERE id='{close_turn['id']}';")) == {'frameId': close['id'], 'closeId': close['id']}
+          and query(f"SELECT close_id FROM assistant.turn_close_pins WHERE turn_id='{close_turn['id']}';") == close['id'])
+    curve_agent = fixture.publish(fixture.save(fixture.create('recorded close curve'), model,
+        tools=['read_custom_curves', 'prepare_custom_curve'], roles=['trader']))
+    owner.call('assistant/grants/grant', {'operationId': str(uuid4()), 'agentId': curve_agent['id'], 'version': 1})
+    definition = {'code': 'synthetic_close_proposal', 'name': 'Synthetic close proposal', 'output': 'out', 'nodes': [
+        {'id': 'source', 'kind': 'source', 'parameters': {'curve': 'future'}, 'inputs': {}},
+        {'id': 'select', 'kind': 'select', 'parameters': {'mode': 'positions', 'first': '1', 'count': '1', 'binding': 'context'}, 'inputs': {'source': 'source'}},
+        {'id': 'dates', 'kind': 'dates', 'parameters': {'mode': 'context', 'sampling': 'context_utc_time', 'corrections': 'exact_context_frame_history_latest_visible'}, 'inputs': {}},
+        {'id': 'sample', 'kind': 'sample', 'parameters': {}, 'inputs': {'selection': 'select', 'dates': 'dates'}},
+        {'id': 'out', 'kind': 'output', 'parameters': {}, 'inputs': {'values': 'sample'}}]}
+    formula = owner.call('custom-curves/format', {'definition': definition})['formula']
+    prepared, prepared_results, _ = ask([('read_custom_curves', {}), ('prepare_custom_curve', {
+        'code': definition['code'], 'name': definition['name'], 'engine': 'custom_curve_recipe_v2', 'formula': formula})],
+        page='custom_curves', report={'page': 'custom_curves', 'selection': {'curve': None, 'unsaved': False}}, state=curve_agent, frame_id=close['id'])
+    check('a recorded close supports requested curve preparation', prepared_results[1].get('result', {}).get('status') == 'proposed_draft')
+    opened = owner.call('assistant/curve-proposal', {'turnId': prepared['id'], 'step': 2})
+    check('reopening a recorded-close proposal binds its exact context once and returns the original unpriced draft',
+          opened['status'] == 'unpriced_draft' and opened['definition'] == definition
+          and opened['origin']['contextId'] == prepared['context']['contextId'] and opened['frameId'] == close['id'])
+    try:
+        owner.call('market/context/retained', {'contextId': close_turn['context']['contextId'], 'selection': 'latest_correction'})
+        historical = next(f for f in owner.call('workspace')['frames'] if f.get('originCloseId') == close['id'])
+        retained_turn, _, _ = ask([('read_page_digest', {'mode': 'overview'})], report=close_report,
+            knowledge={'mode': 'retained', 'contextId': close_turn['context']['contextId'], 'frameId': historical['id']})
+        check('a historical close alias stays compact and uses the exact selected context',
+              historical['id'] != close['id'] and retained_turn['context']['contextId'] == close_turn['context']['contextId']
+              and json.loads(query(f"SELECT pins::text FROM assistant.turns WHERE id='{retained_turn['id']}';")) == {'frameId': historical['id'], 'closeId': close['id']})
+    finally:
+        owner.call('market/current', {})
+
     check('no model request reaches configured proxy traps', trap.connections == 0)
     print(f'PASS {passed} assistant workspace integration checks', flush=True)
