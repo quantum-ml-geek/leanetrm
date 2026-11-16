@@ -1,6 +1,6 @@
 # Architecture and domain contracts
 
-D412 adds [commercial Transport capacity operations](gas-transport-capacity-operations.md)
+D415 adds [commercial Transport capacity operations](gas-transport-capacity-operations.md)
 over independent exact entitlement, capacity-version and chosen-plan identities.
 Shared gross limits, explicit empty release and retained source/authority
 admission have local managed/native, upgrade and actual browser qualification.
@@ -12,7 +12,7 @@ over independent native ownership and cash. The bounded title-transfer profile
 uses shared entry, lifecycle and current-clock interactive/retained price risk.
 Release qualification and broader service capabilities remain separate.
 
-D409 adds [physical storage assets and activity](storage-facility-operations.md),
+D414 adds [physical storage assets and activity](storage-facility-operations.md),
 independent from commercial entitlement, title and cash. The first operating
 profile has local managed, native, upgrade and browser qualification. Integration
 and release gates remain separate from that evidence.

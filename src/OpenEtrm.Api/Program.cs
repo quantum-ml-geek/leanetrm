@@ -2537,6 +2537,13 @@ api.MapPost("/options/holding",(HttpContext c,FuturesOptionHoldingRequest body)=
 // Booked option positions with their series' stored analytics, for those who read trades and market data. It prices nothing.
 api.MapPost("/options/positions",(HttpContext c,OptionPositionsRequest body)=>TradingRead(c,body.Context??throw new MarketDataException("option_context","Supply the selected context."),
     (connection,view,ct)=>tradeReads.ReadBound(connection,view,()=>OptionPositionAnalytics.Read(connection,database,view,body,ct),ct),expectedConvention:FuturesOptionStore.Convention));
+// A strategy of option legs on one expiry: what it may be built from, read from the product's stored surface, and its
+// analysis, which calibrates the legs as valuation does and values them under the shared scenario layers. Both are reads
+// for those who read trades and market data, and book and store nothing; the analysis is also an asynchronous read.
+api.MapPost("/options/strategy/setup",(HttpContext c,OptionStrategySetupRequest body)=>TradingRead(c,body.Context??throw new MarketDataException("option_context","Supply the selected context."),
+    (connection,view,ct)=>tradeReads.ReadBound(connection,view,()=>OptionStrategyRead.Setup(connection,database,view,body,ct),ct),expectedConvention:FuturesOptionStore.Convention));
+api.MapPost("/options/strategy/analyze",(HttpContext c,OptionStrategyAnalyzeRequest body)=>TradingRead(c,body.Context??throw new MarketDataException("option_context","Supply the selected context."),
+    (connection,view,ct)=>OptionStrategyRead.Read(tradeReads,connection,database,view,body,ct),expectedConvention:FuturesOptionStore.Convention));
 // Volatility surfaces: a fit is a job on the retained risk queue, admitted over working data by those who may publish market data
 // and read trades; the read returns the stored revision fitted at the selected close and known at the selected context, and the
 // library lists the stored surfaces with the close each belongs to. No agent tool fits.
@@ -2808,7 +2815,8 @@ AsyncReadPlan PrepareAsyncRead(PreviewSession session,AsyncReadInput input)
         },ct));
         var scenario=input.Permissions.Contains("RunScenario");
         var combined=input.Body is TradingWorkspaceRequest;
-        var convention=input.Body is FuturesEditorRequest?null:input.Body is SwapEditorRequest?SwapStore.Convention:TradingBlotter.Convention;
+        var convention=input.Body is FuturesEditorRequest?null:input.Body is SwapEditorRequest?SwapStore.Convention:
+            input.Body is OptionStrategyAnalyzeRequest?FuturesOptionStore.Convention:TradingBlotter.Convention;
         Guid? head=input.Body switch{FuturesEditorRequest body=>body.TradeId,SwapEditorRequest body=>body.TradeId,_=>null};
         Func<NpgsqlConnection,TradingView,CancellationToken,Task<object>> operation=input.Body switch
         {
@@ -2822,6 +2830,7 @@ AsyncReadPlan PrepareAsyncRead(PreviewSession session,AsyncReadInput input)
             FuturesEditorRequest body=>(connection,view,ct)=>tradeReads.FuturesTrade(connection,view,body.TradeId,body.Revision,ct),
             SwapEditorRequest body=>(connection,view,ct)=>tradeReads.SwapTrade(connection,view,body.TradeId,body.Revision,ct),
             RiskScopeRequest body=>(connection,view,ct)=>tradeReads.ReadBound(connection,view,()=>RiskTradeScope.Directory(connection,database.Manifest.CatalogId,view.CalculationFrame,body,ct),ct),
+            OptionStrategyAnalyzeRequest body=>(connection,view,ct)=>OptionStrategyRead.Read(tradeReads,connection,database,view,body,ct),
             _=>(connection,view,ct)=>tradeReads.Read(connection,view,data=>AsyncPortfolioRead(input,connection,data,view.CalculationFrame,ct),ct,
                 referenceScope:ReferenceReadScope.TradeValuation,observationScope:ObservationReadScope.ExactPins)
         };

@@ -116,7 +116,7 @@ internal static class OptionPositionAnalytics
                 Figure(SignedRatio.Sum(members.Select(r=>r.Measures[measure].Amount!.Value)),null);
         return sums;
     }
-    private static JsonObject Figure(SignedRatio? amount,string? missing)=>new(){["amount"]=amount is {} stated?HalfEven18.Report(stated):null,["missing"]=missing};
-    private static SignedRatio Ratio(ExactDecimal value)=>SignedRatio.TryParse(value.ToString(),out var ratio)?ratio:
+    internal static JsonObject Figure(SignedRatio? amount,string? missing)=>new(){["amount"]=amount is {} stated?HalfEven18.Report(stated):null,["missing"]=missing};
+    internal static SignedRatio Ratio(ExactDecimal value)=>SignedRatio.TryParse(value.ToString(),out var ratio)?ratio:
         throw new MarketDataException("numeric_format","An exact decimal has plain decimal text.");
 }

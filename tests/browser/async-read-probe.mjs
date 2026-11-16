@@ -6,7 +6,7 @@ function installAsyncReadProbe(){
   'curve.evaluate.v1':'evaluate','curve.history.v1':'history','curve.shapes.v1':'market/curve-shapes',
   'trading.directory.v1':'trading/directory','trading.freshness.v1':'trading/freshness','trading.positions.v1':'trading/positions',
   'trading.position.v1':'trading/position','trading.workspace.v1':'trading/workspace','trading.blotter.v1':'trading/blotter',
-  'futures.editor.v1':'futures/editor','swaps.editor.v1':'swaps/editor',
+  'futures.editor.v1':'futures/editor','swaps.editor.v1':'swaps/editor','options.strategy.analyze.v1':'options/strategy/analyze',
   'portfolio.risk.catalog.v1':'portfolio/risk/catalog','portfolio.risk.calculate.v1':'portfolio/risk',
   'portfolio.risk.scope.v1':'portfolio/risk/scope','portfolio.risk.history.v1':'portfolio/risk/history',
   'portfolio.risk.statistical.setup.v1':'portfolio/risk/statistical/setup',
