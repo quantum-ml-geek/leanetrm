@@ -2,22 +2,23 @@
 
 ## Mandatory Side composition (D413)
 
-Status: agreed boundary; implementation and qualification in progress.
+Status: implemented and locally qualified for power, REC and required common
+adapters. Final merged verification results are recorded in the capability
+contract; other product families and release activation remain separate.
 
 All financial instruments derive from `Instrument`. Only `FuturesContract` and
 exchange-traded `FuturesOptionInstrument` may have no Sides. The current increment
 covers power, REC and their required common retained-program/claim adapters,
 using concrete subclasses of abstract `Side` with immutable independent schedules
 and Side-owned PV. The universal rule does not qualify another product family.
-Reuse shared
-fixed/floating economics without replacing asset-specific behavior with product
-switches. Instruments combine signed memberships; Trade applies external typed
+Reuse shared fixed/floating economics without replacing asset-specific behavior
+with product switches. Instruments combine signed memberships; Trade applies external typed
 quantity once. Shared operating feasibility supplies typed quantities/state and
 does not own Sides or another PV.
 
-The operating assembly increment must:
+The implemented operating assembly contract:
 
-1. Admit the explicit `operating_side_composition_v2` contract through the common
+1. Admits the explicit `operating_side_composition_v2` contract through the common
    managed API and UI: one to eight ordered independent Sides, explicit stable
    keys, names, quantity sources, coefficients, delivery/payment kind, prices and
    each Side's own payment rule where applicable. Repeated quantity sources remain
@@ -27,21 +28,24 @@ The operating assembly increment must:
    plan-linked Side alongside any literal horizon payment Sides. The whole-right
    literal is consumed once in the first native interval, with payment from the
    first operating month under its explicit rule; it is not a periodic capacity
-   fee. Delivery uses a typed physical-plan output. This
-   admission bound matches the existing native eight-slot composition contract.
-2. Preserve legacy valuation JSON, economic identities, accepted receipts and
-   certified reads. Native saved-v2 admission must independently validate the
-   original composition and sealed programs before publication; preview support
-   alone does not admit a new saved profile.
-3. Retain exact Side/program memberships and source/cell/quantity relationships,
+   fee. Delivery uses a typed physical-plan output. The admission bound matches
+   the existing native eight-slot composition contract.
+2. Preserves legacy valuation JSON, economic identities, accepted receipts and
+   certified reads. Native saved-v2 admission independently validates the original
+   composition and sealed programs before publication; saved reads execute
+   concrete retained Sides without repricing authored definitions.
+3. Retains exact Side/program memberships and source/cell/quantity relationships,
    current book/party/market/physical authority, expected heads, command replay,
    business-fact no-ops and worker fences. Full-right facility overlap protection
    spans old/new profiles and facility versions. Composition adds no pooled
    solar/storage dispatch or physical lifecycle.
-4. Qualify independent Side dates and directions, repeated-source cash legs,
-   retained reopen/inspection, single application of member/trade signs, ordinary
+4. Is covered by independent checks of Side dates and directions, repeated-source
+   cash legs, retained reopen/inspection, single application of member/trade signs, ordinary
    portfolio base/up/down risk, malformed native commands and historical/current
-   authority boundaries. Record measured results only after these checks pass.
+   authority boundaries. Native expiry checks reject a semantic no-op whose
+   receipt insertion outlives its authority. Final merged frontend/browser and
+   managed/native/HTTP results are recorded in the
+   [D413 qualification](structured-power-trading.md#d413-qualification).
 
 See [the developer contract](instrument-contracts.md) and
 [the operating profile](structured-power-trading.md#explicit-side-assembly-d413).

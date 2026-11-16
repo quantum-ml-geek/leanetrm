@@ -6,7 +6,8 @@ except futures and exchange-traded options. All instruments derive from
 `Side` subclasses and combines their signed PVs. Retained execution is a Side
 implementation, and shared operating plans supply quantities/state without
 nested Side or Instrument PV. The power/REC increment and its required common
-adapters are in progress; see [the contract](instrument-contracts.md) and
+adapters are implemented with bounded managed, native and owned HTTP qualification;
+see [the contract](instrument-contracts.md) and
 [acceptance gates](plan.md#mandatory-side-composition-d413).
 
 D406 adds locally qualified [Park and Loan commercial booking](gas-park-loan.md)

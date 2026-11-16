@@ -166,6 +166,17 @@ def check_composition(client,query,manifest,legacy,route,frame,context):
     assert fraction(repeated_value['value'])==Fraction(5326,10) and len(repeated_value['sides'])==6
     repeated_holding=client.call('trading/position',dict(context=context,tradeId=repeated['tradeId'],bindingId=repeated['bindingId'],revision=1,instrumentType='operating_right'))['holding']
     assert Fraction(repeated_holding['presentValue'])==Fraction(5326,10)
+    position=dict(context=dict(context),tradeId=repeated['tradeId'],bindingId=repeated['bindingId'],revision=1,instrumentType='operating_right')
+    inspection=dict(position=position,sideSlot=None,contribution=None,offset=0,limit=32)
+    directory=client.call('trading/side-schedules',inspection)
+    assert len(directory['sides'])==6
+    position['context'].update(knowledgeMode='retained',contextId=directory['contextId'])
+    for side,total in zip(directory['sides'],map(Fraction,['810','-200','-18.1','-36.2','-5','-18.1'])):
+        selected=dict(inspection,sideSlot=side['slot'])
+        page=client.call('trading/side-schedules',selected)['page']
+        assert page['manifest']==side['manifest'] and sum(Fraction(row['presentValue']) for row in page['rows'])==total
+        detail=client.call('trading/side-schedules',dict(selected,contribution=page['rows'][0]['key']))['page']
+        assert detail['rows'] and detail['valueBasis']=='unit_side_v1'
     from check_operating_composition_authority import run_checks as check_authority
     check_authority(query,manifest,request,saved)
     print('PASS operating Side assembly HTTP: repeated display names/sources, five concrete schedules, delivery, independent dates, exact saved PV, replay and exclusivity',flush=True)

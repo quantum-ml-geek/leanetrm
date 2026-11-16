@@ -3,9 +3,11 @@
 D413 requires the retained program to execute through a concrete subclass of
 abstract `Side`. Its exact immutable program supplies that Side's schedule and PV;
 the owning Instrument combines signed Side memberships rather than looping over
-raw programs as a substitute for Sides. This conversion is in progress, so the
-existing retained execution/storage qualification below does not alone certify
-the new inheritance boundary. See [the instrument contract](instrument-contracts.md).
+raw programs as a substitute for Sides. The power/REC increment and its required
+common adapters implement this through `RetainedProgramSide`, with independent
+schedule/PV/inspection, signed aggregation and scenario/discount isolation checks.
+The existing storage qualification below does not establish broader product
+capability. See [the instrument contract](instrument-contracts.md).
 
 This checkpoint implements booking-time executable storage and an authorized
 direct loader for D258. It does not switch the application's valuation adapters

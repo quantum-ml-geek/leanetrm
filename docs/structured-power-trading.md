@@ -7,7 +7,8 @@ managed calculation contracts. A saved facility alone creates no trade.
 
 ## Explicit Side assembly (D413)
 
-Status: accepted contract; implementation and qualification in progress.
+Status: implemented and locally qualified for the bounded power/REC and required
+common-adapter scope. Final merged results are recorded below.
 
 The optional preview `composition` selects `operating_side_composition_v2` while
 legacy `valuation` is null. It explicitly states perspective, measure, currency,
@@ -44,12 +45,47 @@ be reused; the instrument combines only signed Side contributions. A retained
 program is executed by its concrete Side. Common feasibility outputs supply
 typed quantities to all members without invoking a Side or Instrument PV.
 
-The GUI must prepare this same explicit contract and invalidate review after
-composition or context edits. Native saved-v2 admission and populated upgrade
-qualification remain required before this section can claim saved-v2 support.
+The GUI prepares this same explicit contract and invalidates review after
+composition or context edits. Native saved-v2 admission validates each original
+member against its sealed quantity, price, sign, roots and independent value date.
+Ordinary reopen, Side inspection and portfolio valuation execute concrete
+`RetainedProgramSide` members. Feasibility-only reconstruction clears both
+financial request versions and cannot reprice or regenerate those saved Sides.
+Existing v1 commands, identities and first outcomes remain unchanged.
+
+The owned HTTP workflow books and reopens five independent Sides, including two
+same-source fees with the same display name and different payment dates, at an
+independently expected value of `550.7`. Native checks preserve distinct thermal
+guaranteed and consumption sources, reject malformed compositions and match
+managed label whitespace/length rules. A delayed native receipt insertion that
+expires the caller's authority refuses and rolls back, including semantic no-ops.
+These are bounded qualification results, not production capacity evidence.
+
 Independent Side dates do not enable started delivery, shared-resource pooling,
-optimization, invoices or payment processing. The qualified legacy profile and
-its existing numerical oracles remain documented below.
+optimization, invoices or payment processing. The legacy profile and its
+existing numerical oracles remain documented below. Populated installation
+upgrade and release qualification remain explicit activation gates.
+
+### D413 qualification
+
+Local verification on 2026-11-16 covered power, REC and the required common
+adapters. These counts describe the verified workload, not broader product or
+production capacity:
+
+| Check | Verified result |
+| --- | --- |
+| Managed domain | 775 core checks pass, including concrete retained Sides, independent signed assembly, exact legacy identities, concurrent first access and context/scenario/discount isolation. |
+| Managed API and builds | Default API suite emits 98 PASS records; four structured-power groups and one hedge group pass. Core, API and worker builds have zero warnings/errors. |
+| Frontend | 1,961 checks pass, including actual Chrome component checks for independent Side entry, repeated sources, presets, allowed kinds and review invalidation. |
+| Native storage | The complete 349-migration chain and native workflows pass on stock PostgreSQL 16.14 and 18.1, including malformed composition, exact source quantities, label parity, replay and current authority. |
+| Saved trading HTTP | Five independent Sides reopen at `550.7`; an explicit sixth repeated-source membership gives `532.6`. All six native Side pages and calculation details pass. Legacy/v2 booking, expiry refusal, REC forwards and inventory remain green. |
+| Live API-backed browser | 27 checks pass: 15 facility/plan checks and 12 saved trading/REC checks. The run removes its owned disposable resources. |
+| Repository | 142 Python checks pass. |
+
+These results do not authorize deployment, schema activation or operations on an
+existing database. Installation-specific populated upgrade and release checks
+remain separate gates; no optimizer, pooled resource operation or new physical/
+cash lifecycle is qualified by Side assembly.
 
 ## Operating-right booking
 

@@ -29,12 +29,14 @@ and schedules. They remain separate contributions. A Side contains neither peer
 Sides nor an Instrument whose PV it calls. Shared operating feasibility produces
 typed quantity/state outputs consumed by those Sides; it adds no separate PV.
 
-This is a mandatory implementation boundary. The current D413 increment covers
-power, REC and their required common adapters; its retained-program, claim and
-operating assembly paths must satisfy the same rule before that increment is
-described as qualified. The rule alone establishes no capability or qualification
-for another product family. Existing booking versions and retained identities
-remain readable under their original financial and authorization contracts.
+The D413 increment implements this boundary for power, REC and their required
+common adapters. `RetainedProgramSide` owns exact retained schedule execution and
+inspection, with ordinary signed Side aggregation and context-bound reuse.
+Managed numerical checks, native admission and the owned saved-trade HTTP workflow
+qualify this bounded scope. The rule alone establishes no capability or
+qualification for another product family. Existing booking versions and retained
+identities remain readable under their original financial and authorization
+contracts.
 
 ## Trade ownership
 

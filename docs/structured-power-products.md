@@ -22,16 +22,18 @@ Only consumed physical parameters are saved; guarantees, entitlement, state,
 dispatch, prices and fees remain explicit preview inputs. Unsupported planned
 fields appear disabled as **Coming soon**.
 
-D413 additionally requires concrete Side composition and an explicit operating
-assembly contract. That refactor is in progress, separately from the qualified
-D412 supplied-plan profile below. Fixed/floating pricing is shared economics;
-the concrete Side owns its asset/delivery/payment behavior and retained schedule.
-The [instrument contract](instrument-contracts.md) applies to previews, booked
-programs and ordinary portfolio valuation alike.
+D413 implements explicit operating assembly through concrete Side composition,
+with separate independent dates and prices, repeated quantity sources and native
+saved admission. It preserves the qualified D412 request/identity contract below.
+Fixed/floating pricing is shared economics; the concrete Side owns its
+asset/delivery/payment behavior and retained schedule. The
+[instrument contract](instrument-contracts.md) applies to previews, booked
+programs and ordinary portfolio valuation alike. Qualification is bounded to
+power, REC and their required common adapters.
 
 The managed supplied-plan preview validates thermal commitment/fuel and battery
 state paths, and resolves solar entitlement and delivery/payment quantities.
-Ordinary independent payment Sides own the schedules and price typed outputs
+Ordinary independent delivery/payment Sides own the schedules and price typed outputs
 from the same plan. Results expose exact gross rows and signed contributions
 under the explicit right-holder, remaining-operating-value measure. Current
 priced previews are undiscounted; fixed-profile solar exposes quantity residuals
