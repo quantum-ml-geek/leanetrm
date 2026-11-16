@@ -694,6 +694,12 @@ locked NuGet/npm caches, verified stock PostgreSQL packages and corresponding
 sources, offline installation and a GitHub cache miss/save/restore/hit check.
 These checks preserve the ordinary matrix and release gates.
 
+D405 separates shared behavior checks from integration preparation and selects
+conservative path consumers for pull requests. All existing full-gate commands
+and same-commit master publication remain required. Managed runtime feature
+selection and coverage-derived dependency analysis remain future work. See
+[CI impact selection](ci-impact.md) for implemented boundaries and qualification.
+
 The default public page and hosted gateway route contract are available
 separately from the authenticated workspace (D163). An owned nginx check exercises
 static routes, native application routing and a synthetic sign-in upstream.
@@ -1817,7 +1823,7 @@ named place. Physical cargo logistics and tanker freight need distinct explicit
 contracts. Additional fee types/amounts remain deferred to their first executable
 consumer; no unused catalog is added in this increment.
 
-## Authorized structured power continuation (D405)
+## Authorized structured power continuation (D406)
 
 The [operating-facility slice](operating-facilities.md) retains supported thermal,
 battery and solar physical parameters on exact existing locations, with supplied

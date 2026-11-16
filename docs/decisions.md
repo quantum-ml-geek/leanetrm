@@ -5549,11 +5549,37 @@ admission/reconciliation and progressive row streams. This decision does not
 expand numerical qualification or authorize merging or deployment; qualification
 and the pull request record the implemented operations and remaining limits.
 
-## D405 — Operating-facility versions and supplied-plan previews
+
+## D405 · Explicit CI consumers and shared verification groups
+
+Pull requests select the union of declared changed-path consumers. Repository
+checks always run. Documentation and isolated test edits may select narrower
+groups; managed runtime, SQL, dependencies, workflow, shared helpers and unknown
+paths require broad verification. Missing/empty comparisons and unrelated
+checkouts require the complete gate. Compare the PR common ancestor with its
+tested merge result, include both sides of renames, and retain complete Git
+history without a changed-file API limit.
+
+Separate repository, frontend, managed and database behavior checks from the
+fourteen existing integration groups. Run shared suites once across the matrix.
+Each integration checkout retains locked builds of the API checks, MarketData
+checks and worker, plus frontend assets and owned disposable resources. Preserve
+all existing native/browser consumers and the pinned dependency acquisition
+contract. Caches never count as test evidence.
+
+The stable required check rejects failed, cancelled and skipped selection/jobs.
+Every master push and manual dispatch requires the full gate. Publication requires
+that complete plan for the same master push plus existing enablement/environment
+controls. The pull operator requires an exact latest-head release; documentation
+pushes retain that path so they cannot strand earlier runtime changes. See
+[CI impact selection](ci-impact.md) for the executable boundaries and remaining
+qualification. No application, schema or financial contract changes are included.
+
+## D406 — Operating-facility versions and supplied-plan previews
 
 Status: decided 2026-11-16. The supplied-plan capability was checked in an
-isolated predecessor worktree. Its current-master port and the authorized
-extensions below require their own integrated qualification.
+isolated worktree on the current master base. Saved trading, hedge reporting
+and durable REC extensions below require their own integrated qualification.
 
 - Physical operating setup extends the existing exact reference location. It
   stores no duplicate name, location type or coordinates, and no planned field
@@ -5580,7 +5606,7 @@ extensions below require their own integrated qualification.
   before delivery; each priced interval must fit its saved window. Current
   control state governs authoring and command recovery.
 - The pure REC kernel remains the immutable state-transition evaluator. The
-  authorized durable consumer records supplied issuance/incoming-transfer evidence,
+  authorized durable consumer will record supplied issuance/incoming-transfer evidence,
   exact lot/range ownership, allocation, release, transfer and retirement under
   certified knowledge with current authority. It does not submit an external
   registry action, manufacture inventory from forecasts, choose lots automatically
