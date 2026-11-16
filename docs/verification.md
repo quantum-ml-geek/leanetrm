@@ -499,7 +499,7 @@ this change; they run in the pull request's CI.
 | Api checks `--async-read-contracts`, `--assistant-workspace` | local | exit 0; 1 and 21 PASS |
 | `npm test --prefix web` | local | 1,924 of 1,925 pass; the other passed when its file was run again |
 | `python3 -m unittest tests.test_ci_impact tests.test_check_all tests.test_migration_identity tests.test_ci_dependencies tests.test_public_routes` | local | 68 OK |
-| `run_preview.py --check --exchange-check`, before master's D407 was merged | container | exit 0, 363 PASS |
+| `run_preview.py --check --exchange-check` | container | exit 0, 368 PASS |
 
 What the local checks cover:
 
@@ -562,10 +562,10 @@ have been about half as fast per thread.
 
 The one web test that failed in the full run is a crude delivery-setup browser
 test whose local browser did not start within 60 s; its file's eleven tests
-pass when run again, and this change does not touch it. The exchange run was
-made before master's migrations 0339 and 0340 were merged in ahead of the
-option analytics migration, now 0341; it has not been repeated on this tree,
-and CI applies them in that order.
+pass when run again, and this change does not touch it. The exchange run is of
+this tree, with master's migrations 0339 and 0340 applied before the option
+analytics migration 0341; an earlier run, before they were merged in, also
+passed (exit 0, 363 PASS).
 
 The exchange run covers, against the exchange example with its surface fitted
 at a working snapshot: the setup offering the seven templates at the series'
@@ -580,7 +580,8 @@ with its code; a leg valued at intrinsic said on its row with the dated curves
 refused and the payoff still stated; and no surface revision stored.
 
 Measured in that run for one analysis (2 legs, 11 points, 1 curve): 22
-calibration and 64 valuation tree prices in 4.5 s on the two-CPU host.
+calibration and 64 valuation tree prices in 4.2 s on the two-CPU host (4.5 s
+in the earlier run).
 
 The first exchange run stopped at the first analysis, exit 1 with 296 PASS: the
 read resolved the product's market source without the view's own market data,
