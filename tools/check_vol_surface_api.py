@@ -161,8 +161,8 @@ def run_checks(url, query, manifest, *, run_worker, worker_login):
     rows = [(group, row) for group in held['groups'] for row in group['rows']]
     figures = ('value',) + measures
     check('position delta and gamma are stated in the unit the underlying is quoted per, never the option contract',
-          rows and all(group['quantityUnit'] == 'MMBtu' for group, _ in rows if group['product'] == PRODUCT)
-          and all(group['quantityUnit'] not in ('contract', '') for group, _ in rows), sorted({(g['product'], g['quantityUnit']) for g, _ in rows}))
+          rows and {(group['product'], group['quantityUnit']) for group, _ in rows} <= {('nymex_on', 'MMBtu (IT)'), ('nymex_lo', 'bbl (42 US gal)')},
+          sorted({(g['product'], g['quantityUnit']) for g, _ in rows}))
     check('a group states the selection its surface was fitted under and the day its thetas run to',
           all(group['sensitivities'] == {k: stated[k] for k in ('policy', 'ticks', 'priceSteps', 'volatilityBump', 'clockSource', 'clockZone', 'dayTo')}
               for group, _ in rows if group['product'] == PRODUCT), [g['sensitivities'] for g, _ in rows][:1])
