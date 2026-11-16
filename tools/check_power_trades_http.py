@@ -24,13 +24,13 @@ def original_physical_authority(client, query, manifest, selected):
         temporary,first,successor=(str(uuid4()) for _ in range(3))
         name='synthetic_operating_side_wait_'+temporary[:8]
         with ThreadPoolExecutor(max_workers=2) as pool:
-            holder=pool.submit(query,f"SET application_name='{name}';BEGIN;LOCK TABLE market_data.temporal_contexts IN ACCESS EXCLUSIVE MODE;SELECT pg_sleep(3.5);COMMIT;")
+            holder=pool.submit(query,f"SET application_name='{name}';BEGIN;LOCK TABLE trading.power_operating_instruments IN ACCESS EXCLUSIVE MODE;SELECT pg_sleep(3.5);COMMIT;")
             running=None
             installed=False
             try:
                 deadline=time.monotonic()+1.5
                 while query(f"SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE application_name='{name}' AND wait_event='PgSleep');")!='t':
-                    assert time.monotonic()<deadline,'The owned context-read lock did not become active.'
+                    assert time.monotonic()<deadline,'The owned operating-source lock did not become active.'
                     time.sleep(.01)
                 original='' if missing else f"INSERT INTO security.role_grants VALUES('{first}','{actor}','{temporary}','{manifest['tenantId']}','{manifest['workspaceId']}',clock_timestamp()-interval '1 second',clock_timestamp()+interval '1.5 seconds',false);"
                 query(f"BEGIN;DELETE FROM security.role_permissions WHERE(role_id,permission)=('{role}','ReadPhysical');"
@@ -46,11 +46,17 @@ def original_physical_authority(client, query, manifest, selected):
                 deadline=time.monotonic()+1.2
                 while time.monotonic()<deadline and not running.done():
                     blocked=query("SELECT EXISTS(SELECT 1 FROM pg_locks l JOIN pg_stat_activity a ON a.pid=l.pid "
-                        "WHERE l.relation='market_data.temporal_contexts'::regclass AND NOT l.granted "
-                        "AND a.usename='preview_runtime' AND a.wait_event_type='Lock');")=='t'
+                        "WHERE l.relation='trading.power_operating_instruments'::regclass AND NOT l.granted "
+                        "AND a.usename='preview_runtime' AND a.wait_event_type='Lock' AND a.query LIKE '%security.operating_position_scope%');")=='t'
                     if blocked:break
                     time.sleep(.01)
-                assert blocked is not missing, 'Original ReadPhysical capture must precede the exact context wait, and absent authority must refuse before it.'
+                assert blocked is not missing, 'Original ReadPhysical capture must precede the protected source wait, and absent authority must refuse before it.'
+                if blocked:
+                    assert query(f"SELECT clock_timestamp()<granted_to FROM security.role_grants WHERE id='{first}';")=='t', \
+                        'Observe the protected source wait while the original ReadPhysical grant is still active.'
+                    assert query("SELECT NOT EXISTS(SELECT 1 FROM pg_locks l JOIN pg_stat_activity a ON a.pid=l.pid "
+                        "WHERE l.relation='trading.power_operating_instruments'::regclass AND NOT l.granted AND a.usename='preview_authenticator');")=='t', \
+                        'The synthetic lock must not postpone identity issuance before the original permission capture.'
                 running.result(timeout=12);holder.result(timeout=8)
                 assert query('SELECT generation FROM security.epoch;')==epoch
                 assert query(f"SELECT granted_from<=clock_timestamp() AND clock_timestamp()<granted_to FROM security.role_grants WHERE id='{successor}';")=='t'
