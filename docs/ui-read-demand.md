@@ -1,5 +1,10 @@
 # UI read demand
 
+[D404 asynchronous delivery](async-reads.md) changes how selected reads complete,
+not which financial inputs they require. Lazy demand and shared batches still
+apply; full-scope Risk reads retain complete held-input requirements. Each view
+owns progress and supersession. Other operations retain their existing transport.
+
 D310 separates navigation metadata from executable market reads. Opening a page
 may read its exact definition/reference bundle and the offered close directory.
 These are explicit directories: closes retain their existing 128-choice capacity;

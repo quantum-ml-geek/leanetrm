@@ -25,12 +25,15 @@ for synthetic booking, graphical break-even pricing and settlement previews.
   fuel links, multi-month booking and versioned delivery setup. Future compositions
   support amendments before operational/facility relationships exist. Contractual
   pre-delivery net MTM and interactive/queued scenario risk retain independent
-  physical and payment forecasts; started-delivery indexed cash lifecycle remains
-  work. Manual nominations, acknowledgments, schedule adoption and imbalance reconciliation
-  reuse retained daily quantities. Final daily fixed-price cash determinations
-  retain original and correcting contributions; gas invoices, payments and
-  operational PV remain work. See [delivery operations](docs/gas-delivery-operations.md)
-  and [billing](docs/gas-cash-billing.md)
+  physical and payment forecasts. Started booked compositions retain remaining
+  value, accrued unsettled cash and recorded payments under the explicit
+  undiscounted policy.
+  Manual nominations, acknowledgments, schedule adoption and imbalance reconciliation
+  reuse retained daily quantities. Independent owned stock, operator claims/debts
+  and commodity loans retain their holdings and surviving cash; commercial invoice
+  issuance and broader physical settlement remain work. See
+  [delivery operations](docs/gas-delivery-operations.md),
+  [billing](docs/gas-cash-billing.md) and [owned holdings](docs/gas-owned-holdings.md)
 - **Physical crude:** fixed standard-volume booking, contractual pre-delivery PV
   and interactive/queued risk, plus bounded receipts, title transfer, inventory-lot
   allocation, dispatch, invoices, payments and cash-record corrections. See
@@ -58,7 +61,10 @@ for synthetic booking, graphical break-even pricing and settlement previews.
   splices and whole-interval lookups retain selected source evidence; see
   [curve evaluation](docs/curve-evaluation.md)
 - **P&L and risk:** futures execution P&L and swap/PPA PV using pinned actuals
-  and projections. Connected quote and computed-output scenarios calculate
+  and projections. [Trading P&L](docs/trading-pnl.md) compares two retained close
+  contexts with attribution and an explicit Run then Save workflow; unsupported
+  scope refuses rather than silently excluding holdings. Connected quote and
+  computed-output scenarios calculate
   delta and gamma from shared scenario PV evaluations; generated-close jobs retain
   mixed futures-and-swaps reports. Interactive and queued portfolio risk also cover
   supported PPA, gas, crude and LNG bindings; generated gas, crude and LNG closes refuse.
@@ -69,6 +75,13 @@ for synthetic booking, graphical break-even pricing and settlement previews.
 - **Agent curve drafts:** authorized agents can read curve ingredients, prepare a
   pinned preview and propose a bounded custom-curve draft. Saving uses the ordinary
   authorized operation after explicit human approval; publishing remains a person’s action
+- **Asynchronous reads:** selected curve, trading and Risk reads complete
+  independently through correlated SSE responses, with per-view progress and
+  cancellation. Commands and durable jobs retain their existing contracts;
+  see [coverage and limits](docs/async-reads.md)
+- **Futures margin:** the explicitly selected native-margin profile retains
+  determinations, corrections, variation-margin cash, partial payments and remaining
+  value; see [the bounded lifecycle](docs/lifecycle-delivery.md)
 - **Live corrections:** push updates through the shared header context, with visible refresh/stale status; [policy and limits](docs/live-calculation.md)
 - **Facility quantities:** shared reported quantities, explicit trade/Side allocation plans,
   versioned operating maxima and historical views for retained gas days; see
@@ -147,8 +160,8 @@ for synthetic booking, graphical break-even pricing and settlement previews.
 
 ## What's not built yet
 
-Full futures settlement PV and variation margin, option products beyond the
-supported listed American futures options, EVT and operating backtests,
+Futures settlement outside the documented native-margin profile, option products
+beyond the supported listed American futures options, EVT and operating backtests,
 broader physical settlement, power products outside the documented fixed hourly
 profile, inventory costing,
 post-delivery crude valuation, PPA accepted-cash accounting/payments, broader agent
@@ -196,6 +209,7 @@ existing database.
 **Implementation**
 
 - [Current implementation and verification](docs/implementation.md)
+- [Asynchronous workbench reads: coverage, protocol and limits](docs/async-reads.md)
 - [Blotter workbench](docs/blotter-workbench.md)
 - [Description-driven deal ticket (physical gas)](docs/deal-ticket.md)
 - [Scheduled financial swaps](docs/financial-swap-quantities.md)

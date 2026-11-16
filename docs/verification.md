@@ -1,5 +1,23 @@
 # Local verification and continuous integration
 
+## Asynchronous read qualification (D404)
+
+Owned disposable previews passed 32 asynchronous HTTP checks and 11 workbench
+browser checks, including actual held SSE replies, mixed database sessions and
+navigation while curve/trading/Risk reads wait. Hosted HTTPS checks passed with
+real sign-in cookies, logout and session expiry during blocked work. Additional
+owned browser suites passed 170 Risk, 295 assistant, 101 scheduled-swap and 35
+Dashboard assertions. Live correction checks passed all 40 original assertions
+with an additional forced replay while its generation was running.
+
+These are local synthetic correctness results on stock PostgreSQL 18.1,
+.NET 10.0.402, Node 24.7 and Chrome on macOS arm64. They do not establish
+production capacity or tail latency. Required CI and release gates still apply.
+The [read transport qualification command](async-reads.md#qualification) is part
+of the workspace partition. Dated records below preserve earlier results.
+
+## Current runner
+
 For the current complete command and prerequisites, start with
 [Required tools](#required-tools). `tools/check_all.py` runs all suites by
 default; `--group workspace|reference|standard|exchange|assistant|risk|trading|lifecycle|physical|gas|portfolio|settlement|ppa|recovery`
@@ -20,10 +38,12 @@ Every partition retains fresh-checkout preparation and the shared checks; the
 required aggregate waits for all fourteen partitions. The command-union checks require
 each owned consumer exactly once across the matrix.
 
-The integrated calendar/lifecycle runner contains 183 commands: 63 shared checks,
-63 isolated application previews and 57 partition-specific native/application
-checks. Local integration checks passed 737 managed core checks, 88 rate checks,
-1,806 frontend checks and 121 Python checks. Calendar migrations 0318–0337 follow
+The current integrated runner contains 185 commands: 64 shared checks,
+64 isolated application previews and 57 partition-specific native/application
+checks. The D404 local checkpoint passed 1,866 frontend checks and 122 Python
+checks. The earlier calendar/lifecycle checkpoint passed 737 managed core checks,
+88 rate checks, 1,806 frontend checks and 121 Python checks; those counts describe
+that increment. Calendar migrations 0318–0337 follow
 the lifecycle schema without changing any published predecessor migration.
 Migration 0321 checks the exact retained schedule views, including invoker
 semantics, ownership, ACLs, column grants and rewrite rules. Its parity qualifier

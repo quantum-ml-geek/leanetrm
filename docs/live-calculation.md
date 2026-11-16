@@ -10,7 +10,7 @@ instruments, side schedules and the Blotter. There is no browser pricing engine.
 | Selection | Knowledge and inputs |
 | --- | --- |
 | Working | Explicit selected observation pins; changing the database does not change those pins |
-| Historical | One certified effective date and knowledge cutoff; D334 selects the in-force session close and its pins even when recorded after that cutoff |
+| Historical | One certified effective date and knowledge cutoff; the selected session close and its pins must be known in force at that cutoff (D375) |
 | Live corrections | Fixed selected facts, effective/valuation date, observation cutoff, sources, roles and contracts; follow their latest committed corrections through successive certified knowledge contexts |
 
 Choose **Follow live corrections** on a selected market, custom-curve or trading
@@ -30,9 +30,10 @@ other rolling policies require separate explicit selection contracts. Frozen
 actuals retain the existing frozen-input policy. A live correction is a newly
 admitted market frame, not a scenario offset.
 
-The [regional-close exception](regional-closes.md#historical-views-always-latest)
-applies to the selected close and its pins only. Other market facts, references
-and trade state retain the historical cutoff; current authority is always checked.
+The selected close follows the [regional-close contract](regional-closes.md):
+D375 supersedes the earlier D334 exception. Close prices, other market facts,
+references and trade state retain the historical cutoff; current authority is
+always checked.
 
 ## Calculation and reuse
 
@@ -73,6 +74,13 @@ cost frame admission, incremental database loading or compiled-topology reuse.
 
 ## Push, bounded work and visible freshness
 
+This market-context notification stream is separate from the
+[D404 read-response stream](async-reads.md). The latter delivers selected business
+read outcomes. Neither changes retained Risk submission identities or uncertain
+command recovery. Late Risk display preparation, including a refusal, may affect
+only its current owner, generation, scope and visible page; a current-owner denial
+still clears its own values.
+
 Migration 0083 sends identifier-free PostgreSQL notifications on actual financial
 publications and authority changes. Existing commit-serialized publication
 streams are the durable catch-up record. Each API process listens independently;
@@ -97,6 +105,9 @@ while a previous connection is still being cleaned up; an overlapping admission
 is refused and can be retried after cleanup.
 
 The UI keeps one calculation in flight and only the newest pending update.
+An ordinary replay of the running generation does not queue a duplicate refresh.
+Explicit forced refresh may queue another read, and failed generations remain
+retryable. A stopped selection cannot mark a replacement selection Live.
 Its minimum refresh cooldown is 250 milliseconds and grows to twice the last
 refresh duration, capped at ten seconds. Hidden tabs defer screen calculations.
 It does not receive or render the full dependency graph. Open native history,

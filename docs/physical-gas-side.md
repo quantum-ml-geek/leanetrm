@@ -28,9 +28,18 @@ capabilities.
 
 D338 adds separate [final daily fixed cash determinations](gas-cash-billing.md);
 D339 adds [manual delivery operations](gas-delivery-operations.md), including
-nomination requests, external acknowledgments, statements and imbalance agreements.
-Physical completion/title, inventory, invoice issuance, payment allocation and
-settlement-aware portfolio valuation remain unsupported. The common Blotter includes both gas profiles through the native retained-schedule pricer, with a distinct contractual PV measure. One immutable gas instrument is one position binding; physical-side quantities are never summed into a receipt-plus-delivery total. Missing gas market context or started delivery produces an explicit unavailable valuation, while retained terms and daily operational quantities remain readable.
+nomination requests, external acknowledgments, statements and imbalance
+agreements. For these earlier profiles, physical completion/title, inventory,
+invoice issuance, payment allocation and settlement-aware portfolio valuation
+remain unsupported. D360 below adds started-composition measures and recorded
+payments; the separate [D401 owned-holdings contract](gas-owned-holdings.md)
+covers native retained interests. The common Blotter includes both gas profiles
+through the native retained-schedule pricer, with a distinct contractual PV
+measure. One immutable gas instrument is one position binding; physical-side
+quantities are never summed into a receipt-plus-delivery total. Missing gas
+market context produces an explicit unavailable valuation. Started delivery
+refuses for the earlier profiles; D360 compositions use the policy below.
+Retained terms and daily operational quantities remain readable.
 
 New trade opens the supported product booking workflows in the same panel, including
 listed futures options and physical LNG. Physical gas opens the deal ticket, whose
@@ -43,7 +52,18 @@ and open in the same panel. Unknown booking outcomes block replacement requests 
 retain the actor-owned command across ticket remounts, including when supplementary
 browser storage fails.
 
-Interactive and queued portfolio risk load supported gas profiles, including future compositions with fixed or indexed consideration, from their retained programs and use the common `PV` and `MarketFactors` contracts (D287). Shared factors appear once across gas and other instruments, while exact membership directions and quantity ratios determine their repriced contributions. Gas-only scopes are admitted. Migration 0165 supplies read-only worker access with the runtime history/current-authority rules and an additional lease fence. Missing inputs and started delivery refuse explicitly; earlier reports retain their original exclusions. Automated closes containing gas remain explicitly unsupported. Operational quantity revisions do not change contractual PV or create extra positions.
+Interactive and queued portfolio risk load supported gas profiles, including
+future compositions with fixed or indexed consideration, from their retained
+programs and use the common `PV` and `MarketFactors` contracts (D287). Shared
+factors appear once across gas and other instruments, while exact membership
+directions and quantity ratios determine their repriced contributions. Gas-only
+scopes are admitted. Migration 0165 supplies read-only worker access with the
+runtime history/current-authority rules and an additional lease fence. Missing
+inputs refuse explicitly; started delivery refuses for the earlier profiles,
+while D360 compositions follow their explicit started-delivery policy below.
+Earlier reports retain their original exclusions. Automated closes containing
+gas remain explicitly unsupported. Operational quantity revisions do not change
+contractual PV or create extra positions.
 
 ## Independent sides and fixed quantity links
 

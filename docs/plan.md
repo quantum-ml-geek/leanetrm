@@ -1,5 +1,12 @@
 # Delivery plan and acceptance criteria
 
+D404 is implemented for 25 selected main-workbench curve, trading and Risk reads,
+with independent view progress, bounded execution, cancellation admission fences
+and exact authorization/context checks before SSE publication. Local qualification
+covers transport parity, concurrent database work, late responses, hosted identity
+expiry and Live replay ownership. Broader page migration and capacity qualification
+remain separate work; see [coverage and limits](async-reads.md).
+
 D403 replaces the absolute single-calendar restriction with an explicit
 per-purpose Side calendar policy and one UTC payment-day execution contract.
 Local managed and native checks cover exact published calendar capture, immutable
@@ -25,9 +32,9 @@ in the verification runner.
 The integrated verification runner requires 185 commands, including 64 isolated
 application previews, with domain, native database, populated-upgrade, agent and
 browser coverage. Local integration checks passed 737 managed core checks,
-88 rate checks, 1,806 frontend checks, 121 Python checks and 28 owned lifecycle
-browser checks. The integrated CI
-matrix must pass before publication qualification is complete. Native rejection
+88 rate checks and 28 owned lifecycle browser checks at the D403 checkpoint.
+The later D404 checkpoint passed 1,866 frontend checks and 122 Python checks.
+The integrated CI matrix must pass before publication qualification is complete. Native rejection
 probes cover altered calendar and clock captures, payment dates, quantities,
 source contracts and retained program agreement.
 
@@ -2418,10 +2425,11 @@ graph worker execution, ISO finality integration and cash/accounting remain
 separate work. An affine compiled optimization remains unmeasured.
 
 D404 adds correlated asynchronous responses to named main-workbench reads.
-Qualify exact ordinary-HTTP/SSE projection parity, mixed concurrent curve/Risk
-work, independent page progress, cancellation and late responses, account and
-historical-context changes, and hosted sign-in revalidation. Test actual VaR/ES
-configuration and retained-report consumers without replacing their explicit
-statistical method policies. Preserve progressive row delivery and retained
-command recovery. Broader operation coverage and throughput claims require
+Local checks qualify ordinary-HTTP/SSE business projection and exact financial
+value parity, mixed concurrent curve/Risk work, independent page progress,
+cancellation and late responses, account and historical-context changes, and
+hosted sign-in revalidation. Actual VaR/ES configuration and retained-report
+consumers keep their explicit statistical method policies. Progressive row
+delivery and retained command recovery keep their separate contracts. Broader
+operation coverage and throughput claims require
 consumer-specific qualification; a transport design alone establishes neither.
