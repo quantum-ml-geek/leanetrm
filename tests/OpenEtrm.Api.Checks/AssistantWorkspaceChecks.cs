@@ -11,10 +11,10 @@ static class AssistantWorkspaceChecks
     public static void Run()
     {
         DiscoveryWork();
-        foreach(var page in new[]{"physical_operations","dashboard","crude_setup","vol_surfaces","facility_quantities"})
+        foreach(var page in new[]{"physical_operations","dashboard","crude_setup","vol_surfaces","options","facility_quantities"})
         {
             PageReports.Require(JsonSerializer.SerializeToElement(new{page,selection=new{}}));
-            if((page is "dashboard" or "vol_surfaces")&&(PageReports.Dispatch(JsonSerializer.SerializeToElement(new{page,selection=new{}})) is not null||PageReports.Opens(page)))
+            if((page is "dashboard" or "vol_surfaces" or "options")&&(PageReports.Dispatch(JsonSerializer.SerializeToElement(new{page,selection=new{}})) is not null||PageReports.Opens(page)))
                 throw new Exception("An identity-only page gained a reader or navigation target.");
             foreach(var invalid in new[]{"{\"value\":\"918273\"}","{}"})
             foreach(var extra in invalid=="{}"?new[]{",\"layout\":{}",",\"view\":{}",",\"focus\":{}"}:new[]{""})

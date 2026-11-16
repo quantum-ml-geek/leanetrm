@@ -2341,10 +2341,10 @@ body.assistant-open.assistant-overlay main .floating-context{display:none}
 /* Vol surfaces: the close in view, a shelf of product cards that say where each is calibrated, then the chosen product's
    calibrated closes and its surface, or a panel that offers to calibrate this close or open one that has a surface. */
 #vol-surfaces-page{display:flex;flex-direction:column;gap:16px;min-width:0}
-.vol-hero{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px 24px;padding:20px 24px;border-radius:var(--radius-lg);
+.vol-hero,.options-hero{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px 24px;padding:20px 24px;border-radius:var(--radius-lg);
  background:linear-gradient(120deg,var(--surface) 0%,var(--surface) 55%,var(--accent-soft) 100%);border:1px solid var(--border);box-shadow:var(--shadow);min-width:0}
-.vol-eyebrow{display:block;font-size:11px;font-weight:650;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-text);margin-bottom:4px}
-.vol-here{margin:0;font-size:24px;font-weight:650;letter-spacing:-.01em;color:var(--text);overflow-wrap:anywhere}
+.vol-eyebrow,.options-eyebrow{display:block;font-size:11px;font-weight:650;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-text);margin-bottom:4px}
+.vol-here,.options-here{margin:0;font-size:24px;font-weight:650;letter-spacing:-.01em;color:var(--text);overflow-wrap:anywhere}
 .vol-model-chip{display:inline-flex;align-items:center;gap:8px;padding:6px 6px 6px 12px;border-radius:999px;background:var(--surface);border:1px solid var(--border);font-size:12px;color:var(--text-3);max-width:100%}
 .vol-model{font-family:var(--mono);font-size:11px;color:var(--text-2);background:var(--surface-3);border-radius:999px;padding:4px 10px;overflow-wrap:anywhere}
 .vol-shelf{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px;box-shadow:var(--shadow);min-width:0}
@@ -2380,14 +2380,15 @@ body.assistant-open.assistant-overlay main .floating-context{display:none}
 .vol-status{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin:-6px 0 0;font-size:13px;color:var(--text-2);font-weight:500}
 .vol-fit-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
 .vol-fit-note{font-size:12px;color:var(--text-3)}
+.vol-fit-clock{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text-3)}
 .vol-fit-failure{font-size:12px;color:var(--danger);overflow-wrap:anywhere}.vol-fit-failure:empty,.vol-fit-note:empty{display:none}
 .vol-closes{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;min-width:0}
 .vol-closes-label{flex:none;font-size:11px;font-weight:650;letter-spacing:.06em;text-transform:uppercase;color:var(--text-3)}
 .vol-close-list{display:flex;flex:1 1 0;gap:8px;margin:0;padding:2px;list-style:none;overflow-x:auto;min-width:0;scrollbar-width:thin}
-.vol-close-chip{display:inline-flex;align-items:baseline;gap:6px;padding:6px 12px;border-radius:999px;font-weight:400;background:var(--surface);color:var(--text-2);border:1px solid var(--border-strong)}
-.vol-close-chip:hover{background:var(--surface);border-color:var(--accent);color:var(--text)}
+.vol-close-chip,.options-expiry{display:inline-flex;align-items:baseline;gap:6px;padding:6px 12px;border-radius:999px;font-weight:400;background:var(--surface);color:var(--text-2);border:1px solid var(--border-strong)}
+.vol-close-chip:hover,.options-expiry:hover{background:var(--surface);border-color:var(--accent);color:var(--text)}
 .vol-close-date{font-weight:600;color:inherit;font-variant-numeric:tabular-nums}.vol-close-session{font-size:12px;color:var(--text-3)}
-.vol-close-chip[aria-current=true]{background:var(--accent);border-color:var(--accent);color:var(--on-accent);cursor:default}
+.vol-close-chip[aria-current=true],.options-expiry[aria-current=true]{background:var(--accent);border-color:var(--accent);color:var(--on-accent);cursor:default}
 .vol-close-chip[aria-current=true] .vol-close-session{color:var(--on-accent)}
 .vol-close-chip[data-reach=otherSession],.vol-close-chip[data-reach=otherDay]{border-style:dashed}
 .vol-close-chip[data-reach=replaced]{opacity:.6}.vol-close-chip[data-reach=replaced] .vol-close-date{text-decoration:line-through}
@@ -2453,7 +2454,7 @@ body.assistant-open.assistant-overlay main .floating-context{display:none}
 .vol-gap{margin:12px 0 8px;padding:12px;font-size:12px;line-height:1.55;color:var(--warn);background:var(--warn-soft);border:1px solid var(--warn-border);border-radius:var(--radius)}
 .vol-tooltip{max-width:280px;white-space:normal!important;line-height:1.5}
 @media(max-width:900px){.vol-views{grid-template-columns:minmax(0,1fr)}.vol-readout{position:static;grid-row:auto}.vol-smiles{grid-template-columns:minmax(0,1fr)}
- .vol-missing{grid-template-columns:minmax(0,1fr)}.vol-missing-mark{grid-row:auto}.vol-missing-actions{grid-column:1}.vol-here{font-size:20px}}
+ .vol-missing{grid-template-columns:minmax(0,1fr)}.vol-missing-mark{grid-row:auto}.vol-missing-actions{grid-column:1}.vol-here,.options-here{font-size:20px}}
 .factor-history-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:12px;margin:12px 0;min-width:0}.factor-history-fields label{display:grid;gap:6px;min-width:0}.factor-history-fields input,.factor-history-fields select,#risk-history-results select{width:100%;min-width:0}#risk-history-fields,#risk-history-results{min-width:0}#risk-history-results>label{display:block;margin:14px 0}
 
 #risk-history-panel{min-width:0;max-width:100%}#risk-history-fields{border:0;padding:0;margin:0}#risk-history-results .table-wrap{max-width:100%;overflow-x:auto}
@@ -2811,3 +2812,53 @@ header>div:first-child{flex:1 1 160px}
 .lifecycle-review-facts{display:grid;grid-template-columns:max-content 1fr;gap:.5rem 1rem}
 .lifecycle-review-facts dd{margin:0;overflow-wrap:anywhere}
 @media(max-width:600px){.lifecycle-review-facts{grid-template-columns:minmax(0,1fr);gap:.25rem}.lifecycle-review-facts dd{margin-bottom:.5rem}}
+/* Options (options-view.ts): the chain of one expiry, read from the product's stored surface. Calls mirror puts about the
+   strike column; a side in the money is washed, the at-the-money strike is marked, and a missing figure is a muted dash. */
+#options-page{display:flex;flex-direction:column;gap:16px;min-width:0}
+.options-views{display:inline-flex;gap:4px;padding:4px;border-radius:999px;background:var(--surface);border:1px solid var(--border)}
+.options-view{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:999px;border:0;background:transparent;color:var(--text-2);font-weight:500}
+.options-view[aria-pressed=true]{background:var(--accent);color:var(--on-accent)}
+.options-view:disabled{color:var(--text-disabled);cursor:default}
+.options-soon{font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;padding:2px 6px;border-radius:999px;background:var(--surface-3);color:var(--text-3)}
+.options-products,.options-expiries{display:flex;flex-wrap:wrap;align-items:center;gap:8px;min-width:0}
+.options-product{display:inline-flex;align-items:baseline;gap:8px;padding:8px 14px;border-radius:10px;font-weight:400;background:var(--surface-2);color:var(--text);border:1px solid var(--border)}
+.options-product:hover{border-color:var(--border-strong);background:var(--surface)}
+.options-product[aria-pressed=true]{background:var(--accent-soft);border-color:var(--accent)}
+.options-product-name{font-weight:600}
+.options-more{font-size:12px;color:var(--text-3)}
+.options-chain-view{display:flex;flex-direction:column;gap:12px;min-width:0}
+.options-facts{display:flex;flex-wrap:wrap;gap:6px 28px;margin:0;padding:12px 16px;border-radius:var(--radius-lg);background:var(--surface);border:1px solid var(--border);font-size:13px}
+.options-facts>div{display:flex;align-items:baseline;gap:8px}.options-facts dt{color:var(--text-3)}.options-facts dd{margin:0;font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--text)}
+.options-chain-host{overflow-x:auto;border-radius:var(--radius-lg);border:1px solid var(--border);background:var(--surface);box-shadow:var(--shadow)}
+.options-chain th{text-align:right}.options-chain-groups th{text-align:center;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-text);background:var(--surface)}
+.options-chain td{cursor:pointer}.options-chain td.options-unlisted{cursor:default;background:var(--surface-2)}
+.options-chain th.options-strike{text-align:center;font-family:var(--mono);font-size:13px;font-weight:650;color:var(--text);background:var(--surface-2);border-inline:1px solid var(--border-strong);position:static}
+.options-chain thead th.options-strike{position:sticky;font-size:10px;font-weight:600;color:var(--text-2)}
+.options-chain td.options-itm{background:var(--accent-soft)}
+.options-chain tr.options-atm th.options-strike{color:var(--on-accent);background:var(--accent)}
+.options-chain td.options-selected{box-shadow:inset 0 2px 0 var(--brand-cool),inset 0 -2px 0 var(--brand-cool)}
+.options-chain td.options-missing-figure{color:var(--text-3)}
+.options-chain td.options-settle{font-weight:600}
+.options-held-lots{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;background:var(--surface-3);color:var(--text);border:1px solid var(--border-strong)}
+.options-readout dl{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:6px 24px;max-width:560px;margin:12px 0;font-size:13px}
+.options-readout dl>dt{color:var(--text-3)}.options-readout dl>dd{margin:0;font-family:var(--mono);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.options-basis{margin:0;font-size:12px;line-height:1.55;color:var(--text-3);max-width:110ch}
+.options-positions{display:flex;flex-direction:column;gap:12px;min-width:0}
+.options-position-group th{text-align:left;background:var(--surface-2);position:static;font-size:12px}
+.options-position-future{font-family:var(--mono);font-size:13px;font-weight:650;color:var(--text);margin-right:12px}
+.options-position-note{font-size:12px;font-weight:400;color:var(--text-3)}
+.options-position-subtotal th,.options-position-total th{text-align:right;position:static;background:var(--surface);font-size:12px;color:var(--text-2)}
+.options-position-subtotal td{font-weight:600}.options-position-total td,.options-position-total th{border-top:2px solid var(--border-strong);font-weight:650}
+.options-position-table td.options-missing-figure{color:var(--text-3)}
+.options-position-calibrate{padding:2px 10px;font-size:12px}
+/* The term structure (vol-surface-view.ts): the fitted level at the money by expiry, over a card per expiry. */
+.vol-term{grid-column:1/-1}
+.vol-term .vol-chart{height:200px}
+.vol-expiry-strip{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,200px),1fr));gap:10px;margin-top:10px}
+.vol-expiry-card{display:grid;gap:2px;align-content:start;text-align:left;white-space:normal;padding:10px 12px;border-radius:10px;font-weight:400;background:var(--surface-2);color:var(--text);border:1px solid var(--border)}
+.vol-expiry-card:hover{border-color:var(--border-strong);background:var(--surface)}
+.vol-expiry-card[aria-pressed=true]{background:var(--accent-soft);border-color:var(--accent)}
+.vol-expiry-name{font-size:12px;color:var(--text-2)}
+.vol-expiry-level{font-size:18px;font-weight:650;font-variant-numeric:tabular-nums}
+.vol-expiry-facts,.vol-expiry-gap{font-size:12px;color:var(--text-3);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.vol-expiry-gap{color:var(--warn)}
