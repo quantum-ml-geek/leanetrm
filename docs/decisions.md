@@ -5949,7 +5949,7 @@ qualify generated closes, cross-clock P&L or complete economic horizon risk;
 source-known zero, future-effective, completed and cash-only states require
 the same explicit continuation fence. See the [contract](gas-park-custody.md).
 
-## D413 · One definition per covered read; its ordinary route releases the session gate
+## D419 · One definition per covered read; its ordinary route releases the session gate
 
 Amends D404. Each read the response channel admits is written once, as a capture
 of the session's selection, an execution and a recheck. Its ordinary HTTP route
@@ -5990,4 +5990,4 @@ leaving 18; their ordinary routes remain.
 - **Not decided here.** Reads outside D404's coverage, page loading, the
   channel's encoding, compression and lifetime, and pushed job status. See
   [the design](superpowers/specs/2026-11-16-non-blocking-page-reads-design.md).
-- **Evidence.** [Verification](verification.md#ordinary-reads-outside-the-session-gate-d413).
+- **Evidence.** [Verification](verification.md#ordinary-reads-outside-the-session-gate-d419).

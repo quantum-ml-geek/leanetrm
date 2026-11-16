@@ -16,7 +16,7 @@ production capacity or tail latency. Required CI and release gates still apply.
 The [read transport qualification command](async-reads.md#qualification) is part
 of the workspace partition. Dated records below preserve earlier results.
 
-## Ordinary reads outside the session gate (D413)
+## Ordinary reads outside the session gate (D419)
 
 Measured on 16 November 2026 with `--page-read-benchmark` on one Linux machine
 (x86_64, 2 logical processors, 7.8 GiB, PostgreSQL 18.7, .NET 10.0.402; client,
