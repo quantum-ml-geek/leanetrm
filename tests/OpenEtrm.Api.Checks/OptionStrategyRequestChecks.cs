@@ -91,7 +91,7 @@ internal static class OptionStrategyRequestChecks
 
     private static void Offers()
     {
-        var offer=OptionStrategyRead.Offer(Surface(),Expiry,At,Utc,Utc,OptionStrategyRead.SurfaceClock);
+        var offer=OptionStrategyRead.Offer(Surface(),Expiry,At,Expiry,Utc,Utc,OptionStrategyRead.SurfaceClock);
         string Legs(JsonNode offered,string id)=>offered["templates"]!.AsArray().Single(t=>t!["id"]!.GetValue<string>()==id)!["legs"] is JsonArray legs?
             string.Join(' ',legs.Select(l=>$"{l!["side"]} {l["lots"]} {l["series"]} @{l["entryPrice"]?.GetValue<string>()??"none"}")):"refused "+offered["templates"]!.AsArray().Single(t=>t!["id"]!.GetValue<string>()==id)!["refusal"]!["code"];
         if(Legs(offer,"iron_condor")!="sell 1 p2.8 @0.08 buy 1 p2.6 @0.08 sell 1 c3.2 @0.08 buy 1 c3.4 @none"||Legs(offer,"butterfly")!="buy 1 c2.8 @0.08 sell 2 c3 @0.08 buy 1 c3.2 @0.08")
@@ -119,21 +119,30 @@ internal static class OptionStrategyRequestChecks
 
         // A recorded close counts days on its convention's clock and its analysis names none.
         var newYork=new ClockRule("New York","iana",null,"America/New_York",TimeZoneDatabase.Installed().Version());
-        var close=OptionStrategyRead.Offer(Surface(),Expiry,At,newYork,null,OptionSurfaceAnalytics.ConventionClock);
+        var close=OptionStrategyRead.Offer(Surface(),Expiry,At,Expiry,newYork,null,OptionSurfaceAnalytics.ConventionClock);
         if(close["clock"]!.ToJsonString()!="""{"source":"close_convention","zone":"America/New_York"}"""||close["offered"]!["sensitivities"]!["clock"] is not null||close["offered"]!["instants"]!.AsArray().Count!=5)
             throw new Exception($"A close offers its convention's days and no named clock: {close["clock"]} {close["offered"]!["sensitivities"]}.");
         // Without a clock only the valuation instant is offered.
-        var uncounted=OptionStrategyRead.Offer(Surface(),Expiry,At,null,null,OptionStrategyRead.SurfaceClock);
+        var uncounted=OptionStrategyRead.Offer(Surface(),Expiry,At,Expiry,null,null,OptionStrategyRead.SurfaceClock);
         if(uncounted["clock"] is not null||uncounted["offered"]!["instants"]!.AsArray().Count!=1||uncounted["offered"]!["sensitivities"]!["clock"] is not null)throw new Exception("No clock offers the valuation instant alone.");
+        // Curves stop before the series' instruction cutoff: at 17:00 on the 20th the day's instant is no longer before it.
+        var cut=OptionStrategyRead.Offer(Surface(),Expiry,At,At.AddDays(4),Utc,Utc,OptionStrategyRead.SurfaceClock);
+        if(cut["offered"]!["instants"]!.AsArray().Count!=4||DateTimeOffset.Parse(cut["offered"]!["instantsBefore"]!.GetValue<string>(),CultureInfo.InvariantCulture)!=At.AddDays(4)||
+            !cut["offered"]!["instantsComplete"]!.GetValue<bool>())throw new Exception($"Dated curves are offered up to before the horizon: {cut["offered"]}.");
+        // A named clock this host cannot count days on is still the one an analysis names; the offer says its dates are not all there.
+        var foreign=Utc with{Code="Synthetic",Kind="iana",FixedOffsetSeconds=null,IanaZone="America/New_York",TzdbVersion="synthetic_other_release"};
+        var unread=OptionStrategyRead.Offer(Surface(),Expiry,At,Expiry,foreign,foreign,OptionStrategyRead.SurfaceClock);
+        if(unread["offered"]!["instants"]!.AsArray().Count!=1||unread["offered"]!["instantsComplete"]!.GetValue<bool>()||unread["offered"]!["sensitivities"]!["clock"]?["code"]?.GetValue<string>()!="Synthetic")
+            throw new Exception($"A clock the host cannot count on: {unread["offered"]}.");
         Console.WriteLine("PASS dated curves are offered on the close convention's clock, or the surface's at a working snapshot, and without one only at the valuation instant");
 
-        var narrow=OptionStrategyRead.Offer(Surface(listed:s=>s.Strike!=D("2.6")&&s.Code!="c3.2"),Expiry,At,Utc,Utc,OptionStrategyRead.SurfaceClock);
+        var narrow=OptionStrategyRead.Offer(Surface(listed:s=>s.Strike!=D("2.6")&&s.Code!="c3.2"),Expiry,At,Expiry,Utc,Utc,OptionStrategyRead.SurfaceClock);
         if(Legs(narrow,"iron_condor")!="refused strategy_template_strike"||Legs(narrow,"call_spread")!="refused strategy_template_series"||Legs(narrow,"straddle")!="buy 1 c3 @0.08 buy 1 p3 @0.08"||
             narrow["offered"]!["prices"]!["lower"]!.GetValue<string>()!="2.7")throw new Exception($"A template with a strike or series that is not listed is refused alone: {narrow["templates"]}.");
-        var unsettled=OptionStrategyRead.Offer(Surface(atTheMoney:null),Expiry,At,Utc,Utc,OptionStrategyRead.SurfaceClock);
+        var unsettled=OptionStrategyRead.Offer(Surface(atTheMoney:null),Expiry,At,Expiry,Utc,Utc,OptionStrategyRead.SurfaceClock);
         if(unsettled["templates"]!.AsArray().Any(t=>t!["refusal"]?["code"]?.GetValue<string>()!="strategy_template_money")||unsettled["offered"]!["prices"] is not null)
             throw new Exception("Without an at-the-money strike no template and no range is offered.");
-        Reject("strategy_expiry",()=>OptionStrategyRead.Offer(Surface(),Expiry.AddDays(30),At,Utc,Utc,OptionStrategyRead.SurfaceClock));
+        Reject("strategy_expiry",()=>OptionStrategyRead.Offer(Surface(),Expiry.AddDays(30),At,Expiry.AddDays(30),Utc,Utc,OptionStrategyRead.SurfaceClock));
         Console.WriteLine("PASS a template whose strike or series is not listed is refused with its code, and nothing nearer is offered");
     }
 
@@ -153,7 +162,7 @@ internal static class OptionStrategyRequestChecks
         };
         var day=At.AddDays(1);
         var composed=OptionStrategyRead.Compose(legs,OptionStrategies.AtExpiry(legs,[D("2.5"),D("3.5")]),ImmutableDictionary<Guid,FuturesOptionMarketBinding>.Empty,
-            ImmutableDictionary<Guid,string>.Empty.Add(put.Id,"option_settlement_missing"),analytics,day,[],new("option_at_intrinsic","A leg is valued at intrinsic."));
+            ImmutableDictionary<Guid,string>.Empty.Add(put.Id,"option_settlement_missing"),analytics,day,[],new OptionStrategyCurveRefusal("option_at_intrinsic","A leg is valued at intrinsic."));
         var strategy=composed["strategy"]!;
         string Amount(string measure)=>strategy[measure]!["amount"]?.GetValue<string>()??"missing:"+strategy[measure]!["missing"]!.GetValue<string>();
         // 10,000 × (2 × 0.08 − 3 × 0.1), 10,000 × (2 × 0.5 + 3 × 0.5), 10,000 × (2 × 2 − 3 × 2) and 10,000 × (2 × −0.004 + 3 × 0.003).

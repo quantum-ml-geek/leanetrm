@@ -43,9 +43,10 @@ public sealed record OptionStrategySetupRequest([property:JsonRequired]FuturesRe
 // the dated curves, and the strategy's value and sensitivities. Both book nothing and store nothing.
 internal static class OptionStrategyRead
 {
-    // The most one analysis may ask for. Each dated point of each leg is one tree price, as is each of about 17 samples of
-    // a leg's sensitivities, so these bound a request at 492 tree prices of curves and 68 of sensitivities beyond
-    // calibration. They are set from the recorded measurement in docs/verification.md; a request beyond one is refused.
+    // The most one analysis may ask for. Each dated point of each leg is one tree price, with one more per leg for the base
+    // of each set, as is each of about 17 samples of a leg's sensitivities; so these bound a request at about 500 tree
+    // prices of curves and 68 of sensitivities beyond calibration. They are set from the recorded measurement in
+    // docs/verification.md; a request beyond one is refused.
     internal const int MaxLegs=4,MaxPoints=41,MaxCurves=3,MaxLots=100000,MaxVolatilityShiftPoints=100;
     // The dated curves of one analysis are valued in at most this many sets at once, each over a market of its own.
     private const int CurveSets=4;
@@ -103,15 +104,20 @@ internal static class OptionStrategyRead
         var convention=view.Frame.Close is {} recorded?await CloseConventions.Read(connection,database.Manifest.CatalogId,recorded,ct):null;
         ClockRule? named=null;
         if(convention is null&&surface.Sensitivities?.ClockZone is {} zone&&TradingPnlReport.Clocks().Where(rule=>ReferenceClockJson.Zone(rule)==zone).ToArray() is [{} one])named=one;
-        foreach(var member in Offer(surface,body.ExpiryAt,view.Frame.At,convention is null?named:convention.Clock,named,convention is null?SurfaceClock:OptionSurfaceAnalytics.ConventionClock))
+        // The series' instruction cutoffs, which the surface does not state, are read from the product's own definition.
+        var source=await VolSurfaceStore.ProductSource(connection,database,view.CalculationFrame,ct,body.DefinitionRevisionId);
+        var terms=await database.Read(connection,ct,ppaBundle:source,observationIds:[],includeCalendarDays:false);
+        var horizon=OptionStrategies.CurveHorizon(terms.FuturesOptionSeries.Where(s=>s.Product.Code==body.Product&&s.Terms.ExpiryAt==body.ExpiryAt),view.Frame.At);
+        foreach(var member in Offer(surface,body.ExpiryAt,view.Frame.At,horizon,convention is null?named:convention.Clock,named,convention is null?SurfaceClock:OptionSurfaceAnalytics.ConventionClock))
             answer[member.Key]=member.Value?.DeepClone();
         return answer;
     }
 
     // The offer from a stored surface: each template's legs among the expiry's listed series or why it has none, a price
-    // range about the money, the instants a dated curve may be drawn at, counted on the clock, and the policies an analysis
-    // names. Each is an offer for the page to send back; an analysis accepts what it is given, offered or not.
-    internal static JsonObject Offer(VolSurfaceResult surface,DateTimeOffset expiryAt,DateTimeOffset valuationAt,ClockRule? clock,ClockRule? requestClock,string clockSource)
+    // range about the money, the instants a dated curve may be drawn at, counted on the clock up to before the horizon the
+    // series are valued to, and the policies an analysis names. Each is an offer for the page to send back; an analysis
+    // accepts what it is given, offered or not.
+    internal static JsonObject Offer(VolSurfaceResult surface,DateTimeOffset expiryAt,DateTimeOffset valuationAt,DateTimeOffset horizon,ClockRule? clock,ClockRule? requestClock,string clockSource)
     {
         var expiry=surface.Expiries.SingleOrDefault(e=>e.ExpiryAt==expiryAt)??throw Error("strategy_expiry","The product's surface lists no such expiry.");
         var series=surface.Series.Where(s=>s.Series.ExpiryAt==expiryAt).ToArray();
@@ -140,25 +146,27 @@ internal static class OptionStrategyRead
             var (lower,upper)=(strikes[Math.Max(0,centre-OfferedStrikes)],strikes[Math.Min(strikes.Length-1,centre+OfferedStrikes)]);
             if(upper.CompareTo(lower)>0)prices=new(){["lower"]=lower.ToString(),["upper"]=upper.ToString(),["points"]=OfferedPoints};
         }
-        // The valuation instant, then the same local time on each later calendar date before expiry.
+        // The valuation instant, then the same local time on each later calendar date before the horizon. The list is
+        // complete unless it was cut at its length or the clock could not count a day, which the offer says.
         var instants=new List<DateTimeOffset>();var complete=true;
-        if(valuationAt<expiryAt)
+        if(valuationAt<horizon)
         {
             instants.Add(valuationAt);
             try
             {
                 var counted=clock is null?null:PowerClock.FromRule(clock,TimeZoneDatabase.Installed());
-                for(var next=counted is null?(DateTimeOffset?)null:ClockChange.NextCalendarDay(valuationAt,counted).At;next is {} day&&day<expiryAt;next=ClockChange.NextCalendarDay(day,counted!).At)
+                for(var next=counted is null?(DateTimeOffset?)null:ClockChange.NextCalendarDay(valuationAt,counted).At;next is {} day&&day<horizon;next=ClockChange.NextCalendarDay(day,counted!).At)
                 {
                     if(instants.Count>OfferedDays){complete=false;break;}
                     instants.Add(day);
                 }
             }
-            // A clock this host cannot count days on offers the valuation instant alone.
-            catch(MarketDataException){instants.RemoveRange(1,instants.Count-1);clock=null;}
+            catch(MarketDataException){complete=false;}
         }
+        // The clock a working snapshot's analysis names is offered whether or not this host can count days on it: an
+        // analysis then states no day and its theta is missing, as a fit's is.
         var sensitivities=JsonSerializer.SerializeToNode(OptionSurfaceAnalytics.Offered,RiskJobs.Json)!.AsObject();
-        sensitivities["clock"]=requestClock is null||clock is null?null:JsonSerializer.SerializeToNode(requestClock,RiskJobs.Json);
+        sensitivities["clock"]=requestClock is null?null:JsonSerializer.SerializeToNode(requestClock,RiskJobs.Json);
         return new JsonObject
         {
             ["underlyingSeries"]=expiry.UnderlyingCode,["futures"]=expiry.Futures?.ToString(),["atTheMoneyStrike"]=expiry.AtTheMoneyStrike?.ToString(),
@@ -167,7 +175,7 @@ internal static class OptionStrategyRead
             ["offered"]=new JsonObject
             {
                 ["prices"]=prices,["pointCounts"]=new JsonArray([..PointCounts.Select(n=>(JsonNode)n)]),
-                ["instants"]=new JsonArray([..instants.Select(at=>(JsonNode)Instant(at))]),["instantsComplete"]=complete,
+                ["instants"]=new JsonArray([..instants.Select(at=>(JsonNode)Instant(at))]),["instantsComplete"]=complete,["instantsBefore"]=Instant(horizon),
                 ["selectedInstants"]=new JsonArray([..instants.Take(1).Select(at=>(JsonNode)Instant(at))]),["volatilityShiftPoints"]="0",
                 ["valuation"]=JsonSerializer.SerializeToNode(FuturesOptionValuationPolicy.Release1,Json),["sensitivities"]=sensitivities,["expiryRule"]=OptionStrategies.ExerciseRule
             }
@@ -193,7 +201,7 @@ internal static class OptionStrategyRead
         var terms=legs[0].Option.Series;
         if(terms.Terms.ExpiryAt!=body.ExpiryAt)throw Error("strategy_expiry","The legs do not expire at the expiry the analysis names.");
         if(snapshot.ValuationAt>=body.ExpiryAt)throw new MarketDataException("option_expired","The legs are at or past their expiry at this valuation instant.");
-        OptionStrategies.RequireInstants(body.Instants,snapshot.ValuationAt,body.ExpiryAt);
+        OptionStrategies.RequireInstants(body.Instants,snapshot.ValuationAt,OptionStrategies.CurveHorizon(legs.Select(l=>l.Option.Series),snapshot.ValuationAt));
         var plan=OptionSurfaceAnalytics.Plan(OptionSurfaceAnalytics.Pin(body.Sensitivities,view.Frame.Close is {} recorded?await CloseConventions.Read(connection,catalog,recorded,ct):null),snapshot.ValuationAt);
         var expiry=OptionStrategies.AtExpiry(legs,selection.Prices);
 
@@ -222,11 +230,11 @@ internal static class OptionStrategyRead
         }).ToArray();
         // The sensitivities' failure is the read's. A valuation that refuses a dated sample refuses the dated curves with its
         // code and leaves the rest of the analysis standing; any other failure is the read's, the first in order.
-        if((outcomes[0].Error??outcomes.Skip(1).Select(o=>o.Error).FirstOrDefault(error=>error is not null and not MarketDataException)) is {} failure)
+        if((outcomes[0].Error??outcomes.Skip(1).Select(o=>o.Error).FirstOrDefault(error=>error is not null and not OptionStrategyCurveRefusal)) is {} failure)
             System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(failure);
         var analytics=((ImmutableArray<OptionSeriesSensitivities>)outcomes[0].Value!).ToDictionary(s=>s.InstrumentId);
-        var refusal=unsolved is not null?new MarketDataException(unsolved,unsolved==OptionStrategies.Uncalibrated?"A leg did not calibrate, so the strategy has no dated curve.":
-            "A leg is valued at intrinsic and has no volatility, so the strategy has no dated curve."):outcomes.Skip(1).Select(o=>o.Error as MarketDataException).FirstOrDefault(e=>e is not null);
+        var refusal=unsolved is not null?new OptionStrategyCurveRefusal(unsolved,unsolved==OptionStrategies.Uncalibrated?"A leg did not calibrate, so the strategy has no dated curve.":
+            "A leg is valued at intrinsic and has no volatility, so the strategy has no dated curve."):outcomes.Skip(1).Select(o=>o.Error as OptionStrategyCurveRefusal).FirstOrDefault(e=>e is not null);
         var dated=refusal is not null?[]:outcomes.Skip(1).Select(o=>(OptionStrategyDatedCurve)o.Value!).GroupBy(c=>c.At).OrderBy(g=>g.Key)
             .Select(g=>new OptionStrategyDatedCurve(g.Key,[..g.SelectMany(c=>c.Points)])).ToImmutableArray();
 
@@ -248,10 +256,9 @@ internal static class OptionStrategyRead
             ["volatilityShift"]=new JsonObject{["convention"]=VolatilityShift.ParentAdditive,["size"]=selection.VolatilityShift.ToString()},["rounding"]=HalfEven18.Policy
         };
         answer["limits"]=Limits;
-        var receipts=bindings.Values.Select(b=>b.Receipt).ToArray();
-        // A solved series' calibration prices the tree at both bracket ends and once per halving; a fallback once.
-        answer["work"]=new JsonObject{["calibrationTreePrices"]=receipts.Sum(r=>r.Mode==FuturesOptionPricing.SolvedMode?r.Iterations!.Value+2:1),
-            ["valuationTreePrices"]=bindings.Values.Sum(b=>b.TreePrices),["curveSets"]=curves.Count,["elapsedMs"]=elapsed.ElapsedMilliseconds};
+        var (calibrating,valuing)=(FuturesOptionMarket.CalibrationTreePrices(bindings.Values.Select(b=>b.Receipt)),bindings.Values.Sum(b=>b.TreePrices));
+        answer["work"]=new JsonObject{["calibrationTreePrices"]=calibrating,["valuationTreePrices"]=valuing,["treePrices"]=calibrating+valuing,["curveSets"]=curves.Count,
+            ["elapsedMs"]=elapsed.ElapsedMilliseconds};
         return answer;
     }
 
@@ -259,7 +266,7 @@ internal static class OptionStrategyRead
     // figures are those times each leg's multiplier and signed lots, added: value, vega and theta are money, delta and
     // gamma quantities of the one underlying future. A sum with a missing member is missing.
     internal static JsonObject Compose(ImmutableArray<OptionStrategyLeg> legs,OptionStrategyExpiry expiry,ImmutableDictionary<Guid,FuturesOptionMarketBinding> bindings,
-        ImmutableDictionary<Guid,string> failures,IReadOnlyDictionary<Guid,OptionSeriesSensitivities> analytics,DateTimeOffset? dayTo,ImmutableArray<OptionStrategyDatedCurve> dated,MarketDataException? refusal)
+        ImmutableDictionary<Guid,string> failures,IReadOnlyDictionary<Guid,OptionSeriesSensitivities> analytics,DateTimeOffset? dayTo,ImmutableArray<OptionStrategyDatedCurve> dated,OptionStrategyCurveRefusal? refusal)
     {
         var rows=new JsonArray([..legs.Select(leg=>
         {

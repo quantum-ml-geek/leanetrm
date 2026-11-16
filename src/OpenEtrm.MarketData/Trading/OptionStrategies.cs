@@ -33,6 +33,10 @@ public sealed record OptionStrategyExtreme(SignedRatio? Amount)
 public sealed record OptionStrategyExpiry(string Rule,SignedRatio NetPremium,OptionStrategyExtreme MaximumProfit,OptionStrategyExtreme MaximumLoss,
     ImmutableArray<OptionStrategyBreakeven> Breakevens,ImmutableArray<OptionStrategyPoint> Curve);
 
+// Why a strategy has no dated curve, with the refusing code: a leg has no volatility to value it at, or the valuation
+// refused a sample. It is a statement about the strategy's inputs, never a fault in how the curves were asked for.
+public sealed class OptionStrategyCurveRefusal(string code,string message,Exception? inner=null):MarketDataException(code,message,inner);
+
 // Option legs on one expiry and one underlying future, combined. At expiry a leg is worth its exercise value and the
 // strategy's payoff is piecewise linear in the futures price, so its extremes and breakevens are solved exactly. Before
 // expiry the legs are valued by ordinary instrument PV under the shared price, clock and volatility layers; nothing is
@@ -71,11 +75,16 @@ public static class OptionStrategies
         return [..Enumerable.Range(0,points).Select(n=>ExactDecimal.FromScaled(lower.ScaledValue+n*step))];
     }
 
-    // The instants dated curves are drawn at: from the valuation instant to before the legs' expiry, each once, in order.
-    public static void RequireInstants(ImmutableArray<DateTimeOffset> instants,DateTimeOffset valuationAt,DateTimeOffset expiryAt)
+    // The instant dated curves stop before: the earliest, over the series, of the instruction cutoff still ahead of the
+    // valuation instant, or else the expiry. The option model values a series up to there and refuses a later clock.
+    public static DateTimeOffset CurveHorizon(IEnumerable<FuturesOptionSeriesSpecification> series,DateTimeOffset valuationAt)=>
+        (series??throw Error("strategy_legs","Supply the series.")).Select(s=>s.InstructionCutoffAt is {} cutoff&&cutoff>valuationAt?cutoff:s.Terms.ExpiryAt).DefaultIfEmpty(valuationAt).Min();
+
+    // The instants dated curves are drawn at: from the valuation instant to before the horizon, each once, in order.
+    public static void RequireInstants(ImmutableArray<DateTimeOffset> instants,DateTimeOffset valuationAt,DateTimeOffset horizon)
     {
-        if(instants.IsDefault||instants.Any(at=>!TradingInstant.IsSupported(at)||at<valuationAt||at>=expiryAt)||instants.Zip(instants.Skip(1)).Any(pair=>pair.First>=pair.Second))
-            throw Error("strategy_curve_instant","Each dated curve needs its own instant from the valuation instant to before the legs' expiry, in increasing order.");
+        if(instants.IsDefault||instants.Any(at=>!TradingInstant.IsSupported(at)||at<valuationAt||at>=horizon)||instants.Zip(instants.Skip(1)).Any(pair=>pair.First>=pair.Second))
+            throw Error("strategy_curve_instant",$"Each dated curve needs its own instant from the valuation instant to before {horizon:O}, where the legs' instruction cutoff or expiry ends their valuation, in increasing order.");
     }
 
     public static OptionStrategyExpiry AtExpiry(ImmutableArray<OptionStrategyLeg> legs,ImmutableArray<ExactDecimal> prices)
@@ -122,26 +131,28 @@ public static class OptionStrategies
     // future to that price, the calculation clock to the instant and every leg's held volatility by the shift, less the
     // premium paid. The prepared portfolio holds one contract of each leg's series (FuturesOptionSensitivities.UnitHoldings);
     // a holding's value is scaled by its leg's signed lots outside the PV. Every leg must be solved for a volatility: a
-    // strategy with a leg valued at intrinsic, or one that did not calibrate, has no dated curve. A sample the valuation
-    // refuses refuses the curves with its code.
+    // strategy with a leg valued at intrinsic, or one that did not calibrate, has no dated curve, and a sample the
+    // valuation refuses refuses the curves with its code; both are an OptionStrategyCurveRefusal. Anything else wrong
+    // with what was asked is an ordinary error. One call values at most RiskEngine.MaxJointScenarios prices.
     public static ImmutableArray<OptionStrategyDatedCurve> Dated(PreparedConnectedPortfolioRisk? prepared,ImmutableDictionary<Guid,FuturesOptionMarketBinding> bindings,
         ImmutableArray<OptionStrategyLeg> legs,ImmutableArray<ExactDecimal> prices,ImmutableArray<DateTimeOffset> instants,ExactDecimal volatilityShift,CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
         Require(legs);
-        if(bindings is null||prices.IsDefaultOrEmpty)throw Error("strategy_price_range","Supply the legs' bindings and the futures prices the curves are stated at.");
+        if(bindings is null||prices.IsDefaultOrEmpty||prices.Length>RiskEngine.MaxJointScenarios)
+            throw Error("strategy_price_range",$"Supply the legs' bindings and from one to {RiskEngine.MaxJointScenarios} futures prices the curves are stated at.");
         var held=new Dictionary<Guid,(OptionStrategyLeg Leg,FuturesOptionMarketBinding Binding)>();
         foreach(var leg in legs)
         {
-            if(!bindings.TryGetValue(leg.Option.Id,out var binding))throw Error(Uncalibrated,$"Option series {leg.Option.SeriesKey.Code} did not calibrate, so the strategy has no dated curve.");
+            if(!bindings.TryGetValue(leg.Option.Id,out var binding))throw new OptionStrategyCurveRefusal(Uncalibrated,$"Option series {leg.Option.SeriesKey.Code} did not calibrate, so the strategy has no dated curve.");
             if(binding.Calibration is not SolvedVolatility)
-                throw Error(FuturesOptionSensitivities.AtIntrinsic,$"Option series {leg.Option.SeriesKey.Code} is valued at intrinsic and has no volatility, so the strategy has no dated curve.");
+                throw new OptionStrategyCurveRefusal(FuturesOptionSensitivities.AtIntrinsic,$"Option series {leg.Option.SeriesKey.Code} is valued at intrinsic and has no volatility, so the strategy has no dated curve.");
             held.Add(FuturesOptionSensitivities.UnitTrade(leg.Option.Id),(leg,binding));
         }
         if(prepared?.Factors is not [{} future]||!held.Keys.All(prepared.Holdings.Select(h=>h.TradeId).ToHashSet().Contains))
             throw Error("option_sensitivity_input","The prepared portfolio must hold one contract of each leg's series, priced from their one underlying future.");
         var valuationAt=prepared.Valuation.Snapshot.ValuationAt;
-        RequireInstants(instants,valuationAt,legs[0].Option.Series.Terms.ExpiryAt);
+        RequireInstants(instants,valuationAt,CurveHorizon(legs.Select(l=>l.Option.Series),valuationAt));
         var basis=held.Values.Select(h=>h.Binding.BaseFutures).Distinct().ToArray();
         if(basis is not [var futures])throw Error("option_context","The legs of one strategy are calibrated at one futures price.");
         var premium=NetPremium(legs);
@@ -157,16 +168,14 @@ public static class OptionStrategies
                 ImmutableArray<CurveShift> shifts=move==default?[]:[new(CurveShockCoordinate.MarketQuote,new ContractCurveTarget(future.Curves[0],future.Contract),future.Unit,move,CurveShift.ParentAdditive)];
                 return new ConnectedRiskScenario($"price_{n}",price.ToString(),shifts){Clock=clock,Volatility=volatility,Unchanged=shifts.IsEmpty&&clock is null&&volatility.IsEmpty};
             }).ToImmutableArray();
-            var points=ImmutableArray.CreateBuilder<OptionStrategyValuePoint>(prices.Length);
-            // A scenario set is bounded, so a long curve is valued in bounded sets of its points.
-            foreach(var set in samples.Chunk(RiskEngine.MaxJointScenarios))
-                foreach(var sample in RiskEngine.CalculateScenarios(prepared,new(CurveSet,CurveSetVersion,ConnectedRiskScenarioSet.Independent,[..set]),
-                    RiskEngine.ExactNumericalPolicy,ct,RiskDetail.Holdings).Scenarios)
-                {
-                    var value=SignedRatio.Sum(sample.Groups.SelectMany(g=>g.Positions).Where(p=>held.ContainsKey(p.TradeId)).Select(p=>p.Values.Value.Ratio*Ratio(held[p.TradeId].Leg.Lots)));
-                    points.Add(new(prices[points.Count],value,value-premium));
-                }
-            curves.Add(new(at,points.MoveToImmutable()));
+            ConnectedScenarioRiskRun run;
+            try{run=RiskEngine.CalculateScenarios(prepared,new(CurveSet,CurveSetVersion,ConnectedRiskScenarioSet.Independent,samples),RiskEngine.ExactNumericalPolicy,ct,RiskDetail.Holdings);}
+            catch(MarketDataException refused){throw new OptionStrategyCurveRefusal(refused.Code,refused.Message,refused);}
+            curves.Add(new(at,[..run.Scenarios.Select((sample,n)=>
+            {
+                var value=SignedRatio.Sum(sample.Groups.SelectMany(g=>g.Positions).Where(p=>held.ContainsKey(p.TradeId)).Select(p=>p.Values.Value.Ratio*Ratio(held[p.TradeId].Leg.Lots)));
+                return new OptionStrategyValuePoint(prices[n],value,value-premium);
+            })]));
         }
         return curves.MoveToImmutable();
     }

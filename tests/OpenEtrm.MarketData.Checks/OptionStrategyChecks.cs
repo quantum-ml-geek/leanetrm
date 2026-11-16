@@ -29,6 +29,9 @@ internal static class OptionStrategyChecks
         Check("a ratio spread has an unbounded loss and a bounded profit", RatioSpread);
         Check("a breakeven that is not a terminating decimal is rounded once at 18 places", RepeatingBreakeven);
         Check("a payoff that is zero from a price upward breaks even on an unbounded range", ZeroTail);
+        Check("a payoff that only touches zero at a strike breaks even there and nowhere else", TouchesZero);
+        Check("a payoff that is zero at a futures price of zero breaks even there", ZeroAtZero);
+        Check("a put bought for nothing breaks even from its strike upward", FreePut);
         Check("the expiry curve is exact at each price point and at each strike inside the range", ExpiryCurvePoints);
         Check("price points are evenly spaced exact decimals, and any other range is refused", PriceGrid);
         Check("legs of another expiry or underlying future, repeated series and unsupported lots or entries are refused", LegRules);
@@ -38,6 +41,7 @@ internal static class OptionStrategyChecks
         Check("the curve at the valuation instant with no shift passes through the legs' base values", DatedBasePoint);
         Check("dated curves are refused when a leg is valued at intrinsic or did not calibrate", DatedNeedSolvedLegs);
         Check("a volatility shift the valuation refuses is the dated curves' refusal", DatedRefusedShift);
+        Check("a curve asked for past the legs' instruction cutoff, or at too many prices, is an error and not a refusal", DatedAskedWrongly);
         Check("dated curves are reproducible", DatedReproducible);
     }
 
@@ -150,12 +154,39 @@ internal static class OptionStrategyChecks
         if(free.Breakevens is not [{Upper:{} upper} range]||Text(range.Lower)!="0"||Text(upper)!="3")throw new Exception($"Expected breakeven from 0 to 3; got {Ranges(free)}.");
     }
 
+    private static void TouchesZero()
+    {
+        // A call and a put sold at 3 for nothing: the payoff is −10,000 × |F − 3|, which is zero only at 3.
+        var expiry=Expiry(Leg(OptionRight.Call,"3","-1","0"),Leg(OptionRight.Put,"3","-1","0"));
+        Breakevens(expiry,"3");
+        Extreme(expiry.MaximumProfit,"0","profit");Extreme(expiry.MaximumLoss,null,"loss");
+        Curve(expiry,("2","-10000"),("3","0"),("4","-10000"));
+    }
+
+    private static void ZeroAtZero()
+    {
+        // A put sold at 3 for a premium of 3: 30,000 received, all of it owed back at a futures price of zero.
+        var expiry=Expiry(Leg(OptionRight.Put,"3","-1","3"));
+        Breakevens(expiry,"0");
+        Extreme(expiry.MaximumProfit,"30000","profit");Extreme(expiry.MaximumLoss,"0","loss");
+    }
+
+    private static void FreePut()
+    {
+        var expiry=Expiry(Leg(OptionRight.Put,"3","1","0"));
+        if(expiry.Breakevens is not [{Upper:null} tail]||Text(tail.Lower)!="3")throw new Exception($"Expected breakeven from 3 upward; got {Ranges(expiry)}.");
+        Extreme(expiry.MaximumProfit,"30000","profit");Extreme(expiry.MaximumLoss,"0","loss");
+    }
+
     private static void ExpiryCurvePoints()
     {
         var legs=ImmutableArray.Create(Leg(OptionRight.Call,"3","1","0.08"),Leg(OptionRight.Put,"3","1","0.08"),Leg(OptionRight.Call,"3.3","-1","0.01"));
         // The strike at 3 lies between two price points and joins the curve; the strike at 3.3 lies outside the range.
         var expiry=OptionStrategies.AtExpiry(legs,[D("2.95"),D("3.05"),D("3.15")]);
         Curve(expiry,("2.95","-1000"),("3","-1500"),("3.05","-1000"),("3.15","0"));
+        // A strike below every price point adds no point; its breakeven is stated all the same.
+        var deep=OptionStrategies.AtExpiry([Leg(OptionRight.Call,"2","1","0.5")],[D("3"),D("4")]);
+        Curve(deep,("3","5000"),("4","15000"));Breakevens(deep,"2.5");
     }
 
     private static void PriceGrid()
@@ -186,6 +217,13 @@ internal static class OptionStrategyChecks
         OptionStrategies.RequireInstants([],Market.At,Market.Expiry);
         foreach(var instants in new[]{new[]{Market.At.AddSeconds(-1)},new[]{Market.Expiry},new[]{Market.At.AddDays(2),Market.At},new[]{Market.At,Market.At}})
             Reject("strategy_curve_instant",()=>OptionStrategies.RequireInstants([..instants],Market.At,Market.Expiry));
+        // The fixture's series take instructions until two hours before expiry: curves stop before that cutoff while it is
+        // ahead, and before expiry once it has passed or where a series has none.
+        var series=Fixture.Series(Call);var cutoff=Market.Expiry.AddHours(-2);
+        if(OptionStrategies.CurveHorizon([series],Market.At)!=cutoff||OptionStrategies.CurveHorizon([series],cutoff)!=Market.Expiry||
+            OptionStrategies.CurveHorizon([series with{InstructionCutoffAt=null,ContraryInstructionsAllowed=false}],Market.At)!=Market.Expiry||
+            OptionStrategies.CurveHorizon([series with{InstructionCutoffAt=null,ContraryInstructionsAllowed=false},series],Market.At)!=cutoff)
+            throw new Exception("Curves stop before the earliest instruction cutoff still ahead, or else the expiry.");
     }
 
     private static void Templates()
@@ -278,9 +316,9 @@ internal static class OptionStrategyChecks
     {
         var c=Prepare(Call,AtIntrinsic);
         ImmutableArray<OptionStrategyLeg> legs=[new(Fixture.Option(Call),D("1"),D("0.08")),new(Fixture.Option(AtIntrinsic),D("-1"),D("1"))];
-        Reject("option_at_intrinsic",()=>OptionStrategies.Dated(c.Prepared,c.Bindings,legs,[D("3")],[Market.At],default,CancellationToken.None));
+        Refuse("option_at_intrinsic",()=>OptionStrategies.Dated(c.Prepared,c.Bindings,legs,[D("3")],[Market.At],default,CancellationToken.None));
         var one=Prepare(Call);
-        Reject("strategy_leg_uncalibrated",()=>OptionStrategies.Dated(one.Prepared,one.Bindings,Straddle(one),[D("3")],[Market.At],default,CancellationToken.None));
+        Refuse("strategy_leg_uncalibrated",()=>OptionStrategies.Dated(one.Prepared,one.Bindings,Straddle(one),[D("3")],[Market.At],default,CancellationToken.None));
         // The expiry payoff needs no volatility and is stated all the same.
         Equal(Text(OptionStrategies.AtExpiry(legs,[D("3")]).NetPremium),"-9200");
     }
@@ -288,9 +326,25 @@ internal static class OptionStrategyChecks
     private static void DatedRefusedShift()
     {
         var c=Prepare();
-        // A shift below the held volatility leaves none to price at.
-        var code=Refused(()=>OptionStrategies.Dated(c.Prepared,c.Bindings,Straddle(c),[D("3")],[Market.At],D("-5"),CancellationToken.None));
-        Console.WriteLine($"     refused with {code}");
+        // A shift of 100 points down, the most a request may state, is more than the legs' held volatility: none is left to price at.
+        if(c.Volatility(Call).CompareTo(L("1"))>=0)throw new Exception("The fixture's volatility is expected to be under 100 points.");
+        Refuse("scenario_volatility",()=>OptionStrategies.Dated(c.Prepared,c.Bindings,Straddle(c),[D("3")],[Market.At],D("-1"),CancellationToken.None));
+    }
+
+    private static void DatedAskedWrongly()
+    {
+        var c=Prepare();var cutoff=Market.Expiry.AddHours(-2);
+        void Wrong(string code,Action ask)
+        {
+            try{ask();}catch(OptionStrategyCurveRefusal refusal){throw new Exception($"{refusal.Code} was reported as a refusal of the curves.");}
+            catch(MarketDataException e)when(e.Code==code){return;}
+            throw new Exception($"Expected {code}.");
+        }
+        Wrong("strategy_curve_instant",()=>OptionStrategies.Dated(c.Prepared,c.Bindings,Straddle(c),[D("3")],[cutoff],default,CancellationToken.None));
+        OptionStrategies.Dated(c.Prepared,c.Bindings,Straddle(c),[D("3")],[cutoff.AddSeconds(-1)],default,CancellationToken.None);
+        Wrong("strategy_price_range",()=>OptionStrategies.Dated(c.Prepared,c.Bindings,Straddle(c),OptionStrategies.Prices(D("1"),D("1")+D("0.001")*D(RiskEngine.MaxJointScenarios.ToString()),RiskEngine.MaxJointScenarios+1),
+            [Market.At],default,CancellationToken.None));
+        Wrong("option_sensitivity_input",()=>OptionStrategies.Dated(null,c.Bindings,Straddle(c),[D("3")],[Market.At],default,CancellationToken.None));
     }
 
     private static void DatedReproducible()
@@ -334,9 +388,10 @@ internal static class OptionStrategyChecks
         try{action();}catch(MarketDataException e)when(e.Code==code){return e.Message;}
         throw new Exception($"Expected {code}.");
     }
-    private static string Refused(Action action)
+    // A refusal of the dated curves with this code, as distinct from an error in what was asked.
+    private static void Refuse(string code,Action action)
     {
-        try{action();}catch(MarketDataException e){return e.Code;}
-        throw new Exception("Expected a structured refusal.");
+        try{action();}catch(OptionStrategyCurveRefusal e)when(e.Code==code){return;}
+        throw new Exception($"Expected the curves to be refused with {code}.");
     }
 }

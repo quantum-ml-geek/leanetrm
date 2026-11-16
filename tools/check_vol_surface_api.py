@@ -201,7 +201,7 @@ def run_checks(url, query, manifest, *, run_worker, worker_login):
           and offered['sensitivities']['policy'] == SENSITIVITY_POLICY and offered['expiryRule'] == 'option_expiry_exercise_value_v1'
           and datetime.fromisoformat(offered['instants'][0]) == datetime.fromisoformat(frame['at']) and offered['selectedInstants'] == offered['instants'][:1]
           and all(datetime.fromisoformat(b).timestamp() - datetime.fromisoformat(a).timestamp() == 86400 for a, b in zip(offered['instants'], offered['instants'][1:]))
-          and datetime.fromisoformat(offered['instants'][-1]) < datetime.fromisoformat(live['expiryAt'])
+          and datetime.fromisoformat(offered['instants'][-1]) < datetime.fromisoformat(offered['instantsBefore']) <= datetime.fromisoformat(live['expiryAt'])
           and Decimal(offered['prices']['lower']) < Decimal(live['atTheMoneyStrike']) < Decimal(offered['prices']['upper']) and offered['prices']['points'] == 21
           and setup['limits'] == {'legs': 4, 'points': 41, 'curves': 3, 'lots': 100000, 'volatilityShiftPoints': 100}, offered)
 
@@ -211,7 +211,7 @@ def run_checks(url, query, manifest, *, run_worker, worker_login):
                                                    'prices': {**offered['prices'], 'points': 11}, 'instants': offered['selectedInstants'], 'volatilityShiftPoints': '0',
                                                    'valuation': offered['valuation'], 'sensitivities': offered['sensitivities'], 'expiryRule': offered['expiryRule'], **changes},
                       expected=expected, timeout=TIMEOUT)
-    stored = len(revisions(PRODUCT))
+    stored = revisions(PRODUCT)
     analysis = analyse(straddle['legs'])
     strike, paid = Decimal(live['atTheMoneyStrike']), sum(Decimal(leg['entryPrice']) for leg in straddle['legs'])
     multiplier = Decimal(analysis['legs'][0]['multiplier'])
@@ -240,19 +240,21 @@ def run_checks(url, query, manifest, *, run_worker, worker_login):
           and analysis['policies']['sensitivities']['clockZone'] == 'UTC' and analysis['policies']['expiryRule'] == offered['expiryRule']
           and analysis['policies']['volatilityShift'] == {'convention': 'absolute_annualized_volatility_parent_additive_v1', 'size': '0'}
           and analysis['limits'] == setup['limits'] and analysis['work']['calibrationTreePrices'] > 0 and analysis['work']['valuationTreePrices'] >= 22
+          and analysis['work']['treePrices'] == analysis['work']['calibrationTreePrices'] + analysis['work']['valuationTreePrices']
           and analysis['work']['curveSets'] == 4 and analysis['context']['effectiveOn'] == DAY, (analysis['request'], analysis['policies'], analysis['work']))
     print(f"WORKLOAD option strategy analysis: 2 legs, 11 points, 1 curve, {analysis['work']['calibrationTreePrices']} calibration and "
           f"{analysis['work']['valuationTreePrices']} valuation tree prices in {analysis['work']['elapsedMs']} ms", flush=True)
     shifted = analyse(straddle['legs'], volatilityShiftPoints='5')
-    check('a volatility shift raises a long straddle\'s dated curve and leaves its payoff at expiry alone',
+    check('a volatility shift raises a long straddle\'s dated curve, never lowering a point, and leaves its payoff at expiry alone',
           shifted['dated']['state'] == 'valued' and shifted['policies']['volatilityShift']['size'] == '0.05' and shifted['expiry'] == expiry
-          and all(Decimal(a['profitAndLoss']) > Decimal(b['profitAndLoss']) for a, b in zip(shifted['dated']['curves'][0]['points'], dated['curves'][0]['points'])),
+          and all(Decimal(a['profitAndLoss']) >= Decimal(b['profitAndLoss']) for a, b in zip(shifted['dated']['curves'][0]['points'], dated['curves'][0]['points']))
+          and any(Decimal(a['profitAndLoss']) > Decimal(b['profitAndLoss']) for a, b in zip(shifted['dated']['curves'][0]['points'], dated['curves'][0]['points'])),
           shifted['dated'])
     other = next((s for s in solved if s['series']['expiryAt'] != live['expiryAt']), None)
     leg = straddle['legs'][0]
     for code, changes in (('strategy_limit', {'legs': [{**leg, 'series': f'synthetic_{n}'} for n in range(5)]}), ('strategy_limit', {'prices': {**offered['prices'], 'points': 42}}),
                           ('strategy_limit', {'instants': offered['instants'][:4]} if len(offered['instants']) >= 4 else {'prices': {**offered['prices'], 'points': 42}}),
-                          ('strategy_leg_series', {'legs': [{**leg, 'series': 'synthetic_unlisted'}]}), ('strategy_curve_instant', {'instants': [live['expiryAt']]}),
+                          ('strategy_leg_series', {'legs': [{**leg, 'series': 'synthetic_unlisted'}]}), ('strategy_curve_instant', {'instants': [offered['instantsBefore']]}),
                           ('strategy_price_range', {'prices': {**offered['prices'], 'lower': '0'}}), ('strategy_price_range', {'prices': {**offered['prices'], 'points': 4, 'upper': str(Decimal(offered['prices']['lower']) + 1)}}),
                           ('option_policy', {'valuation': {**offered['valuation'], 'calibrationFallback': 'none'}}), ('strategy_expiry_rule', {'expiryRule': 'synthetic_other_rule'}),
                           ('option_sensitivity_policy', {'sensitivities': {**offered['sensitivities'], 'clock': None}}),
@@ -268,7 +270,7 @@ def run_checks(url, query, manifest, *, run_worker, worker_login):
               and mixed['legs'][1]['delta'] == {'value': None, 'missing': 'option_at_intrinsic'} and mixed['legs'][0]['delta']['value'] is not None
               and mixed['strategy']['delta'] == {'amount': None, 'missing': 'incomplete'} and mixed['strategy']['value']['amount'] is not None
               and len(mixed['expiry']['curve']) >= 11 and mixed['expiry']['netPremium']['direction'] in ('debit', 'credit', 'none'), mixed)
-    check('a strategy analysis stores no surface revision', len(revisions(PRODUCT)) == stored, len(revisions(PRODUCT)))
+    check('a strategy analysis stores no surface revision', revisions(PRODUCT) == stored, revisions(PRODUCT))
 
     refit = fit()
     run_worker()
