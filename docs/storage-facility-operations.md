@@ -79,6 +79,9 @@ Reported-source selection searches exact compatible revisions by pipeline,
 point, operating date or identity, with bounded results and an explicit request
 to refine a truncated search. Linking a source retains its existing quantity and
 allocation ledger; it does not create a second writable physical quantity.
+The initial facility directory displays at most 200 assets and states when more
+exist. Broader facility discovery needs a qualified searched or paged authoring
+path; the reported-flow search does not search the asset directory.
 
 ## Transaction admission
 

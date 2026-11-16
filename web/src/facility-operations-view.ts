@@ -11,7 +11,7 @@ type Form={label:string;permission:string;base:Record<string,unknown>;fields:Ope
 type Inspection={overviewSections:{label:string;values:{label:string;value:string}[]}[];tables:{label:string;columns:string[];rows:string[][];instantColumns?:number[]}[]};
 type Context={contextId:string;effectiveOn:string;knownAt:string};
 type Facility={id:string;label:string;versionId:string;revision:number};
-type View=Inspection&{ownerId:string;context:Context;at:string;facilityId?:string;facilities?:Facility[];forms:Record<string,Form>;configuration:Record<string,Form>;canRecord:boolean;canConfigure:boolean;historical:boolean;allocationLinks?:{ledgerId:string;label:string}[];sourceSearch?:string;sourceChoicesTruncated?:boolean};
+type View=Inspection&{ownerId:string;context:Context;at:string;facilityId?:string;facilities?:Facility[];hasMore?:boolean;forms:Record<string,Form>;configuration:Record<string,Form>;canRecord:boolean;canConfigure:boolean;historical:boolean;allocationLinks?:{ledgerId:string;label:string}[];sourceSearch?:string;sourceChoicesTruncated?:boolean};
 type Preview=Inspection&{ownerId:string;context:Context;operationId:string;facilityId:string;kind:string;command:Record<string,unknown>;effectiveAt:string};
 type Outcome={found?:true;operationId:string;facilityId:string;kind:string;outcome:Record<string,unknown>;command?:Record<string,unknown>;effectiveAt?:string};
 type Options={api:Api;act:(work:()=>Promise<void>)=>Promise<void>;busy:()=>boolean;zone:()=>string;identity:()=>string;context:()=>FacilityContext;permission:(name:string)=>boolean;changed:()=>void;openAllocations?:(ledgerId:string)=>Promise<void>};
@@ -107,7 +107,8 @@ export function setupFacilityOperations(root:HTMLElement,o:Options){
     if(read.facilityId!==id||Object.values({...read.forms,...read.configuration}).some(form=>form.base?.facilityId!==id))throw Error('The read did not retain the selected facility and its exact command targets. Refresh.');view=read;}
    drawInspection();
    drawContext();
-   get('message').textContent=section==='activity'&&!selected?'Choose a facility to inspect its opening evidence, independent plan and measured activity.':'';actions();
+   get('message').textContent=[section==='activity'&&!selected?'Choose a facility to inspect its opening evidence, independent plan and measured activity.':'',
+    directory.hasMore?'More physical facilities exist than this directory displays.':''].filter(Boolean).join(' ');actions();
   }catch(error){if(!current(at))return;directory=undefined;view=undefined;get('inspection').replaceChildren();get('actions').replaceChildren();get('message').textContent=String(error);throw error;}finally{if(current(at)){reading=false;sync();}}
  }
  form.addEventListener('input',invalidate);form.addEventListener('change',invalidate);

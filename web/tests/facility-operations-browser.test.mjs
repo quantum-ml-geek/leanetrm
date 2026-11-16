@@ -32,6 +32,15 @@ const setup=`(async()=>{
  await operations.load();
 })()`;
 
+test('a bounded facility directory states when additional assets are not displayed',browser,()=>withBrowserPage('<div id="host"></div>',async evaluate=>{
+ await evaluate(setup);
+ await evaluate('reply.hasMore=true;operations.load()');
+ assert.match(await evaluate("document.querySelector('[data-facility-ops=message]').textContent"),/more physical facilities/i);
+ assert.equal(await evaluate("calls.some(call=>call.path.endsWith('/record'))"),false);
+ await evaluate('reply.hasMore=false;operations.load()');
+ assert.doesNotMatch(await evaluate("document.querySelector('[data-facility-ops=message]').textContent"),/more physical facilities/i);
+}));
+
 test('Activity searches exact reported-flow choices before entry and keeps its query after a confirmed refresh',browser,()=>withBrowserPage('<div id="host"></div>',async evaluate=>{
  await evaluate(setup);
  assert.equal(await evaluate("document.querySelector('[data-facility-ops=source-search]')?.hidden??true"),true);
