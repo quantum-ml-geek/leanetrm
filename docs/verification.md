@@ -4673,7 +4673,7 @@ on desktop and phone. All owned resources were removed. The complete CI matrix
 still gates the exact commit. These checks do not qualify complete economic
 continuation, quantity scaling, correction adapters or production activation.
 
-After integrating the current master and facility foundation, migration 0343
+After integrating the current master and facility foundation, migration 0350
 retains the original fee SQL unchanged. Local qualification passes 740 managed
 core, the full API schedule suite, 1,966 frontend and 144 Python checks. Native
 qualification retains all 26 independent whole-book checkpoints; populated
@@ -4742,7 +4742,7 @@ resources. Aggregate CI gates the exact published commit; release and production
 activation remain separate.
 
 After integrating the current master, facilities and balance-time fees,
-migration 0344 retains the custody SQL unchanged. The integrated artifact passes
+migration 0351 retains the custody SQL unchanged. The integrated artifact passes
 741 managed core checks, the full API schedule suite, 1,993 frontend and 146
 Python checks. Native qualification retains all 18 source/value checkpoints;
 populated upgrade, three retained PRICE jobs, four original-authority wait

@@ -1,3 +1,4 @@
+import {tradingInstrumentTypes,type TradingInstrumentType} from './trading-instrument-types.js';
 // The pages as the assistant panel sees them (docs/ai-assistant.md §7.3, §8, §10.1, D191): the report an ask sends for
 // what a page shows, Looking at, which says exactly that, the context an ask pins, when a navigation target moves the
 // page, the places a move left for Back, and the plain lines the conversation shows. None of them names an identifier.
@@ -18,7 +19,7 @@ export type PageFocus={tradeIds:string[];pivotCell:PivotCellFocus|null};
 export type PageReport={page:string;selection:Record<string,unknown>;layout?:BlotterLayoutShown;view?:BlotterDigestView;focus?:PageFocus;businessDate?:string};
 export type BlotterDigestView=BlotterSelection&{primaryMeasure:string|null};
 export type BlotterSelection={mode:'trades'|'pivot';bookIds:string[];portfolioIds:string[];groupBy:string[];measures:string[]};
-export type TradeShown={tradeId:string;instrumentType:'future'|'financial_swap'|'heat_rate'|'ppa'|'physical_gas'|'physical_gas_park_loan'|'physical_gas_park_custody'|'physical_crude'|'physical_lng'|'futures_option';revision:number;reference:string};
+export type TradeShown={tradeId:string;instrumentType:TradingInstrumentType;revision:number;reference:string};
 /** A new trade being entered in the Blotter's panel: of its product, or of none until the person chooses one. */
 export type EntryShown={product:NewProduct|null};
 /** What PPA bookings shows: the inspected trade's revision, else the book whose PPA trades it lists, else neither. */
@@ -34,21 +35,21 @@ export type PageState=(
   |({page:'futures';risk:boolean;trade:TradeShown|null;entry:EntryShown|null;lens:'values'|'risk';view:BlotterSelection}&BlotterLayoutShown)
   |{page:'jobs';job:string|null}|({page:'ppa'}&PpaShown)|{page:'custom-curves';curve:string|null;unsaved:boolean}
   |{page:'physical-operations';physical?:PhysicalShown}|{page:'lifecycle'}|{page:'risk';view:RiskView}
-  |{page:'facilities'|'dashboard'|'crude-setup'|'gas-setup'|'gas'|'crude'|'delivery'|'interval-series'|'interval-curves'|'vol-surfaces'|'options'|'admin'|'ai'})&{assistant?:WorkspaceSelection;digestView?:BlotterDigestView;focus?:PageFocus;businessDate?:string;facilityLedger?:string|null;facilitySection?:'quantities'|'definitions'|'activity'};
+  |{page:'rec-inventory'|'physical-power'|'facilities'|'dashboard'|'crude-setup'|'gas-setup'|'gas'|'crude'|'delivery'|'interval-series'|'interval-curves'|'vol-surfaces'|'options'|'admin'|'ai'})&{assistant?:WorkspaceSelection;digestView?:BlotterDigestView;focus?:PageFocus;businessDate?:string;facilityLedger?:string|null;facilitySection?:'quantities'|'definitions'|'activity'};
 // The knowledge a page shows: working data, with its As of frame once one is chosen; the selected historical view; or a
 // historical selection not yet applied, which pins nothing.
 export type PageContext={mode:'current';frameId:string|null;frameLabel:string|null;businessDate?:string}
   |{mode:'retained';contextId:string;effectiveOn:string;knownAtLabel:string;frameId:string|null;frameLabel:string|null}|{mode:'unapplied'};
 
 export const inconsistent=()=>Error('The assistant’s page is inconsistent. Reload it.');
-const unsupported:Record<string,string>={facilities:'facility_quantities',dashboard:'dashboard','crude-setup':'crude_setup','gas-setup':'gas_setup',gas:'physical_gas',crude:'physical_crude',delivery:'delivery_prices','interval-series':'interval_series',
+const unsupported:Record<string,string>={'rec-inventory':'rec_inventory','physical-power':'physical_power',facilities:'facility_quantities',dashboard:'dashboard','crude-setup':'crude_setup','gas-setup':'gas_setup',gas:'physical_gas',crude:'physical_crude',delivery:'delivery_prices','interval-series':'interval_series',
   'interval-curves':'interval_curves','vol-surfaces':'vol_surfaces',options:'options',admin:'users_access',ai:'settings_ai'};
 // Pages the assistant reads but Navigate does not open (D250).
 const unopened:readonly string[]=['ppa'];
 const noBlotter={mode:null,portfolioIds:null,groupBy:null,measures:null};
 
 // The page a trade being entered is reported as: one id per product, and one while none is chosen. The assistant reads none of them.
-const entryPages={none:'blotter_new_trade',futures:'blotter_new_future',swaps:'blotter_new_swap',ppa:'blotter_new_ppa',gas:'blotter_new_gas','park-loan':'blotter_new_park_loan',crude:'blotter_new_crude',lng:'blotter_new_lng',options:'blotter_new_option'} as const;
+const entryPages={rec:'blotter_new_rec',none:'blotter_new_trade',futures:'blotter_new_future',swaps:'blotter_new_swap',ppa:'blotter_new_ppa',gas:'blotter_new_gas','park-loan':'blotter_new_park_loan',crude:'blotter_new_crude',lng:'blotter_new_lng',options:'blotter_new_option'} as const;
 // The report an ask sends: a read page's selection is its read tool's input for the view the page shows; any other
 // page's is empty. Blotter trade rows name no grouping, which the Blotter keeps for when its totals are shown again. What the
 // Blotter's panel holds comes first, its risk report, a new trade or a position; then its trade rows under the Risk lens, whose
@@ -81,9 +82,10 @@ export function pageReport(state:PageState):PageReport{
       const layout:BlotterLayoutShown={pane:{...state.pane},poppedOut:state.poppedOut};
       const pointers={...(state.digestView?{view:structuredClone(state.digestView)}:{}),...(state.focus?{focus:structuredClone(state.focus)}:{})};
       if(state.risk)return {page:'blotter_risk',selection:state.assistant??{},layout,...pointers};
-      if(state.entry)return {page:entryPages[state.entry.product??'none'],selection:state.assistant??{},layout,...pointers};
+      if(state.entry)return {page:entryPages[state.entry.product??'none'],selection:state.entry.product==='rec'?{}:state.assistant??{},layout,...pointers};
       if(!state.trade&&state.lens==='risk')return {page:'blotter_risk_lens',selection:state.assistant??{},layout,...pointers};
       const t=state.trade,v=state.view,pivot=v.mode==='pivot';
+      if(t?.instrumentType==='operating_right'||t?.instrumentType==='rec_forward')return {page:t.instrumentType==='operating_right'?'blotter_operating_right':'blotter_rec_forward',selection:{},layout,...pointers};
       return {page:'blotter',layout,...pointers,selection:t?{view:'trade',mode:null,bookIds:null,portfolioIds:null,groupBy:null,measures:null,tradeId:t.tradeId,instrumentType:t.instrumentType,revision:t.revision}
         :{view:'blotter',mode:v.mode,bookIds:[...v.bookIds],portfolioIds:[...v.portfolioIds],groupBy:pivot?[...v.groupBy]:[],measures:pivot?[...v.measures]:[],
           tradeId:null,instrumentType:null,revision:null}};
@@ -102,9 +104,9 @@ export function askKnowledge(context:PageContext){
 }
 
 const pageNames:Record<string,string>={lifecycle:'Lifecycle',physical_operations:'Physical operations',gas_setup:'Gas delivery setup',crude_setup:'Crude delivery setup',facility_quantities:'Facilities',facility_definitions:'Facility definitions',facility_activity:'Physical facility activity',curves:'Curves & prices',contract_definitions:'Contract definitions',schedules:'Schedules',power_tous:'Power TOUs',
-  reference_data:'Reference data',parties:'Entities & counterparties',blotter:'Blotter',blotter_risk:'Blotter',blotter_risk_lens:'Blotter',blotter_new_trade:'Blotter',blotter_new_future:'Blotter',blotter_new_swap:'Blotter',blotter_new_ppa:'Blotter',blotter_new_gas:'Blotter',blotter_new_park_loan:'Blotter',blotter_new_option:'Blotter',blotter_new_crude:'Blotter',blotter_new_lng:'Blotter',delivery_prices:'Delivery prices',
+  reference_data:'Reference data',parties:'Entities & counterparties',blotter:'Blotter',blotter_operating_right:'Blotter',blotter_rec_forward:'Blotter',blotter_risk:'Blotter',blotter_risk_lens:'Blotter',blotter_new_rec:'Blotter',blotter_new_trade:'Blotter',blotter_new_future:'Blotter',blotter_new_swap:'Blotter',blotter_new_ppa:'Blotter',blotter_new_gas:'Blotter',blotter_new_park_loan:'Blotter',blotter_new_option:'Blotter',blotter_new_crude:'Blotter',blotter_new_lng:'Blotter',delivery_prices:'Delivery prices',
   custom_curves:'Curve builder',interval_series:'Interval data',interval_curves:'Curves & prices · Hourly / sub-hourly',jobs:'Jobs',users_access:'Users & access',
-  risk_jobs:'Risk',settings_ai:'AI',dashboard:'Dashboard',physical_gas:'Physical gas bookings',physical_crude:'Physical crude bookings',ppa:'PPA bookings',vol_surfaces:'Vol surfaces',options:'Options'};
+  rec_inventory:'REC inventory',physical_power:'Operating facilities',risk_jobs:'Risk',settings_ai:'AI',dashboard:'Dashboard',physical_gas:'Physical gas bookings',physical_crude:'Physical crude bookings',ppa:'PPA bookings',vol_surfaces:'Vol surfaces',options:'Options'};
 // The label catalog is checked against server admission by the owned browser fixture.
 export const reportedPages:readonly string[]=Object.freeze(Object.keys(pageNames));
 const dimensions:Record<string,string>={portfolio:'portfolio',book:'book',market:'market',contract:'contract',instrumentType:'instrument type',commodity:'commodity'};
@@ -139,6 +141,11 @@ function shows(report:PageReport,names:Names,trade?:string){
     case 'blotter_new_future':return `A new future is being entered. ${unsent}`;
     case 'blotter_new_swap':return `A new swap is being entered. ${unsent}`;
     case 'blotter_new_ppa':return 'A new PPA is being entered. The assistant does not read a trade being entered.';
+    case 'blotter_operating_right':return 'A saved operating right is open. The assistant does not read this trade.';
+    case 'blotter_rec_forward':return 'A saved REC forward is open. The assistant does not read this trade.';
+    case 'rec_inventory':return 'Certificate inventory and standalone forwards. The assistant does not read this page.';
+    case 'physical_power':return 'Operating facilities and supplied plans. The assistant does not read this page.';
+    case 'blotter_new_rec':return 'A qualified REC forward is being entered. The assistant does not read a trade being entered.';
     case 'blotter_new_lng':return 'A new physical LNG cargo is being entered. The assistant does not read a trade being entered.';
     case 'blotter_new_crude':return 'A new physical crude trade is being entered. The assistant does not read a trade being entered.';
     case 'blotter_new_option':return 'A new futures option is being entered. The assistant does not read a trade being entered.';

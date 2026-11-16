@@ -30,6 +30,7 @@ def run_checks(query, manifest, receipt):
       ALTER TABLE trading.swap_trade_revisions ENABLE TRIGGER USER;
       ALTER TABLE trading.instrument_side_schedules DISABLE TRIGGER USER;
       DELETE FROM trading.instrument_side_schedules WHERE instrument_id='{receipt['instrumentId']}';
+      SET CONSTRAINTS ALL IMMEDIATE;
       ALTER TABLE trading.instrument_side_schedules ENABLE TRIGGER USER;
     """
     enter=f"SET SESSION AUTHORIZATION preview_runtime;SELECT security.use_context('{token}');"

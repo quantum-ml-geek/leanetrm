@@ -427,6 +427,22 @@ composition booking, future replacement amendments and independent indexed
 consideration through the existing FloatingSide. These preserve contractual net
 MTM and do not admit started-delivery cash lifecycle operations.
 
+D412 adds [versioned operating facilities](operating-facilities.md) and bounded
+supplied-plan thermal toll, battery and solar calculation through independent
+Side schedules. Physical operating parameters extend exact existing locations;
+trade entitlement, guarantees, state and prices stay separate. Saved complete-right
+trades retain their exact facility version, supplied plan and membership-owned
+programs. Ordinary Instrument/Side reads, Blotter and shared factor scenarios
+consume those programs. The hedge report keeps base measures distinct and adds
+only like-currency price changes under one scenario set. Standalone REC forwards
+own independent physical-delivery and consideration schedules; the durable manual
+inventory consumer records evidenced serial ownership and exact outgoing delivery
+allocations. Both use current authorization, certified history and idempotent
+commands. See [trading and inventory contracts](structured-power-trading.md).
+Optimization and external registry submission remain separate work.
+[Structured power](structured-power-products.md)
+and [contract conventions](power-contract-conventions.md) record the boundaries.
+
 D229 integrates PPA bindings into the common blotter and interactive/queued
 portfolio risk, with an explicit pending-meter policy and distinct value measure.
 Heat-rate examples use the existing typed factor contract and independent

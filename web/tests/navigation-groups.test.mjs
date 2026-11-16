@@ -22,7 +22,7 @@ test('the groups and their pages keep the sidebar order',()=>{
   ['trading','Trading',['futures','options']],
   ['markets','Markets',['market','delivery','interval-series','vol-surfaces','interval-curves']],
   ['risk','Risk',['risk','risk-pnl','risk-scenarios','risk-var','risk-runs']],
-  ['scheduling','Scheduling',['lifecycle','physical-operations','facilities']],
+  ['scheduling','Scheduling',['lifecycle','physical-operations','facilities','physical-power','rec-inventory']],
   ['reference','Reference Data',['reference']],
   ['administration','Administration',['jobs','admin','ai']]]);
 });
@@ -71,8 +71,8 @@ test('market data outranks administration and the Blotter outranks plain market 
 test('the sidebar lists each page for the permissions that open it',()=>{
  const market=['dashboard','market','delivery','interval-series','interval-curves','reference'];
  assert.deepEqual(listed(['ReadMarketData','RunJobs']).sort(),[...market,'jobs'].sort());
- assert.deepEqual(listed(['ReadMarketData','ReadTrades','ReadTradeParties']).sort(),[...market,'jobs','lifecycle','physical-operations','futures','options','vol-surfaces'].sort());
- assert.deepEqual(listed(['ReadMarketData','ReadTrades']).sort(),[...market,'jobs','lifecycle','physical-operations','futures','options','vol-surfaces'].sort());
+ assert.deepEqual(listed(['ReadMarketData','ReadTrades','ReadTradeParties']).sort(),[...market,'jobs','lifecycle','physical-operations','futures','options','vol-surfaces','rec-inventory'].sort());
+ assert.deepEqual(listed(['ReadMarketData','ReadTrades']).sort(),[...market,'jobs','lifecycle','physical-operations','futures','options','vol-surfaces','rec-inventory'].sort());
  assert.deepEqual(listed(['ReadMarketData','ReadTradeParties']).sort(),[...market,'jobs'].sort());
  assert.deepEqual(listed(['ManageAccess','ManageIdentities']),['jobs','admin']);
  assert.deepEqual(listed(['ManageAgents']),['jobs','ai']);
@@ -141,10 +141,10 @@ test('moving pages changes no account’s reach',()=>{
  const reach=permissions=>[...allPages,'custom-curves','configuration','schedules','power','parties','gas-setup','crude-setup','curve-definitions'].filter(page=>pageAvailable(page,permissions)).sort();
  const market=['dashboard','market','delivery','interval-series','interval-curves','reference','jobs','custom-curves','configuration','schedules','power','gas-setup','crude-setup','curve-definitions'];
  assert.deepEqual(reach(['ReadMarketData']),[...market].sort());
- assert.deepEqual(reach(['ReadMarketData','ReadTrades']),[...market,'lifecycle','physical-operations','futures','options','vol-surfaces'].sort());
+ assert.deepEqual(reach(['ReadMarketData','ReadTrades']),[...market,'lifecycle','physical-operations','futures','options','vol-surfaces','rec-inventory'].sort());
  assert.deepEqual(reach(['ReadMarketData','ReadTradeParties']),[...market,'parties'].sort());
- assert.deepEqual(reach(['ReadMarketData','ReadTrades','RunScenario']),[...market,'lifecycle','physical-operations','futures','options','vol-surfaces','risk','risk-pnl','risk-scenarios','risk-var','risk-runs'].sort());
- assert.deepEqual(reach(['ReadMarketData','ReadTrades','ReadFacilityQuantities']),[...market,'lifecycle','physical-operations','futures','options','vol-surfaces','facilities'].sort());
+ assert.deepEqual(reach(['ReadMarketData','ReadTrades','RunScenario']),[...market,'lifecycle','physical-operations','futures','options','vol-surfaces','rec-inventory','risk','risk-pnl','risk-scenarios','risk-var','risk-runs'].sort());
+ assert.deepEqual(reach(['ReadMarketData','ReadTrades','ReadFacilityQuantities']),[...market,'lifecycle','physical-operations','futures','options','vol-surfaces','rec-inventory','facilities'].sort());
  assert.deepEqual(reach(['ManageAccess']),['admin','jobs'].sort());
 });
 
@@ -152,4 +152,18 @@ test('Reference Data lists the areas of its console, in the console\'s order and
  const [,body]=markup.match(/<div id="nav-reference"[^>]*>(.*?)<\/div>/s);
  assert.deepEqual([...body.matchAll(/<button id="reference-area-([a-z]+)"[^>]*data-area="([a-z]+)"[^>]*title="([^"]+)"/g)].map(([,id,area,name])=>({id:area,name:name.replace('&amp;','&'),same:id===area})),
   consoleAreas.map(a=>({...a,same:true})));
+});
+
+test('operating facilities reuse Scheduling with exact physical read permission',()=>{
+ assert.equal(pageGroup('physical-power'),'Scheduling');
+ assert.equal(navigationGroups.filter(group=>group.pages.includes('physical-power')).length,1);
+ assert.equal(navigationGroups.some(group=>group.id==='physical'),false);
+ assert.equal(pageAvailable('physical-power',['ReadMarketData','ReadPhysical']),true);
+ for(const permissions of [[],['ReadMarketData'],['ReadPhysical'],['ReadMarketData','ReadTrades']])assert.equal(pageAvailable('physical-power',permissions),false);
+});
+
+test('REC trade entry is Scheduling while inventory authority remains separate',()=>{
+ assert.equal(pageGroup('rec-inventory'),'Scheduling');
+ assert.equal(pageAvailable('rec-inventory',['ReadMarketData','ReadTrades','ReadRecInventory']),true);
+ for(const permissions of [[],['ReadMarketData'],['ReadRecInventory']])assert.equal(pageAvailable('rec-inventory',permissions),false);assert.equal(pageAvailable('rec-inventory',['ReadMarketData','ReadTrades']),true);
 });

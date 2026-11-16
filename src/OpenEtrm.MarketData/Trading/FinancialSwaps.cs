@@ -87,9 +87,10 @@ public sealed partial record FixedSide : Side
     internal static DateTimeOffset PaymentBoundary(PaymentRule? rule,DateOnly from,DateOnly to)=>
         PaymentBoundary((rule??throw new MarketDataException("payment_rule","An explicit payment rule is required.")).Generate(from,to).Date);
     internal static DateTimeOffset PaymentBoundary(DateOnly date)=>new(date.ToDateTime(TimeOnly.MinValue,DateTimeKind.Utc));
-    public override SideSchedule GenerateSchedule()=>IntervalDefinition is null?GenerateDatedSchedule():new IntervalSideSchedule(this);
+    public override SideSchedule GenerateSchedule()=>OperatingDefinition is not null?OperatingSchedules.Schedule(this):IntervalDefinition is null?GenerateDatedSchedule():new IntervalSideSchedule(this);
     public SidePaymentSchedule GenerateDatedSchedule()
     {
+        if(OperatingDefinition is not null)throw OperatingSchedules.Invalid("side_schedule_terms","Use this side's operating quantity schedule.");
         if(RetainedPlan is {} retained)return retained.DatedSchedule();
         var payments=Periods.Select((period,n)=>
         {
@@ -183,7 +184,7 @@ public sealed partial record FloatingSide : Side
     public CurveKey ProjectionCurve=>Projections[0].Market.Curve;
     public ImmutableArray<FloatingObservation> ObservationSchedule=>[..Periods.SelectMany(p=>p.ObservationSchedule)];
     public FloatingProjectionBinding PricingBinding=>new(Projections){ContractObservations=[..Periods.Where(p=>!p.ContractObservations.IsDefaultOrEmpty).SelectMany(p=>p.ContractObservations)]};
-    public override DefinitionIdentity PricingBindingIdentity=>IntervalDefinition is null&&!Periods[0].ContractObservations.IsDefaultOrEmpty?DefinitionIdentity.For(new ContractObservationBindings([..Periods.SelectMany(p=>p.ContractObservations)])):IntervalDefinition is null?DefinitionIdentity.For(new MonthlyProjectionBindings([..Periods.Select(p=>new FloatingProjectionBinding(p.Projections))])):DefinitionIdentity.For(Price);
+    public override DefinitionIdentity PricingBindingIdentity=>OperatingDefinition is {} operating?DefinitionIdentity.For(operating):IntervalDefinition is null&&!Periods[0].ContractObservations.IsDefaultOrEmpty?DefinitionIdentity.For(new ContractObservationBindings([..Periods.SelectMany(p=>p.ContractObservations)])):IntervalDefinition is null?DefinitionIdentity.For(new MonthlyProjectionBindings([..Periods.Select(p=>new FloatingProjectionBinding(p.Projections))])):DefinitionIdentity.For(Price);
     public ImmutableArray<OpenEtrm.Shared.Numerics.ExactRatio> Quantities=>[..Periods.Select(p=>p.Allocation)];
     private FloatingSidePeriod SinglePeriod=>Periods.Length==1?Periods[0]:
         throw new MarketDataException("side_payment_scope","Select an observation/payment period from this whole-term side.");
@@ -263,9 +264,10 @@ public sealed partial record FloatingSide : Side
         foreach(var period in Periods)ValidateCustom(period,binding);
         return new(Id,Settlement,Quote,UnitQuantity,[..Periods.Select(p=>p with{CustomProjection=binding})],CalendarPolicy,PowerQuantity,GasDeliveryClock);
     }
-    public override SideSchedule GenerateSchedule()=>IntervalDefinition is null?GenerateDatedSchedule():new IntervalSideSchedule(this);
+    public override SideSchedule GenerateSchedule()=>OperatingDefinition is not null?OperatingSchedules.Schedule(this):IntervalDefinition is null?GenerateDatedSchedule():new IntervalSideSchedule(this);
     public SidePaymentSchedule GenerateDatedSchedule()
     {
+        if(OperatingDefinition is not null)throw OperatingSchedules.Invalid("side_schedule_terms","Use this side's operating quantity schedule.");
         if(RetainedPlan is {} retained)return retained.DatedSchedule();
         if(Periods[0].ObservationImplementation==DeliveryIndexImplementation)return GenerateDeliveryIndexSchedule();
         if(!Periods[0].ContractObservations.IsDefaultOrEmpty)return GenerateContractObservationSchedule();
