@@ -1531,12 +1531,12 @@ api.MapPost("/corrections",(HttpContext c,CorrectionRequest body)=>Locked(c,asyn
     if (session.Frames.Count>=128&&!(c.Features.Get<AssistantInvocation>()?.ResultIdentity is {} replay&&session.Frames.ContainsKey(replay))) throw new MarketDataException("preview_limit","Restart the disposable preview to create more saved selections.");
     if (string.IsNullOrWhiteSpace(body.Value)) throw new MarketDataException("missing_value","Enter an exact decimal value.");
     c.Items["correction_attempted"]=true;
-    var (revision,id)=await database.WithIdentity(Profile(session),"ImportObservations",async(connection,ct)=>{
+    var id=await database.WithIdentity(Profile(session),"ImportObservations",async(connection,ct)=>{
         var selected=held.Length==1?held[0].RevisionId:(await MarketInputSelection.RootSource(database,connection,frame,ct)).DefinitionRevisionId;
-        return(selected,await database.Correct(connection,selected,body.ObservationId,body.Value,ct));
+        return await database.Correct(connection,selected,body.ObservationId,body.Value,ct);
     },c.RequestAborted);
     var updated=held.Length==0?frame.SelectRevision(body.ObservationId,id,"Edited inputs")
-        :frame.SelectSwapMarketRevision(revision,held[0].Pins,body.ObservationId,id,"Edited inputs");
+        :frame.SelectSwapMarketRevision(held[0].RevisionId,held[0].Pins,body.ObservationId,id,"Edited inputs");
     if(c.Features.Get<AssistantInvocation>()?.ResultIdentity is {} identity)updated=updated with{Id=identity};
     if(c.Features.Get<AssistantInvocation>() is not null)session.Frames.TryAdd(updated.Id,updated);else session.Frames.Add(updated.Id,updated);
     return Results.Ok(new {frame=updated,observationId=id});
