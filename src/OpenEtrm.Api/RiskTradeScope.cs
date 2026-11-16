@@ -60,7 +60,15 @@ internal static class RiskTradeScope
             LEFT JOIN trading.trade_references t ON(t.catalog_id,t.trade_id)=($1,(h.value->>'trade_id')::uuid)
             """,[catalog,books.ToArray(),(object?)ids?.ToArray()??DBNull.Value],ct);
         var complete=!ppas.Any(r=>r.TryGetProperty("__unavailable_ppa_identity",out _));
-        rows=rows.AddRange(ppas.Where(r=>r.TryGetProperty("trade_id",out _))).OrderBy(r=>r.GetProperty("trade_reference").ValueKind==JsonValueKind.Null?int.MaxValue:int.Parse(r.Text("trade_reference"),CultureInfo.InvariantCulture))
+        var operating=await PreviewDatabase.Rows(connection,"""
+            SELECT (value||jsonb_build_object('product','operating_right'))::text FROM jsonb_array_elements(
+             security.operating_position_scope($1,$2::uuid[],ARRAY[]::uuid[],$3::uuid[]))
+            """,[catalog,books.ToArray(),(object?)ids?.ToArray()??DBNull.Value],ct);
+        var recs=await PreviewDatabase.Rows(connection,"""
+            SELECT (value||jsonb_build_object('product','rec_forward'))::text FROM jsonb_array_elements(
+             security.rec_forward_position_scope($1,$2::uuid[],ARRAY[]::uuid[],$3::uuid[]))
+            """,[catalog,books.ToArray(),(object?)ids?.ToArray()??DBNull.Value],ct);
+        rows=rows.AddRange(operating).AddRange(recs).AddRange(ppas.Where(r=>r.TryGetProperty("trade_id",out _))).OrderBy(r=>r.GetProperty("trade_reference").ValueKind==JsonValueKind.Null?int.MaxValue:int.Parse(r.Text("trade_reference"),CultureInfo.InvariantCulture))
             .ThenBy(r=>r.Id("trade_id")).ToImmutableArray();
         if(rows.Select(r=>r.Id("trade_id")).Distinct().Count()!=rows.Length)
             throw new MarketDataException("risk_trade_scope","Every available trade requires one exact visible booking identity.");

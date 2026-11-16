@@ -407,3 +407,17 @@ test('Looking at says which physical instrument revision, tab, gas day and stage
 test('operating facilities report a distinct page without unsaved browser terms',()=>{
  assert.deepEqual(pageReport({page:'physical-power'}),{page:'physical_power',selection:{}});
 });
+
+
+test('REC ticket and saved structured inspectors report identity with real Blotter layout while financial selections stay private',()=>{
+ const base={page:'futures',...open,risk:false,entry:null,lens:'values',view:blotter};
+ const focus={tradeIds:[trade],pivotCell:null};
+ for(const [instrumentType,page] of [['operating_right','blotter_operating_right'],['rec_forward','blotter_rec_forward']]){
+  const report=pageReport({...base,focus,trade:{tradeId:trade,instrumentType,revision:2,reference:'TR-000009'},assistant:{operation:'unsupported.financial',inputJson:'{}'}});
+  assert.deepEqual(report,{page,selection:{},layout,focus});
+  const shown=lookingAt(report,{mode:'current',frameId:frame,frameLabel:'Synthetic close'},{curve:String,table:String});
+  assert.equal(shown.page,'Blotter');assert.equal(shown.supported,false);assert.equal(shown.askable,true);assert.match(shown.shows,/does not read/);
+ }
+ const ticket=pageReport({...base,trade:null,entry:{product:'rec'},assistant:{operation:'rec/trades/book',inputJson:'private draft'}});
+ assert.deepEqual(ticket,{page:'blotter_new_rec',selection:{},layout});
+});

@@ -13,7 +13,11 @@ public sealed record StructuredPowerCatalogResult(StructuredPowerPins Pins,Immut
     ImmutableArray<StructuredPowerChoice> Clocks,ImmutableArray<StructuredPowerKindChoice> Kinds,
     ImmutableArray<StructuredPowerQuantityChoice> PowerQuantities,ImmutableArray<StructuredPowerQuantityChoice> EnergyQuantities,
     ImmutableArray<StructuredPowerQuantityChoice> FuelQuantities,ImmutableArray<StructuredPowerQuantityChoice> RightQuantities,
-    ImmutableArray<StructuredPowerChoice> Currencies,ImmutableArray<StructuredPowerQuoteChoice> Quotes,string PaymentImplementation,bool CanSave,bool CanPreview);
+    ImmutableArray<StructuredPowerChoice> Currencies,ImmutableArray<StructuredPowerQuoteChoice> Quotes,string PaymentImplementation,bool CanSave,bool CanPreview)
+{
+    public ImmutableArray<StructuredPowerPriceContract> PriceContracts { get; init; }=[];
+    public ImmutableArray<string> OperatingBookingClockCodes { get; init; }=[];
+}
 
 public static partial class StructuredPowerPreview
 {
@@ -28,6 +32,7 @@ public static partial class StructuredPowerPreview
             Choices("locations"),Choices("clock_rules"),[new("battery","Battery storage",[5,15,30,60]),new("thermal","Thermal tolling",[15,60]),new("solar","Solar output right",[15,60])],
             [..quantities.Where(x=>x.UnitCode=="megawatt"&&x.DimensionCode=="power")],[..quantities.Where(x=>x.UnitCode=="megawatt_hour"&&x.DimensionCode=="energy")],
             [..quantities.Where(x=>x.DimensionCode=="energy")],[..quantities.Where(x=>x.UnitCode=="resource_right"&&CompleteRightDimension(data,x.DimensionCode))],
-            Choices("currencies"),[..data.Quotes.Where(x=>x.Kind==QuoteKind.Outright).Select(x=>new StructuredPowerQuoteChoice(x.Key.Code,$"{x.Key.Code} · {x.Currency.Code} per {x.Quantity.Code} × {x.Multiplier}",x.Quantity.Code,x.Currency.Code,x.Multiplier.ToString()))],OpenEtrm.MarketData.Trading.PaymentRule.Implementation,canSave,canPreview);
+            Choices("currencies"),[..data.Quotes.Where(x=>x.Kind==QuoteKind.Outright).Select(x=>new StructuredPowerQuoteChoice(x.Key.Code,$"{x.Key.Code} · {x.Currency.Code} per {x.Quantity.Code} × {x.Multiplier}",x.Quantity.Code,x.Currency.Code,x.Multiplier.ToString()))],OpenEtrm.MarketData.Trading.PaymentRule.Implementation,canSave,canPreview)
+        {OperatingBookingClockCodes=[..data.References["clock_rules"].Where(r=>r.Text("kind")=="fixed_offset"&&r.Number("fixed_offset_seconds")==default).Select(r=>r.Text("code"))]};
     }
 }

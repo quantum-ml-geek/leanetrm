@@ -16,6 +16,7 @@ static class AgentToolChecks
 {
     public static void Run()
     {
+        StructuredProductIdentityReports();
         CurvePreparation();
         CurveDrafts();
         JobReads();
@@ -30,6 +31,23 @@ static class AgentToolChecks
         Results();
         Display();
         Navigation();
+    }
+    static void StructuredProductIdentityReports()
+    {
+        foreach(var page in new[]{"blotter_new_rec","blotter_operating_right","blotter_rec_forward"})
+        {
+            var report=JsonSerializer.SerializeToElement(new{page,selection=new{},
+                layout=new{pane=new{details=true,charts=false},poppedOut=true},focus=new{tradeIds=new[]{Trade},pivotCell=(object?)null}});
+            PageReports.Require(report);
+            Require(PageReports.Dispatch(report) is null&&!PageReports.Supported.Contains(page)&&!PageReports.Navigable.Contains(page),
+                "The actual structured-product ticket and saved-inspector layout report only their identity, with no read or navigation dispatch.");
+            Require(Code(()=>PageReports.Require(Json(Report(page,"{\"tradeId\":\""+Trade+"\"}"))))=="page_report_invalid",
+                "Identity-only structured pages cannot smuggle financial selections into an assistant read.");
+        }
+        foreach(var kind in new[]{"operating_right","rec_forward"})
+            Require(Code(()=>AgentTools.Parse("read_trades",Json($$"""{"view":"trade",{{NoBlotter}},"tradeId":"{{Trade}}","instrumentType":"{{kind}}","revision":1}""")))=="tool_arguments_invalid",
+                "Structured-product identity reporting does not create an unsupported financial read or a swap fallback.");
+        Console.WriteLine("PASS structured-product assistant identity: real ticket and inspector layouts accepted without financial reads or navigation");
     }
     // Futures option catalog (R27, R16, R17): one option product's series of one expiry date among those options/catalog lists,
     // at the pinned frame under the Blotter's accesses, for a required product and expiry; its result keeps the series and convention without the booking
@@ -480,7 +498,7 @@ static class AgentToolChecks
             PageReports.Require(Json(report));
             Require(PageReports.Dispatch(Json(report)) is {Call:{} dispatchedCall} read&&read.Page==page&&dispatchedCall.Operation.Id==operation,$"{report} dispatches {operation}");
         }
-        var unsupported=new[]{"physical_power","dashboard","vol_surfaces","blotter_new_lng","blotter_new_ppa","blotter_new_gas","blotter_new_crude","blotter_new_option","physical_gas","physical_crude"};
+        var unsupported=new[]{"physical_power","rec_inventory","blotter_new_rec","blotter_operating_right","blotter_rec_forward","dashboard","vol_surfaces","blotter_new_lng","blotter_new_ppa","blotter_new_gas","blotter_new_crude","blotter_new_option","physical_gas","physical_crude"};
         var workspace=new[]{"lifecycle","physical_operations","gas_setup","crude_setup","facility_quantities","risk_jobs","blotter_risk","blotter_risk_lens","blotter_new_trade","blotter_new_future","blotter_new_swap","delivery_prices","interval_series","interval_curves","users_access","settings_ai"};
         Require(PageReports.NotSupported.Order().SequenceEqual(unsupported.Order())&&PageReports.Supported.Order()
                 .SequenceEqual(new[]{"curves","contract_definitions","schedules","power_tous","reference_data","parties","blotter","custom_curves","jobs","ppa"}.Concat(workspace).Order()),

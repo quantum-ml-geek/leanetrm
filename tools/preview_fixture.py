@@ -152,12 +152,10 @@ def fixture(root, current_schema=True, fixing_frames=False, date_plan=None, wind
     if current_schema:
         # One complete operating right is the external unit for constrained-facility
         # pricing; its fixed access payment consumes the corresponding exact quote.
-        # Dimensionless counts share the existing certificate dimension; exact unit
+        # Dimensionless counts share one physical dimension; exact unit
         # and quantity identities distinguish resource rights from certificates.
         extra_ref.extend([
-            f"INSERT INTO ref_data.measurement_bases VALUES ({R},'operating_power','test_power','power');",
-            f"INSERT INTO ref_data.quantity_specifications VALUES ({R},'operating_power_mw','test_power','operating_power','megawatt','power');",
-            f"INSERT INTO ref_data.dimensions VALUES ({R},'certificate',0,0,0,0,0,0,0) ON CONFLICT DO NOTHING;",
+            f"INSERT INTO ref_data.dimensions VALUES ({R},'certificate',0,0,0,0,0,0,0) ON CONFLICT(catalog_id,revision_id,code) DO NOTHING;",
             f"INSERT INTO ref_data.units (catalog_id,revision_id,code,symbol,dimension_code) VALUES ({R},'resource_right','right','certificate');",
             f"INSERT INTO ref_data.commodity_units VALUES ({R},'test_power','resource_right','certificate');",
             f"INSERT INTO ref_data.measurement_bases VALUES ({R},'test_resource_right_basis','test_power','certificate');",

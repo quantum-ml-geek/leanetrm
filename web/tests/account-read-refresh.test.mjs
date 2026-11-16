@@ -27,7 +27,7 @@ test('permission refresh retires pending reads before temporarily clearing accou
  const context={currentProfile:'synthetic-reader',navigation:{context:{contextId:'synthetic-retained-context',knownThrough:4}},
   permissions:['ReadMarketData'],marketGeneration:0,curveRead:curveController,pageRead:{controller:pageController},
   $:node,select:node,choose:noop,clearPrices:noop,clearReference:noop,setCurveNames:noop,renderBlotterViews:noop,scheduleWorkspace:undefined};
- for(const name of ['structuredPower','closeConventionDefaults','lifecycle','physicalOperations','deliverySetup','referenceConsole','curveWorkspace','customCurves',
+ for(const name of ['recInventory','structuredPower','closeConventionDefaults','lifecycle','physicalOperations','deliverySetup','referenceConsole','curveWorkspace','customCurves',
   'volSurfaces','riskJobs','riskViewsNav','facilities','jobs','dashboard','deliveryPrices','intervalSeries','intervalCurves','ppa','gas','crude',
   'lng','gasSetup','crudeSetup','referenceEditor','parties','unitConverter','futures','power','touProducts','schedules','dateEditor','priceSetup',
   'curveDefinitions','administration','aiSettings','agentGrants','referenceNavigation','marketCalendar','accessPolicy','assistantPolicy'])

@@ -48,7 +48,7 @@ def run_checks(query, manifest, psql=None, environment=None):
         consumptionHeatRate='7', consumptionNoLoadFuelPerHour='1', consumptionStartupFuel='2')
     terms = dict(kind='thermal', definitionCatalogId=catalog, definitionRevisionId=definition,
         referenceCatalogId=reference, referenceRevisionId=revision, facilityCode='test_facility_a',
-        clockCode='test_utc', intervalMinutes=60, powerQuantityCode='operating_power_mw',
+        clockCode='test_utc', intervalMinutes=60, powerQuantityCode='test_power_megawatt',
         energyQuantityCode='test_power_quantity', fuelQuantityCode='test_gas_quantity',
         battery=None, thermal=thermal, solar=None,
         implementation='structured_power_facility_v1')
@@ -155,7 +155,7 @@ def run_checks(query, manifest, psql=None, environment=None):
     bad = json.loads(json.dumps(facility))
     bad['terms']['powerQuantityCode'] = 'test_power_quantity'
     reject(save(bad), 'power_facility_reference')
-    bad['terms']['powerQuantityCode'] = 'operating_power_mw'
+    bad['terms']['powerQuantityCode'] = 'test_power_megawatt'
     bad['terms']['clockCode'] = 'absent_clock'
     reject(save(bad), 'power_facility_reference')
     check('wrong units and incompatible exact clock references refuse')
@@ -230,7 +230,7 @@ def run_checks(query, manifest, psql=None, environment=None):
     check('solar consumes exact MWh and measurement stage without an unused MW relationship',
           solar_result['facility']['terms']['solar'] == solar['terms']['solar'] and solar_result['facility']['terms']['powerQuantityCode'] is None)
     unused_mw = json.loads(json.dumps(solar))
-    unused_mw['terms']['powerQuantityCode'] = 'operating_power_mw'
+    unused_mw['terms']['powerQuantityCode'] = 'test_power_megawatt'
     reject(save(unused_mw), 'power_facility_shape')
     check('a solar supplied-production model cannot retain an unused power quantity')
     inert_solar = json.loads(json.dumps(solar))
@@ -247,6 +247,11 @@ def run_checks(query, manifest, psql=None, environment=None):
     battery_result = json.loads(query(runtime(save(battery))))
     check('battery supports a declared one-direction limit without a fabricated charge capability',
           battery_result['facility']['terms']['battery']['maximumChargeMw'] == '0')
+    capped=json.loads(json.dumps(battery));capped['version']=2
+    capped['terms']['battery'].update(throughputPolicy='grid_charge_plus_discharge',maximumThroughputMwh='18.100')
+    capped_result=json.loads(query(runtime(save(capped,expected=1))))
+    check('a consumed cumulative battery throughput cap saves its exact normalized value',
+          capped_result['facility']['terms']['battery']['maximumThroughputMwh']=='18.1')
 
     if psql is not None:
         children = []
@@ -363,6 +368,7 @@ def main():
 
         if Path(query('SHOW data_directory;')).resolve() != data.resolve():
             raise RuntimeError('Refusing any database outside the newly created cluster')
+        query((ROOT / 'db/bootstrap.sql').read_text())
         for migration in sorted((ROOT / 'db/migrations').glob('[0-9][0-9][0-9][0-9]_*.sql')):
             query(migration.read_text())
         from preview_fixture import fixture

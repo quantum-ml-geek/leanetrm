@@ -487,6 +487,9 @@ def main():
                 from check_publication_resolution_upgrade import run_checks as check_publication_resolution_upgrade
                 check_publication_resolution_upgrade(query,migration)
             query(migration.read_text())
+        if args.example=='standard' and(args.structured_power_check or not args.check):
+            from rec_fixture import extend as extend_rec
+            reference,market,security,manifest=extend_rec(reference,market,security,manifest)
         if args.check:
             from check_whole_term_swap_schema import run_checks as check_whole_term_swap_schema
             check_whole_term_swap_schema(query)
@@ -629,6 +632,9 @@ def main():
             query("INSERT INTO security.role_permissions SELECT id,p FROM security.roles CROSS JOIN "
                   "(VALUES('ReadPhysical'),('ManagePhysicalSetup'),('RunScenario'))x(p) "
                   "WHERE code='market_data_editor' ON CONFLICT DO NOTHING;")
+            query("INSERT INTO security.role_permissions SELECT id,p FROM security.roles CROSS JOIN "
+                  "(VALUES('ReadPhysical'),('RunScenario'),('ReadRecInventory'),('RecordRecInventory'),('ConfigureRecInventory'))x(p) "
+                  "WHERE code='trader' ON CONFLICT DO NOTHING;")
         query(f"SELECT security.initialize_operating_policies('{manifest["tenantId"]}','{manifest["workspaceId"]}');")
         if args.example=='standard' and (gas_demo or not args.check or args.async_workbench_check or args.factor_history_check or args.parametric_risk_check or args.historical_risk_check or args.monte_carlo_risk_check):
             from factor_history_fixture import seed as seed_history
@@ -864,12 +870,15 @@ def main():
         if args.check:
             if args.structured_power_check:
                 from check_structured_power import run_checks as check_structured_power
-                check_structured_power(url,query,manifest)
+                structured=check_structured_power(url,query,manifest)
                 if args.browser_check:
                     target=temporary/'browser-target.json'
-                    target.write_text(json.dumps({'suite':'business_browser_v1','url':url,'runId':run_id}))
-                    browser_process=subprocess.Popen(['node',str(ROOT/'tests/browser/run.mjs'),str(target),str(args.browser.resolve()),'--structured-power'],cwd=ROOT,env=env,start_new_session=True)
-                    if browser_process.wait(timeout=240):raise RuntimeError('Owned structured power browser checks failed')
+                    target.write_text(json.dumps({'suite':'business_browser_v1','url':url,'runId':run_id,
+                        'structuredTrading':{'snapshotId':structured['operating']['snapshotId'],
+                            'operating':structured['operating'],'hedge':structured['operating']['hedge'],'rec':structured['rec']}}))
+                    for suite in ('--structured-power','--structured-trading'):
+                        browser_process=subprocess.Popen(['node',str(ROOT/'tests/browser/run.mjs'),str(target),str(args.browser.resolve()),suite],cwd=ROOT,env=env,start_new_session=True)
+                        if browser_process.wait(timeout=300):raise RuntimeError('Owned structured power browser checks failed: '+suite)
             elif args.async_workbench_check:
                 from check_async_workbench_http import run_checks
                 run_checks(url,query,psql,env,manifest)

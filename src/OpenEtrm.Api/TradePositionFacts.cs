@@ -118,7 +118,7 @@ internal sealed class TradePositionFacts(PreviewManifest manifest)
         facts.AddRange(await PhysicalFacts(connection,bookIds,portfolioIds,ct));
         foreach(var option in await FuturesOptionPositions.Read(connection,manifest,bookIds,portfolioIds,ct))
             facts.AddRange(option.Facts().Select(fact=>(Integer(option.Head,"trade_reference"),fact)));
-        await RequireHeads(connection,scopeBooks,ct);
+        await RequireHeads(connection,scopeBooks,[..facts.Where(f=>f.Position.InstrumentType is OperatingPositions.Type or RecPositions.Type).Select(f=>f.Position.TradeId).Distinct()],ct);
         if(facts.GroupBy(p=>(p.Position.TradeId,p.Position.BindingId)).Any(g=>g.Count()!=1)||
             facts.GroupBy(p=>p.Position.TradeId).Any(g=>g.Select(p=>p.Position.InstrumentType).Distinct().Count()!=1))throw Missing();
         return Page(facts.ToImmutable(),offset,limit);
@@ -137,12 +137,16 @@ internal sealed class TradePositionFacts(PreviewManifest manifest)
             facts.Add((Integer(lng.Head,"trade_reference"),lng.Fact()));
         foreach(var crude in await CrudePositions.Read(connection,manifest,bookIds,portfolioIds,ct))
             facts.Add((Integer(crude.Head,"trade_reference"),crude.Fact()));
+        foreach(var operating in await OperatingPositions.Read(connection,manifest,bookIds,portfolioIds,ct))
+            facts.Add((Integer(operating.Head,"trade_reference"),operating.Fact()));
+        foreach(var rec in await RecPositions.Read(connection,manifest,bookIds,portfolioIds,ct))
+            facts.Add((Integer(rec.Head,"trade_reference"),rec.Fact()));
         return facts.ToImmutable();
     }
-    private async Task RequireHeads(NpgsqlConnection connection,Guid[] books,CancellationToken ct)
+    private async Task RequireHeads(NpgsqlConnection connection,Guid[] books,Guid[] nativeTrades,CancellationToken ct)
     {
         await using var query=ScheduleStore.Command(connection,"""
-            SELECT EXISTS(SELECT 1 FROM trading.trades t WHERE t.catalog_id=$1 AND t.book_id=ANY($2::uuid[])
+            SELECT EXISTS(SELECT 1 FROM trading.trades t WHERE t.catalog_id=$1 AND t.book_id=ANY($2::uuid[]) AND NOT(t.id=ANY($3::uuid[]))
              AND NOT EXISTS(SELECT 1 FROM trading.trade_revisions r WHERE(r.catalog_id,r.trade_id)=(t.catalog_id,t.id))
              AND NOT EXISTS(SELECT 1 FROM trading.swap_trade_revisions r WHERE(r.catalog_id,r.trade_id)=(t.catalog_id,t.id))
              AND NOT EXISTS(SELECT 1 FROM trading.ppa_trade_revisions r WHERE(r.catalog_id,r.trade_id)=(t.catalog_id,t.id))
@@ -150,7 +154,7 @@ internal sealed class TradePositionFacts(PreviewManifest manifest)
              AND NOT EXISTS(SELECT 1 FROM trading.lng_trade_revisions r WHERE(r.catalog_id,r.trade_id)=(t.catalog_id,t.id))
              AND NOT EXISTS(SELECT 1 FROM trading.crude_trade_revisions r WHERE(r.catalog_id,r.trade_id)=(t.catalog_id,t.id))
              AND NOT EXISTS(SELECT 1 FROM trading.futures_option_trade_revisions r WHERE(r.catalog_id,r.trade_id)=(t.catalog_id,t.id)))
-            """,manifest.CatalogId,books);
+            """,manifest.CatalogId,books,nativeTrades);
         if(Equals(await query.ExecuteScalarAsync(ct),true))throw Missing();
     }
     private static async Task RequireReferences(NpgsqlConnection connection,HashSet<Guid> catalogs,CancellationToken ct)

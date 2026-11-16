@@ -20,12 +20,14 @@ def run_checks(url, query, manifest):
         assert len(selected) == 1, f'Expected the exact synthetic reference {code}.'
         return selected[0]
 
-    power = one(catalog['powerQuantities'], 'operating_power_mw')
+    power = one(catalog['powerQuantities'], 'test_power_megawatt')
     energy = one(catalog['energyQuantities'], 'test_power_quantity')
     right = one(catalog['rightQuantities'], 'test_resource_right_quantity')
     one(catalog['locations'], 'test_facility_a')
     one(catalog['clocks'], 'test_utc')
     quote = one(catalog['quotes'], 'test_power_outright')
+    assert any(row['curveCode'] == 'local_power' and row['quoteCode'] == quote['code']
+               for row in catalog['priceContracts'])
     terms = dict(catalog['pins'], kind='battery', facilityCode='test_facility_a', clockCode='test_utc',
                  intervalMinutes=60, powerQuantityCode=power['code'], energyQuantityCode=energy['code'],
                  fuelQuantityCode=None, battery=dict(maximumChargeMw='10', maximumDischargeMw='10',
@@ -39,6 +41,12 @@ def run_checks(url, query, manifest):
     receipt = client.call(route + 'save', command)
     assert receipt['changed'] and receipt['facility']['version'] == 1
     assert client.call(route + 'save', command) == receipt, 'An exact retry must return its original outcome.'
+    replay_without_snapshot=deepcopy(command)
+    replay_without_snapshot['snapshotId']=str(uuid4())
+    assert client.call(route+'save',replay_without_snapshot)==receipt, 'An accepted command replays before fresh snapshot selection.'
+    changed_retry=deepcopy(replay_without_snapshot)
+    changed_retry['facility']['terms']['battery']['maximumChargeMw']='11'
+    assert client.call(route+'save',changed_retry,expected=409)['code']=='power_facility_request_conflict'
     assert client.call(route + 'status', {'requestId': command['requestId']}) == receipt
     assert client.call(route + 'get', dict(snapshotId=frame, facilityId=facility['id'], version=1)) == receipt['facility']
     assert any(row['id'] == facility['id'] and row['version'] == 1 for row in client.call(route + 'list',
@@ -139,8 +147,21 @@ def run_checks(url, query, manifest):
     historical_error = client.call(route + 'save', historical_command, expected=422)
     assert historical_error['code'] == 'historical_read_only'
     client.call('market/current', {})
+    from check_power_trades_http import run_checks as check_trades
+    booked_thermal=deepcopy(thermal_request)
+    booked_thermal['grid']['operatingDate']='2031-01-04'
+    booked_thermal['thermalState']['at']='2031-01-04T00:00:00Z'
+    booked_thermal['thermalDispatch'][0]['startupInstructionAt']='2031-01-04T00:00:00Z'
+    booked_thermal['valuation']['fuelQuantityBasis']='guaranteed'
+    booked_solar=deepcopy(solar_request)
+    booked_solar['grid']['operatingDate']='2031-01-05'
+    operating=check_trades(client,query,manifest,request,other_plans=[
+        ('thermal',booked_thermal,760,{'energy_output':1000,'fuel_input':240}),
+        ('solar',booked_solar,500,{'payment_energy':500})])
+    from check_rec_http import run_checks as check_recs
+    rec=check_recs(client,query,manifest)
     anonymous = PreviewClient(url)
     anonymous.bootstrap()
     anonymous.call(route + 'catalog', {'snapshotId': frame}, expected=403)
     print('PASS structured power HTTP: exact saved pins, idempotent receipts, carried battery losses, gross sides, scenario provenance and strict refusals', flush=True)
-    return 22
+    return dict(operating=operating,rec=rec)

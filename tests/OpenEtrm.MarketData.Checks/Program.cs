@@ -65,6 +65,8 @@ if(args is ["--physical-lifecycle"]){PhysicalLifecycleChecks.Run();return;}
 if(args is ["--gas-forward-settlement-example"]){GasForwardSettlementExampleChecks.Run();return;}
 if(args is ["--gas-forward-settlement-example-json"]){Console.WriteLine(GasForwardSettlementExampleChecks.Export());return;}
 if(args is ["--operating-sides"]){OperatingSideChecks.Run();return;}
+if(args is ["--rec-forward"]){RecForwardChecks.Run();return;}
+if(args is ["--operating-book"]){OperatingBookChecks.Run();return;}
 if(args is ["--battery-toll"]){BatteryOperatingPlanChecks.Run();return;}
 
 if(args is ["--thermal-toll"]){ThermalTollChecks.Run();return;}
@@ -207,7 +209,7 @@ CustomCurveChecks.Run();
 CurveKindChecks.Run();
 ExactCurvePriceChecks.Run();
 ExactArithmeticChecks.Run();
-var passed = OperatingSideChecks.Run()+BatteryOperatingPlanChecks.Run()+PpaConnectedChecks.Run()+CrossCommoditySwapChecks.Run()+PpaBenchmark.CheckWorkloads()+ScheduledSwapChecks.Run()+SwapSettlementChecks.Run()+SettlementDeterminationChecks.Run()+SwapLifecycleChecks.Run()+SwapNetSettlementChecks.Run()+SwapContractBridgeChecks.Run();
+var passed = RecForwardChecks.Run()+OperatingBookChecks.Run()+OperatingSideChecks.Run()+BatteryOperatingPlanChecks.Run()+PpaConnectedChecks.Run()+CrossCommoditySwapChecks.Run()+PpaBenchmark.CheckWorkloads()+ScheduledSwapChecks.Run()+SwapSettlementChecks.Run()+SettlementDeterminationChecks.Run()+SwapLifecycleChecks.Run()+SwapNetSettlementChecks.Run()+SwapContractBridgeChecks.Run();
 void Check(string label, Action run) { run(); passed++; Console.WriteLine($"PASS {label}"); }
 void Equal<T>(T actual, T expected) where T : notnull
 {

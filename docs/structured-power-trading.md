@@ -1,0 +1,195 @@
+# Saved operating rights, price hedges and REC inventory
+
+D408 extends [operating facilities](operating-facilities.md) with saved trades,
+ordinary retained Side valuation, a price hedge report and manually evidenced
+certificate inventory. The implementation has separate native admission and
+managed calculation contracts. A saved facility alone creates no trade.
+
+## Operating-right booking
+
+`supplied_operating_right_trade_v1` books one complete specified thermal toll,
+battery operating right or solar output right. The command explicitly selects
+the book, exact legal parties, immutable facility version, opening state,
+supplied interval plan, contractual guarantees/entitlement, prices, payment rule,
+economic perspective and fees. The server records its UTC booking date under
+`server_booking_utc_v1`; this profile does not admit an invented execution date.
+
+The external binding is exactly one complete right. Quantity scaling is disabled:
+doubling a right would otherwise duplicate startup budgets, output limits or
+stored energy. Serialized native admission refuses overlapping rights on the
+same facility/window. Shared rights and pooled solar/storage constraints require
+a separate allocation contract. Owned facilities do not acquire a synthetic
+external counterparty merely to appear as a trade; internal entitlement admission
+remains future work.
+
+Each independent Side retains its own structural schedule and declared output
+bindings from the same feasible plan. The instrument sums signed Side values;
+the shared operating calculation supplies quantities without adding another PV.
+Stored programs include exact reference and price dependencies. Fixed prices
+have no curve exposure. `selected_contract_flat_v1` reads only the explicitly
+selected native quote/curve/contract, which must cover every operating date and
+have compatible exact quantity/currency references. There is no inferred price
+curve, fixing source or spread dependency.
+
+The saved profile supports future, fixed-zero-offset UTC intervals, at most 1,024
+intervals, explicit undiscounted remaining operating value and the right-holder
+perspective. Broader facility previews can inspect supported native clocks;
+that does not widen saved admission. A saved valuation refuses at or after its
+delivery start rather than projecting unrecorded actuals. Thermal fuel valuation
+explicitly chooses guaranteed or modeled consumption. Solar priced output rights
+use as-produced entitlement; firm-profile residual quantities remain a preview
+until balancing price Sides are supported. Opening storage supplies usable
+future energy without an inferred historical cost basis. Access fees use the
+explicit once-per-horizon basis.
+
+`/physical/power-trades` exposes catalog, preview, book, status, directory, get,
+valuation and hedges operations. New booking prepares and seals owned programs,
+then rechecks current authority and selected sources at final admission. Ordinary
+Blotter, position facts, Side inspection and portfolio valuation consume the same
+saved identities. There is no amendment, dispatch execution, metered performance,
+fuel nomination, invoice or payment operation for this profile.
+
+## Financial hedge comparison
+
+`operating_right_price_hedge_v1` requires one saved operating trade, explicit
+financial futures/swap/heat-rate hedge IDs, selected books, a certified context,
+nonempty shared factor bumps and explicit numerical/pricing/aggregation policies.
+All selected positions must price; excluded holdings cannot produce a successful
+net report. Ordinary futures retain their native execution/variation-margin
+measure rather than becoming forwards.
+
+The common portfolio engine evaluates base/up/down PV under immutable shared
+market scenarios. `shared_price_changes_v1` reports operating, hedge and net
+up/down P&L, delta and gamma by exact factor and currency reference. Base values
+remain separate by measure and currency. No FX conversion, exposure allocation,
+cross-measure base sum, hedge ratio or hedge-accounting designation is inferred.
+A supplied-plan price shock holds the plan fixed; it does not measure weather,
+outage, redispatch or unexercised flexibility. Financial hedges create no physical
+delivery, fuel requirement, stored energy or certificates.
+
+## Standalone REC forwards
+
+`rec_forward_v1` books an explicit whole certificate count, product/program/class
+and generation vintage, exact parties and one future UTC delivery day. The
+versioned assignment and physical mark contract must cover the complete delivery
+window. Physical receipt/delivery and consideration have opposite directions
+and independent retained Sides. Consideration explicitly uses a fixed price or
+selected flat contract; monthly calendar-day, unadjusted payment rules and
+undiscounted valuation are required. Payment cannot precede delivery completion.
+
+The physical Side values the specified certificate asset; consideration values
+the agreed payment. Both carry the whole count through a single external unit
+binding. `/rec/trades` provides catalog, preview, book, status, get and valuation;
+ordinary Blotter, Side inspection and portfolio risk use the same native records.
+Booking creates an exact delivery obligation, not issued inventory. Neither a
+solar forecast nor a battery discharge creates certificate ownership.
+
+This forward profile supports future contractual value only. Started delivery,
+trade amendments, inventory cost accounting, recorded cash settlement and
+automatic purchase fulfillment remain separate work. An incoming inventory
+receipt records manual evidence without automatically matching a purchase
+forward. Outgoing delivery allocations and transfers use the exact booked
+delivery capacity described below.
+
+## Evidence-backed inventory
+
+Migration 0340 adds the current manual inventory consumer, not an external
+registry client. Accounts bind exact books, legal entities and registry account
+references. Destinations bind exact counterparty versions and registry accounts.
+Registry, product, class, program, eligibility assignment, evidence source and
+retirement purpose references are typed and versioned. Public examples are
+explicitly synthetic; migration installation grants no operational capability.
+
+Serial bounds are integer strings describing half-open ranges `[from,to)`.
+Receipt evidence establishes ownership; allocation reserves an eligible range
+against an exact native outgoing delivery. Release names the exact allocation
+fact/revision. Transfer consumes that reserved range against the designated
+counterparty destination within the booked delivery window. Retirement consumes
+an available range with an explicit beneficiary, purpose and evidence. Quantity,
+registry/program/class/vintage eligibility and aggregate delivery capacity are
+checked before publication. Automatic lot selection is unavailable.
+
+Natural registry lot identity cannot be duplicated by submitting another local
+UUID or reference revision. Overlapping ownership, reserved retirement,
+over-transfer and conflicting concurrent writes refuse atomically. Native locks
+cover both account generations and shared delivery capacity. Corrections append
+a new knowledge revision of the same business fact; replay resolves the whole
+state and refuses a correction that invalidates dependent evidence. Stable
+business order breaks equal-effective-time ties without inventing timestamps or
+sorting random UUIDs (`latest_knowledge_revision_effective_then_business_order_v2`).
+
+`rec_business_date_end_utc_v1` requires an explicit business date and current or
+certified retained knowledge. Effective time and knowledge time remain distinct.
+Historical reads preserve original evidence while using current authorization.
+The `/rec` directory, read, account, destination, record and status operations
+use authorized native storage and publication. Certified reads replay the retained
+facts through the managed evaluator; selected history shows the latest eligible
+revision of each business fact at that cutoff. Inventory values are counts, not
+MTM or historical cost.
+
+## Authority, history and recovery
+
+All new tables use forced RLS and bounded authorized functions. Booking requires
+current trade authority; operating reads also require physical-read authority.
+Inventory read, evidence recording and account/destination configuration have
+separate `ReadRecInventory`, `RecordRecInventory` and `ConfigureRecInventory`
+capabilities. Book and exact party scopes remain enforced. Worker reads retain
+their lease/custody restrictions. Waiting or calculation cannot extend authority;
+sources and permissions are checked again before returning/publishing.
+
+Every write carries an actor-owned request identity. An exact retry returns its
+first outcome before fresh market/facility validation. Reusing the identity with
+different content refuses. A new request for the same business fact returns the
+original identity without another fact/publication. Changed supported inventory
+facts append revisions under an expected account generation. Unknown outcomes
+retain the exact command and expose status/retry recovery. Historical views
+cannot create facts or reinterpret present command receipts as historical data.
+
+## User interfaces and qualification
+
+Scheduling → Operating facilities contains consumed physical fields, supplied
+plans, reviewed trade booking, saved-trade selection/repricing and the price
+hedge report. Scheduling → REC inventory contains account/destination setup,
+exact serial evidence, per-product balances/history and standalone forward
+booking. New Trade → REC forward reuses that editor. Saved trades open in the
+ordinary Blotter and independent Side inspector. Inventory has its own explicit
+working business date without replacing the selected financial market close;
+retained views remain read-only. Unsupported planned facility controls display
+disabled **Coming soon** states and persist no unused parameters.
+
+The assistant accepts identity-only context on these new pages and saved-product
+inspectors. It does not read their financial forms, submit their commands or
+reinterpret them as an existing swap product.
+
+Managed checks use independent numerical expectations and malformed-program
+refusals. Disposable PostgreSQL checks cover reference admission, helper drift,
+publication/replay, overlap/conservation, corrections and current authorization.
+The owned API/browser suite exercises native saved trades, shared hedge scenarios,
+REC delivery/inventory and desktop/phone forms, using only its own disposable
+database. Run the combined workflow from this repository:
+
+```sh
+python3 tools/run_preview.py --check --structured-power-check \
+  --pg-bin /path/to/postgresql/bin --dotnet /path/to/dotnet \
+  --browser-check --browser /path/to/chromium
+```
+
+Local qualification on 2026-11-16 used the pinned .NET 10.0.402 SDK and Node
+24.7.0, stock PostgreSQL 16.14 and 18.1, and an owned Chrome profile:
+
+| Check | Verified result |
+| --- | --- |
+| Managed core and targeted API checks | 771 core checks; retained operating/REC programs, independent Side selection and exact hedge-result checks pass. |
+| Facility persistence | 44 native cases, including capped storage, concurrent retries, stale heads, certified reads and authority expiry after waits. |
+| Retained program upgrade | Sixteen predecessor helpers reject altered execution/security metadata; supplied-plan source grammar admits only the explicit flat-contract profile. |
+| Operating native admission | 30 behavior groups pass, including exact fuel/storage/solar quantities and closed parameter types. |
+| REC inventory | 27 native behavior groups pass, including certified corrections, original-fact reassertion and concurrent first-outcome replay. |
+| REC forward native admission | Authority, raw-table denial, exact assignment coverage, JSON shape, payment timing and sealed-program requirements pass. |
+| Owned API workflow | Thermal 760, solar 500 and fixed battery 610 reopen at their independent expected PVs. The selected outright battery returns 34.495 with price delta 8.1. REC evidence conserves 100 issued as 60 transferred plus 40 retired; cross-account delivery-capacity admission and release pass. |
+| User interface | 1,894 frontend checks and 24 live API-backed browser checks pass; financial desktop/phone screenshots were inspected. |
+| Repository checks | 140 Python checks and the standalone dependency boundary pass. |
+
+Optimization, stochastic flexibility, external registry submission, automatic
+issuance, shared-resource dispatch and broader settlement remain separate
+qualification gates. The implementation and local checks do not establish
+production capacity or authorize schema/application activation.

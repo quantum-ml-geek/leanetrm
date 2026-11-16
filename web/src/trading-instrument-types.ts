@@ -1,0 +1,4 @@
+// Closed transport identities shared by position facts, page selections and
+// owned-window references. Product valuation remains in the managed backend.
+export const tradingInstrumentTypes=['future','financial_swap','heat_rate','ppa','physical_gas','physical_crude','physical_lng','futures_option','operating_right','rec_forward'] as const;
+export type TradingInstrumentType=typeof tradingInstrumentTypes[number];

@@ -355,7 +355,7 @@ remaining bounds are recorded with the executable consumers in the linked contra
 | D318 | Author curves from a rolling date-mapping window with explicit, matching terms | Owner-directed, 2026-11-04 ([curve-definitions.md](curve-definitions.md)). A curve names its commodity, location, quote, delivery profile, contract kind (with an exact futures product for futures), an exact published date-mapping version and how many of its positions it carries, its settlement target, a direct price rule and explicit missing-price and interpolation policies; none is defaulted. Contracts roll because the mapping resolves against the context date; the curve adds no roll rule, and publishers supply each close's marks. Curves are defined on Curves & prices and previewed at the header's selected close, in that close's exact context (current knowledge on its date, or the selected historical context on that date); schedules and date mappings stay on their own Settings page. Terms the contract and the curve both name must be equal: a futures product's and an index target's commodity, location, currency, unit and multiplier, and each futures position matches exactly one series of an executable product by delivery period and known last-trading instant. A preview reads reference terms and resolves its mapping in one exact retained context. Futures settle to their exchange settlement, OTC forwards to one published index. Index spreads, hourly physical settlement (nodal LMP), forwards settling to futures, formula contracts, carry-forward or interpolated prices and linear interpolation are shown as Coming soon and refused. First increment: catalog and read-only preview operations and the Curves step of Schedules & date mappings; durable versions follow in D358; D359 admits published interest-rate definitions into market revisions and prices from them, and D362 admits contract curves |
 | D334 | Close by regional session; the latest close for a session and business day is in force | Owner decisions and implementation recorded in [regional closes](regional-closes.md); design calls await review. Refines D162 and D219: a close names an exact versioned close session (clock, local cutoff, business calendar, curves) and an explicit business day, and its UTC instant is the session cutoff on that day. For each session and business day the close with the highest publication order is in force, evaluated on read; earlier ones are history and are refused for new work (`close_replaced`). A close must carry exactly its session's curves; nothing is carried forward. Recording needs a per-session grant. Every view, historical ones included, reads the close in force; this lifts only the knowledge-time checks on the close and its pins and is a recorded exception to the knowledge-cutoff rule. Saved results keep their exact close; pilot reports disclose replacement, while portfolio-job disclosure and historical worker close-session binding remain documented limitations. Each person's chosen session is remembered; no session is chosen for anyone. Only recorded closes are closes; unrecorded snapshots are working data offered separately, and built-in demo frames are seeded as session closes. Existing closes are retired and deployments reseeded (migration 0202 refuses a non-empty close history). Implemented in the repository; hosted activation requires separate qualification |
 
-| D405 | Keep consumed physical parameters in versioned facility extensions and value supplied thermal, battery and solar plans through common independent Sides | Decided 2026-11-16; [contract and verification](operating-facilities.md), [details](#d405--operating-facility-versions-and-supplied-plan-previews). Extend existing reference locations with exact relationship FKs and only implemented physical/model parameters. Contract guarantees, entitlement, state, dispatch, prices and fees remain explicit calculation inputs. Migration 0338 supplies idempotent version writes and certified exact reads under current authority. Managed previews expose gross Side rows under the complete-right, undiscounted remaining-value contract; the REC addition is a pure evidence/range ledger. Prior isolated checks qualify that bounded slice; current-master integration is being qualified. Saved operating contracts, ordinary hedge reporting and durable manual REC inventory are the authorized next increment; optimization and external registry submission remain excluded. |
+| D408 | Keep consumed facility parameters separate from saved operating rights, their independent Sides and evidenced REC ownership | Decided 2026-11-16; [facility contract](operating-facilities.md), [trading and inventory contract](structured-power-trading.md), [details](#d408--operating-facility-versions-and-supplied-plan-previews). Extend exact reference locations with consumed physical/model parameters. Book complete exclusive supplied-plan rights through retained membership-owned schedules; compare separately booked financial hedges under shared scenarios. Standalone REC forwards own delivery/consideration Sides; durable manual inventory uses exact serial evidence, delivery capacity, certified history and idempotent commands. GUI consumers use those same authorized operations. Optimization and external registry submission remain separate. |
 
 ## Proposed implementation choices
 
@@ -423,8 +423,9 @@ specified rights as unit instruments where arbitrary per-MW scaling is invalid. 
 physical constraints require joint feasibility and explicit allocation. REC
 issuance/ownership evidence stays distinct from current modeled PPA holdings.
 
-The first contract perspective, operating constraints, meter/terminal policies
-and REC eligibility/delivery terms remain explicit choices before implementation.
+The implemented supplied-plan perspective, operating constraints, terminal
+policies and bounded REC eligibility/delivery terms are recorded in D408. Broader
+meter/settlement and optional-right contracts require separate explicit choices.
 No optimizer dependency, schema, financial default or automatic reinterpretation
 of existing trades is selected. Existing PPA, heat-rate, certificate-holding and
 settlement contracts retain their meaning.
@@ -5575,11 +5576,14 @@ pushes retain that path so they cannot strand earlier runtime changes. See
 [CI impact selection](ci-impact.md) for the executable boundaries and remaining
 qualification. No application, schema or financial contract changes are included.
 
-## D406 — Operating-facility versions and supplied-plan previews
+## D408 — Operating-facility versions and supplied-plan previews
 
 Status: decided 2026-11-16. The supplied-plan capability was checked in an
-isolated worktree on the current master base. Saved trading, hedge reporting
-and durable REC extensions below require their own integrated qualification.
+isolated worktree on the current master base. The continuation adds saved trading,
+shared-scenario hedge reporting, standalone REC forwards and durable manual REC
+inventory with the bounded contracts below. Local verification is recorded in
+the [trading contract](structured-power-trading.md); release qualification and
+activation remain separate.
 
 - Physical operating setup extends the existing exact reference location. It
   stores no duplicate name, location type or coordinates, and no planned field
@@ -5606,18 +5610,34 @@ and durable REC extensions below require their own integrated qualification.
   before delivery; each priced interval must fit its saved window. Current
   control state governs authoring and command recovery.
 - The pure REC kernel remains the immutable state-transition evaluator. The
-  authorized durable consumer will record supplied issuance/incoming-transfer evidence,
+  authorized durable consumer records supplied issuance/incoming-transfer evidence,
   exact lot/range ownership, allocation, release, transfer and retirement under
   certified knowledge with current authority. It does not submit an external
   registry action, manufacture inventory from forecasts, choose lots automatically
   or provide inventory costing. Exact registry/program/class and purpose references
   are added only for those current operations.
-- The next delivery increment saves explicit operating contracts and owned Side
-  schedules, exposes them through ordinary trade/physical inspection, and compares
-  their generic scenario PV with separately booked financial hedges. Financial
-  hedges create no physical flow or certificate. Explicit state/quantity inputs,
-  legal counterparties, booking authority, native cash treatment and retained
-  history must be qualified before those entry points are advertised.
+- Saved operating contracts pin the facility version and supplied plan, hold one
+  complete exclusive right, and retain independent membership-owned programs.
+  Native UTC-only future admission refuses overlapping rights and started
+  delivery. Ordinary Blotter, Side inspection and portfolio PV read those same
+  identities. Fixed native prices and explicitly selected covering flat
+  contracts are supported; no mark implies an undeclared dependency.
+- The price hedge report reprices explicit operating and financial holdings under
+  one certified context and immutable base/up/down scenarios. Base measures stay
+  separate; only like-currency price changes and derivatives are added. Empty
+  factors, excluded selected holdings and incomplete results refuse. Financial
+  hedges create no physical flow or certificate and imply no hedge-accounting
+  qualification.
+- Standalone REC forwards retain separate physical and consideration schedules
+  for an exact product/vintage and one future UTC day. Explicit fixed/flat prices,
+  opposite directions, whole certificate counts and undiscounted payment rules
+  are required. Booking creates a native delivery capacity, never inventory.
+  Manual allocations and outgoing transfer evidence consume that capacity;
+  purchase fulfillment and cash settlement are separate future consumers.
+- Scheduling contains facility/trade/hedge and inventory/REC-forward forms; New
+  Trade reuses the REC editor. Every write retains its exact request for
+  first-outcome recovery; retained views are read-only. Planned physical
+  parameters have disabled Coming soon controls and no inert persisted columns.
 - Intrinsic/stochastic dispatch optimization, external registry connectivity,
   hybrid/shared-resource pooling and broader optional structures remain later
   scope. No proposed interface or plan establishes implementation. See the

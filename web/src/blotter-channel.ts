@@ -1,3 +1,4 @@
+import {tradingInstrumentTypes} from './trading-instrument-types.js';
 // The message channel between the main window and a popped-out Blotter (docs/blotter-workbench.md, Pop-out Blotter).
 // Messages carry selections only, never figures: the pop-out reads every value itself under its own session cookie. Both
 // ends read each message strictly (own session, version 1, known kind, no extra fields) and drop what they refuse. Every message but the
@@ -39,7 +40,7 @@ const record=<T>(key:Parse<string>,parse:Parse<T>):Parse<Record<string,T>>=>x=>i
 const strings=list(str);
 
 const selection=shape({mode:oneOf('trades','pivot'),bookIds:strings,portfolioIds:strings,groupBy:strings,measures:strings});
-const tradeShown=shape({tradeId:str,instrumentType:oneOf('future','financial_swap','heat_rate','ppa','physical_gas','physical_crude','physical_lng','futures_option'),revision,reference:str});
+const tradeShown=shape({tradeId:str,instrumentType:oneOf(...tradingInstrumentTypes),revision,reference:str});
 // Grid keys are columns, which may be pivot keys longer than ordinary text, so the saved-view rule decides them.
 const layoutKey:Parse<string>=x=>typeof x==='string'&&validLayoutField(x)?x:refuse('a grid column is unknown');
 const gridLayout:Parse<GridLayout>=shape({order:list(layoutKey),widths:record(layoutKey,x=>Number.isSafeInteger(x)?x as number:refuse('a width is not a whole number')),sort:list(shape({key:layoutKey,direction:oneOf('asc','desc')}))});

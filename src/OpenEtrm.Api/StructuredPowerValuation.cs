@@ -8,7 +8,8 @@ namespace OpenEtrm.Api;
 
 public static partial class StructuredPowerPreview
 {
-    static StructuredPowerValuationResult Value(PreviewData data,InputFrame frame,DateTimeOffset knownAt,Guid id,
+    private sealed record ValuedPlan(StructuredPowerValuationResult Value,OperatingRightInstrument Instrument,ImmutableDictionary<Guid,string> Names);
+    static ValuedPlan Value(PreviewData data,InputFrame frame,DateTimeOffset knownAt,Guid id,
         StructuredPowerResolvedTerms resolved,DeliveryInterval[] grid,IReadOnlyDictionary<string,OperatingOutputPort> ports,
         ImmutableArray<OperatingScenarioQuantityCell> cells,StructuredPowerValuationInput input)
     {
@@ -100,7 +101,7 @@ public static partial class StructuredPowerPreview
                 row.OperatingEvidence?.EvidenceId,row.OperatingEvidence?.KnownAt)).ToImmutableArray();
             return new StructuredPowerSideResult(sideId,names[sideId],contribution.Coefficient.ToString(),quotes[sideId],evaluated.PresentValue,contribution.Contribution,rows);
         }).ToImmutableArray();
-        return new(input.Measure,input.Perspective,currency,unit,value.PresentValue,sides,value.NumericalPolicy);
+        return new(new(input.Measure,input.Perspective,currency,unit,value.PresentValue,sides,value.NumericalPolicy),instrument,names.ToImmutableDictionary());
     }
     private static PaymentRule OperatingPayment(PpaPaymentInput input)
     {

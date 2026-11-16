@@ -1,14 +1,15 @@
 # Solar, generation tolling, batteries and RECs
 
 Status: bounded local implementation and remaining delivery proposal,
-2026-11-15. D406 implements operating-facility versions and supplied-plan
-thermal, battery and solar previews; the broader product sequence below remains
-future work. The power-plant scope here is **generation tolling**.
+2026-11-15. D408 implements operating-facility versions and supplied-plan
+thermal, battery and solar previews, saved operating trades, common-scenario price
+hedging and durable manual REC inventory/forwards. The broader product sequence
+below remains future work. The power-plant scope here is **generation tolling**.
 
 The historical source-inspection baseline in section 2 is commit `4bf8e146`.
 The current slice is described separately below and in the
-[operating-facility capability contract](operating-facilities.md). Owned HTTP
-checks pass; browser visual/workflow qualification is pending. Physical-service and
+[operating-facility capability contract](operating-facilities.md) and
+[saved trading and inventory contract](structured-power-trading.md). Physical-service and
 price-publication qualification remain separate prerequisites where needed.
 
 ## Current implemented slice
@@ -29,12 +30,16 @@ under the explicit right-holder, remaining-operating-value measure. Current
 priced previews are undiscounted; fixed-profile solar exposes quantity residuals
 until balancing-price sides are qualified.
 
-The REC addition is a pure immutable evidence/range ledger with ownership,
-allocation, transfer, retirement, correction and replay checks. It is not a
-persisted registry or standalone REC booking service. None of these additions
-implements an optimizer, external operating instruction, toll/storage trade
-booking or cash lifecycle. The sections below retain the wider commercial
-design and future acceptance gates; they do not expand this implemented slice.
+The continuation saves future complete exclusive operating-right trades through
+their retained Side programs, exposes ordinary Blotter/portfolio/Side reads and
+compares explicit financial hedges under one immutable scenario set. Standalone
+REC forwards retain independent physical/consideration schedules. The pure REC
+range evaluator has a durable manual evidence consumer for exact lot ownership,
+allocation/release, outgoing transfer and retirement, with certified corrections
+and replay. These additions do not optimize, execute dispatch, submit registry
+actions or establish a cash lifecycle. The sections below retain the wider
+commercial design and future acceptance gates; the linked contracts delimit the
+implemented slice.
 
 ## 1. Recommended model
 
@@ -122,8 +127,9 @@ Evaluation loads those retained instructions. Forecasts, meters, declared plans,
 state and scenario-dependent dispatch supply the dynamic values through typed
 bindings. Each Side values its own contribution roots; detail, settlement and
 risk inspect the same rows. Changing a market scenario changes evaluated values,
-not the retained contractual schedule. The existing general booked-program
-cutover still needs qualification before this proposal can use it end to end.
+not the retained contractual schedule. The saved supplied-plan profile retains
+and executes those programs end to end; broader operating choices and settlement
+remain separate consumers.
 
 Where operating choices couple the sides, one declared managed calculation
 produces the consistent quantity/state outputs for the complete right and
@@ -203,7 +209,7 @@ Linear per-MW normalization is suitable only where the defined economics scale
 that way. Startup costs, minimum loads and storage limits make arbitrary scaling
 of an optimized facility unsafe.
 
-Propose one **complete specified operating right** as the unit for a constrained
+Use one **complete specified operating right** as the unit for a constrained
 toll or battery instrument. The unit definition contains its MW/MWh limits and
 fixed/start costs; the trade holds an external quantity of one. Multiple units
 require independently deliverable identical rights. A fractional entitlement
@@ -453,9 +459,9 @@ side terms. A linked Operations view should show the referenced facility/right,
 plan, measured state, feasible limits and exceptions. Price/Risk previews retain
 the selected context and show gross contributions before booking; a hedge
 comparison selects existing trades without creating or resizing a hedge.
-Unsupported forms remain unavailable with a backend explanation. The first
-toll/storage slice is a managed preview, followed by separately tested durable
-book/reopen/amend/state-continuity flows; a preview must not masquerade as booking.
+Unsupported forms remain unavailable with a backend explanation. The current
+toll/storage profile has separate preview and durable book/reopen flows.
+Amendments, evolving operational state and broader settlement remain later work.
 
 ## 9. Delivery sequence and acceptance examples
 
@@ -472,10 +478,12 @@ before implementation. Reuse existing consumers before adding schema or controls
 | 6. Intrinsic dispatch | Generation and storage optimization behind the same instrument valuation contract | Independent exhaustive small cases, deterministic tie policy, full scenario repricing and state/quantity reuse checks |
 | 7. Broader structures | Shared rights, solar plus storage, ancillary services, contingent clauses and stochastic models | Separate supported consumers, joint feasibility, numerical evidence and explicit contract versions |
 
-The following remain broader product/integration acceptance examples. Selected
-quantity and pure-ledger behaviors now have the checks recorded in
-[operating facilities](operating-facilities.md); this table establishes no
-end-to-end product qualification. All numbers are synthetic. Scalar cash examples
+The bounded supplied-plan portions of steps 2–5 are implemented in
+[operating facilities](operating-facilities.md) and
+[saved trading/inventory](structured-power-trading.md). Broader PPA hedge analysis,
+state continuity, optional rights and settlement remain separate acceptance
+examples. This table establishes no production qualification. All numbers are
+synthetic. Scalar cash examples
 explicitly use USD, discount factor one and zero other charges; they establish
 arithmetic, not a market convention.
 
