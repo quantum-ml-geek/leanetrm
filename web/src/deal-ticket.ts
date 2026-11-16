@@ -189,6 +189,10 @@ function tradeFields(o:TicketView,fields:TicketField[]){
  return node;
 }
 
+function statusLine(status:TicketStatus){
+ const line=el('p','ticket-status',status.text);line.dataset.kind=status.kind;line.setAttribute('role','status');return line;
+}
+
 function strip(o:TicketView,fields:TicketField[]){
  const view=o.schedule,node=el('header','ticket-strip');
  const title=el('div','ticket-title');
@@ -200,7 +204,7 @@ function strip(o:TicketView,fields:TicketField[]){
   progress.append(bar,el('span','ticket-progress-text',`${view.deliveredLeaves} of ${view.leaves} delivered`),el('span','ticket-valuation',`Valued at ${o.instant(view.valuationAt)}`));
   node.append(progress);
  }
- const line=el('p','ticket-status',o.status.text);line.dataset.kind=o.status.kind;line.setAttribute('role','status');node.append(line);
+ node.append(statusLine(o.status));
  return node;
 }
 
@@ -301,6 +305,7 @@ function groupedFields(o:TicketView,groups:TicketFieldGroup[],actual:InstrumentS
   if(mapped.length)renderInstrumentSides(card,mapped,{zone:o.zone,retained:o.mode==='booked',disclosure:true});
   root.append(card);
  }
+ root.append(statusLine(o.status));
  return root;
 }
 
@@ -334,7 +339,7 @@ export function renderTicket(host:HTMLElement,o:TicketView){
    if(!sides.length&&groups)renderInstrumentSides(root,groups,{zone:o.zone,retained:o.mode==='booked',reason:o.sideGroupsReason});
   }
  }
- if(o.presentation==='schedules'){const state=el('p','ticket-status',o.status.text);state.dataset.kind=o.status.kind;root.append(state);}
+ if(o.presentation==='schedules')root.append(statusLine(o.status));
  if(o.measures){if(!o.currency)throw Error('The trade measures require their currency.');root.append(measures(o.measures,o.currency,o.instant));}
  if(o.presentation!=='terms')root.append(panel);
  const planned=upcoming(o);
