@@ -525,6 +525,12 @@ and a pinned local pull operator; schema and infrastructure changes require a
 separate qualified baseline (D135). Hosted authentication and collection boundaries are described
 in [hosted pilot operations](hosted-pilot.md); the synthetic local preview stays isolated.
 
+D405 adds conservative [CI impact selection](ci-impact.md): shared behavior checks
+run once across the matrix, and pull requests select explicitly declared path
+consumers. Unknown/shared changes and unavailable comparison history require the
+full gate. Master publication retains the complete same-commit gate and exact-head
+release contract. Integration jobs retain independent builds and disposable state.
+
 A neutral default public page lives in `site/` (D385), separately from the authenticated
 workspace assets. The hosted gateway serves only its exact homepage, two public
 assets and one bounded images folder (D382, D388); `/app` forwards to the application's native root with its query intact.
