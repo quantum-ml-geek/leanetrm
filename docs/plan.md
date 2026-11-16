@@ -22,6 +22,13 @@ qualification. Complete economic horizon risk, broader service laws and source
 reconciliation remain separate qualification work. The exact combined artifact
 still requires its integration and release gates.
 
+D409 implements [retained-title parking](gas-park-custody.md) as a distinct
+Park and Loan profile. It preserves customer title through identified-lot
+reservations, accepts provider foreign custody without a stock account, and
+uses ordinary independent fee cash. Native operations, shared entry, browser
+workflows and current-clock pricing have disposable local qualification. Transport, commercial
+Storage, wider rights, correction adapters and economic continuation remain open.
+
 D404 is implemented for 25 selected main-workbench curve, trading and Risk reads,
 with independent view progress, bounded execution, cancellation admission fences
 and exact authorization/context checks before SSE publication. Local qualification

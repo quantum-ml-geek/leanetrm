@@ -54,13 +54,14 @@ test('a retained request holds New trade back, ahead of every other reason, beca
  assert.deepEqual(newTradeControl({catalog:{canBook:false,bookingUnavailableReason:'Historical view is read-only.'},retained:true,fallback}),{enabled:false,reason:retainedBlock});
 });
 
-test('one New trade product choice includes the explicit Park and loan profile beside physical gas',async()=>{
+test('New trade keeps one public Park and loan family beside physical gas',async()=>{
  const {newTradeProducts}=await import('../dist/new-trade.js');
  assert.deepEqual(newTradeProducts.map(([key])=>key),['futures','options','swaps','ppa','gas','park-loan','crude','lng']);
  assert.equal(newTradeProducts.find(([key])=>key==='park-loan')[1],'Park and loan');
+ assert.equal(newTradeProducts.some(([key])=>key==='park-custody'),false);
 });
 
-test('the Park and loan introduction leaves the fee law to the explicitly selected profile',async()=>{
+test('the Park and loan introduction keeps title and fee terms explicitly selected',async()=>{
  const old=globalThis.document;
  class Node{constructor(){this.children=[];this.dataset={};this.text='';}
   append(...children){this.children.push(...children);}replaceChildren(...children){this.children=children;}
@@ -70,7 +71,7 @@ test('the Park and loan introduction leaves the fee law to the explicitly select
  try{
   const {setupNewTrade}=await import('../dist/new-trade.js'),parts=Object.fromEntries(['head','body','view'].map(key=>[key,new Node()]));
   setupNewTrade({element:key=>parts[key]},{choose:()=>{},busy:()=>false}).show({kind:'new',product:'park-loan'},'loading');
-  assert.match(parts.head.textContent,/explicitly selected fee profile/);
+  assert.match(parts.head.textContent,/explicitly selected title and fee terms/);
   assert.doesNotMatch(parts.head.textContent,/independent fixed fee/);
  }finally{globalThis.document=old;}
 });

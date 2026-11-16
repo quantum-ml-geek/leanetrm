@@ -18,7 +18,7 @@ export type PageFocus={tradeIds:string[];pivotCell:PivotCellFocus|null};
 export type PageReport={page:string;selection:Record<string,unknown>;layout?:BlotterLayoutShown;view?:BlotterDigestView;focus?:PageFocus;businessDate?:string};
 export type BlotterDigestView=BlotterSelection&{primaryMeasure:string|null};
 export type BlotterSelection={mode:'trades'|'pivot';bookIds:string[];portfolioIds:string[];groupBy:string[];measures:string[]};
-export type TradeShown={tradeId:string;instrumentType:'future'|'financial_swap'|'heat_rate'|'ppa'|'physical_gas'|'physical_gas_park_loan'|'physical_crude'|'physical_lng'|'futures_option';revision:number;reference:string};
+export type TradeShown={tradeId:string;instrumentType:'future'|'financial_swap'|'heat_rate'|'ppa'|'physical_gas'|'physical_gas_park_loan'|'physical_gas_park_custody'|'physical_crude'|'physical_lng'|'futures_option';revision:number;reference:string};
 /** A new trade being entered in the Blotter's panel: of its product, or of none until the person chooses one. */
 export type EntryShown={product:NewProduct|null};
 /** What PPA bookings shows: the inspected trade's revision, else the book whose PPA trades it lists, else neither. */

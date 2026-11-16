@@ -69,3 +69,10 @@ test('a closed balance-time advance window has its own product-specific unavaila
  assert.equal(valuationReason('gas_balance_fee_advance_window','physical_gas_park_loan'),'Advance window closed without accepted performance; remaining plan value unavailable');
  assert.throws(()=>valuationReason('gas_balance_fee_advance_window','physical_gas'),/unknown valuation status/);
 });
+
+test('custody unavailable rows state the acceptance or source issue without implying commodity pricing',()=>{
+ assert.match(valuationReason('gas_custody_acceptance_window','physical_gas_park_custody'),/acceptance window.*unavailable/i);
+ assert.match(valuationReason('gas_custody_reconciliation','physical_gas_park_custody'),/reconciliation.*observation/i);
+ assert.match(valuationReason('discount_curve','physical_gas_park_custody'),/fee discount/i);
+ assert.throws(()=>valuationReason('missing_observation','physical_gas_park_custody'),/unknown valuation status/);
+});

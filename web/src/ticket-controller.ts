@@ -12,7 +12,7 @@ import type {FacilityAllocationTrack,ScheduleView,TicketChoice,TicketDescription
 // draft and reads its lookups once edits settle, and books through the retained request protocol; a booked one reads its trade and shows it.
 // Every value, choice, lookup and schedule is the backend's; the controller only keeps what the person sees in step with what they did.
 type Api=<T>(path:string,body?:unknown,signal?:AbortSignal)=>Promise<T>;
-type Opened={tradeId:string;bindingId:string;revision:number};
+type Opened={tradeId:string;bindingId:string;revision:number;product?:string};
 type NewEntry={booked:(receipt:{tradeId:string})=>void;amending?:Opened};
 // instant is the page's formatter for the instants the ticket shows.
 export type TicketOptions={api:Api;context:()=>Record<string,unknown>;product:string;instant:(at:string)=>string;zone:()=>string;actor:()=>string;readOnly?:boolean;presentation?:'schedules'|'terms';onAmend?:()=>void;sideSchedule?:(host:HTMLElement,side:TicketSide,slot:number,view:TicketView,context:Record<string,unknown>)=>()=>void}&({opened:Opened}|({opened?:undefined}&NewEntry));
@@ -451,7 +451,8 @@ export function setupTicket(host:HTMLElement,o:TicketOptions):TicketHandle{
  async function check(){
   const command=pending.command;if(!current()||!command||sending)return;
   try{
-   const r=await o.api<TicketReceipt|{found:false}>('tickets/status',{operationId:command.operationId,product:o.product});
+   const profile=(command.body.draft as TicketDraft|undefined)?.trade?.profile;
+   const r=await o.api<TicketReceipt|{found:false}>('tickets/status',{operationId:command.operationId,product:o.product,...(typeof profile==='string'?{profile}:{})});
    if('tradeId' in r)receipt(command,r);else say('No completed booking was found. Retry the original booking.');
   }catch(error){say(`The booking status could not be read: ${reasonOf(error)}`);}
  }

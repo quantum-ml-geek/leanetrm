@@ -21,7 +21,7 @@ def checks(query, manifest):
     assert directory.name.startswith('oetrm-ref-')
     dotnet = str(Path(os.environ['DOTNET']).resolve())
     frozen = directory / 'balance-price-binaries'
-    shutil.copytree(ROOT / 'tests/OpenEtrm.Api.Checks/bin/Debug/net10.0', frozen)
+    shutil.copytree(Path(os.environ.get('BALANCE_FEE_PRICE_BINARIES', ROOT / 'tests/OpenEtrm.Api.Checks/bin/Debug/net10.0')), frozen)
     stamps = {path.name: path.read_bytes() for path in frozen.glob('OpenEtrm.*.dll')}
     market = f.valuation_inputs()
     worker = 'synthetic_balance_price_worker'

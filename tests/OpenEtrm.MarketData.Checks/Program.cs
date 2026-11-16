@@ -23,6 +23,7 @@ if(args is ["--physical-futures-value"]){PhysicalFuturesValueChecks.Run();return
 if(args is ["--gas-owned-holdings"]){GasOwnedHoldingsChecks.Run();return;}
 if(args is ["--gas-park-and-loan"]){GasParkAndLoanChecks.Run();return;}
 if(args is ["--gas-park-loan-balance-fee"]){GasParkLoanBalanceFeeChecks.Run();return;}
+if(args is ["--gas-park-custody"]){GasParkCustodyChecks.Run();return;}
 if(args is ["--gas-quantity-projection"]){GasQuantityProjectionChecks.Run();return;}
 if(args is ["--gas-operator-handoff"]){GasOperatorMarkHandoffChecks.Run();return;}
 if(args is ["--gas-delivery-principal"]){GasDeliveryPrincipalChecks.Run();return;}
@@ -655,6 +656,7 @@ GasKnownCashoutChecks.Run();passed++;
 GasOwnedHoldingsChecks.Run();passed++;
 GasParkAndLoanChecks.Run();passed++;
 GasParkLoanBalanceFeeChecks.Run();passed++;
+GasParkCustodyChecks.Run();passed++;
 GasQuantityProjectionChecks.Run();passed++;
 GasOperatorMarkHandoffChecks.Run();passed++;
 GasKnownStockChecks.Run();passed++;

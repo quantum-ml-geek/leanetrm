@@ -74,6 +74,7 @@ public static class GasParkLoanTicket
 
     public static TicketDescription Describe(TicketDraft? draft)
     {
+        if(GasParkCustodyTicket.IsSelected(draft))return GasParkCustodyTicket.Describe(draft);
         if(draft is not null&&(draft.Product!=Product||draft.Version!=1||draft.Trade is null||draft.Sides.IsDefault||!draft.Sides.IsEmpty))
             throw Invalid("profile","Supply the installed Park and Loan ticket.");
         return draft?.Trade.GetValueOrDefault("profile") switch
@@ -87,7 +88,7 @@ public static class GasParkLoanTicket
 
     public static ImmutableArray<TicketChoice>? StaticChoices(string field)=>field switch
     {
-        "profile"=>[new(GasParkAndLoanTerms.Version,"Title transfer; fixed fee determined on advance"),new(GasParkLoanBalanceFeeTerms.Version,"Title transfer; outstanding principal × elapsed-hour fee")],
+        "profile"=>[new(GasParkAndLoanTerms.Version,"Title transfer; fixed fee determined on advance"),new(GasParkLoanBalanceFeeTerms.Version,"Title transfer; outstanding principal × elapsed-hour fee"),new(GasParkCustodyTerms.Version,"Park custody; customer retains title and fee is independent")],
         "service_kind"=>[new("park","Park"),new("loan","Loan")],
         "perspective"=>[new("customer","Customer"),new("provider","Provider")],
         "title_policy"=>[new(GasCommodityLoan.TitleTransfer,"Transfer title on accepted advance")],

@@ -25,6 +25,7 @@ internal static class GasParkLoanActionChecks
         Reject(JsonSerializer.SerializeToElement(new{expectedVersion=4,agreementEvidenceId=id,evidenceId=id,lotId=(Guid?)null,reservationId=(Guid?)null,effectiveAt="2031-01-02T12:00:00Z"}));
         Reject(JsonSerializer.SerializeToElement(new{expectedVersion=4,agreementEvidenceId=id,evidenceId=id,claimEvidenceId=(Guid?)null,lotId=(Guid?)null,reservationId=(Guid?)null,effectiveAt="2031-01-02T12:00:00Z",unreviewed="x"}));
         Reject(JsonSerializer.SerializeToElement(new{expectedVersion=4,agreementEvidenceId=id,evidenceId=id,claimEvidenceId=(Guid?)null,lotId=(Guid?)null,reservationId=(Guid?)null,effectiveAt="2031-01-02T06:00:00-06:00"}));
+        Reject(JsonSerializer.SerializeToElement(new{expectedVersion=4,agreementEvidenceId=id,evidenceId=id,claimEvidenceId=(Guid?)null,lotId=(Guid?)null,reservationId=(Guid?)null,effectiveAt="2031-01-02T12:00:00.00000001Z"}));
         var determination=request with{Action=GasParkLoanActions.Determine,Selection=JsonSerializer.SerializeToElement(new{
             expectedVersion=4,previousDeterminationId=(Guid?)null,through="2031-01-02T12:00:00.1234560+00:00",effectiveAt="2031-01-02T12:00:00.1234560+00:00",businessKey="synthetic_fee",evidence="Synthetic fee determination"})};
         var canonical=GasParkLoanActions.Normalize(determination);

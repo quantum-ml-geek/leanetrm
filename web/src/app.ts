@@ -1642,7 +1642,7 @@ async function showTarget(report:string,selection:Record<string,unknown>|null,ki
       signal?.throwIfAborted();await setPage('futures');futures.reset('read');
       if(selection.view==='trade'){
         if(select('snapshot').value)await futures.load();signal?.throwIfAborted();
-        await futures.openTrade(String(selection.tradeId),selection.instrumentType as 'future'|'financial_swap'|'heat_rate'|'ppa'|'physical_gas'|'physical_gas_park_loan'|'physical_crude'|'futures_option',selection.revision as number|null,signal);
+        await futures.openTrade(String(selection.tradeId),selection.instrumentType as 'future'|'financial_swap'|'heat_rate'|'ppa'|'physical_gas'|'physical_gas_park_loan'|'physical_gas_park_custody'|'physical_crude'|'futures_option',selection.revision as number|null,signal);
       }else await futures.show(selection as Parameters<typeof futures.show>[0]);
       return;
     default:return showPage(next);

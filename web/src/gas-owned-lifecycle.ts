@@ -22,7 +22,7 @@ export function mountGasOwnedAction(root:HTMLElement,offer:LifecycleOffer,setup:
  const body=node('fieldset');body.className='schedule-fields gas-lifecycle-fields';body.dataset.lifecyclePermission=form.permission;body.disabled=!o.permission(form.permission);root.append(body);
  const editor=mountOperationFields(body,form.fields,o,async(target,action)=>{
   const sourceAction=action??offer.action;
-  const read=await o.api<GasOwnedSetup>('lifecycle/gas/setup',{context:structuredClone(setup.context),target:structuredClone(target)});
+  const read=await o.api<GasOwnedSetup>(target.handler==='gas_park_custody'?'gas/park-custody/setup':'lifecycle/gas/setup',{context:structuredClone(setup.context),target:structuredClone(target)});
   if(read.target?.handler!==target.handler||read.target.scopeId!==target.scopeId||read.target.bindingId!==target.bindingId||
    read.context?.contextId!==setup.context.contextId||read.context.businessDate!==setup.context.businessDate||read.context.snapshotId!==setup.context.snapshotId||!sameUtcInstant(read.context.asOf,setup.context.asOf)||
    read.forms?.[sourceAction]?.permission!==form.permission)throw Error('The member fields do not match this exact observed target and source.');

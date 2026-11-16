@@ -38,8 +38,8 @@ The gas partition includes the Park and Loan native, populated-upgrade, retained
 price-worker and real application browser qualifiers, alongside its existing
 amendment upgrades and application checks.
 
-The current integrated runner contains 196 commands: 64 shared checks,
-64 isolated application previews and 68 partition-specific native/application
+The current integrated runner contains 213 commands: 76 shared checks,
+64 isolated application previews and 73 partition-specific native/application
 checks. The D404 local checkpoint passed 1,866 frontend checks and 122 Python
 checks. The earlier calendar/lifecycle checkpoint passed 737 managed core checks,
 88 rate checks, 1,806 frontend checks and 121 Python checks; those counts describe
@@ -4632,3 +4632,61 @@ postconditions. Review screenshots show the monetary facts and record control
 on desktop and phone. All owned resources were removed. The complete CI matrix
 still gates the exact commit. These checks do not qualify complete economic
 continuation, quantity scaling, correction adapters or production activation.
+
+## Retained-title parking qualification (D409)
+
+The [custody contract](gas-park-custody.md) adds five required commands in the gas
+partition: native/source/value qualification, populated predecessor upgrade,
+queued PRICE workers, normal application browser and restricted-provider browser.
+Twelve managed boundary commands run once in the managed partition. The runner
+tests prove those placements and selected-tool propagation.
+
+The native/managed matrix passes 18 actual service/source checkpoints
+(13 whole-book valuations and five explicit empty-financial refusals), including both fee signs, exact retained customer stock, provider
+custody without commodity inputs, and paid/due cash without unused rates. A
+zero-fee provider retains physical custody and service value zero; the empty
+financial portfolio refuses explicitly, while independent stock in the same book
+is valued normally. Payment heads are resolved by knowledge before business-time
+application, including a later known bank revision effective after evaluation.
+
+Independent adversarial checks cover exact typed parent/member receipts,
+exclusive original/remainder reservation ownership, generic release/spending
+bypasses, all accepted stock boundaries, future-effective source changes,
+quantity corrections, current-source reconciliation and first-outcome recovery.
+Raw keys canonicalize ASCII padding and refuse control characters at both public
+RPC and typed persistence boundaries; free multiline evidence remains supported.
+Opaque non-ASCII-space keys and supplementary characters also pass native-to-managed
+rereads, with matching 128-scalar key and 2,000-scalar free-evidence bounds.
+Populated upgrade preserves fixed-fee, balance-time and ordinary premium cash
+facts, aliases, historical cuts, original outcomes and later supported operations,
+and refuses protected producer/worker-boundary drift.
+
+Actual source-history lock waits separately qualify missing original owned
+authority, expired original owned authority and expired original gas-operations
+authority despite valid successor grants. Provider setup succeeds without owned
+authority. Explicit customer discovery obeys its original captured access.
+The exact outer lifecycle source instant also passed an HTTP precision check:
+valid input returns a review, while a nonzero sub-microsecond fraction refuses
+instead of being truncated into the same source identity.
+
+Three actual custody PRICE jobs match their ordinary complete reports and retain
+source, scope, actor/delegator/current-worker authority and original deadlines.
+The existing fixed-fee and balance-time worker regressions pass nine jobs each.
+Economic horizon, generated-close and cross-clock P&L consumers refuse the
+unqualified custody continuation for zero, future-effective, completed and
+cash-only states; excluded scopes remain unaffected.
+
+The corrected combined runtime passes 111 normal and 48 restricted-provider
+full-application browser checks. They cover shared profile entry, booking and
+reopening, raw/superseded/unapplied observations, refused mismatched performance,
+partial/final returns, independent bank payments, uncertain-response recovery,
+completed-custody inspection, user-zone times and phone layout. Desktop, phone
+and maximized accepted/raw-history screenshots were inspected independently.
+Existing fixed-fee and balance-time application regressions pass 72 and 185 checks.
+
+Managed core passes 740 checks, the full API schedule checks pass, and API builds
+have zero warnings/errors. The frontend passes 1,970 full checks followed by 19
+focused final presentation checks; Python passes 144 checks. These results use
+synthetic data, stock PostgreSQL 16 and the pinned .NET SDK in disposable
+resources. Aggregate CI gates the exact published commit; release and production
+activation remain separate.

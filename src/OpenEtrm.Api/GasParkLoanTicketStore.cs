@@ -9,7 +9,18 @@ using OpenEtrm.MarketData.Trading;
 
 namespace OpenEtrm.Api;
 
-public sealed record TicketStatusRequest(Guid OperationId,string? Product=null);
+public sealed record TicketStatusRequest(Guid OperationId,string? Product=null,string? Profile=null)
+{
+    internal bool UsesCustody()
+    {
+        if(Product==GasParkLoanTicket.Product&&Profile is null||
+            Profile is not(null or GasParkAndLoanTerms.Version or GasParkLoanBalanceFeeTerms.Version or GasParkCustodyTerms.Version)||
+            Product==GasParkCustodyTicket.Product&&Profile is not(null or GasParkCustodyTerms.Version)||
+            Product is not(GasParkLoanTicket.Product or GasParkCustodyTicket.Product)&&Profile is not null)
+            throw new MarketDataException("ticket_input","Retain the exact supported product family and selected profile for booking recovery.");
+        return Product==GasParkCustodyTicket.Product||Product==GasParkLoanTicket.Product&&Profile==GasParkCustodyTerms.Version;
+    }
+}
 internal sealed class GasParkLoanTicketStore(PreviewDatabase database)
 {
     internal static readonly JsonSerializerOptions Json=GasOwnedOperations.Json;

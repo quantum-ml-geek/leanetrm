@@ -11,7 +11,7 @@ test('a separate trade window always reads the exact retained selection, without
   tradeId:selection.tradeId,bindingId:selection.bindingId,revision:2,instrumentType:'ppa'});
 });
 test('gas windows retain their instrument binding and exact context like other positions',()=>{
- for(const instrumentType of ['physical_gas','physical_gas_park_loan']){
+ for(const instrumentType of ['physical_gas','physical_gas_park_loan','physical_gas_park_custody']){
   const gas={...selection,instrumentType};
   assert.deepEqual(readPositionWindowUrl(positionWindowUrl('https://example.invalid/',gas)),gas);
   assert.deepEqual(positionWindowRequest(gas),{...positionWindowRequest(selection),instrumentType});

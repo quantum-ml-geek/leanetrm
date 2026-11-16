@@ -41,6 +41,40 @@ STORAGE_FACILITY={f'tools/{name}.py' for name in ('check_storage_facility','chec
 
 
 class CheckAllTests(unittest.TestCase):
+    def test_custody_native_upgrade_worker_and_both_browser_roles_are_required(self):
+        helpers={f'tools/{name}.py' for name in (
+            'check_gas_park_custody','check_gas_park_custody_upgrade',
+            'check_gas_park_custody_worker','check_gas_park_custody_browser')}
+        for group in ALL_GROUPS:
+            selected=[]
+            def run(command,**options):
+                found=helpers.intersection(command)
+                if not found:return
+                helper=found.pop();selected.append(command)
+                self.assertEqual(command[command.index('--pg-bin')+1],'/stock pg')
+                self.assertEqual(options['env']['DOTNET'],'/selected sdk')
+                if helper.endswith('_browser.py'):
+                    self.assertEqual(command[command.index('--dotnet')+1],'/selected sdk')
+                    self.assertEqual(command[command.index('--browser')+1],'/selected browser')
+                    self.assertIn('--no-build',command)
+            run_checks(Path('/stock pg'),Path('/selected sdk'),Path('/selected browser'),group=group,run=run)
+            self.assertEqual(len(selected),5 if group=='gas' else 0)
+            if selected:
+                self.assertEqual({part for command in selected for part in command}&helpers,helpers)
+                self.assertEqual(sum('--provider-only' in command for command in selected),1)
+
+    def test_custody_managed_boundaries_run_once_in_managed_partition(self):
+        flags={'--gas-park-custody','--gas-park-custody-ticket','--gas-park-custody-evidence',
+            '--gas-park-custody-actions','--gas-park-custody-effects','--gas-park-custody-handler',
+            '--gas-park-custody-setup','--gas-park-custody-overview','--ticket-status-routing',
+            '--cash-payment-status','--gas-instant-ingress','--lifecycle-context-ingress'}
+        for group in ALL_GROUPS:
+            selected=[]
+            run_checks(Path('/pg'),Path('/dotnet'),Path('/browser'),group=group,
+                run=lambda command,**options:selected.extend(flags.intersection(command)))
+            self.assertEqual(set(selected),flags if group=='managed' else set())
+            self.assertEqual(len(selected),len(flags) if group=='managed' else 0)
+
     def test_lightweight_groups_do_not_require_postgresql_installation(self):
         with tempfile.TemporaryDirectory(prefix='openetrm-ci-tools-') as temporary:
             root = Path(temporary)
@@ -376,6 +410,10 @@ class CheckAllTests(unittest.TestCase):
         self.assertEqual([c[-2:] for c in schedule_commands],
                          [['--', flag] for flag in ('--context-resolution', '--schedules', '--async-reads', '--published-clock', '--calendar-authoring', '--gas-ticket', '--historical-risk', '--monte-carlo-risk', '--close-risk', '--automation',
                            '--live-calculation', '--reference-intake', '--preview-data', '--side-observation-compatibility',
+                       '--gas-park-custody','--gas-park-custody-ticket','--gas-park-custody-evidence',
+                       '--gas-park-custody-actions','--gas-park-custody-effects','--gas-park-custody-handler',
+                       '--gas-park-custody-setup','--gas-park-custody-overview','--ticket-status-routing',
+                       '--cash-payment-status','--gas-instant-ingress','--lifecycle-context-ingress',
                            '--lifecycle-actions','--economic-risk-contract','--lifecycle-schedule-contract','--gas-owned-setup',
                           '--shared-native-markets','--derivative-methods','--gas-accepted-order','--lifecycle-residual-currencies','--gas-operator-contract')])
         self.assertTrue(any('--historical-risk-check' in c and '--browser-check' in c for c in commands))

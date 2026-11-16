@@ -23,13 +23,16 @@ def build_assets(dotnet):
     subprocess.run(['npm','run','build','--prefix','web'],cwd=ROOT,check=True,timeout=120)
 
 
-def run(query,manifest,dotnet,browser,children,fixture,script,*,worker_enabled=True,timeout=240,artifacts=()):
+def run(query,manifest,dotnet,browser,children,fixture,script,*,worker_enabled=True,timeout=240,artifacts=(),api_bin=None):
+    api_source=ROOT/'src/OpenEtrm.Api/bin/Debug/net10.0' if api_bin is None else Path(api_bin).resolve()
+    for name in ['OpenEtrm.Api.dll','OpenEtrm.Api.deps.json','OpenEtrm.Api.runtimeconfig.json']:
+        if not (api_source/name).is_file():raise ValueError('A coherent current-tree API artifact is required: '+str(api_source/name))
     root=Path(query('SHOW unix_socket_directories;')).resolve()
     run_id=str(uuid4());(root/'.openetrm-preview').write_text(run_id)
     (root/'manifest.json').write_text(json.dumps(manifest));(root/'manifest.json').chmod(0o600)
     shutil.copyfile(ROOT/'deploy/process-limits.example.json',root/'process-limits.json')
     shutil.copytree(ROOT/'web/dist',root/'web')
-    shutil.copytree(ROOT/'src/OpenEtrm.Api/bin/Debug/net10.0',root/'api')
+    shutil.copytree(api_source,root/'api')
     if worker_enabled:
         shutil.copytree(ROOT/'src/OpenEtrm.Worker/bin/Debug/net10.0',root/'worker')
     environment={k:v for k,v in os.environ.items() if not k.startswith(('PG','OPENETRM_','ASPNETCORE_','DOTNET_'))}

@@ -128,6 +128,21 @@ if(args is ["--ticket-description"]){TicketDescriptionChecks.Run();return;}
 if(args is ["--gas-ticket"]){GasTicketChecks.Run();return;}
 if(args is ["--gas-park-loan-ticket"]){GasParkLoanTicketChecks.Run();GasParkLoanPortfolioChecks.Run();GasParkLoanPositionChecks.Run();GasParkLoanActionChecks.Run();return;}
 if(args is ["--gas-park-loan-balance-fee"]){GasParkLoanBalanceFeeAdapterChecks.Run();return;}
+if(args is ["--gas-park-custody"]){GasParkCustodyAdapterChecks.Run();GasParkCustodyDraftChecks.Run();GasParkCustodyPositionChecks.Run();return;}
+if(args is ["--gas-park-custody-ticket"]){GasParkCustodyTicketChecks.Run();return;}
+if(args is ["--gas-park-custody-evidence"]){GasParkCustodyEvidenceChecks.Run();GasParkCustodyBookingStatusChecks.Run();return;}
+if(args is ["--gas-park-custody-actions"]){GasParkCustodyActionChecks.Run();return;}
+if(args is ["--gas-park-custody-effects"]){GasParkCustodyEffectChecks.Run();return;}
+if(args is ["--gas-park-custody-handler"]){await GasParkCustodyHandlerChecks.Run();return;}
+if(args is ["--gas-park-custody-setup"]){GasParkCustodySetupChecks.Run();return;}
+if(args is ["--gas-park-custody-overview"]){GasParkCustodyOverviewChecks.Run();return;}
+if(args is ["--ticket-status-routing"]){TicketStatusRoutingChecks.Run();return;}
+if(args is ["--cash-payment-status"]){CashPaymentStatusChecks.Run();return;}
+if(args is ["--gas-instant-ingress"]){GasInstantIngressChecks.Run();return;}
+if(args is ["--lifecycle-context-ingress"]){LifecycleContextIngressChecks.Run();return;}
+if(args is ["--gas-park-custody-worker-submit",var custodyWorkerPacket]){await GasParkCustodyWorkerChecks.Run(custodyWorkerPacket,false);return;}
+if(args is ["--gas-park-custody-worker-verify",var custodyWorkerReceipt]){await GasParkCustodyWorkerChecks.Run(custodyWorkerReceipt,true);return;}
+if(args is ["--gas-park-custody-native",var custodyNativePacket]){await GasParkCustodyWorkerChecks.Run(custodyNativePacket,false,true);return;}
 if(args is ["--gas-park-loan-setup"]){GasParkLoanSetupChecks.Run();return;}
 if(args is ["--gas-park-loan-native",var parkLoanPacket]){await GasParkLoanNativeChecks.Run(parkLoanPacket);return;}
 if(args is ["--gas-park-loan-worker-submit",var parkLoanWorkerPacket]){await GasParkLoanWorkerChecks.Run(parkLoanWorkerPacket,false);return;}
@@ -266,6 +281,21 @@ if (args is ["--schedules"])
     GasTicketChecks.Run();
     GasParkLoanTicketChecks.Run();
     GasParkLoanBalanceFeeAdapterChecks.Run();
+    GasParkCustodyAdapterChecks.Run();
+    GasParkCustodyDraftChecks.Run();
+    GasParkCustodyPositionChecks.Run();
+    GasParkCustodyTicketChecks.Run();
+    GasParkCustodyEvidenceChecks.Run();
+    GasParkCustodyBookingStatusChecks.Run();
+    GasParkCustodyActionChecks.Run();
+    GasParkCustodyEffectChecks.Run();
+    await GasParkCustodyHandlerChecks.Run();
+    GasParkCustodySetupChecks.Run();
+    GasParkCustodyOverviewChecks.Run();
+    TicketStatusRoutingChecks.Run();
+    CashPaymentStatusChecks.Run();
+    GasInstantIngressChecks.Run();
+    LifecycleContextIngressChecks.Run();
     GasParkLoanPortfolioChecks.Run();
     GasParkLoanPositionChecks.Run();
     GasParkLoanActionChecks.Run();

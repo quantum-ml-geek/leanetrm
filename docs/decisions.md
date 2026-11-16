@@ -5625,3 +5625,43 @@ Quantity scaling, source-correction continuity and complete economic horizon
 projection remain unqualified. The economic fence includes source-known future,
 zero-rate, rounded-zero and cash-only states. See the [fee contract and actual
 qualification](gas-park-loan-balance-fee.md).
+
+## D409 · Retained-title parking with independent reservations and fee cash
+
+**Status:** bounded implementation with disposable local qualification; aggregate
+CI, release and production activation remain separate gates.
+
+**Requirement.** Represent parking that retains customer title, with auditable
+observations, explicit performance and surviving independent cash, rather than
+creating a title-transfer claim or an artificial provider commodity position.
+
+**Decision.** Install `physical_gas_park_custody_v1` as an explicit profile of
+the shared Park and Loan authoring family. Capture one exact point, native
+quantity basis, currency, acceptance window and return due. Customer acceptance
+reserves identified owned lots; provider acceptance records foreign custody with
+an explicitly absent owned account. Partial return releases an original native
+reservation and creates its exact same-lot remainder atomically. Final return
+requires release authority without requiring authority to create a nonexistent
+remainder. No custody transition changes owned quantity or physical activity.
+
+Record supported raw observations independently of financial application. Exact
+manual/review action policies, observation revisions and accepted return order
+are explicit. Changed pinned evidence requires reconciliation without rewriting
+accepted title or cash. Original request recovery precedes fresh-source lookup;
+a fresh acknowledgement of a sealed fact beyond the selected view reports no
+new effect and does not promote that view's business or knowledge cutoff.
+
+Recognize the independently directed fixed fee at acceptance as an ordinary
+`TimedCashPayment` membership. Recorded bank payments use the existing cash
+operation and its `AmendTrade` authority, with read-only actor-bound receipt
+recovery. The completed custody workbench remains available for independent
+unpaid cash and raw observation history. Contractual instants display in the
+user's zone; exact wire instants retain native microsecond precision.
+
+**Boundaries.** The installed contract prohibits use and sale of custody and
+does not implement loss application, cross-point conversion, source correction
+adapters, quantity scaling or automatic performance. An expired unaccepted plan
+is unavailable even with a zero fee. Current-clock price qualification does not
+qualify generated closes, cross-clock P&L or complete economic horizon risk;
+source-known zero, future-effective, completed and cash-only states require
+the same explicit continuation fence. See the [contract](gas-park-custody.md).

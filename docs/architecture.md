@@ -16,6 +16,13 @@ determinations, independent cash and remaining service value retain distinct
 owners. Current-clock price qualification does not establish complete economic
 horizon continuation.
 
+D409 adds a separately selected [retained-title parking profile](gas-park-custody.md)
+within shared Park and Loan entry. Customer-owned stock, custody reservations
+and ordinary fee cash keep independent identities. Provider custody needs no
+owned inventory or commodity mark. Disposable local qualification covers the
+managed/native, shared ticket, browser and retained price consumers;
+complete economic continuation remains fenced.
+
 D401 selects [shared lifecycle delivery](lifecycle-delivery.md): operation-specific
 eligibility, native lifecycle coordination, gas ownership/entitlements/borrowing
 and event-aware economic risk. Its delivery gates distinguish implementation from
