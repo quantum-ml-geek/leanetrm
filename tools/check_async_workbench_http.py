@@ -235,7 +235,8 @@ def run_checks(url, query, psql, environment, manifest):
         result={}
         def work():
             try:result['value']=tab().call(path,body,expected=expected)
-            except Exception as error:result['error']=repr(error)
+            except Exception as error:result['error']=repr(error)[:300]
+            result['at']=time.monotonic()
         thread=threading.Thread(target=work);thread.start()
         return thread,result
     def beside():
@@ -294,9 +295,9 @@ def run_checks(url, query, psql, environment, manifest):
             while query(f"SELECT bool_and(granted_to<clock_timestamp()) FROM security.role_grants WHERE principal_id={principal};")!='t':
                 assert time.monotonic()<deadline,'The owned Risk role did not expire'
                 time.sleep(.05)
-            return thread,held,gated
-        thread,held,gated=holding(psql,environment,GATE,answering);thread.join(timeout=20);gated.join(timeout=20)
-        assert (held.get('value') or {}).get('code')=='access_denied',f'the waiting read answered {held}'
+            return thread,held,gated,time.monotonic()
+        thread,held,gated,expired=holding(psql,environment,GATE,answering);thread.join(timeout=20);gated.join(timeout=20)
+        assert (held.get('value') or {}).get('code')=='access_denied',f"the waiting read answered {held.get('at',0)-expired:+.2f} s from the role's expiry: {held}"
         check('authority that ends while an ordinary read waits to answer refuses it')
     finally:
         for grant in saved:
