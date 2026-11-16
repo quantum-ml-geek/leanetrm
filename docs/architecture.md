@@ -7,26 +7,26 @@ Booking, review and saved-trade views must show those same memberships and their
 roles and terms. The alignment is in implementation, including cash, gas holdings,
 retained programs and service rights; see [the decision](decisions.md#d417--explicit-sides-for-every-non-exchange-instrument).
 
-D416 adds [ordinary direct point market-value publication](point-trader-marks.md)
+D418 adds [ordinary direct point market-value publication](point-trader-marks.md)
 with exact source/temporal selection, final observations and independent reviewed
 trade adoption. First publication needs no successful evaluation or input frame.
 The combined facility, certificate and financial Transport baseline passes native,
 managed, populated-upgrade and actual browser qualification. Subsequent Side
 alignment and release gates remain open.
 
-D415 implements the selected first [financial Transport rights and fixed-fee
+D416 implements the selected first [financial Transport rights and fixed-fee
 contract](gas-transport-financial.md). Direct signed whole-package values,
 independent ordinary cash and explicit expiry retain separate owners. Native, managed and actual browser consumers have local qualification, including
 explicit expiry recovery and independent cash. First-value market publication,
 integrated upstream qualification and release remain separate gates.
 
-D414 adds locally qualified [retained chosen routes](gas-transport-routes.md)
+D413 adds locally qualified [retained chosen routes](gas-transport-routes.md)
 over exact native capacity claims and exclusive logical source-plan memberships.
 Managed/native, populated-upgrade and actual browser checks qualify persisted
 route adoption and release. Integrated release, physical performance and financial
 value remain separate.
 
-D413 adds [commercial Transport capacity operations](gas-transport-capacity-operations.md)
+D415 adds [commercial Transport capacity operations](gas-transport-capacity-operations.md)
 over independent exact entitlement, capacity-version and chosen-plan identities.
 Shared gross limits, explicit empty release and retained source/authority
 admission have local managed/native, upgrade and actual browser qualification.
@@ -38,7 +38,7 @@ over independent native ownership and cash. The bounded title-transfer profile
 uses shared entry, lifecycle and current-clock interactive/retained price risk.
 Release qualification and broader service capabilities remain separate.
 
-D409 adds [physical storage assets and activity](storage-facility-operations.md),
+D414 adds [physical storage assets and activity](storage-facility-operations.md),
 independent from commercial entitlement, title and cash. The first operating
 profile has local managed, native, upgrade and browser qualification. Integration
 and release gates remain separate from that evidence.

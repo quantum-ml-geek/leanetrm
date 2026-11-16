@@ -82,6 +82,8 @@ public abstract record Instrument
     public virtual void ValidateBinding(Quantity quantity,DeliveryCoverage? coverage)
     {
         RequireQuantity(quantity,coverage);
+        if(!SupportsQuantityScaling&&!SupportsWholePosition&&quantity!=UnitQuantity)
+            throw new MarketDataException("risk_quantity_scaling","This instrument has not declared linear scaling in booked quantity.");
         if(coverage is not null)
             throw new MarketDataException("ppa_segment_coverage","This instrument does not accept delivery coverage.");
     }

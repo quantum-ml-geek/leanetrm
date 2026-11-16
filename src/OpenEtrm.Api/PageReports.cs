@@ -48,7 +48,7 @@ static class PageReports
     internal static bool Operational(string page)=>page is "users_access" or "settings_ai" or "jobs" or "risk_jobs" or "delivery_prices" or "interval_series";
 
     // The pages the Blotter reports, which alone may state its layout.
-    static readonly ImmutableHashSet<string> BlotterPages=["blotter_new_rec","blotter_operating_right","blotter_rec_forward","blotter","blotter_risk","blotter_risk_lens","blotter_new_trade","blotter_new_future","blotter_new_swap","blotter_new_ppa","blotter_new_gas","blotter_new_park_loan","blotter_new_option","blotter_new_crude","blotter_new_lng"];
+    static readonly ImmutableHashSet<string> BlotterPages=["blotter_new_transport","blotter_new_rec","blotter_operating_right","blotter_rec_forward","blotter","blotter_risk","blotter_risk_lens","blotter_new_trade","blotter_new_future","blotter_new_swap","blotter_new_ppa","blotter_new_gas","blotter_new_park_loan","blotter_new_option","blotter_new_crude","blotter_new_lng"];
 
     // The pages the assistant reads, those Navigate opens, and those it does not read.
     internal static IEnumerable<string> Supported=>Pages.Where(p=>p.Value.Tool is not null).Select(p=>p.Key);
@@ -127,10 +127,10 @@ static class PageReports
         if(page.Tool is null)return selection.ValueKind==JsonValueKind.Object&&!selection.EnumerateObject().Any()?new(id,null,layout):null;
         try
         {
-            // A retained Park and Loan can host a question before its trade reader is qualified.
+            // A retained gas-service trade can host a question before its trade reader is qualified.
             // Validate its identity without offering or dispatching another product's reader.
             if(id=="blotter"&&selection.ValueKind==JsonValueKind.Object&&selection.TryGetProperty("instrumentType",out var instrument)
-                &&instrument.ValueKind==JsonValueKind.String&&instrument.GetString()=="physical_gas_park_loan")
+                &&instrument.ValueKind==JsonValueKind.String&&instrument.GetString() is ("physical_gas_park_loan" or "physical_gas_park_custody" or "physical_gas_transport"))
             {
                 var trade=new ToolInput(selection);
                 trade.Exactly("view","mode","bookIds","portfolioIds","groupBy","measures","tradeId","instrumentType","revision");

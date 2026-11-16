@@ -9,20 +9,20 @@ and shared-scenario regression checks. Actual browser checks must verify the
 integrated booking and inspection flows before release. This work is in
 implementation; it does not qualify the affected financial PRs for merge.
 
-D416 implements [ordinary direct point market-value publication](point-trader-marks.md),
+D418 implements [ordinary direct point market-value publication](point-trader-marks.md),
 independent of financial adoption. Native and focused managed/UI checks cover a
 first value on a genuine empty point, exact correction/acknowledgement, retained
 actor-bound status and complete optional input provenance. The combined facility,
 certificate and financial Transport baseline passes actual HTTP/browser and
 upgrade checks. Subsequent Side alignment, merge and deployment remain separate gates.
 
-D415 implements the selected [financial Transport rights and fixed-fee
+D416 implements the selected [financial Transport rights and fixed-fee
 contract](gas-transport-financial.md). Native and managed value/upgrade controls
 and actual shared browser checks provide local evidence. First-value market
 publication, integrated upstream qualification and release remain delivery gates.
 Physical performance and commercial Storage retain separate planned contracts.
 
-D414 locally qualifies [retained chosen routes](gas-transport-routes.md) with
+D413 locally qualifies [retained chosen routes](gas-transport-routes.md) with
 explicit graph/law definitions, complete exact source claims and exclusive
 logical memberships. Correction makes a current assessment unavailable until
 explicit re-adoption, while own release can free stale memberships. Local native,
@@ -36,7 +36,7 @@ deferred source changes, original authority, historical reads and populated
 upgrades. The same frozen application artifact passed 55 route, 64 capacity and
 30 storage browser checks, with desktop, local-zone and phone views reviewed.
 
-D413 implements [commercial Transport capacity operations](gas-transport-capacity-operations.md)
+D415 implements [commercial Transport capacity operations](gas-transport-capacity-operations.md)
 with immutable legal/reference/path scope, complete dated gross limits and
 independent chosen plans. Explicit empty release permits cleanup while retaining
 other breaches. Local managed/native, populated-upgrade and actual browser
@@ -44,7 +44,7 @@ checks passed. Integration/release gates remain open.
 This operating consumer does not enable financial Transport booking, route
 conservation, accepted flow or complete service value.
 
-The D413 checkpoint passed 741 managed core, 1,984 frontend and 146 Python
+The D415 checkpoint passed 741 managed core, 1,984 frontend and 146 Python
 checks, the full API schedule suite, native source/concurrency/receipt/authority
 controls and populated predecessor/drift checks. Actual browser qualification
 passed 64 Transport checks and 30 existing-storage regression checks against
@@ -58,7 +58,7 @@ browser, native financial and populated-upgrade qualifiers passed. Aggregate CI,
 release and service economic-horizon qualification remain open. Broader service
 terms require separately qualified executable profiles.
 
-D409 adds a [storage physical operations consumer](storage-facility-operations.md):
+D414 adds a [storage physical operations consumer](storage-facility-operations.md):
 versioned asset rules, pipeline ports, dated opening evidence and independent
 planned/measured activity. Native persistence, explicit coverage, concurrent plan
 admission, existing allocation links and shared UI have local qualification.
@@ -1959,12 +1959,10 @@ Extend only after the baseline contracts are demonstrated:
 - Broader calendars, delivery shapes and schedule authoring.
 - Options beyond listed American futures options (D288): other exercise and
   settlement styles, volatility inputs and shocks, and nonlinear model diagnostics.
-- An option strategy viewer on the Options page (D408): legs of one expiry
-  combined from the chain, with profit and loss against the futures price at
-  expiry and at stated earlier instants from an analysis read over the shared
-  layers. Strategies across expiries need a declared relationship between
-  futures months first; futures legs, saved strategies and booking a strategy
-  in one action follow it.
+- Option strategies beyond one expiry (D409 analyses and draws legs of one
+  expiry on one underlying future). Strategies across expiries need a declared
+  relationship between futures months first; futures legs, saved strategies and
+  booking a strategy in one action follow it.
 - Spread-option valuation for storage, tolling and transport, once one of those
   product lines names it as a consumer.
 - Option-side sibling dependencies, shared exercise groups and an explicit

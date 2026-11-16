@@ -35,7 +35,7 @@ public static class FuturesOptionSensitivities
         ..(options??throw Error("Supply the option series.")).Select(option=>new Trade(UnitTrade(option.Id),ContractIdentity.FromCanonical("option_sensitivity_book_v1"),
             [new TradeInstrument(ContractIdentity.FromCanonical($"option_sensitivity_binding_v1:{option.Id:D}"),option,new Quantity(One,option.UnitQuantity.Specification))]))
     ];
-    private static Guid UnitTrade(Guid instrument)=>ContractIdentity.FromCanonical($"option_sensitivity_unit_v1:{instrument:D}");
+    internal static Guid UnitTrade(Guid instrument)=>ContractIdentity.FromCanonical($"option_sensitivity_unit_v1:{instrument:D}");
 
     // The series of one underlying future. The prepared portfolio holds UnitHoldings of exactly the bindings solved for a
     // volatility, and is absent when none is; a binding valued at intrinsic takes no layer and reports its settlement with

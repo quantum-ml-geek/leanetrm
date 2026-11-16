@@ -434,12 +434,14 @@ test('REC ticket and saved structured inspectors report identity with real Blott
  assert.deepEqual(ticket,{page:'blotter_new_rec',selection:{},layout});
 });
 
-test('a selected Park and Loan permits questions and identifies its unavailable trade read',()=>{
-  const report=pageReport({page:'futures',...open,risk:false,trade:{tradeId:trade,instrumentType:'physical_gas_park_loan',revision:1,reference:'TR-000009'},entry:null,view:blotter});
+test('a selected unqualified gas service permits questions and identifies its unavailable trade read',()=>{
+  for(const kind of ['physical_gas_park_loan','physical_gas_park_custody','physical_gas_transport']){
+  const report=pageReport({page:'futures',...open,risk:false,trade:{tradeId:trade,instrumentType:kind,revision:1,reference:'TR-000009'},entry:null,view:blotter});
   assert.equal(report.page,'blotter');
-  assert.equal(report.selection.instrumentType,'physical_gas_park_loan');
+  assert.equal(report.selection.instrumentType,kind);
   const seen=lookingAt(report,{mode:'current',frameId:frame,frameLabel:'Synthetic close'},{curve:String,table:String},{trade:'TR-000009'});
   assert.equal(seen.askable,true);
   assert.equal(seen.supported,false);
   assert.equal(seen.shows,'Trade TR-000009, revision 1. The assistant does not read this trade.');
+  }
 });

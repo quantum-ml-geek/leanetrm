@@ -144,7 +144,7 @@ internal static class VolSurfaceStore
         return(source,await ProjectInputs(connection,database,frame,source,ct));
     }
 
-    private static async Task<CatalogueSource> ProductSource(
+    internal static async Task<CatalogueSource> ProductSource(
         NpgsqlConnection connection,PreviewDatabase database,InputFrame frame,CancellationToken ct,Guid? definitionRevisionId)
     {
         if(definitionRevisionId is {} exact)
