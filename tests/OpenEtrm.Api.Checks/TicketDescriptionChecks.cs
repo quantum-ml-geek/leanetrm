@@ -25,6 +25,16 @@ internal static class TicketDescriptionChecks
         TicketDescription WithTrade(params TicketField[] fields) => valid with { TradeFields = [..fields] };
         TicketDescription WithBuy(params TicketField[] fields) => valid with { Sides = [Kind("buy", fields), valid.Sides[1]] };
         Check("a valid description passes unchanged", () => { if (!ReferenceEquals(TicketDescriptions.Validate(valid), valid)) throw new Exception("Instance changed"); });
+        Check("ticket dispatch rejects an explicit null draft",()=>
+        {
+            try{TicketDraft.Require(null);}catch(MarketDataException error)when(error.Code=="ticket_input"){return;}
+            throw new Exception("A missing draft must return the structured input refusal before product dispatch.");
+        });
+        Check("ticket dispatch preserves supplied terms for their product validator",()=>
+        {
+            var draft=new TicketDraft("synthetic_product",1,ImmutableDictionary<string,string>.Empty,[]);
+            if(!ReferenceEquals(TicketDraft.Require(draft),draft))throw new Exception("Ticket ingress cannot invent or replace supplied terms.");
+        });
         Check("side columns map to schedule view measures", () =>
         {
             var kind = valid.Sides[0] with { Columns = [new("q", "Q", null, "quantity", []), new("p", "P", null, "price", []), new("a", "A", null, "money", [])] };
