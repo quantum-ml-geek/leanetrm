@@ -45,6 +45,8 @@ if(args is ["--binding-discounting"]){BindingDiscountingChecks.Run();return;}
 if(args is ["--instant-rate-graph"]){InstantRateGraphChecks.Run();return;}
 if(args is ["--option-clock"]){FuturesOptionChecks.ClockLayers();return;}
 if(args is ["--option-sensitivities"]){OptionSensitivityChecks.Run();return;}
+if(args is ["--option-strategies"]){OptionStrategyChecks.Run();return;}
+if(args is ["--option-strategy-workload",var strategyPoints,var strategyCurves]){OptionStrategyChecks.Workload(int.Parse(strategyPoints),int.Parse(strategyCurves));return;}
 if(args is ["--valuation-environment"]){ValuationEnvironmentChecks.Run();return;}
 if(args is ["--pnl-attribution"]){TradingPnlAttributionChecks.Run();return;}
 if(args is ["--unpaid-cash"]){UnpaidCashChecks.Run();return;}
@@ -643,6 +645,7 @@ CustomProjectionChecks.Run();
 ConnectedPortfolioChecks.Run();
 ValuationEnvironmentChecks.Run();passed++;
 OptionSensitivityChecks.Run();passed++;
+OptionStrategyChecks.Run();passed++;
 JointScenarioRiskChecks.Run();
 AlignedFactorHistoryChecks.Run();
 ParametricRiskChecks.Run();

@@ -298,8 +298,19 @@ See [the lifecycle contract](exchange-futures.md#option-lifecycle) for the full 
   currency; a sum with a missing member is missing, and thetas that run to
   different days are not added (`theta_days_differ`). A product whose inputs
   cannot be read at the close is a row state, not a failed read. The read prices
-  nothing. **Strategy** reads
-  *Coming soon*.
+  nothing. Its **Strategy** view combines legs on the expiry in view (D409):
+  from a template or from the chain's selected series, each a buy or a sale in
+  whole lots at an entry price, which starts as the settlement shown.
+  **`POST /api/options/strategy/setup`** `{context, product, model, expiryAt}`
+  offers, from the stored surface, each template's legs or the code of why it
+  has none, a price range, the instants a dated curve may be drawn at and the
+  policies an analysis names. **`POST /api/options/strategy/analyze`** names all
+  of them and returns the payoff at expiry with its net premium, largest profit
+  and loss (each bounded or not) and breakevens, solved exactly; one curve per
+  instant from ordinary PV of the legs under price, clock and volatility
+  layers; each leg's implied volatility and delta; and the strategy's value and
+  sensitivities. The page draws these and computes none. Both reads book and
+  store nothing. See [strategies](#strategies).
 - **New trade.** The option ticket selects exchange, commodity, underlying future,
   call or put, then strike; each list comes from the backend catalog and resets
   those below it. Once a series is chosen, the ticket links to its product's
@@ -319,6 +330,63 @@ See [the lifecycle contract](exchange-futures.md#option-lifecycle) for the full 
   page the assistant does not read: it can be asked from there and its page
   guidance is configurable, but the workspace operations do not cover it.
 
+## Strategies
+
+A strategy is option legs on one expiry and one underlying future (D409). The
+pure analysis is `OptionStrategies` in
+[OptionStrategies.cs](../src/OpenEtrm.MarketData/Trading/OptionStrategies.cs);
+the reads are [OptionStrategyRead.cs](../src/OpenEtrm.Api/OptionStrategyRead.cs).
+
+**Request.** Every member is required; none is filled in.
+
+| Member | Meaning |
+| --- | --- |
+| `context`, `product`, `expiryAt` | The trading context, the option product and the instant every leg expires at. |
+| `legs[]` | `series` (a listed series code), `side` (`buy` or `sell`), `lots` (a whole number from 1 to 100,000), `entryPrice` (exact decimal text, not negative, per unit of quote). Each series is on one leg. |
+| `prices` | `lower`, `upper` and `points`: evenly spaced futures prices, bounds included. |
+| `instants[]` | The instants of the dated curves, increasing, from the valuation instant to before the legs' instruction cutoff while one is ahead, or else their expiry. None is an empty list. |
+| `volatilityShiftPoints` | Added to every leg's held volatility for the dated curves, in volatility points (5 is 0.05), in hundredths of a point. |
+| `valuation` | The option valuation policy, in full: the one the setup offers. |
+| `sensitivities` | The `option_sensitivities_layers_v1` selection, as a fit states it, with a clock only at a working snapshot. |
+| `expiryRule` | `option_expiry_exercise_value_v1`. |
+
+**Response.**
+
+- `legs[]`: the request's legs with `right`, `strike`, `multiplier`, `premium`
+  (signed: positive is paid), `state` (`solved`, `at_intrinsic` or
+  `unavailable`) with `reason`, `settlement`, `impliedVolatility`, and `value`
+  and `delta` per unit of quote.
+- `expiry`: `rule`; `netPremium` as an amount with `direction` (`debit`,
+  `credit` or `none`); `maximumProfit` and `maximumLoss`, each a signed profit
+  and loss with `bounded`, or no amount when it has no bound; `breakevens[]` as
+  `lower` and `upper` (equal for one price, no `upper` for every price from
+  `lower` upward); and `curve[]` of `price` and `profitAndLoss`.
+- `dated`: `state` `valued` with `curves[]` (`at`, then `points[]` of `price`,
+  `value` and `profitAndLoss`), or `refused` with `reason` and `message`.
+- `strategy`: `value`, `delta`, `gamma`, `vega` and `theta`, each an amount or
+  the code of why there is none, and `dayTo` for theta. Value, vega and theta
+  are money in `currency`; delta and gamma are quantities in `quantityUnit`,
+  the unit the underlying is quoted per.
+- `request`, `policies` (valuation, sensitivities as stated with their clock
+  and day, the expiry rule, the price, clock and volatility layer conventions
+  and the reporting policy), `limits` and `work` (calibration and valuation
+  tree prices and their sum, the sets the curves were valued in, elapsed
+  time).
+
+**Refusals.** `strategy_limit`, `strategy_legs`, `strategy_leg_side`,
+`strategy_leg_lots`, `strategy_leg_entry`, `strategy_leg_series`,
+`strategy_expiry`, `strategy_underlying`, `strategy_price_range`,
+`strategy_curve_instant`, `strategy_volatility_shift`, `strategy_expiry_rule`,
+`strategy_product`, `option_policy`, `option_sensitivity_policy`,
+`option_expired`, and for a template `strategy_template_strike`,
+`strategy_template_series` or `strategy_template_money`.
+
+**What it is not.** The payoff at expiry is an exercise value under a stated
+rule, not a model price, and implies no lifecycle event. The dated curves hold
+each leg's calibrated volatility under the price and clock scenarios
+(`option_implied_volatility_held_v1`) and shift it only by the stated amount.
+The sensitivities are the option model's own; Risk reports keep theirs.
+
 ## Remaining work
 
 - **Volatility.** Stored volatility surfaces under a versioned vol model, with
@@ -326,7 +394,9 @@ See [the lifecycle contract](exchange-futures.md#option-lifecycle) for the full 
   [volatility surfaces](vol-surfaces.md) (D304), and each fit stores its series'
   value, delta, gamma, vega and theta for the Options page (D408). Valuing
   options from the surface, interpolated values for unsettled series, volatility
-  in Risk, scheduled fitting, strategies and payoff diagrams remain. The shared valuation layer
+  in Risk and scheduled fitting remain. Strategies on one expiry and their
+  payoff are analysed and drawn (D409); strategies across expiries, futures
+  legs, saved strategies and booking a strategy in one action remain. The shared valuation layer
   supports held calibrated-series IV and weighted-node shocks with explicit
   annualized-volatility units; the stored analytical surface is still not a pricing
   source. See [valuation layers](valuation-context-layers.md).

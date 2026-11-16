@@ -26,12 +26,39 @@ const setup=`
     rows:[{tradeId:'t2',bindingId:'b2',tradeReference:'TR-000002',bookId:'bk',book:'Synthetic options',series:'lo70',right:'call',strike:'70',openLots:'4',state:'notCalibrated',reason:'not_calibrated',
       value:figure(null,'not_calibrated'),delta:figure(null,'not_calibrated'),gamma:figure(null,'not_calibrated'),vega:figure(null,'not_calibrated'),theta:figure(null,'not_calibrated')}],
     subtotal:{value:figure(null,'incomplete'),delta:figure(null,'incomplete'),gamma:figure(null,'incomplete'),vega:figure(null,'incomplete'),theta:figure(null,'incomplete')}}]};
+ // What a strategy on the expiry may be built from, and an analysis that answers the legs and scenario it is sent.
+ const at='2026-10-16T17:00:00+00:00',nextDay='2026-10-17T17:00:00+00:00',limits={legs:4,points:41,curves:3,lots:100000,volatilityShiftPoints:100};
+ const offered={prices:{lower:'2.6',upper:'3.4',points:21},pointCounts:[11,21,41],instants:[at,nextDay],instantsComplete:true,selectedInstants:[at],volatilityShiftPoints:'0',
+  valuation:{observationRole:'daily_settlement',numericalPolicy:'american_futures_option_crr_v1',scenarioPolicy:'option_implied_volatility_held_v1',calibrationFallback:'intrinsic'},
+  sensitivities:{policy:'option_sensitivities_layers_v1',bump:{ticks:1,priceSteps:2},volatilityBump:'0.01',clock:{code:'UTC'}},expiryRule:'option_expiry_exercise_value_v1'};
+ const strategySetup={product:'synthetic_on',model,expiryAt:expiry,state:'fitted',limits,underlyingSeries:'ng_f27',futures:'3.01',atTheMoneyStrike:'3',templateRule:'listed_strike_offsets_from_at_the_money_v1',
+  clock:{source:'surface',zone:'UTC'},offered,templates:[
+   {id:'straddle',name:'Straddle',refusal:null,legs:[{series:'c3',right:'call',strike:'3',side:'buy',lots:1,entryPrice:'0.1670'},{series:'p3',right:'put',strike:'3',side:'buy',lots:1,entryPrice:'0.1670'}]},
+   {id:'iron_condor',name:'Iron condor',legs:null,refusal:{code:'strategy_template_strike',message:'Iron condor needs a put 4 listed strikes below 3, and the expiry lists none there.'}}]};
+ const analysed=body=>({product:body.product,expiryAt:body.expiryAt,valuationAt:at,underlyingSeries:'ng_f27',currency:'USD',quantityUnit:'MMBtu',futures:'3.01',
+  request:{prices:body.prices,instants:body.instants,volatilityShiftPoints:body.volatilityShiftPoints},
+  legs:body.legs.map(leg=>({series:leg.series,right:leg.series[0]==='c'?'call':'put',strike:'3',side:leg.side,lots:String(leg.lots),entryPrice:leg.entryPrice,multiplier:'10000',premium:'1670',
+   state:'solved',reason:null,settlement:'0.167',impliedVolatility:'0.4512',value:'0.167',delta:measure(leg.series[0]==='c'?'0.523':'-0.477')})),
+  expiry:{rule:'option_expiry_exercise_value_v1',netPremium:{amount:'3340',direction:'debit'},maximumProfit:{amount:null,bounded:false},maximumLoss:{amount:'-3340',bounded:true},
+   breakevens:[{lower:'2.666',upper:'2.666'},{lower:'3.334',upper:'3.334'}],curve:[{price:'2.6',profitAndLoss:'660'},{price:'3',profitAndLoss:'-3340'},{price:'3.4',profitAndLoss:'660'}]},
+  dated:refuseDated?{state:'refused',reason:'option_at_intrinsic',message:'A leg is valued at intrinsic and has no volatility, so the strategy has no dated curve.',curves:[]}:
+   {state:'valued',reason:null,message:null,curves:body.instants.map(instant=>({at:instant,points:[{price:'2.6',value:'4400',profitAndLoss:'1060'},{price:'3',value:'3340',profitAndLoss:'0'},{price:'3.4',value:'4500',profitAndLoss:'1160'}]}))},
+  strategy:{value:figure('3340'),delta:figure('460'),gamma:figure('39759.1'),vega:figure(null,'incomplete'),theta:figure('-82.4'),dayTo:nextDay},
+  policies:{sensitivities:{policy:'option_sensitivities_layers_v1'},expiryRule:'option_expiry_exercise_value_v1'},limits,work:{calibrationTreePrices:60,valuationTreePrices:120,treePrices:180,curveSets:4,elapsedMs:900}});
+ const analyses=[],signals=[],unhandled=[];let refuseDated=false,refuseAnalysis=false,holdAnalysis=null;
+ addEventListener('unhandledrejection',event=>unhandled.push(String(event.reason)));
  const calls=[],opened=[],booked=[];let fitted=true,failPositions=false;
- const api=async(path,body)=>{
+ const api=async(path,body,signal)=>{
   calls.push(path.split('?')[0]);
   if(path.startsWith('reference/catalog'))return {definitionRevisionId:'definition-a',rows:[{code:'synthetic_on',name:'Synthetic gas options'},{code:'synthetic_lo',name:'Synthetic crude options'}],hasMore:false};
   if(path==='options/positions'){if(failPositions)throw Object.assign(Error('The positions could not be read.'),{code:'synthetic_failure'});return positions;}
   if(path==='vol-surfaces/read')return {definitionRevisionId:'definition-a',snapshotId:'synthetic-close',model,state:fitted?'fitted':'notFitted',job:null,surface:fitted?surface:null};
+  if(path==='options/strategy/setup')return {...strategySetup,product:body.product,expiryAt:body.expiryAt};
+  if(path==='options/strategy/analyze'){
+   analyses.push(body);signals.push(signal);if(holdAnalysis)await holdAnalysis;
+   if(refuseAnalysis)throw Object.assign(Error('Choose a positive lower bound, a higher upper bound and at least two points whose even spacing is an exact decimal.'),{code:'strategy_price_range'});
+   return analysed(body);
+  }
   throw Error('unexpected read '+path);
  };
  const options=setupOptions({api,context:()=>({snapshotId:'synthetic-close',convention:'futures_option_premium_v1',knowledgeMode:'current'}),zone:()=>'UTC',
@@ -93,3 +120,103 @@ browser('a read that fails is said, and stays said while the person changes view
  failPositions=false;await options.refresh();
  return {failed,afterPositions,afterChain,recovered:{state:state(),error:!$('#options-error').hidden}};
 `,{failed:{state:'error',error:true},afterPositions:{state:'error',error:true},afterChain:{state:'error',error:true},recovered:{state:'idle',error:false}});
+
+const strategyState="$('#options-strategy').dataset.state";
+browser('Strategy opens on the expiry in view with the templates, range and curves its setup offers; a template it cannot place is disabled and says why',`
+ await options.open('synthetic_on');await tick();
+ $('#options-view-strategy').click();await tick();await tick();
+ const refused=$('.options-template[data-template=iron_condor]');
+ return {state:state(),pressed:$('#options-view-strategy').getAttribute('aria-pressed'),soon:/Coming soon/.test($('#options-view-strategy').textContent),strategy:${strategyState},
+  shown:!$('#options-strategy').hidden&&$('.options-chain-view').hidden&&!$('#options-expiries').closest('[hidden]'),setup:calls.filter(c=>c==='options/strategy/setup').length,
+  templates:all('.options-template').map(c=>[c.dataset.template,c.getAttribute('aria-disabled')==='true']),why:refused.title,
+  said:(refused.click(),[$('#options-strategy').dataset.state,$('#options-strategy-message').textContent,$('#options-strategy-legs tbody tr[data-series]')]),
+  range:[$('#options-strategy-lower').value,$('#options-strategy-upper').value,$('#options-strategy-points').value,all('#options-strategy-points option').map(o=>o.value).join()],
+  curves:all('.options-strategy-curve').map(c=>c.dataset.instant===at),dates:all('#options-strategy-add-curve option').length,shift:$('#options-strategy-shift').value,
+  legs:$('#options-strategy-legs tbody').textContent,analyse:$('#options-strategy-analyse').disabled,analysed:analyses.length};
+`,{state:'strategy',pressed:'true',soon:false,strategy:'empty',shown:true,setup:1,templates:[['straddle',false],['iron_condor',true]],
+ why:'Iron condor needs a put 4 listed strikes below 3, and the expiry lists none there.',
+ said:['refused','Iron condor is not offered at this expiry. Iron condor needs a put 4 listed strikes below 3, and the expiry lists none there.',null],range:['2.6','3.4','21','11,21,41'],curves:[true],dates:2,shift:'0',
+ legs:'No legs yet. Choose a template, or add a call or a put from the chain.',analyse:true,analysed:0});
+
+browser('a template fills its legs and is analysed with the offered policies sent back: the payoff is drawn and the backend\'s figures are shown',`
+ await options.open('synthetic_on');await tick();$('#options-view-strategy').click();await tick();await tick();
+ $('.options-template[data-template=straddle]').click();await tick();await tick();await tick();
+ const sent=analyses[0],row=series=>[...$('#options-strategy-legs tr[data-series='+series+']').children];
+ const plot=$('#options-strategy-chart .options-strategy-plot');
+ return {strategy:${strategyState},sent:{product:sent.product,expiry:sent.expiryAt===expiry,legs:sent.legs,prices:sent.prices,instants:sent.instants.length===1&&sent.instants[0]===at,shift:sent.volatilityShiftPoints,
+   policies:JSON.stringify([sent.valuation,sent.sensitivities,sent.expiryRule])===JSON.stringify([offered.valuation,offered.sensitivities,offered.expiryRule]),context:sent.context.snapshotId,definition:sent.definitionRevisionId},
+  call:[row('c3')[0].textContent,row('c3')[1].querySelector('input').value,row('c3')[2].textContent,row('c3')[3].querySelector('input').value,row('c3')[4].textContent,row('c3')[5].textContent],
+  put:[row('p3')[0].textContent,row('p3')[5].textContent],
+  chart:!!plot.querySelector('canvas')&&plot.querySelector('canvas').width>0,label:plot.getAttribute('aria-label'),
+  card:[...$('#options-strategy-analysis dl').children].map(n=>n.textContent),tones:all('#options-strategy-analysis dd').map(d=>d.className),
+  tiles:all('.options-tile').map(t=>[t.dataset.measure,t.querySelector('.options-tile-value').textContent,t.querySelector('.options-tile-unit').textContent,t.title]),
+  basis:/option_expiry_exercise_value_v1/.test($('#options-strategy-basis').textContent)&&/Risk reports keep theirs/.test($('#options-strategy-basis').textContent)&&/books and stores nothing/.test($('#options-strategy-basis').textContent),
+  message:$('#options-strategy-message').textContent};
+`,{strategy:'analysed',sent:{product:'synthetic_on',expiry:true,legs:[{series:'c3',side:'buy',lots:1,entryPrice:'0.167'},{series:'p3',side:'buy',lots:1,entryPrice:'0.167'}],
+  prices:{lower:'2.6',upper:'3.4',points:21},instants:true,shift:'0',policies:true,context:'synthetic-close',definition:'definition-a'},
+ call:['Buy','1','3 call c3','0.167','45.1%','0.52'],put:['Buy','-0.48'],chart:true,
+ label:'Profit and loss against the futures price: At expiry, Valuation · Oct 16, 2026, 5:00 PM. Futures 3.01, Breakeven 2.666, Breakeven 3.334',
+ card:['Net premium','Debit 3,340.00 USD','Maximum profit','Unbounded','Maximum loss','-3,340.00 USD','Breakevens','2.666 · 3.334'],tones:['','','options-tone-loss',''],
+ tiles:[['value','3,340.00','USD',''],['delta','460','MMBtu',''],['gamma','39,759','MMBtu per 1.00 of price',''],['vega','—','USD per volatility point','A position in this sum has no figure'],['theta','-82.40','USD for one day','']],
+ basis:true,message:''});
+
+browser('a leg comes from the chain at its settlement; changing it marks the analysis as stale, and a refusal is said with its code while the legs stay',`
+ await options.open('synthetic_on');await tick();
+ $('#options-chain td[data-series=c325]').click();$('#options-strategy-sell').click();
+ const again=$('#options-strategy-sell').disabled;
+ $('#options-view-strategy').click();await tick();await tick();
+ const added=[...$('#options-strategy-legs tr[data-series=c325]').children].map(td=>td.querySelector('input')?.value??td.textContent).slice(0,4);
+ $('#options-strategy-analyse').click();await tick();await tick();
+ const first=${strategyState};
+ const lots=$('#options-strategy-legs .options-leg-lots');lots.value='3';lots.dispatchEvent(new Event('change'));
+ const stale=[${strategyState},$('#options-strategy-message').textContent,!!$('#options-strategy-chart canvas')];
+ lots.value='0';lots.dispatchEvent(new Event('change'));$('#options-strategy-analyse').click();await tick();
+ const problem=[$('#options-strategy-message').textContent,analyses.length];
+ lots.value='3';lots.dispatchEvent(new Event('change'));refuseAnalysis=true;$('#options-strategy-analyse').click();await tick();await tick();
+ const refused=[${strategyState},$('#options-strategy-message').textContent,all('#options-strategy-legs tbody tr').length,analyses.at(-1).legs];
+ $('.options-leg-side').click();const flipped=$('#options-strategy-legs tr[data-series=c325]').dataset.side;
+ $('.options-leg-remove').click();
+ return {again,added,first,stale,problem,refused,flipped,cleared:$('#options-strategy-legs tbody').textContent,analyse:$('#options-strategy-analyse').disabled};
+`,{again:true,added:['Sell','1','3.25 call c325','0.167'],first:'analysed',stale:['stale','The legs or the scenario changed. Analyse again to update the payoff.',true],
+ problem:['Each leg needs a whole number of lots from 1 to 100000.',1],
+ refused:['refused','Choose a positive lower bound, a higher upper bound and at least two points whose even spacing is an exact decimal. (strategy_price_range)',1,[{series:'c325',side:'sell',lots:3,entryPrice:'0.167'}]],
+ flipped:'buy',cleared:'No legs yet. Choose a template, or add a call or a put from the chain.',analyse:true});
+
+browser('dated curves are chosen from the offered dates up to the limit; refused curves say why and the payoff at expiry is still drawn; an answer to a replaced choice is dropped',`
+ await options.open('synthetic_on');await tick();$('#options-view-strategy').click();await tick();await tick();
+ const add=$('#options-strategy-add-curve');add.value=nextDay;add.dispatchEvent(new Event('change'));
+ const chosen=all('.options-strategy-curve').map(c=>c.dataset.instant),left=all('#options-strategy-add-curve option').length;
+ refuseDated=true;$('.options-template[data-template=straddle]').click();await tick();await tick();await tick();
+ const refused={strategy:${strategyState},instants:analyses[0].instants,why:$('#options-strategy-refused').textContent,title:$('#options-strategy-refused').title,chart:!!$('#options-strategy-chart canvas'),
+  label:$('#options-strategy-chart .options-strategy-plot').getAttribute('aria-label')};
+ // An analysis is awaited when a curve is removed: its answer belongs to the choice it was sent for and is not shown.
+ let release;holdAnalysis=new Promise(resolve=>release=resolve);refuseDated=false;
+ $('#options-strategy-analyse').click();await tick();const busy=${strategyState};
+ $('.options-strategy-curve').click();const during=${strategyState};
+ release();holdAnalysis=null;await tick();await tick();
+ return {chosen,left,refused,busy,during,after:${strategyState},curves:all('.options-strategy-curve').length,refusedStill:!!$('#options-strategy-refused'),cancelled:signals.at(-1).aborted,earlier:signals[0].aborted};
+`,{chosen:['2026-10-16T17:00:00+00:00','2026-10-17T17:00:00+00:00'],left:1,
+ refused:{strategy:'analysed',instants:['2026-10-16T17:00:00+00:00','2026-10-17T17:00:00+00:00'],why:'No dated curve: Valued at intrinsic, so it has no sensitivities.',
+  title:'A leg is valued at intrinsic and has no volatility, so the strategy has no dated curve.',chart:true,label:'Profit and loss against the futures price: At expiry. Futures 3.01, Breakeven 2.666, Breakeven 3.334'},
+ busy:'busy',during:'stale',after:'stale',curves:1,refusedStill:true,cancelled:true,earlier:false});
+
+browser('the keyboard keeps its place when the legs are redrawn, an answer leaves what is being typed alone, and moving to another product cancels a pending analysis',`
+ await options.open('synthetic_on');await tick();$('#options-view-strategy').click();await tick();await tick();
+ const focus=()=>document.activeElement?.dataset?.focus??document.activeElement?.tagName;
+ const chip=$('.options-template[data-template=straddle]');chip.focus();chip.click();const afterTemplate=focus();await tick();await tick();await tick();
+ const flip=$('.options-leg-side');flip.focus();flip.click();const afterFlip=[focus(),document.activeElement.textContent];
+ const remove=all('.options-leg-remove')[1];remove.focus();remove.click();const afterRemove=focus();
+ // An answer arrives while a number is being typed and has not been entered yet.
+ let release;holdAnalysis=new Promise(resolve=>release=resolve);
+ $('#options-strategy-analyse').click();await tick();
+ const lots=$('.options-leg-lots');lots.focus();lots.value='7';
+ release();holdAnalysis=null;await tick();await tick();
+ const typing=[${strategyState},$('.options-leg-lots')===lots,lots.value,document.activeElement===lots,$('#options-strategy-legs .options-leg-figure').textContent];
+ // Another product is chosen while an analysis is awaited.
+ holdAnalysis=new Promise(resolve=>release=resolve);$('#options-strategy-analyse').click();await tick();
+ const pending=signals.at(-1);
+ all('.options-product')[1].click();await tick();
+ const cancelled=pending.aborted;release();holdAnalysis=null;await tick();await tick();await tick();
+ return {afterTemplate,afterFlip,afterRemove,typing,cancelled,state:state(),product:$('.options-product[aria-pressed=true]').dataset.product,legs:$('#options-strategy-legs tbody').textContent,unhandled};
+`,{afterTemplate:'template:straddle',afterFlip:['side:c3','Sell'],afterRemove:'analyse',typing:['analysed',true,'7',true,'45.1%'],cancelled:true,state:'strategy',product:'synthetic_lo',
+ legs:'No legs yet. Choose a template, or add a call or a put from the chain.',unhandled:[]});
