@@ -156,10 +156,11 @@ export async function run({command,evaluate,wait,click,persona,check,idle,fitsWi
    `${q(offer.answer.templates.filter(t=>t.refusal).map(t=>t.id).sort().join())}===[...document.querySelectorAll('.options-template[aria-disabled=true]')].map(c=>c.dataset.template).sort().join()&&
     [...document.querySelectorAll('.options-template[aria-disabled=true]')].every(c=>c.title.length>0)&&!document.querySelector('.options-template[data-template=straddle]').hasAttribute('aria-disabled')`,
    "[...document.querySelectorAll('.options-template')].map(c=>[c.dataset.template,c.getAttribute('aria-disabled'),c.title])");
-  // Fewer price points keep this analysis short; the range and the curve stay as offered.
+  // Fewer price points keep this analysis short, inside the longest wait a page action may take; the range and the curve
+  // stay as offered.
   await enter('#options-strategy-points','11');
   await click('.options-template[data-template=straddle]');
-  await settled(`${strategy}==='analysed'||${strategy}==='refused'`,180000);
+  await settled(`${strategy}==='analysed'||${strategy}==='refused'`,60000);
   const money=offer.answer.atTheMoneyStrike;
   await check('a straddle is analysed: two legs at the money at their settlements, the payoff drawn, and the premium, extremes and breakevens stated',
    `${strategy}==='analysed'&&[...document.querySelectorAll('#options-strategy-legs tbody tr')].map(r=>r.dataset.side+' '+r.querySelector('.options-leg-name').textContent).join()===${q(`buy ${Number(money)} call,buy ${Number(money)} put`)}&&
@@ -180,8 +181,7 @@ export async function run({command,evaluate,wait,click,persona,check,idle,fitsWi
   await check('changing a leg leaves the last analysis on show, marked as no longer the choice\'s',
    `${strategy}==='stale'&&/Analyse again/.test(document.querySelector('#options-strategy-message').textContent)&&!!document.querySelector('#options-strategy-chart canvas')`,
    `[${strategy},document.querySelector('#options-strategy-message').textContent]`);
-  // A range whose spacing is not an exact decimal is refused by the backend and said; the legs stay.
-  await enter('#options-strategy-upper',String(Number(offer.answer.offered.prices.lower)+1));await enter('#options-strategy-points','11');
+  // A lower bound of zero is refused by the backend and said; the legs stay.
   await enter('#options-strategy-lower','0');
   await click('#options-strategy-analyse');
   await settled(`${strategy}==='refused'`,60000);
