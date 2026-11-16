@@ -43,6 +43,10 @@ static class AdditionalProviderChecks
         foreach(var vendor in new[]{"openai","xai","google","meta"})
         {
             var wire=vendor=="google"?Google():Response(vendor);
+            var unconfigured=new Fake(vendor,wire);
+            Check((await Run(unconfigured,Request(vendor) with{System=""}))[^1] is ModelCompleted&&
+                !Json(unconfigured.Bodies[0]).TryGetProperty(vendor=="google"?"systemInstruction":"instructions",out _),
+                vendor+" omits unconfigured optional instructions without substituting a prompt");
             var fake=new Fake(vendor,wire);
             var events=await Run(fake,Request(vendor));
             Check(string.Concat(events.OfType<ModelTextDelta>().Select(e=>e.Text))=="Ready","text streamed");

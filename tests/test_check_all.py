@@ -47,6 +47,20 @@ class CheckAllTests(unittest.TestCase):
             selected=[command for command in commands if OPERATING_FACILITIES.intersection(command) or '--structured-power-check' in command]
             self.assertEqual(len(selected),2 if group=='physical' else 0)
 
+    def test_assistant_prompt_and_demand_checks_are_required(self):
+        for group in ALL_GROUPS:
+            commands = []
+            run_checks(Path('/pg'), Path('/dotnet'), Path('/browser'), group=group,
+                       run=lambda command, **options: commands.append(command))
+            self.assertEqual(sum('--assistant-prompts' in command for command in commands), int(group == 'managed'))
+            workspace = [c for c in commands if '--assistant-workspace-check' in c]
+            self.assertEqual(len(workspace), int(group == 'assistant'))
+            if workspace:
+                self.assertIn('--browser-check', workspace[0])
+        preview = (ROOT / 'tools/run_preview.py').read_text()
+        self.assertIn("migration.name in ('0339_assistant_installation_prompts.sql','0340_assistant_requested_context.sql')", preview)
+        self.assertIn('check_assistant_prompt_upgrade(query,migration)', preview)
+
     def test_lightweight_groups_do_not_require_postgresql_installation(self):
         with tempfile.TemporaryDirectory(prefix='openetrm-ci-tools-') as temporary:
             root = Path(temporary)
@@ -339,7 +353,7 @@ class CheckAllTests(unittest.TestCase):
         self.assertEqual(executed, expected)
         schedule_commands = [c for c in commands if '--project' in c and 'Api.Checks' in c[c.index('--project') + 1]]
         self.assertEqual([c[-2:] for c in schedule_commands],
-                         [['--', flag] for flag in ('--context-resolution', '--schedules', '--async-reads', '--published-clock', '--calendar-authoring', '--gas-ticket', '--historical-risk', '--monte-carlo-risk', '--close-risk', '--automation',
+                         [['--', flag] for flag in ('--context-resolution', '--schedules', '--async-reads', '--assistant-prompts', '--published-clock', '--calendar-authoring', '--gas-ticket', '--historical-risk', '--monte-carlo-risk', '--close-risk', '--automation',
                            '--live-calculation', '--reference-intake', '--preview-data', '--side-observation-compatibility',
                            '--lifecycle-actions','--economic-risk-contract','--lifecycle-schedule-contract','--gas-owned-setup',
                           '--shared-native-markets','--derivative-methods','--gas-accepted-order','--lifecycle-residual-currencies','--gas-operator-contract')])

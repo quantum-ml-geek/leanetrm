@@ -280,10 +280,10 @@ def run_checks(url, query, psql, manifest, environment, log, fake, trap, admin, 
           and [s['ordinal'] for s in recorded] == list(range(1, 15)) and [s['call'] for s in recorded] == [loop[0]['id']] * 3 + [loop[1]['id']] * 11
           and [e['kind'] for e in events] == ['accepted', 'text'] + ['step'] * 14 + ['text', 'usage', 'completed'], (turn, loop, events))
     check("each request offers the version's switched-on tools in the fixed order, Navigate after the reads, with automatic choice and closed "
-          "input schemas that require every member they state",
+          "input schemas that require every member they state, without unconfigured guidance",
           [t['name'] for t in sent[0]['tools']] == list(TOOLS) and all(r['tools'] == sent[0]['tools'] for r in sent)
           and all(r['tool_choice'] == {'type': 'auto', 'disable_parallel_tool_use': False} for r in sent)
-          and all(t['input_schema']['type'] == 'object' and t['input_schema']['additionalProperties'] is False and t['description']
+          and all(t['input_schema']['type'] == 'object' and t['input_schema']['additionalProperties'] is False and t['description'] == ''
                   and sorted(t['input_schema'].get('required', [])) == sorted(t['input_schema']['properties']) for t in sent[0]['tools']),
           sent[0]['tools'])
     replayed = sent[1]['messages']
@@ -298,22 +298,22 @@ def run_checks(url, query, psql, manifest, environment, log, fake, trap, admin, 
                   'market_data.contract_definitions_v1', 'reference_data.table_v1', 'schedules.library_v1', 'schedules.tou_products_v1',
                   'schedules.power_hours_v1', 'trade_parties.versions_v1', 'trades.blotter_v1', 'trades.blotter_v1', 'trades.trade_v1', 'trades.trade_v1']
     check("a step records its tool, operation, the request's input, the instant it read, after its call's close and before the next "
-          "call, and every access its read ran under; its event carries only its number and tool; the turn records turns_v21",
+          "call, and every access its read ran under; its event carries only its number and tool; the turn records turns_v22",
           [(s['tool'], s['operation'], s['input'], s['code']) for s in recorded] == [(r[1], o, r[2], None) for r, o in zip(first + second, operations)]
           and [s['access'] for s in recorded] == [market] * 9 + [parties] + [trades] * 4
           and all(at(loop[0]['closed']) <= at(s['read_at']) <= at(loop[1]['started']) for s in recorded[:3])
           and all(at(loop[1]['closed']) <= at(s['read_at']) <= at(loop[2]['started']) for s in recorded[3:])
           and [e['payload'] for e in events if e['kind'] == 'step'] == [{'ordinal': n, 'tool': s['tool']} for n, s in enumerate(recorded, start=1)]
-          and query(f"SELECT runtime_set FROM assistant.turns WHERE id='{turn['id']}';") == 'turns_v21', recorded)
+          and query(f"SELECT runtime_set FROM assistant.turns WHERE id='{turn['id']}';") == 'turns_v22', recorded)
     grant_id = delegation(turn)
     contexts_read = issued(grant_id)
     check("each read runs in one request context of its own, issued to the agent's principal under the turn's grant on the agent pools, "
-          "never a page's: page views and trades as of the context the ask captured, even after the session selected a historical view, "
-          "current-only definitions with none bound, and no read captures a context",
-          len(contexts_read) == 14 and all((c['actor'], c['application_name'], c['login']) == (principal(main), 'openetrm-agent-reads', 'preview_runtime')
+          "never a page's: page views and trades as of the context the first financial read captured, even after the session selected a historical view, "
+          "current-only definitions with none bound, and financial reads share one requested capture",
+          len(contexts_read) == 15 and all((c['actor'], c['application_name'], c['login']) == (principal(main), 'openetrm-agent-reads', 'preview_runtime')
                                            for c in contexts_read)
-          and [c['context'] for c in contexts_read] == [None if o in CURRENT_ONLY else turn['context']['contextId'] for o in operations]
-          and turn['context']['contextId'] != navigated['contextId'] and query('SELECT count(*) FROM market_data.temporal_contexts;') == captures,
+          and [c['context'] for c in contexts_read] == [None]+[None if o in CURRENT_ONLY else turn['context']['contextId'] for o in operations]
+          and turn['context']['contextId'] != navigated['contextId'] and int(query('SELECT count(*) FROM market_data.temporal_contexts;')) == int(captures)+1,
           contexts_read)
 
     answered = {k: content for k, (content, _) in answers(sent[2]).items()}
@@ -470,9 +470,8 @@ def run_checks(url, query, psql, manifest, environment, log, fake, trap, admin, 
           and all(told[f'toolu_synthetic_{n}'][0]['code'] == 'tool_arguments_invalid' and told[f'toolu_synthetic_{n}'][1] for n in (96, 97, 99)),
           (moves, told))
     checked = issued(grant_id)[before:]
-    check("each target's page is checked in a request context of its own, issued to the agent's principal under the turn's grant on the agent "
-          "pools, binding no market context",
-          len(checked) == 6 and [c['context'] for c in checked] == [moved['context']['contextId']] * 3 + [None] * 3
+    check("the initial financial permission check and each read use the agent pools; each target's page check binds no market context",
+          len(checked) == 7 and [c['context'] for c in checked] == [None] + [moved['context']['contextId']] * 3 + [None] * 3
           and all((c['actor'], c['application_name'], c['login']) == (principal(main), 'openetrm-agent-reads', 'preview_runtime') for c in checked),
           checked)
     pathfinder = agent('pathfinder', tools=('read_market_data', 'navigate'))
@@ -595,7 +594,7 @@ def run_checks(url, query, psql, manifest, environment, log, fake, trap, admin, 
           and [e['payload'] for e in events if e['kind'] == 'navigation']
           == [{'ordinal': 7, 'target': {'page': 'curves', 'selection': None, 'context': {'mode': 'retained', 'contextId': selected['contextId'], 'frameId': None},
                                         'kind': 'page', 'label': 'Curves & prices'}}]
-          and [c['context'] for c in issued(grant_id)[before:]] == [selected['contextId'], None], (looked, directory, events))
+          and [c['context'] for c in issued(grant_id)[before:]] == [None, selected['contextId'], None], (looked, directory, events))
     # The panel's Go and Back (§10.1) select a target's retained context again by its id: exactly that context, never a capture.
     contexts = query('SELECT count(*) FROM market_data.temporal_contexts;')
     again = trader.call(RETAINED, {'contextId': selected['contextId'], 'selection': 'latest_correction'})
@@ -778,12 +777,13 @@ def run_checks(url, query, psql, manifest, environment, log, fake, trap, admin, 
     ended, events = settled(lost, admin)
     denied = steps(ended)
     admin.call('profile', {'profile': 'admin'})
-    check("a read after its delegator's role is revoked is denied, and its step is recorded with the accesses it was denied but not "
-          "published; the turn fails access_changed without another call, keeping the text before, which the owner's reads now hide "
-          "since its sources no longer pass the replay recheck",
-          (ended['state'], ended['outcome'], ended['answer'], ended['hidden']) == ('failed', 'access_changed', '', 'access_changed')
-          and query(f"SELECT answer='Reading. ' FROM assistant.turns WHERE id='{lost['id']}';") == 't'
-          and [(s['code'], s['access']) for s in denied] == [('access_denied', market)] and [e['kind'] for e in events] == ['accepted', 'text', 'usage', 'failed']
+    check("a role revoked before the first financial read prevents acquisition and records a refusal with no business source; "
+          "the turn fails access_changed without another call and retains only its earlier neutral text",
+          (ended['state'], ended['outcome'], ended['answer'], ended['hidden']) == ('failed', 'access_changed', 'Reading. ', None)
+          and query(f"SELECT answer='Reading. ' AND context_id IS NULL AND pins IS NULL AND recorded_at IS NULL FROM assistant.turns WHERE id='{lost['id']}';") == 't'
+          and query(f"SELECT count(*) FROM assistant.turn_sources('{lost['id']}');") == '0'
+          and [(s['code'], s['access'], s['operation'], s['read_at']) for s in denied] == [('access_denied', [], None, None)]
+          and [e['kind'] for e in events] == ['accepted', 'text', 'usage', 'failed']
           and len(fake.received) == since + 1, (ended, denied, events))
 
     # Curve proposals are successful, owner-bound read receipts, never model-authored URLs or writes.
@@ -1044,7 +1044,7 @@ def check_ppa_reads(check, query, fake, trader, agent, grant, ask, settled, step
     recorded, results = steps(turn), answers(requests(since)[-1])
     listed = results['toolu_ppa_1'][0]
     check('Read current page on PPA bookings reads the listed book\'s PPA trades through Read trades at the pinned context, cutoff and frame, '
-          'with its own target, and captures no context beyond the one its ask captured',
+          'with its own target, and acquires exactly one context at its first requested financial read',
           turn['state'] == 'completed' and listed['operation'] == 'trades.ppa_book_v1' and listed['target'] == 'n1'
           and (listed['context']['knowledge'], listed['context']['contextId'], listed['context']['cutoff']) == ('working_data', turn['context']['contextId'], turn['context']['cutoff'])
           and set(listed['result']) == {'knownAt', 'trades'} and at(listed['result']['knownAt']) == at(turn['context']['cutoff'])

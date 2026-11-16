@@ -1,6 +1,6 @@
 type Api=<T>(path:string,body?:unknown)=>Promise<T>;
 type Reference={turnId:string;step:number};
-type Review={operation:string;page:string;body:unknown;parameters:Record<string,string>;context:{mode:string;cutoff:string;frameId:string|null};status:string};
+type Review={operation:string;page:string;body:unknown;parameters:Record<string,string>;context:{mode:string;cutoff:string|null;frameId:string|null};status:string};
 
 // Only explicit button activation sends an authorization. Nothing in a model response, stream event, automatic
 // navigation, rendered request or earlier chat text can call it. The server re-reads the immutable proposal.
@@ -16,8 +16,8 @@ export function setupAssistantActions(options:{api:Api;identity:()=>string;chang
     close();const dialog=document.createElement('dialog');dialog.className='assistant-action-review';active=dialog;
     const title=document.createElement('h2');title.textContent='Review assistant proposal';
     const summary=document.createElement('p');summary.textContent=`${value.operation.replaceAll('.',' › ').replaceAll('_v1','')} · awaiting your authorization`;
-    const frame=document.createElement('p');frame.textContent=value.context.mode==='operational'
-      ?'This is an administrative or operational change. The backend checks current permissions and versions when you authorize.'
+    const frame=document.createElement('p');frame.textContent=value.context.cutoff===null
+      ?'This proposal used no financial context. The backend checks current permissions and versions when you authorize.'
       :`Prepared using knowledge through ${value.context.cutoff}. The backend checks current permissions and versions when you authorize.`;
     const payload=document.createElement('pre');payload.textContent=JSON.stringify({body:value.body,parameters:value.parameters},null,2);
     const consent=document.createElement('input');consent.type='checkbox';const label=document.createElement('label');label.append(consent,document.createTextNode(' I authorize this exact change.'));

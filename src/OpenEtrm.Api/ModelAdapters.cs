@@ -37,8 +37,8 @@ public sealed class ModelAdapters(HttpMessageHandler handler,ModelTransportLimit
         if(!ModelTarget.Valid(request.Model.Identifier))throw new ModelCallException("model_identifier_invalid",ModelCatalog.Refusal("model_identifier_invalid"));
         if(request.Parameters.Reasoning is not {} effort||!efforts.Contains(effort))throw new ModelCallException("parameter_required","Choose one of the model's documented reasoning efforts.");
         ArgumentOutOfRangeException.ThrowIfLessThan(request.Parameters.MaxOutputTokens,1);
-        if(request.Messages.IsDefaultOrEmpty||request.Tools.IsDefault||request.Model.AcceptedServed.IsDefault||request.System.Length==0||request.Messages[^1] is ModelReply)
-            throw new ArgumentException("A call needs instructions, explicit lists and a user message or tool results.");
+        if(request.Messages.IsDefaultOrEmpty||request.Tools.IsDefault||request.Model.AcceptedServed.IsDefault||request.System is null||request.Messages[^1] is ModelReply)
+            throw new ArgumentException("A call needs explicit lists, optional instruction text and a user message or tool results.");
         if(!ModelProviders.KeyFormat().IsMatch(key))throw new ModelCallException("credential_unavailable","The provider key cannot be used.");
     }
 }

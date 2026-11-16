@@ -10,15 +10,15 @@ public sealed partial class AgentTools
 {
     static ImmutableArray<AgentTool> WorkspaceTools=>[
         WalkthroughTool,
-        Tool("read_page_digest","Read this first on a page question. Returns a bounded server-computed digest of the admitted page and selection at the turn's exact pin, with issued navigation handles. Never uses browser table values. Choose mode controls for navigation, finding controls or unsaved form help: returns authorized screen capabilities and entry handles without pricing the portfolio. Choose overview for values, positions and numerical explanations. Controls contains no financial evidence; do not follow it with broad discovery unless the task needs a specific operation. Missing measures or browser-only draft state remain explicitly unavailable.",
+        Tool("read_page_digest",
             """{"type":"object","properties":{"mode":{"type":"string","enum":["overview","controls"]}},"required":["mode"],"additionalProperties":false}""",[AssistantOperations.Permission]),
-        Tool("read_workspace_page","Inspects the page the user is on, including pages for risk, trade entry, delivery prices, interval data, administration and AI settings. Returns its available operations and current directory when there is one. An authorized navigable page with available operations returns its own target handle; use it with navigate or a walkthrough go. Unsaved terms are not calculated values. Use discover_page_operations to inspect a request contract, read_page_operation for reads and previews, and propose_page_action for every save or other effect.",
+        Tool("read_workspace_page",
             """{"type":"object","properties":{"page":{"type":"string"}},"required":["page"],"additionalProperties":false}""",[AssistantOperations.Permission]),
-        Tool("discover_page_operations","Discovers the same authorized operations used by the application pages. Name a page or all; operation null lists its operations, an exact operation id returns its handler's input contract. Inputs are JSON with body and string-valued parameters. Missing financial terms require a question. No arbitrary URLs, credentials, SQL or execution are available.",
+        Tool("discover_page_operations",
             """{"type":"object","properties":{"page":{"type":"string"},"operation":{"type":["string","null"]}},"required":["page","operation"],"additionalProperties":false}""",[AssistantOperations.Permission]),
-        Tool("read_page_operation","Runs a discovered read or calculation through the page's ordinary authorized operation. Supply its exact operation and inputJson, an object with body (the request or null) and parameters (string query/route values). Financial reads use the retained context and frame this turn names, knowledgeMode retained and that exact contextId; explicit knownAt is this turn's cutoff. Current-only pages refuse historical views. Every command is refused here, including jobs, publishing, administration, tests with external effects and exports that record a fact.",
+        Tool("read_page_operation",
             OperationSchema,[AssistantOperations.Permission]),
-        Tool("propose_page_action","Prepares a discovered command for human review. Supply the complete explicit inputJson with body and parameters, expected versions and all financial policies. Preview financial changes first with the corresponding ordinary read operation. This tool never executes a command or saves business data, even if the question says save or approve. The application shows the exact payload and requires a separate human Authorize action. Credentials cannot be proposed. Say clearly that the proposal is awaiting authorization.",
+        Tool("propose_page_action",
             OperationSchema,[AssistantOperations.Permission])
     ];
     const string OperationSchema="""{"type":"object","properties":{"operation":{"type":"string","minLength":1,"maxLength":128},"inputJson":{"type":"string","minLength":2,"maxLength":6144}},"required":["operation","inputJson"],"additionalProperties":false}""";
@@ -84,6 +84,9 @@ public sealed partial class AgentTools
                         // in place of the day, so the rest of the page stays readable.
                         try
                         {
+                            var financial=await workspace.Discover(turn,arguments.Page!,"gas.operations.read_v1",ct);
+                            value["context"]=financial["context"]?.DeepClone();
+                            gasDay=SelectedGasDay(selection,turn.Pin)!;
                             var dayRead=await workspace.Read(turn,"gas.operations.read_v1",JsonSerializer.SerializeToElement(gasDay),ct);
                             dayRead.Value["inputJson"]=gasDay.ToJsonString();
                             value["selectedView"]=dayRead.Value;access=[..access.Concat(dayRead.Access).Distinct()];
@@ -106,7 +109,9 @@ public sealed partial class AgentTools
                             native["parameters"]!["snapshotId"]=turn.Pin.RequireFrame().Id.ToString();
                         if(arguments.Page=="facility_quantities")
                         {
-                            var certificate=value["context"]??throw new ToolRefusal("context_required");
+                            var financial=await workspace.Discover(turn,arguments.Page!,directory,ct);
+                            var certificate=financial["context"]??throw new ToolRefusal("context_required");
+                            value["context"]=certificate.DeepClone();
                             native["body"]=new JsonObject{["context"]=new JsonObject{["effectiveOn"]=certificate["effectiveOn"]!.DeepClone(),
                                 ["knowledgeMode"]="retained",["retained"]=certificate.DeepClone(),["convention"]=FacilityQuantityStore.Convention}};
                             if(selection.TryGetProperty("ledgerId",out var selectedLedger)&&selectedLedger.ValueKind==JsonValueKind.String)native["body"]!["ledgerId"]=selectedLedger.GetString();

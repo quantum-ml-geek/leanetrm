@@ -5,11 +5,11 @@ using Npgsql;
 
 namespace OpenEtrm.Api;
 
-// Test names the model and the reasoning effort; the prompt and every other parameter are fixed.
+// Test names the model and the reasoning effort; the prompt comes from installation settings.
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record TestRequest(Guid OperationId,Guid ModelId,string? Reasoning);
 
-// Provider Test (docs/ai-assistant.md §9): one fixed synthetic prompt, without workspace data or tools, sent once to
+// Provider Test (docs/ai-assistant.md §9): one configured test prompt, without workspace data or tools, sent once to
 // a model the administrator picks. The test opens in the administrator's context, which pins its price, decrypts the
 // attested key and checks the request in one transaction: a refusal records nothing, and no byte is sent before
 // the record commits. The response is streamed within the test deadline and the request's. The test's own token
@@ -18,9 +18,6 @@ public sealed record TestRequest(Guid OperationId,Guid ModelId,string? Reasoning
 // administrator's current authority.
 public sealed class ProviderTests(CredentialCustody custody,AgentWorker worker,ModelAdapters adapter,ILogger logger)
 {
-    const string Instruction="This is a connectivity test from OpenETRM's page assistant settings. It carries no workspace data.";
-    const string Prompt="Reply with the single word: ready.";
-
     sealed record Opened(Guid Call,ModelRequest Request,string Key)
     {
         // The key never reaches a log or an exception message through the record's generated text.
@@ -60,7 +57,7 @@ public sealed class ProviderTests(CredentialCustody custody,AgentWorker worker,M
     {
         if(!(await Record(connection,body,generation,token,ct)).TryGetProperty("opened",out var opened))return null;
         var key=ModelCalls.Key(custody,opened);
-        var request=new ModelRequest(ModelCalls.Target(opened),Instruction,[new ModelUserText(Prompt)],[],
+        var request=new ModelRequest(ModelCalls.Target(opened),opened.GetProperty("testInstructions").GetString()!,[new ModelUserText(opened.GetProperty("testQuestion").GetString()!)],[],
             new(opened.GetProperty("maxOutputTokens").GetInt32(),opened.GetProperty("reasoning").GetString(),false));
         ModelAdapters.Validate(request,key);
         return new(opened.GetProperty("call").GetGuid(),request,key);

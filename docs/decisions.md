@@ -355,7 +355,7 @@ remaining bounds are recorded with the executable consumers in the linked contra
 | D318 | Author curves from a rolling date-mapping window with explicit, matching terms | Owner-directed, 2026-11-04 ([curve-definitions.md](curve-definitions.md)). A curve names its commodity, location, quote, delivery profile, contract kind (with an exact futures product for futures), an exact published date-mapping version and how many of its positions it carries, its settlement target, a direct price rule and explicit missing-price and interpolation policies; none is defaulted. Contracts roll because the mapping resolves against the context date; the curve adds no roll rule, and publishers supply each close's marks. Curves are defined on Curves & prices and previewed at the header's selected close, in that close's exact context (current knowledge on its date, or the selected historical context on that date); schedules and date mappings stay on their own Settings page. Terms the contract and the curve both name must be equal: a futures product's and an index target's commodity, location, currency, unit and multiplier, and each futures position matches exactly one series of an executable product by delivery period and known last-trading instant. A preview reads reference terms and resolves its mapping in one exact retained context. Futures settle to their exchange settlement, OTC forwards to one published index. Index spreads, hourly physical settlement (nodal LMP), forwards settling to futures, formula contracts, carry-forward or interpolated prices and linear interpolation are shown as Coming soon and refused. First increment: catalog and read-only preview operations and the Curves step of Schedules & date mappings; durable versions follow in D358; D359 admits published interest-rate definitions into market revisions and prices from them, and D362 admits contract curves |
 | D334 | Close by regional session; the latest close for a session and business day is in force | Owner decisions and implementation recorded in [regional closes](regional-closes.md); design calls await review. Refines D162 and D219: a close names an exact versioned close session (clock, local cutoff, business calendar, curves) and an explicit business day, and its UTC instant is the session cutoff on that day. For each session and business day the close with the highest publication order is in force, evaluated on read; earlier ones are history and are refused for new work (`close_replaced`). A close must carry exactly its session's curves; nothing is carried forward. Recording needs a per-session grant. Every view, historical ones included, reads the close in force; this lifts only the knowledge-time checks on the close and its pins and is a recorded exception to the knowledge-cutoff rule. Saved results keep their exact close; pilot reports disclose replacement, while portfolio-job disclosure and historical worker close-session binding remain documented limitations. Each person's chosen session is remembered; no session is chosen for anyone. Only recorded closes are closes; unrecorded snapshots are working data offered separately, and built-in demo frames are seeded as session closes. Existing closes are retired and deployments reseeded (migration 0202 refuses a non-empty close history). Implemented in the repository; hosted activation requires separate qualification |
 
-| D408 | Keep consumed physical parameters in versioned facility extensions and value supplied thermal, battery and solar plans through common independent Sides | Decided 2026-11-16; [contract and verification](operating-facilities.md), [details](#d408--operating-facility-versions-and-supplied-plan-previews). Extend existing reference locations with exact relationship FKs and only implemented physical/model parameters. Contract guarantees, entitlement, state, dispatch, prices and fees remain explicit calculation inputs. Migration 0339 supplies idempotent version writes and certified exact reads under current authority. Managed previews expose gross Side rows under the complete-right, undiscounted remaining-value contract; the REC addition is a pure evidence/range ledger. Prior isolated checks qualify that bounded slice; current-master integration is being qualified. Saved operating contracts, ordinary hedge reporting and durable manual REC inventory are the authorized next increment; optimization and external registry submission remain excluded. |
+| D408 | Keep consumed physical parameters in versioned facility extensions and value supplied thermal, battery and solar plans through common independent Sides | Decided 2026-11-16; [contract and verification](operating-facilities.md), [details](#d408--operating-facility-versions-and-supplied-plan-previews). Extend existing reference locations with exact relationship FKs and only implemented physical/model parameters. Contract guarantees, entitlement, state, dispatch, prices and fees remain explicit calculation inputs. Migration 0341 supplies idempotent version writes and certified exact reads under current authority. Managed previews expose gross Side rows under the complete-right, undiscounted remaining-value contract; the REC addition is a pure evidence/range ledger. Prior isolated checks qualify that bounded slice; current-master integration is being qualified. Saved operating contracts, ordinary hedge reporting and durable manual REC inventory are the authorized next increment; optimization and external registry submission remain excluded. |
 
 ## Proposed implementation choices
 
@@ -5648,3 +5648,33 @@ and durable REC extensions below require their own integrated qualification.
   hybrid/shared-resource pooling and broader optional structures remain later
   scope. No proposed interface or plan establishes implementation. See the
   [structured power contract](structured-power-products.md).
+
+## D407 — Requested assistant context and installation-owned prompts
+
+Assistant admission retains selection identity and configured prompt versions only.
+It does not read the page, serialize a market frame or capture financial knowledge.
+A financial tool request acquires the selected context once, with original actor,
+session, deadline and worker-generation fencing. Current knowledge is certified at
+that first financial request; retained knowledge stays at its explicitly selected
+certificate. Exact-operation discovery can acquire the certificate necessary to
+construct the financial request. Broad discovery and presentation remain independent
+of financial inputs. Current-only execution does not imply context-free execution.
+
+Exact recorded-close relationships replace repeated source-matrix copies for this
+consumer, preserving historical frame aliases separately. Existing retained frames,
+results and completed operation retries remain readable. No booked input or selected
+close is substituted, and no production database is rewritten by this change.
+
+Application, agent, page and tool guidance are installation-owned immutable settings.
+Missing optional guidance adds nothing; absence is pinned as well as configured
+versions. No production instructions or prompt defaults ship in public source or
+migrations. Provider connectivity tests also use configured text and retain its exact
+versions. Only explicitly synthetic test configuration belongs in verification fixtures.
+Formal tool schemas, business constraints, authorization and separate human approval
+remain enforced in code and cannot be overridden by any prompt.
+
+A selected Park and Loan trade admits questions under the Blotter prompt. Its
+unqualified trade read returns `page_not_supported` without financial acquisition;
+it cannot dispatch the swap reader. The UI identifies that read limitation.
+
+Publication and deployment remain separate from local implementation and qualification.

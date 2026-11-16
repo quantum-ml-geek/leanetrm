@@ -1,7 +1,6 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Text.RegularExpressions;
 using Npgsql;
 
 namespace OpenEtrm.Api;
@@ -22,16 +21,25 @@ public sealed record CurveProposalRequest([property:JsonRequired] Guid TurnId,[p
 public sealed record CurveDraftRequest([property:JsonRequired] Guid TurnId,[property:JsonRequired] int Step);
 
 // Turns over HTTP (docs/ai-assistant.md §7.2, §7.4, §8), in one scope: an ask admits the turn in the person's own
-// context, pins its context in a short transaction of its own and hands the turn's token to the worker with the
+// context and hands the turn's token and selected frame identity to the worker with the
 // scope's read tools; Stop and the owner's reads. The database owns every rule; this boundary passes it the runtime set
 // and the session's binding, and refuses a page report the tools could not read before anything is written.
-public sealed partial class AgentTurns(PreviewDatabase database,string scope,AgentWorker worker,TurnWorker turns,AgentTools tools,ILogger logger)
+public sealed class AgentTurns(PreviewDatabase database,string scope,AgentWorker worker,TurnWorker turns,AgentTools tools)
 {
     public async Task<object> CurveProposal(NpgsqlConnection connection,CurveProposalRequest body,CancellationToken ct)
     {
         Task<JsonElement> Recorded()=>ModelProviders.Read(connection,"SELECT assistant.curve_proposal($1,$2,$3)::text",[scope,body.TurnId,body.Step],ct);
         var saved=await Recorded();
-        var pin=TurnPin.From(saved.GetProperty("context"),saved.GetProperty("pins"),database.Manifest.CatalogId,database.Manifest);
+        InputFrame? exactFrame=null;
+        if(saved.GetProperty("pins").TryGetProperty("closeId",out var close))
+        {
+            var retained=saved.GetProperty("context").GetProperty("contextId").GetGuid();
+            var certificate=(await new KnowledgeStore(database.Manifest.CatalogId).Read(connection,retained,ct)).Context;
+            await MarketContextStore.Bind(connection,database.Manifest.CatalogId,certificate,ct);
+            exactFrame=(await MarketCloses.Frame(connection,database.Manifest.CatalogId,close.GetGuid(),retained,ct))
+                with{Id=saved.GetProperty("context").GetProperty("frameId").GetGuid()};
+        }
+        var pin=TurnPin.From(saved.GetProperty("context"),saved.GetProperty("pins"),database.Manifest.CatalogId,database.Manifest,exactFrame:exactFrame);
         var context=(await new KnowledgeStore(database.Manifest.CatalogId).Read(connection,pin.ContextId,ct)).Context;
         var arguments=AgentTools.Parse("prepare_custom_curve",saved.GetProperty("input")).Arguments as PrepareCurveArguments
             ??throw new InvalidOperationException("A recorded curve proposal has no preparation arguments.");
@@ -39,7 +47,9 @@ public sealed partial class AgentTurns(PreviewDatabase database,string scope,Age
         // Revalidate the proposal under its ORIGINAL pin and current authority.
         // The editor receives an unpriced draft, never an old result relabeled
         // with the header's current context.
-        var page=pin.Page(context);await page.Bind(connection,database.Manifest.CatalogId,ct);
+        var page=pin.Page(context);
+        if(exactFrame is null)await page.Bind(connection,database.Manifest.CatalogId,ct);
+        else await page.BindClose(connection,database.Manifest.CatalogId,ct);
         _=await CustomCurves.PreviewRead(connection,database,page,new(definition,pin.RequireFrame().Id),ct);
         _=await Recorded();
         return new{definition,origin=context,frameId=pin.RequireFrame().Id,engine=arguments.Engine,status="unpriced_draft"};
@@ -55,8 +65,7 @@ public sealed partial class AgentTurns(PreviewDatabase database,string scope,Age
         if(!await reader.ReadAsync(ct))throw new OpenEtrm.MarketData.MarketDataException("custom_curve_draft_unavailable","This saved draft is not one you can open.");
         return new{id=reader.GetGuid(0),version=reader.GetInt32(1)};
     }
-    // A repeat answers with its turn as it stands: only the request that admitted a turn holds its token. However the
-    // record write fails, the turn fails in a scope of its own (§7.2), and its ending is the answer once that lands.
+    // A repeat answers with its turn as it stands: only the request that admitted a turn holds its token.
     public async Task<IResult> Ask(PreviewSession session,string profile,AskRequest body,string mode,Guid? retained,InputFrame? frame,CancellationToken aborted,Action<Guid>? admitted=null)
     {
         PageReports.Require(body.PageReport);
@@ -76,21 +85,11 @@ public sealed partial class AgentTurns(PreviewDatabase database,string scope,Age
         var turn=asked.GetProperty("turn");
         if(!(asked.TryGetProperty("admitted",out var accepted)&&accepted.ValueKind==JsonValueKind.True))return Results.Ok(new{turn});
         var id=turn.GetProperty("id").GetGuid();
-        try
+        if(turn.GetProperty("state").GetString()=="queued")
         {
-            var effectiveDate=PageReports.BusinessDate(body.PageReport)??(frame is not null?TradingView.WorkingDate(frame):(DateOnly?)null);
-            turn=(await database.WithIdentity(profile,"UseAgents",(connection,ct)=>ModelProviders.Read(connection,
-                "SELECT assistant.pin_turn($1,$2,$3::date,$4::jsonb,$5)::text",
-                [id,token,mode=="current"?(object?)effectiveDate??DBNull.Value:DBNull.Value,frame is null?DBNull.Value:TurnPin.Record(frame),DBNull.Value],
-                ct),aborted)).GetProperty("turn");
+            admitted?.Invoke(id);
+            turns.Run(id,token,session.Digest,session.Ends,tools,TurnPin.Deferred(mode,retained,frame,PageReports.BusinessDate(body.PageReport)));
         }
-        catch(Exception e)
-        {
-            if(await Fail(id,token,Failure(e)) is {} failed)return Results.Ok(new{turn=failed});
-            throw;
-        }
-        // A turn whose cancel was requested before its record has ended cancelled.
-        if(turn.GetProperty("state").GetString()=="queued"){admitted?.Invoke(id);turns.Run(id,token,session.Digest,session.Ends,tools);}
         return Results.Ok(new{turn});
     }
 
@@ -108,40 +107,6 @@ public sealed partial class AgentTurns(PreviewDatabase database,string scope,Age
 
     public Task<JsonElement> MarkRead(NpgsqlConnection connection,MarkReadRequest body,CancellationToken ct)=>
         ModelProviders.Read(connection,"SELECT assistant.mark_read($1,$2,$3::bigint)::text",[scope,body.ConversationId,(object?)body.Through??DBNull.Value],ct);
-
-    // The code a failed record write fails its turn with (§7.2): the database's refusal, access_denied for a permission
-    // refused, request_cancelled after an abort or the deadline, and agent_runtime_unavailable for any other failure. The
-    // end of the sign-in session it was asked under is recorded first, so the turn ends cancelled session_ended (§11).
-    internal static (string Code,bool SessionEnded) Failure(Exception e)=>e switch
-    {
-        PostgresException{SqlState:"P0001"} p when Code().IsMatch(p.MessageText)=>(p.MessageText,false),
-        PostgresException{SqlState:"42501"} or PreviewDeniedException=>("access_denied",false),
-        OperationCanceledException or PostgresException{SqlState:"57014"}=>("request_cancelled",false),
-        PreviewSessionEnded=>("request_cancelled",true),
-        _=>("agent_runtime_unavailable",false)
-    };
-
-    // Fails the turn, once, as a worker write; its ending, or none when that did not land, which leaves the turn to
-    // admission's deadline. The ending says nothing of the owner's replay recheck: the turn never started, so it has
-    // neither answer nor text.
-    async Task<JsonElement?> Fail(Guid turn,byte[] token,(string Code,bool SessionEnded) failure)
-    {
-        try
-        {
-            return (await worker.Write(async(connection,ct)=>
-            {
-                if(failure.SessionEnded)await ModelProviders.Read(connection,"SELECT assistant.end_turn_session($1,$2)::text",[turn,token],ct);
-                return await ModelProviders.Read(connection,"SELECT assistant.end_turn($1,$2,'failed',$3)::text",[turn,token,failure.Code],ct);
-            })).GetProperty("turn");
-        }
-        catch(Exception e) when(e is NpgsqlException or OperationCanceledException)
-        {
-            logger.LogError("A turn whose record failed could not be ended: {ErrorType}",e.GetType().Name);
-            return null;
-        }
-    }
-
-    [GeneratedRegex(@"^[a-z][a-z0-9_]{0,63}\z")] private static partial Regex Code();
 
     internal static string Refusal(string code)=>code switch
     {
