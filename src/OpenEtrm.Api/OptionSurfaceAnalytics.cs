@@ -80,7 +80,8 @@ internal static class OptionSurfaceAnalytics
         MarketSnapshot snapshot,ScheduleContext context,VolSurfaceInputs fitted,OptionSensitivityPlan plan,CancellationToken ct)
     {
         var calibrations=fitted.Calibrations;var before=calibrations.Bindings.Values.Sum(b=>b.TreePrices);
-        var analytics=new Dictionary<string,OptionSeriesSensitivities>();
+        // Each expiry's market is prepared in turn on the one connection.
+        var expiries=new List<(PreparedConnectedPortfolioRisk? Prepared,ImmutableDictionary<Guid,FuturesOptionMarketBinding> Bindings)>();
         foreach(var expiry in fitted.Listed.Where(o=>calibrations.Bindings.ContainsKey(o.Id)).GroupBy(o=>(o.Series.Terms.ExpiryAt,Underlying:o.Series.UnderlyingSeries.Code))
             .OrderBy(g=>g.Key.ExpiryAt).ThenBy(g=>g.Key.Underlying,StringComparer.Ordinal))
         {
@@ -97,9 +98,19 @@ internal static class OptionSurfaceAnalytics
                     CustomCurves.MarketPreparation.ValuationDependencies,ct);
                 prepared=RiskEngine.PrepareConnected(market.Valuation,market.Bindings,[portfolio],market.Authority,ct);
             }
-            var codes=expiry.ToDictionary(o=>o.Id,o=>o.Series.Key.Code);
-            foreach(var series in FuturesOptionSensitivities.Calculate(prepared,bindings,plan.Selection,plan.Day,ct))analytics.Add(codes[series.InstrumentId],series);
+            expiries.Add((prepared,bindings));
         }
+        // The expiries are independent and their valuation touches no connection, so they are valued in parallel, as the
+        // series' calibrations are. Every outcome is kept in expiry order and the first failure in that order is the fit's,
+        // exactly as a sequential pass would fail and never as a parallel AggregateException.
+        var outcomes=expiries.AsParallel().AsOrdered().Select(expiry=>
+        {
+            try{return(Series:FuturesOptionSensitivities.Calculate(expiry.Prepared,expiry.Bindings,plan.Selection,plan.Day,ct),Error:(Exception?)null);}
+            catch(Exception error){return(Series:default(ImmutableArray<OptionSeriesSensitivities>),Error:error);}
+        }).ToArray();
+        if(outcomes.FirstOrDefault(o=>o.Error is not null).Error is {} failure)System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(failure);
+        var codes=fitted.Listed.ToDictionary(o=>o.Id,o=>o.Series.Key.Code);
+        var analytics=outcomes.SelectMany(o=>o.Series).ToDictionary(series=>codes[series.InstrumentId]);
         var surface=fitted.Result with{Sensitivities=plan.Stated,
             Series=[..fitted.Result.Series.Select(s=>analytics.TryGetValue(s.Series.Code,out var found)?s with{Analytics=found}:s)]};
         return(surface,calibrations.Bindings.Values.Sum(b=>b.TreePrices)-before);

@@ -42,9 +42,16 @@ def run_checks(url, query, manifest, *, run_worker, worker_login):
         return c.call('vol-surfaces/read', {'context': {'snapshotId': snapshot or frame['id'], 'convention': OPTION, 'knowledgeMode': 'current', **context},
                                             'product': product, 'model': MODEL, **({'definitionRevisionId': definition} if definition else {})}, timeout=TIMEOUT)
 
-    def fit(product=PRODUCT, snapshot=None, request=None, model=MODEL, expected=200, sensitivities=SENSITIVITIES):
-        return c.call('vol-surfaces/fit', {'requestId': request or str(uuid4()), 'snapshotId': snapshot or frame['id'], 'product': product, 'model': model,
-                                           'sensitivities': sensitivities}, expected=expected, timeout=TIMEOUT)
+    def selection_at(snapshot):
+        """The selection a fit at this frame states: a recorded close counts its day on its convention's clock and names
+        none; a working snapshot names one."""
+        at_close = any(f['id'] == snapshot and f.get('close') for f in c.call('workspace')['frames'])
+        return {**SENSITIVITIES, 'clock': None} if at_close else SENSITIVITIES
+
+    def fit(product=PRODUCT, snapshot=None, request=None, model=MODEL, expected=200, sensitivities=None):
+        snapshot = snapshot or frame['id']
+        return c.call('vol-surfaces/fit', {'requestId': request or str(uuid4()), 'snapshotId': snapshot, 'product': product, 'model': model,
+                                           'sensitivities': sensitivities or selection_at(snapshot)}, expected=expected, timeout=TIMEOUT)
 
     def job(job_id):
         return json.loads(query(f"SELECT json_build_object('state',state,'errorCode',error_code,'result',result)::text FROM risk.jobs WHERE id='{job_id}';"))
@@ -72,7 +79,8 @@ def run_checks(url, query, manifest, *, run_worker, worker_login):
     offered = read()['sensitivities']
     check('the read offers the sensitivity selection and the clocks a working snapshot may name, and fills nothing in',
           offered['offered'] == {k: v for k, v in SENSITIVITIES.items() if k != 'clock'} and UTC in offered['clocks'] and offered['clockRequired'] is True, offered)
-    unstated = [fit(sensitivities=selection, expected=422)['code'] for selection in (
+    unstated = [c.call('vol-surfaces/fit', {'requestId': str(uuid4()), 'snapshotId': frame['id'], 'product': PRODUCT, 'model': MODEL, 'sensitivities': selection},
+                       expected=422, timeout=TIMEOUT)['code'] for selection in (
         None, {**SENSITIVITIES, 'clock': None}, {**SENSITIVITIES, 'policy': 'option_sensitivities_unknown_v1'}, {**SENSITIVITIES, 'volatilityBump': '0.02'},
         {**SENSITIVITIES, 'bump': {**SENSITIVITIES['bump'], 'priceSteps': 3}})]
     check('a fit that does not state a supported sensitivity selection and its clock is refused at submit',
@@ -392,8 +400,16 @@ def run_checks(url, query, manifest, *, run_worker, worker_login):
     working = read()
     check('a close starts without the working snapshot\'s surface at the same instant', before_close['state'] == 'notFitted' and before_close['job'] is None
           and working['state'] == 'fitted', (before_close['state'], working['state']))
+    offered_east = before_close['sensitivities']
+    check('a recorded close counts its day on its convention\'s clock: the read asks for none and a fit that names one is refused',
+          offered_east['clockRequired'] is False and fit(snapshot=at_east['id'], sensitivities=SENSITIVITIES, expected=422)['code'] == 'option_sensitivity_policy'
+          and read(snapshot=at_east['id'])['job'] is None, offered_east)
     eastern = fit(snapshot=at_east['id'])
     run_worker()
+    close_stated = read(snapshot=at_east['id'])['surface']['sensitivities']
+    check('a surface fitted at a recorded close states its convention\'s clock and the day its theta runs to',
+          close_stated['clockSource'] == 'close_convention' and close_stated['clockZone']
+          and datetime.fromisoformat(close_stated['dayTo']) > datetime.fromisoformat(at_east['at']), close_stated)
     fitted_east, unfitted_west = read(snapshot=at_east['id']), read(snapshot=at_west['id'])
     check('a fit at one session\'s close is that close\'s alone', fitted_east['state'] == 'fitted' and fitted_east['job']['id'] == eastern['jobId']
           and unfitted_west['state'] == 'notFitted' and unfitted_west['job'] is None and read()['revision']['id'] == working['revision']['id'],
