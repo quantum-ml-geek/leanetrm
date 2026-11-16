@@ -3,6 +3,17 @@ using System.Collections.Immutable;
 using System.Globalization;
 using OpenEtrm.Api;
 using OpenEtrm.MarketData;
+if(args is ["--gas-transport-financial-commands"]){GasTransportFinancialCommandChecks.Run();return;}
+if(args is ["--gas-transport-financial-source"]){GasTransportFinancialSourceChecks.Run();return;}
+if(args is ["--gas-transport-financial-ticket"]){GasTransportFinancialTicketChecks.Run();return;}
+if(args is ["--gas-transport-financial-native",var financialTransportFixture]){await GasTransportFinancialNativeChecks.Run(financialTransportFixture);return;}
+if(args is ["--gas-transport-financial-positions"]){GasTransportFinancialPositionChecks.Run();return;}
+if(args is ["--gas-transport-financial-adapters"]){GasTransportFinancialAdapterChecks.Run();return;}
+if(args is ["--gas-transport-financial-labels"]){GasTransportFinancialLabelChecks.Run();return;}
+if(args is ["--gas-transport-financial-value",var financialTransportValue]){await GasTransportFinancialValueChecks.Run(financialTransportValue);return;}
+if(args is ["--gas-transport-financial-worker-submit",var financialTransportWorker]){await GasTransportFinancialWorkerChecks.Run(financialTransportWorker,false);return;}
+if(args is ["--gas-transport-financial-worker-verify",var financialTransportWorkerReceipt]){await GasTransportFinancialWorkerChecks.Run(financialTransportWorkerReceipt,true);return;}
+if(args is ["--gas-transport-financial-setup"]){GasTransportFinancialSetupChecks.Run();return;}
 if(args is ["--storage-facility-native",var storageFixture]){await StorageFacilityNativeChecks.RunNative(storageFixture);return;}
 if(args is ["--storage-facility-adapters"]){StorageFacilityAdapterChecks.Run();return;}
 if(args is ["--gas-transport-capacity-adapters"]){GasTransportCapacityAdapterChecks.Run();return;}
@@ -234,6 +245,13 @@ if (args is ["--schedules"])
     GasTransportCapacitySourceChecks.Run();
     GasTransportRouteAdapterChecks.Run();
     GasTransportRouteSourceChecks.Run();
+    GasTransportFinancialCommandChecks.Run();
+    GasTransportFinancialSourceChecks.Run();
+    GasTransportFinancialTicketChecks.Run();
+    GasTransportFinancialPositionChecks.Run();
+    GasTransportFinancialAdapterChecks.Run();
+    GasTransportFinancialLabelChecks.Run();
+    GasTransportFinancialSetupChecks.Run();
     GasTransportRouteMetadataChecks.Run();
     GasTransportRoutePresentationChecks.Run();
     GasTransportCapacityMetadataChecks.Run();

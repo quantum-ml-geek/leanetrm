@@ -1,5 +1,11 @@
 # Delivery plan and acceptance criteria
 
+D412 implements the selected [financial Transport rights and fixed-fee
+contract](gas-transport-financial.md). Native and managed value/upgrade controls
+and actual shared browser checks provide local evidence. First-value market
+publication, integrated upstream qualification and release remain delivery gates.
+Physical performance and commercial Storage retain separate planned contracts.
+
 D411 locally qualifies [retained chosen routes](gas-transport-routes.md) with
 explicit graph/law definitions, complete exact source claims and exclusive
 logical memberships. Correction makes a current assessment unavailable until

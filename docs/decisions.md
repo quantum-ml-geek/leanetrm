@@ -5719,3 +5719,46 @@ apply at managed and native boundaries.
 uniform claim per segment, no node storage and no inferred interconnects. It does
 not establish physical performance, title, cash, financial Transport value or
 broader assignment rights. See the [route contract](gas-transport-routes.md).
+
+## D412 · Direct Transport rights values with independent fixed-fee cash
+
+**Status:** bounded implementation with local native, managed and actual browser
+qualification; first-value market publication and integrated release remain open.
+
+**Requirement.** Book and value a complete Transport service-rights package using
+an explicitly selected direct market value, without inferring gas exposure or
+conflating operating plans, physical performance, title and cash.
+
+**Decision.** Install `physical_gas_transport_direct_rights_v1` over one exact
+commercial entitlement/version. Require the company-signed current PV of the
+whole remaining rights package, excluding independent fees and owned gas. Pin
+the selected direct outright valuation definition, exact package/currency
+references, explicit price/fee/expiry laws and company perspective. Perspective
+supplies neither mark sign nor payment direction. Missing marks remain unpriced;
+zero is an explicit observation. Publish market data through its ordinary
+authorized operation, then adopt the exact observation for one financial state
+and valuation instant. Do not copy monetary values into an editable ledger.
+
+An explicit capacity-version adoption changes financial state and requires a
+new mark application. Operating plan changes do not amend financial rights.
+Valuation identity follows the accepted state while the retained agreement and
+binding preserve their native identities. Shared holding admission accepts
+exactly positive one complete package; quantity scaling and duplicate whole
+positions refuse. The ordinary black-box PV and immutable factor-scenario
+contracts retain their dependency semantics.
+
+The first fee is an independently directed, unconditional one-off obligation at
+booking. Nonzero fees own an ordinary `TimedCashPayment`; explicit zero has no
+cash owner. Existing recorded payments preserve complete correction histories
+and the selected same-sign capacity. The rights mark is already PV and receives
+no second discount factor. Exact manual/review lifecycle policy closes the
+rights at the fixed contractual end. Closed rights have known zero value;
+independent unpaid cash survives.
+
+**Boundaries.** One exclusive financial owner per entitlement is supported.
+Automatic service valuation, assignment, partition, source/fee/party amendment,
+residual rights and complete economic horizon continuation require separately
+qualified contracts. Current-clock price risk does not establish cross-clock
+P&L or generated-close support. Exact operating and valuation reference versions
+remain independent; equal currency labels do not authorize netting. See the
+[financial contract and qualification gates](gas-transport-financial.md).

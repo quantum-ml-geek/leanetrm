@@ -154,19 +154,7 @@ internal static class GasParkCustodyAdapter
                 ExactMoney.FromMoney(new(amount,terms.Currency)),AccountingFlowKind.EconomicCash);
         }).ToImmutableArray();
         var state=new RecordedCashValuation(position,instrument,quantity,flows,RecordedCashValuation.Policy,context,source.KnownAt);
-        var heads=new Dictionary<Guid,AccountingFlow>();var paid=ExactMoney.FromMoney(new(default,terms.Currency));
-        // Same-sign payments make the total a bound for every effective-time
-        // prefix. Check every observable knowledge boundary, including earlier
-        // cuts supported by the ordinary complete-history cash projection.
-        foreach(var boundary in flows.GroupBy(f=>f.KnownAt).OrderBy(g=>g.Key))
-        {
-            foreach(var update in boundary)
-            {
-                if(heads.TryGetValue(update.AllocationId,out var previous))paid=paid.Subtract(previous.Amount);
-                heads[update.AllocationId]=update;paid=paid.Add(update.Amount);
-            }
-            if(paid.Scale(terms.FeeDirection).CompareTo(ExactMoney.FromMoney(terms.FixedFee))>0)throw Invalid();
-        }
+        if(!SameSignCashCapacity.IsWithin(terms.SignedFixedFee,flows))throw Invalid();
         return new(binding,instrument,quantity,state);
     }
     static ImmutableArray<JsonElement> Array(JsonElement row,string field)

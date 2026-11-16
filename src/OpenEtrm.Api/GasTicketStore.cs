@@ -39,7 +39,7 @@ public sealed class GasTicketStore(PreviewDatabase database)
  public static TicketDescription Description(string product,TicketDraft? draft=null)
  {
   if(draft is not null&&draft.Product!=product)throw new MarketDataException("ticket_input","The description draft must belong to the explicitly requested product.");
-  return product==GasParkLoanTicket.Product?GasParkLoanTicket.Describe(draft):product==GasTicket.Description.Product?GasTicket.Description:
+  return product==GasTransportFinancialTicket.Product?GasTransportFinancialTicket.Describe(draft):product==GasParkLoanTicket.Product?GasParkLoanTicket.Describe(draft):product==GasTicket.Description.Product?GasTicket.Description:
    throw new MarketDataException("ticket_input",$"No deal ticket describes product '{product}'.");
  }
 

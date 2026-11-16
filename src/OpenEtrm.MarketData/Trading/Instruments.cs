@@ -58,6 +58,7 @@ public abstract record Instrument
     public abstract ReferenceKey Currency { get; }
     public abstract Quantity UnitQuantity { get; }
     public virtual bool SupportsQuantityScaling=>false;
+    public virtual bool SupportsWholePosition=>false;
     internal virtual bool RequiresNativeProgramMarket=>false;
     public virtual InstrumentValuation PV(SideValuationContext context)=>
         throw new MarketDataException("valuation_measure","This instrument requires its declared unit valuation context.");
@@ -79,10 +80,24 @@ public abstract record Instrument
     }
     public virtual void ValidateBinding(Quantity quantity,DeliveryCoverage? coverage)
     {
-        if(!SupportsQuantityScaling)
-            throw new MarketDataException("risk_quantity_scaling","This instrument has not declared linear scaling in booked quantity.");
+        RequireQuantity(quantity,coverage);
         if(coverage is not null)
             throw new MarketDataException("ppa_segment_coverage","This instrument does not accept delivery coverage.");
+    }
+    internal void RequireHolding(Quantity quantity,DeliveryCoverage? coverage,TradeExecution? execution=null)
+    {
+        RequireQuantity(quantity,coverage);
+        if(SupportsWholePosition&&execution is not null)
+            throw new MarketDataException("risk_whole_position","A whole position has no execution basis or quantity scaling.");
+        ValidateBinding(quantity,coverage);
+    }
+    private void RequireQuantity(Quantity quantity,DeliveryCoverage? coverage)
+    {
+        if(!SupportsQuantityScaling&&!SupportsWholePosition)
+            throw new MarketDataException("risk_quantity_scaling","This instrument has not declared linear scaling in booked quantity.");
+        if(SupportsWholePosition&&(SupportsQuantityScaling||quantity is null||quantity.Amount!=ExactDecimal.Parse("1")||
+            quantity.Specification!=UnitQuantity.Specification||UnitQuantity.Amount!=ExactDecimal.Parse("1")||coverage is not null))
+            throw new MarketDataException("risk_whole_position","Hold one exact normalized whole position without coverage, fractional size, sign reversal or multiplication.");
     }
     internal virtual bool SupportsSettlement=>false;
     internal virtual UnitPricingContract DeclareScope(UnitValuationContext context,bool lifecycle)=>Declare(context);

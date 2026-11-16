@@ -118,6 +118,9 @@ const string malformed="The request is incomplete or malformed.";
     PostgresException p when p.MessageText.StartsWith("gas_custody_",StringComparison.Ordinal)
         =>(p.SqlState=="42501"?403:p.MessageText is "gas_custody_stale" or "gas_custody_source" or "gas_custody_context" or "gas_custody_conflict" or "gas_custody_policy_changed" or "gas_custody_reconciliation"?409:422,
             p.MessageText,GasParkCustodyActions.Refusal(p.MessageText)),
+    PostgresException p when p.MessageText.StartsWith("gas_transport_financial_",StringComparison.Ordinal)
+        =>(p.SqlState=="42501"?403:p.MessageText.Contains("conflict",StringComparison.Ordinal)||p.MessageText.Contains("stale",StringComparison.Ordinal)?409:422,
+            p.MessageText,GasTransportFinancialStore.Refusal(p.MessageText)),
     MarketDataException m when m.Code is "gas_custody_source" or "gas_custody_reconciliation" => (409,m.Code,m.Message),
     MarketDataException m when m.Code is "gas_park_loan_context" or "gas_park_loan_reconciliation" => (409,m.Code,m.Message),
     PostgresException p when p.MessageText.StartsWith("gas_quantity_",StringComparison.Ordinal)
@@ -1314,8 +1317,10 @@ api.MapPost("/corrections",(HttpContext c,CorrectionRequest body)=>Locked(c,asyn
     if (session.Frames.Count>=128&&!(c.Features.Get<AssistantInvocation>()?.ResultIdentity is {} replay&&session.Frames.ContainsKey(replay))) throw new MarketDataException("preview_limit","Restart the disposable preview to create more saved selections.");
     if (string.IsNullOrWhiteSpace(body.Value)) throw new MarketDataException("missing_value","Enter an exact decimal value.");
     c.Items["correction_attempted"]=true;
-    var revision=held.Length==1?held[0].RevisionId:database.Manifest.RevisionId;
-    var id=await database.WithIdentity(Profile(session),"ImportObservations",(connection,ct)=>database.Correct(connection,revision,body.ObservationId,body.Value,ct),c.RequestAborted);
+    var (revision,id)=await database.WithIdentity(Profile(session),"ImportObservations",async(connection,ct)=>{
+        var selected=held.Length==1?held[0].RevisionId:(await MarketInputSelection.RootSource(database,connection,frame,ct)).DefinitionRevisionId;
+        return(selected,await database.Correct(connection,selected,body.ObservationId,body.Value,ct));
+    },c.RequestAborted);
     var updated=held.Length==0?frame.SelectRevision(body.ObservationId,id,"Edited inputs")
         :frame.SelectSwapMarketRevision(revision,held[0].Pins,body.ObservationId,id,"Edited inputs");
     if(c.Features.Get<AssistantInvocation>()?.ResultIdentity is {} identity)updated=updated with{Id=identity};
@@ -1434,12 +1439,13 @@ Task<IResult> FuturesRead(HttpContext c,FuturesReadRequest body,Func<NpgsqlConne
 // The page keeps request policy: conventions, risk and amendment permissions, and the booking and amendment flags.
 Task<IResult> TradingRead(HttpContext c,FuturesReadRequest body,Func<NpgsqlConnection,TradingView,CancellationToken,Task<object>> read,bool scenario=false,Guid? headTrade=null,bool amendmentPreview=false,string? expectedConvention=null,bool dealRisk=false,bool combinedWorkspace=false,bool concurrent=false,
     Func<NpgsqlConnection,TradingView,CancellationToken,Task>? recheck=null,
-    Func<NpgsqlConnection,TradingView,CancellationToken,Task>? publicationCheck=null)
+    Func<NpgsqlConnection,TradingView,CancellationToken,Task>? publicationCheck=null,
+    Func<NpgsqlConnection,CancellationToken,Task>? sourceAdmission=null)
 {
     TradingView? completedView=null;
     async Task<IResult> Execute(string profile,Func<TradingReadSelection> capture)
     {
-        var completed=await ExecuteTrading(profile,capture,body,read,c.RequestAborted,scenario,headTrade,amendmentPreview,expectedConvention,dealRisk,combinedWorkspace,publicationCheck);
+        var completed=await ExecuteTrading(profile,capture,body,read,c.RequestAborted,scenario,headTrade,amendmentPreview,expectedConvention,dealRisk,combinedWorkspace,publicationCheck,sourceAdmission:sourceAdmission);
         completedView=completed.View;return Results.Ok(completed.Result);
     }
     if(!concurrent)return Locked(c,session=>Execute(Profile(session),()=>Capture(session,body)));
@@ -1450,10 +1456,12 @@ Task<IResult> TradingRead(HttpContext c,FuturesReadRequest body,Func<NpgsqlConne
 Task<(object Result,TradingView View)> ExecuteTrading(string profile,Func<TradingReadSelection> capture,FuturesReadRequest body,
     Func<NpgsqlConnection,TradingView,CancellationToken,Task<object>> read,CancellationToken cancellation,
     bool scenario=false,Guid? headTrade=null,bool amendmentPreview=false,string? expectedConvention=null,bool dealRisk=false,bool combinedWorkspace=false,
-    Func<NpgsqlConnection,TradingView,CancellationToken,Task>? publicationCheck=null,string? hostedDigest=null)=>
+    Func<NpgsqlConnection,TradingView,CancellationToken,Task>? publicationCheck=null,string? hostedDigest=null,
+    Func<NpgsqlConnection,CancellationToken,Task>? sourceAdmission=null)=>
     database.WithIdentity(profile,"ReadTrades",async(connection,ct)=>
     {
 
+        if(sourceAdmission is not null)await sourceAdmission(connection,ct);
         var selection=capture();
         RequireConvention(body,expectedConvention);
         if(scenario && !await PreviewDatabase.HasPermission(connection,"RunScenario",ct)||dealRisk && !await PreviewDatabase.HasPermission(connection,"RunDealRisk",ct))throw new PreviewDeniedException();
@@ -1788,20 +1796,32 @@ async Task<IResult> BookGasComposition(HttpContext c,PreviewSession session,GasC
 var gasTicket=new GasTicketStore(database);
 var parkLoanTicket=new GasParkLoanTicketStore(database);
 var parkCustodyTicket=new GasParkCustodyTicketStore(database);
+var transportTicket=new GasTransportFinancialTicketStore(database);
+var transportFinancial=new GasTransportFinancialStore(database);
+Task<IResult> FinancialTicketRead(HttpContext c,FuturesReadRequest request,Func<NpgsqlConnection,InputFrame,CancellationToken,Task<object>> read,bool requireCapacity=false)=>
+ TradingRead(c,request,(connection,view,ct)=>tradeReads.ReadBound(connection,view,()=>read(connection,view.CalculationFrame,ct),ct),expectedConvention:PhysicalGasStore.Convention,
+ sourceAdmission:(connection,ct)=>GasTransportFinancialEntry.Capture(connection,database,requireCapacity,ct));
 FuturesReadRequest TicketContext(FuturesReadRequest? context)=>context??throw new MarketDataException("ticket_input","Supply the ticket's read context.");
 GasCompositionRequest TicketRequest(TicketDraft draft,FuturesReadRequest context,Guid operation,Guid definition)=>
  GasTicket.Request(draft,context.SnapshotId,context.KnowledgeMode??throw new MarketDataException("ticket_input","Supply the ticket's knowledge mode."),operation,definition);
-api.MapPost("/tickets/description",(HttpContext c,TicketDescriptionRequest body)=>FuturesRead(c,TicketContext(body.Context),
+api.MapPost("/tickets/description",(HttpContext c,TicketDescriptionRequest body)=>body.Product==GasTransportFinancialTicket.Product?
+ FinancialTicketRead(c,TicketContext(body.Context),(_,_,_)=>Task.FromResult<object>(GasTransportFinancialTicket.Describe(body.Draft))):FuturesRead(c,TicketContext(body.Context),
  async (connection,data,frame,ct)=>GasTicketStore.Description(body.Product,body.Draft) with{SideCalendars=await SideCalendarPolicies.Catalog(connection,ct)},expectedConvention:PhysicalGasStore.Convention,gasReferenceChoices:true));
-api.MapPost("/tickets/choices",(HttpContext c,TicketFieldRequest body)=>FuturesRead(c,TicketContext(body.Context),
+api.MapPost("/tickets/choices",(HttpContext c,TicketFieldRequest body)=>body.Draft.Product==GasTransportFinancialTicket.Product?
+ FinancialTicketRead(c,TicketContext(body.Context),(connection,frame,ct)=>transportTicket.Choices(connection,frame,body,ct),requireCapacity:body.Field is "entitlement" or "capacity_version"):FuturesRead(c,TicketContext(body.Context),
  (connection,data,frame,ct)=>GasParkCustodyTicket.IsSelected(body.Draft)?parkCustodyTicket.Choices(connection,data,frame,body,ct):body.Draft.Product==GasParkLoanTicket.Product?parkLoanTicket.Choices(connection,data,frame,body,ct):gasTicket.Choices(connection,data,frame,body,ct),expectedConvention:PhysicalGasStore.Convention,gasReferenceChoices:true));
-api.MapPost("/tickets/lookup",(HttpContext c,TicketFieldRequest body)=>FuturesRead(c,TicketContext(body.Context),
+api.MapPost("/tickets/lookup",(HttpContext c,TicketFieldRequest body)=>body.Draft.Product==GasTransportFinancialTicket.Product?
+ FinancialTicketRead(c,TicketContext(body.Context),(connection,frame,ct)=>transportTicket.Lookup(connection,frame,body,ct)):FuturesRead(c,TicketContext(body.Context),
  (connection,data,frame,ct)=>GasParkCustodyTicket.IsSelected(body.Draft)?parkCustodyTicket.Lookup(connection,data,frame,body,ct):body.Draft.Product==GasParkLoanTicket.Product?parkLoanTicket.Lookup(connection,data,frame,body,ct):gasTicket.Lookup(connection,data,frame,body,ct),expectedConvention:PhysicalGasStore.Convention,
  gasReferenceChoices:body.Draft.Product is GasParkLoanTicket.Product or GasParkCustodyTicket.Product||GasTicket.LookupOf(body.Draft,body.Side,body.Field)!="market_price"));
-api.MapPost("/tickets/preview",(HttpContext c,TicketPreviewRequest body)=>FuturesRead(c,TicketContext(body.Context),
+api.MapPost("/tickets/preview",(HttpContext c,TicketPreviewRequest body)=>body.Draft.Product==GasTransportFinancialTicket.Product?Locked(c,async session=>{
+ var context=TicketContext(body.Context);RequireGasBooking(session,context.KnowledgeMode,context.ContextId);RequireConvention(context,PhysicalGasStore.Convention);
+ return Results.Ok(await transportTicket.Preview(Profile(session),Frame(session,context.SnapshotId),body,c.RequestAborted));
+}):FuturesRead(c,TicketContext(body.Context),
  (connection,data,frame,ct)=>GasParkCustodyTicket.IsSelected(body.Draft)?parkCustodyTicket.Preview(connection,data,frame,body,ct):body.Draft.Product==GasParkLoanTicket.Product?parkLoanTicket.Preview(connection,data,frame,body,ct):gasComposition.Preview(connection,data,frame,TicketRequest(body.Draft,body.Context,Guid.Empty,data.DefinitionRevision.RevisionId),ct),expectedConvention:PhysicalGasStore.Convention));
 // A booked trade offers day entries by the record operation's own rule, on the read's working or historical selection.
-api.MapPost("/tickets/trade",(HttpContext c,TicketTradeRequest body)=>FuturesRead(c,TicketContext(body.Context),
+api.MapPost("/tickets/trade",(HttpContext c,TicketTradeRequest body)=>body.Product==GasTransportFinancialTicket.Product?
+ FinancialTicketRead(c,TicketContext(body.Context),(connection,frame,ct)=>transportTicket.Trade(connection,frame,body,ct)):FuturesRead(c,TicketContext(body.Context),
  (connection,data,frame,ct)=>
  {
   _=GasTicketStore.Description(body.Product==GasParkCustodyTicket.Product?GasParkLoanTicket.Product:body.Product??GasTicket.Description.Product);
@@ -1809,6 +1829,12 @@ api.MapPost("/tickets/trade",(HttpContext c,TicketTradeRequest body)=>FuturesRea
  },expectedConvention:PhysicalGasStore.Convention,gasTrade:body.Product is GasParkLoanTicket.Product or GasParkCustodyTicket.Product?null:body.TradeId));
 api.MapPost("/tickets/status",(HttpContext c,TicketStatusRequest body)=>Locked(c,session=>database.WithIdentity(Profile(session),"ReadTrades",async(connection,ct)=>
 {
+ if(body.Product==GasTransportFinancialTicket.Product)
+ {
+  if(body.Profile!=GasTransportFinancialProfile.Version)throw GasTransportFinancialStore.Source();
+  var status=await transportTicket.Status(connection,body.OperationId,ct);
+  return Results.Ok(status.GetProperty("found").GetBoolean()?status.GetProperty("outcome"):status);
+ }
  if(body.UsesCustody())
  {
   var status=await parkCustodyTicket.Status(connection,body.OperationId,ct);
@@ -1833,7 +1859,7 @@ api.MapPost("/tickets/amend",(HttpContext c,TicketAmendRequest body)=>Locked(c,a
 // Booking maps the draft against the definition revision its booking read resolves for the selected frame.
 api.MapPost("/tickets/book",(HttpContext c,TicketBookRequest body)=>Locked(c,session=>{
  var context=TicketContext(body.Context);RequireGasBooking(session,context.KnowledgeMode,context.ContextId);RequireConvention(context,PhysicalGasStore.Convention);
- return GasParkCustodyTicket.IsSelected(body.Draft)?BookParkCustody(c,session,body):body.Draft.Product==GasParkLoanTicket.Product?BookParkLoan(c,session,body):BookGasComposition(c,session,TicketRequest(body.Draft,context,body.OperationId,body.DefinitionRevisionId));
+ return body.Draft.Product==GasTransportFinancialTicket.Product?BookTransport(c,session,body):GasParkCustodyTicket.IsSelected(body.Draft)?BookParkCustody(c,session,body):body.Draft.Product==GasParkLoanTicket.Product?BookParkLoan(c,session,body):BookGasComposition(c,session,TicketRequest(body.Draft,context,body.OperationId,body.DefinitionRevisionId));
 }));
 
 async Task<IResult> BookParkLoan(HttpContext c,PreviewSession session,TicketBookRequest body)=>
@@ -1841,6 +1867,22 @@ async Task<IResult> BookParkLoan(HttpContext c,PreviewSession session,TicketBook
 
 async Task<IResult> BookParkCustody(HttpContext c,PreviewSession session,TicketBookRequest body)=>
  Results.Ok(await parkCustodyTicket.Book(Profile(session),Frame(session,body.Context.SnapshotId),body,c.RequestAborted));
+
+async Task<IResult> BookTransport(HttpContext c,PreviewSession session,TicketBookRequest body)=>
+ Results.Ok(await transportTicket.Book(Profile(session),Frame(session,body.Context.SnapshotId),body,c.RequestAborted));
+
+api.MapPost("/gas/transport/financial/preview",(HttpContext c,GasTransportFinancialWriteRequest body)=>Locked(c,async session=>{
+ if(session.MarketContext is not null)throw new MarketDataException("historical_read_only","Return to working data before reviewing a financial change.");
+ return await database.WithIdentity(Profile(session),"AmendTrade",async(connection,ct)=>Results.Ok(await transportFinancial.Preview(connection,body,ct)),c.RequestAborted);
+}));
+api.MapPost("/gas/transport/financial/record",(HttpContext c,GasTransportFinancialWriteRequest body)=>Locked(c,async session=>{
+ if(session.MarketContext is not null)throw new MarketDataException("historical_read_only","Return to working data before recording a financial change.");
+ return await database.WithIdentity(Profile(session),"AmendTrade",async(connection,ct)=>Results.Ok(GasTransportFinancialStore.Receipt(body,await transportFinancial.Record(connection,body,ct))),c.RequestAborted);
+}));
+api.MapPost("/gas/transport/financial/status",(HttpContext c,FacilityStatusRequest body)=>Locked(c,session=>
+ database.WithIdentity(Profile(session),"ReadTrades",async(connection,ct)=>Results.Ok(await transportFinancial.Status(connection,body,ct)),c.RequestAborted)));
+api.MapPost("/gas/transport/financial/setup",(HttpContext c,LifecycleDiscoveryRequest body)=>Locked(c,session=>
+ database.WithIdentity(Profile(session),"ReadTrades",async(connection,ct)=>Results.Ok(await GasTransportFinancialSetup.Read(connection,database,body,ct)),c.RequestAborted)));
 
 api.MapPost("/gas/park-custody/evidence",(HttpContext c,GasParkCustodyEvidenceRequest body)=>Locked(c,async session=>
 {

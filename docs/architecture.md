@@ -1,5 +1,11 @@
 # Architecture and domain contracts
 
+D412 implements the selected first [financial Transport rights and fixed-fee
+contract](gas-transport-financial.md). Direct signed whole-package values,
+independent ordinary cash and explicit expiry retain separate owners. Native, managed and actual browser consumers have local qualification, including
+explicit expiry recovery and independent cash. First-value market publication,
+integrated upstream qualification and release remain separate gates.
+
 D411 adds locally qualified [retained chosen routes](gas-transport-routes.md)
 over exact native capacity claims and exclusive logical source-plan memberships.
 Managed/native, populated-upgrade and actual browser checks qualify persisted

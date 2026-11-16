@@ -127,8 +127,8 @@ internal sealed class TradingPnlReport(PreviewDatabase database)
         // Endpoint pricing does not qualify custody's time, knowledge, reservation
         // or independent-cash bridge. Check both retained cuts before valuing
         // either endpoint, including agreements born inside the selected window.
-        await RequireCustodyContinuation(connection,opening,closing.Frame.At,request,ct);
-        await RequireCustodyContinuation(connection,closing,closing.Frame.At,request,ct);
+        await RequireServiceContinuation(connection,opening,closing.Frame.At,request,ct);
+        await RequireServiceContinuation(connection,closing,closing.Frame.At,request,ct);
         var timeDiagnostics=new List<object>();var timeValues=new List<ExactMoney>();var missingTime=false;
         var first=await Read(connection,opening,request,ct);
         // A recorded prior close's clock is read with its endpoint, and decided before the closing endpoint is prepared.
@@ -257,7 +257,7 @@ internal sealed class TradingPnlReport(PreviewDatabase database)
         return new PnlCalculated(JsonSerializer.SerializeToElement(result,RiskJobs.Json),receipts);
     }
 
-    private async Task RequireCustodyContinuation(NpgsqlConnection connection,TradingView view,DateTimeOffset through,TradingPnlRequest request,CancellationToken ct)
+    private async Task RequireServiceContinuation(NpgsqlConnection connection,TradingView view,DateTimeOffset through,TradingPnlRequest request,CancellationToken ct)
     {
         await using(var save=ScheduleStore.Command(connection,"SAVEPOINT pnl_custody_fence"))await save.ExecuteNonQueryAsync(ct);
         try
@@ -267,6 +267,11 @@ internal sealed class TradingPnlReport(PreviewDatabase database)
             var books=BookScope.Select(await BookScope.Read(connection,database.Manifest.CatalogId,ct),request.BookIds,request.PortfolioIds)
                 .Select(b=>b.Id("id")).Order().ToArray();
             if(books.Length==0)return;
+            await using(var transport=ScheduleStore.Command(connection,
+                "SELECT security.gas_transport_financial_projection_fence($1,$2,$3,$4,$5::uuid[],$6::uuid[])",database.Manifest.CatalogId,
+                view.Context.ContextId!.Value,view.Frame.At,through,books,(object?)request.TradeIds?.ToArray()??DBNull.Value))
+                if(Equals(await transport.ExecuteScalarAsync(ct),true))
+                    throw Error("gas_transport_financial_pnl","Cross-clock Transport P&L requires qualified market-value, expiry and independent cash continuation. Current-clock valuation and price stress remain available.");
             await using var fence=ScheduleStore.Command(connection,
                 "SELECT security.gas_park_custody_projection_fence($1,$2,$3,$4,$5::uuid[],$6::uuid[])",database.Manifest.CatalogId,
                 view.Context.ContextId!.Value,view.Frame.At,through,books,request.TradeIds?.ToArray()??Array.Empty<Guid>());

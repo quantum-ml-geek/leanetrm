@@ -34,6 +34,11 @@ public sealed partial class TradingBlotter
     var custodyRows=new List<JsonObject>();await foreach(var unit in custody.Units(ct))custodyRows.AddRange(unit);
     rows=[..custodyRows];
     break;
+   case GasTransportFinancialTicket.Product:
+    var transport=await GasTransportFinancialBlotter.Run(connection,database,frame,[],[],ct,selected);
+    var transportRows=new List<JsonObject>();await foreach(var unit in transport.Units(ct))transportRows.AddRange(unit);
+    rows=[..transportRows];
+    break;
    case "physical_gas":
     var gas=await GasBlotter.Run(connection,database,frame,[],[],ct,selected);
     var gasRows=new List<JsonObject>();await foreach(var unit in gas.Units(ct))gasRows.AddRange(unit);

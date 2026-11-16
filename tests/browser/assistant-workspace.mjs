@@ -41,7 +41,7 @@ export async function run({command,evaluate,wait,click,set,submit,persona,check,
     const base={page:'futures',risk:false,trade:null,entry:null,lens:'values',view:{mode:'trades',bookIds:[],portfolioIds:[],groupBy:[],measures:[]},pane:{details:false,charts:false},poppedOut:false};
     const states=[{page:'market',curve:null,tab:'prices'},{page:'power',frame:true},{page:'schedules'},
       {page:'reference',table:'units',search:''},{page:'parties',kind:'counterparty'},{page:'jobs',job:null},{page:'lifecycle'},{page:'ppa',trade:null,book:null},{page:'custom-curves',curve:null,unsaved:false},
-      base,{...base,risk:true},{...base,lens:'risk'},...[null,'futures','options','swaps','ppa','gas','park-loan','crude','lng'].map(product=>({...base,entry:{product}})),
+      base,{...base,risk:true},{...base,lens:'risk'},...[null,'futures','options','swaps','ppa','gas','transport','park-loan','crude','lng'].map(product=>({...base,entry:{product}})),
       {page:'risk',view:'risk'},...['physical-operations','facilities','dashboard','crude-setup','gas-setup','gas','crude','delivery','interval-series','interval-curves','vol-surfaces','admin','ai'].map(page=>({page})),
       {page:'facilities',facilitySection:'definitions'},{page:'facilities',facilitySection:'activity'},
       {page:'facilities',facilitySection:'transport'},{page:'facilities',facilitySection:'route'}];

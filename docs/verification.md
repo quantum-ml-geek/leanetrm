@@ -4690,3 +4690,23 @@ focused final presentation checks; Python passes 144 checks. These results use
 synthetic data, stock PostgreSQL 16 and the pinned .NET SDK in disposable
 resources. Aggregate CI gates the exact published commit; release and production
 activation remain separate.
+
+
+## Direct Transport rights and independent cash (D412)
+
+The local financial Transport artifact passes 744 managed core checks, the full
+API schedule suite, 2,020 frontend and 155 Python checks, with zero API build
+warnings/errors. Thirty-two actual managed source/command/value checkpoints,
+shared lifecycle execution/recovery, populated upgrade and two retained PRICE
+jobs pass on the same API and SQL. The 26 full-application browser checks also
+verify native postconditions, exact empty-portfolio source/context binding,
+accepted actor identity, both signed perspectives, capacity amendment, payment
+recovery, independent cash and expiry. Desktop and phone views were inspected.
+
+Adversarial controls cover strict selected-instant source expiry, deferred typed
+source/receipt seals, original permission capture across scope/publication waits,
+current-closed semantic expiry acknowledgement and retained report stability
+after market correction. Disposable synthetic resources were cleaned. First-value
+market publication, integration with the current upstream stack and release
+remain separate gates; no production activation or complete economic horizon
+continuation is implied.
