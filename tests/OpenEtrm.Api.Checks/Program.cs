@@ -208,6 +208,8 @@ if (args is ["--schedules"])
     OptionPolicySelectionChecks.Run();
     CashOptionPolicyChecks.Run();
     SelectedOptionInputChecks.Run();
+    OptionSensitivityRequestChecks.Run();
+    OptionPositionAnalyticsChecks.Run();
     ReferencePresentationChecks.Run();
     CurveActivationInputChecks.Run();
     ConnectedSampleChecks.Run();
