@@ -22,6 +22,8 @@ if(args is ["--cash-option-funding"]){CashOptionFundingChecks.Run();return;}
 if(args is ["--physical-futures-value"]){PhysicalFuturesValueChecks.Run();return;}
 if(args is ["--gas-owned-holdings"]){GasOwnedHoldingsChecks.Run();return;}
 if(args is ["--gas-park-and-loan"]){GasParkAndLoanChecks.Run();return;}
+if(args is ["--gas-park-loan-balance-fee"]){GasParkLoanBalanceFeeChecks.Run();return;}
+if(args is ["--gas-park-custody"]){GasParkCustodyChecks.Run();return;}
 if(args is ["--gas-quantity-projection"]){GasQuantityProjectionChecks.Run();return;}
 if(args is ["--gas-operator-handoff"]){GasOperatorMarkHandoffChecks.Run();return;}
 if(args is ["--gas-delivery-principal"]){GasDeliveryPrincipalChecks.Run();return;}
@@ -53,6 +55,7 @@ if(args is ["--trading-pnl"]){TradingPnlChecks.Run();return;}
 if(args is ["--delivery-index"]){DeliveryIndexChecks.Run();return;}
 if(args is ["--power-product-averages"]){PowerProductChecks.Run();return;}
 if(args is ["--generic-schedules"]){GenericScheduleChecks.Run();return;}
+if(args is ["--storage-facility"]){StorageFacilityChecks.Run();return;}
 if(args is ["--facility-quantities"]){FacilityQuantityChecks.Run();return;}
 
 if(args is ["--crude-inventory-sales"]){CrudeInventorySalesChecks.Run();return;}
@@ -187,6 +190,7 @@ if (args.Length > 0)
 GenericScheduleChecks.Run();
 CrudeReceiptCashChecks.Run();
 FacilityQuantityChecks.Run();
+StorageFacilityChecks.Run();
 CrudeInventorySalesChecks.Run();
 PhysicalCrudeSideChecks.Run();
 LngCargoChecks.Run();
@@ -666,6 +670,8 @@ GasCashoutProjectionChecks.Run();passed++;
 GasKnownCashoutChecks.Run();passed++;
 GasOwnedHoldingsChecks.Run();passed++;
 GasParkAndLoanChecks.Run();passed++;
+GasParkLoanBalanceFeeChecks.Run();passed++;
+GasParkCustodyChecks.Run();passed++;
 GasQuantityProjectionChecks.Run();passed++;
 GasOperatorMarkHandoffChecks.Run();passed++;
 GasKnownStockChecks.Run();passed++;

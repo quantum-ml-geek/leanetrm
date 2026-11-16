@@ -367,7 +367,7 @@ export function setupFutures(options:{tickets:ProductTickets;api:Api;stream:(bod
       const stale=!holdings,context=readContext();
       const displayed=displayedContext();if(!displayed?.contextId)throw Error('Read the Blotter before inspecting its Side schedules.');
       const inspectionContext={...context,knowledgeMode:'retained',contextId:displayed.contextId};
-      const read=await(h.instrumentType==='futures_option'?readOptionView(api,context,h,{actor:options.profile,recorded:()=>void act(load),surface:options.volSurface,lifecycle:options.lifecycle}):h.instrumentType==='physical_gas_park_loan'?readParkLoanView(api,inspectionContext,h,{actor:options.profile,lifecycle:options.window.kind==='main'?options.lifecycle:undefined}):h.instrumentType==='physical_lng'?readLngView(api,context,h):h.instrumentType==='physical_crude'?readCrudeView(api,context,h):h.instrumentType==='physical_gas'?readGasView(api,context,h,{onDenied:clear,actor:options.profile,readOnly:stale,amend:options.window.kind==='main'?()=>void perform({kind:'amend',key:rowKey(h)}):undefined}):h.instrumentType==='ppa'?readPpaView(api,context,h,displayed.knownAt,()=>void manage('ppa',h.tradeId)):(h.instrumentType==='financial_swap'||h.instrumentType==='heat_rate')?readSwapView(api,context,h,formats,{busy,act,settle:()=>settle(h)}):h.instrumentType==='future'?readTradeView(api,context,h,formats):genericPositionView(h));
+      const read=await(h.instrumentType==='futures_option'?readOptionView(api,context,h,{actor:options.profile,recorded:()=>void act(load),surface:options.volSurface,lifecycle:options.lifecycle}):(h.instrumentType==='physical_gas_park_loan'||h.instrumentType==='physical_gas_park_custody')?readParkLoanView(api,inspectionContext,h,{actor:options.profile,lifecycle:options.window.kind==='main'?options.lifecycle:undefined}):h.instrumentType==='physical_lng'?readLngView(api,context,h):h.instrumentType==='physical_crude'?readCrudeView(api,context,h):h.instrumentType==='physical_gas'?readGasView(api,context,h,{onDenied:clear,actor:options.profile,readOnly:stale,amend:options.window.kind==='main'?()=>void perform({kind:'amend',key:rowKey(h)}):undefined}):h.instrumentType==='ppa'?readPpaView(api,context,h,displayed.knownAt,()=>void manage('ppa',h.tradeId)):(h.instrumentType==='financial_swap'||h.instrumentType==='heat_rate')?readSwapView(api,context,h,formats,{busy,act,settle:()=>settle(h)}):h.instrumentType==='future'?readTradeView(api,context,h,formats):genericPositionView(h));
 
       // Details kept on screen while the Blotter is read again do not transition into a working settlement editor.
       const scheduled=withSideSchedules(read,api,inspectionContext,h,clear);
@@ -995,8 +995,8 @@ export function setupFutures(options:{tickets:ProductTickets;api:Api;stream:(bod
   function choose(id:string,rows:{id:string;name:string}[],selected:string,placeholder='Choose…'){const select=get<HTMLSelectElement>(id);select.replaceChildren(new Option(placeholder,''),...rows.map(r=>new Option(publicText(r.name),r.id)));select.value=rows.some(r=>r.id===selected)?selected:'';}
   // A trade row's fields as the trade columns and exports state them: exact amounts, readable names.
   function tradeFields(h:Holding):Record<string,string|null>{
-    const {booking,amountFormat,fixedAmountFormat,commodity,quantitySpecification,currencyReference,projectionCurves,coverage,exchange,linkedFuturesTradeIds,linkedFuturesTrades,actions,sideSchedules,...fields}=h;
-    return {...fields,exchange:exchange?.name??null,linkedFuturesTradeIds:linkedFuturesTradeIds?.join(', ')??null,linkedFuturesTrades:linkedFuturesTrades?.join(', ')??null,priceUnit:h.instrumentType==='ppa'?null:priceUnit(h),tradeDate:booking.tradeDate,legalEntity:booking.legalEntity??null,counterparty:booking.counterparty??null,instrumentType:friendly(h.instrumentType),commodity:commodity.name,market:h.marketLabel??curveName(h.curve),contract:deliveryLabel(h.deliveryFrom,h.deliveryTo,options.zone()),executed:displayInstant(h.executedAt,options.zone()),settlement:publicText(h.settlement==='unprocessed'?'Unprocessed':h.settlement)};
+    const {booking,amountFormat,fixedAmountFormat,commodity,quantitySpecification,currencyReference,projectionCurves,coverage,exchange,linkedFuturesTradeIds,linkedFuturesTrades,actions,sideSchedules,priceNavigation,...fields}=h;
+    return {...fields,exchange:exchange?.name??null,linkedFuturesTradeIds:linkedFuturesTradeIds?.join(', ')??null,linkedFuturesTrades:linkedFuturesTrades?.join(', ')??null,priceUnit:h.priceNavigation===false||h.instrumentType==='ppa'?null:priceUnit(h),tradeDate:booking.tradeDate,legalEntity:booking.legalEntity??null,counterparty:booking.counterparty??null,instrumentType:friendly(h.instrumentType),commodity:commodity.name,market:h.marketLabel??curveName(h.curve),contract:deliveryLabel(h.deliveryFrom,h.deliveryTo,options.zone()),executed:displayInstant(h.executedAt,options.zone()),settlement:publicText(h.settlement==='unprocessed'?'Unprocessed':h.settlement)};
   }
   // What a trade row's value cell says when the close cannot value it, on screen and in exports (D220).
   function notValued(h:Holding,key:string){return h.unavailableReason&&valueFields(h.instrumentType).includes(key)?`Not valued · ${valuationReason(h.unavailableReason,h.instrumentType)}`:undefined;}
@@ -1156,6 +1156,7 @@ export function setupFutures(options:{tickets:ProductTickets;api:Api;stream:(bod
   }
   // The curve shape a position's market has at this read: its shape, why it has none, or nothing yet while the shapes are read.
   function shapeOf(h:Holding):CurveShape|string|undefined{
+    if(h.priceNavigation===false)return 'This service has no commodity price curve.';
     if(!shapes)return undefined;
     if('unavailable' in shapes)return shapes.unavailable;
     if(projectsFromSeveralCurves(h))return severalCurvesShape;
@@ -1419,7 +1420,7 @@ export function setupFutures(options:{tickets:ProductTickets;api:Api;stream:(bod
       received:(read,keys)=>{for(const key of keys){found.set(key,read.get(key)??'Curve shape unavailable · the read did not return this exact curve');pendingShapes.delete(key);}status();redrawCurves();}});
     requestShape=h=>{
       const key=curveSelectionKey(h);
-      if(!current()||projectsFromSeveralCurves(h)||(found.has(key)&&!pendingShapes.has(key))||reader.has(key))return;
+      if(!current()||h.priceNavigation===false||projectsFromSeveralCurves(h)||(found.has(key)&&!pendingShapes.has(key))||reader.has(key))return;
       void reader.get([key]);shapesRead=reader.idle();
     };
     const observer=visibleReads(current,target=>{

@@ -5,6 +5,24 @@ over independent native ownership and cash. The bounded title-transfer profile
 uses shared entry, lifecycle and current-clock interactive/retained price risk.
 Release qualification and broader service capabilities remain separate.
 
+D414 adds [physical storage assets and activity](storage-facility-operations.md),
+independent from commercial entitlement, title and cash. The first operating
+profile has local managed, native, upgrade and browser qualification. Integration
+and release gates remain separate from that evidence.
+
+D410 adds an explicitly selected [outstanding-balance elapsed-hour fee
+profile](gas-park-loan-balance-fee.md). Accepted principal events, cumulative fee
+determinations, independent cash and remaining service value retain distinct
+owners. Current-clock price qualification does not establish complete economic
+horizon continuation.
+
+D411 adds a separately selected [retained-title parking profile](gas-park-custody.md)
+within shared Park and Loan entry. Customer-owned stock, custody reservations
+and ordinary fee cash keep independent identities. Provider custody needs no
+owned inventory or commodity mark. Disposable local qualification covers the
+managed/native, shared ticket, browser and retained price consumers;
+complete economic continuation remains fenced.
+
 D401 selects [shared lifecycle delivery](lifecycle-delivery.md): operation-specific
 eligibility, native lifecycle coordination, gas ownership/entitlements/borrowing
 and event-aware economic risk. Its delivery gates distinguish implementation from
