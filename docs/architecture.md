@@ -7,6 +7,13 @@ Booking, review and saved-trade views must show those same memberships and their
 roles and terms. The alignment is in implementation, including cash, gas holdings,
 retained programs and service rights; see [the decision](decisions.md#d417--explicit-sides-for-every-non-exchange-instrument).
 
+D416 adds [ordinary direct point market-value publication](point-trader-marks.md)
+with exact source/temporal selection, final observations and independent reviewed
+trade adoption. First publication needs no successful evaluation or input frame.
+The combined facility, certificate and financial Transport baseline passes native,
+managed, populated-upgrade and actual browser qualification. Subsequent Side
+alignment and release gates remain open.
+
 D415 implements the selected first [financial Transport rights and fixed-fee
 contract](gas-transport-financial.md). Direct signed whole-package values,
 independent ordinary cash and explicit expiry retain separate owners. Native, managed and actual browser consumers have local qualification, including

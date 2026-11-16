@@ -9,6 +9,13 @@ and shared-scenario regression checks. Actual browser checks must verify the
 integrated booking and inspection flows before release. This work is in
 implementation; it does not qualify the affected financial PRs for merge.
 
+D416 implements [ordinary direct point market-value publication](point-trader-marks.md),
+independent of financial adoption. Native and focused managed/UI checks cover a
+first value on a genuine empty point, exact correction/acknowledgement, retained
+actor-bound status and complete optional input provenance. The combined facility,
+certificate and financial Transport baseline passes actual HTTP/browser and
+upgrade checks. Subsequent Side alignment, merge and deployment remain separate gates.
+
 D415 implements the selected [financial Transport rights and fixed-fee
 contract](gas-transport-financial.md). Native and managed value/upgrade controls
 and actual shared browser checks provide local evidence. First-value market

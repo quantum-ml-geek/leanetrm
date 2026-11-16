@@ -103,6 +103,13 @@ const string malformed="The request is incomplete or malformed.";
         p.MessageText.StartsWith("operating_thermal_",StringComparison.Ordinal)||p.MessageText.StartsWith("operating_solar_",StringComparison.Ordinal)||
         p.MessageText is "operating_right_quantity" or "operating_delivery_lifecycle" or "operating_facility_unavailable" or "operating_position_scope" or "operating_position_metadata" or "operating_quantity")
         => (422,p.MessageText,"Supply exact available operating references, a feasible future plan, explicit prices and complete retained Side memberships."),
+    PostgresException p when p.MessageText=="point_trader_mark_denied"=>(403,p.MessageText,"The original market publication authority is unavailable."),
+    PostgresException p when p.SqlState=="P0001"&&p.MessageText.StartsWith("point_trader_mark_",StringComparison.Ordinal)
+        =>(p.MessageText is "point_trader_mark_stale" or "point_trader_mark_conflict"?409:422,p.MessageText,
+            "Retain the exact market point, explicit policy and original request. Refresh changed sources before reviewing a new publication."),
+    MarketDataException m when m.Code is "point_trader_mark_owner_changed" or "point_trader_mark_conflict" or "point_trader_mark_stale"=>(409,m.Code,m.Message),
+    Exception when context.Items.ContainsKey("point_trader_mark_attempted")&&e is NpgsqlException or OperationCanceledException
+        =>(503,"point_trader_mark_outcome_unknown","The publication outcome is unknown. Retain the original request and check its status."),
             ToolRefusal refusal=>(422,refusal.Code,AgentTools.Text(refusal.Code)),
     PostgresException p when p.SqlState=="P0001"&&p.MessageText=="catalogue_choice_changed"
         => (409,p.MessageText,"The offered product definition changed. Reload the available trade terms before booking."),
@@ -554,6 +561,7 @@ InputFrame Frame(PreviewSession session,Guid id)
     return frame.PpaBundle is null?frame:throw new MarketDataException("snapshot_inputs","This exact bundle frame belongs to the bounded PPA consumer.");
 }
 LifecycleEndpoints.Map(api,database,Locked,Profile,Frame);
+PointTraderMarkEndpoints.Map(api,database,Locked,Profile);
 async Task<SessionFramePlan> DiscoverFrames(NpgsqlConnection connection,PreviewSession session,CancellationToken ct)
 {
     if(session.Live is not null)return new([],session.FrameCatalog);

@@ -4892,3 +4892,41 @@ identifiers reproduces the earlier helper fingerprint. All original helper
 metadata, owner and privilege guards remain, and altered-helper refusals pass.
 This baseline does not qualify the subsequent instrument/Side and UI changes:
 complete managed, native, price-scenario and actual browser gates remain open.
+
+
+## Ordinary point market-value publication (D416)
+
+The local point publisher passes native source/receipt/concurrency/authority
+controls, populated upgrade and 21 actual HTTP/browser checks on the same API,
+SQL and served web artifacts. Preview rollback, first 20, correction 21, a genuine
+new 20, equal-predecessor acknowledgement and lost-response recovery preserve
+immutable observation lineage. Eight independent native identity vectors retain
+exact UTF-8 and microsecond semantics. Missing optional session frames do not
+prevent business publication or readonly status recovery.
+
+Selected currency, quantity-unit and multiplier labels come from the target's
+immutable quote foreign keys in entry, review and status. Explicit edited-input
+application retains independent rate/reference/frozen uses and does not select
+itself. Native postconditions prove no automatic financial adoption or trading
+publication; a separate Transport adoption and ordinary valuation produce exact
+7.50 from a signed 20 rights value and independent −12.50 fee.
+
+Real scope/publication waits refuse expired or absent original authority despite
+active successor grants and unchanged security epoch. A late same-transaction
+source correction refuses final admission; unrelated points and authentic old
+acknowledgements remain valid. Populated upgrade retains existing facts and
+valued sources and preserves an independently owned helper with a similar name.
+Desktop and phone quote disclosure were inspected. Checks used stock PostgreSQL
+16.14, .NET 10.0.402, Node 24.22.0 and an owned Chrome preview on macOS arm64;
+all disposable resources were cleaned. Integrated-stack, CI and release gates
+remain separate, with no production activation or performance claim.
+
+The combined operating-facility, certificate and financial Transport baseline
+also passes the API default/schedule suites, 779 managed core, 2,108 frontend and
+160 Python checks. The publisher native, populated-upgrade and 21 actual browser
+checks pass on that same combined API, SQL and web artifact. Migration 0355 is
+byte-identical to the locally qualified publisher migration; only its filename
+and the two qualifier hooks change. All predecessor migrations remain unchanged.
+Upgrade checks preserve unrelated helper metadata and still refuse protected
+helper drift. This baseline contains no subsequent Side implementation, and it
+does not qualify that later increment or authorize production activation.

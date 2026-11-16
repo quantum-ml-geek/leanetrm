@@ -359,6 +359,8 @@ remaining bounds are recorded with the executable consumers in the linked contra
 
 | D417 | Use explicit independent Sides for every non-exchange Instrument, including one-Side cash, holdings and service rights | Owner requirement, 2026-11-16. Futures and futures options are the only exceptions. Side owns valuation and schedule behavior; Instrument owns memberships and composition. UI booking, review and saved-trade inspection show those actual memberships. [Details](#d417--explicit-sides-for-every-non-exchange-instrument). Implementation and qualification remain separate. |
 
+| D416 | Publish ordinary final point TraderMarks independently of trade adoption | Exact source/point, business and knowledge coordinates, explicit signed values and predecessor controls. Genuine observations and native receipts implement D238; optional input reconstruction cannot prevent or undo publication. [Contract](point-trader-marks.md). The combined facility, certificate and financial Transport baseline passes native, managed, populated-upgrade and actual browser checks. Subsequent Side alignment and release remain open. |
+
 ## Proposed implementation choices
 
 These are working proposals, not additional user requirements. Resolve them
@@ -5988,3 +5990,34 @@ identity/state behavior. Native financial and lifecycle consumers, shared price
 risk and actual integrated browser entry/review/detail/inspection flows must pass
 before the affected financial work is ready to merge. A class hierarchy or UI
 label alone is not evidence that this requirement is complete.
+
+## D416 · Ordinary point publication before financial adoption
+
+**Status:** bounded implementation qualified on the combined facility, certificate
+and financial Transport baseline. Subsequent Side alignment and release remain open.
+
+**Requirement.** A market editor can record the first real signed service-right
+market value, or another supported direct outright point, without needing a
+priced portfolio or trade permissions. Trade adoption remains separate.
+
+**Decision.** Reuse final TraderMark observations and certified knowledge rather
+than introducing a money ledger. Require exact sealed source/reference and point
+relationships, explicit publication policy, supported signed exact value, evidence
+and predecessor selection. Native source admission, actor-bound command receipts,
+original authority/deadline checks and deferred counterpart seals remain the
+business boundary. Generic fact authoring does not impose a financial consumer's
+expiry, multiplier or quantity eligibility law.
+
+A prospective successor identity is control data. An explicit genuine predecessor
+with the same value is acknowledged without reserving that identity, publishing
+another fact or moving a current head backwards. Actual observations alone reserve
+revision identities. Exact retries return the first outcome; imported lineage
+stays opaque. Read-only recovery serializes absence behind publication and does
+not require an old session frame or fresh source heads.
+
+An optional complete original-input fingerprint permits a separately authorized,
+explicit use-inputs operation after publication. Preserve all unrelated source
+parts, rates, roots and frozen pins; clear old close/knowledge claims. Install
+only after commit, compare repeated selection identities by full input content,
+and recheck actor/header identity before UI selection. Optional-view failure does
+not turn accepted publication into business failure. See the [contract](point-trader-marks.md).

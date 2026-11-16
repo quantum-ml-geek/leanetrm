@@ -3,6 +3,10 @@ using System.Collections.Immutable;
 using System.Globalization;
 using OpenEtrm.Api;
 using OpenEtrm.MarketData;
+if(args is ["--point-trader-mark-identity"]){PointTraderMarkIdentityChecks.Run();return;}
+if(args is ["--point-trader-mark-inputs"]){PointTraderMarkInputSelectionChecks.Run();return;}
+if(args is ["--point-trader-mark-commands"]){PointTraderMarkCommandChecks.Run();return;}
+if(args is ["--point-trader-mark-receipts"]){PointTraderMarkReceiptChecks.Run();return;}
 if(args is ["--gas-transport-financial-commands"]){GasTransportFinancialCommandChecks.Run();return;}
 if(args is ["--gas-transport-financial-source"]){GasTransportFinancialSourceChecks.Run();return;}
 if(args is ["--gas-transport-financial-ticket"]){GasTransportFinancialTicketChecks.Run();return;}
@@ -337,6 +341,10 @@ if (args is ["--schedules"])
     GasParkCustodySetupChecks.Run();
     GasParkCustodyOverviewChecks.Run();
     TicketStatusRoutingChecks.Run();
+    PointTraderMarkIdentityChecks.Run();
+    PointTraderMarkInputSelectionChecks.Run();
+    PointTraderMarkCommandChecks.Run();
+    PointTraderMarkReceiptChecks.Run();
     CashPaymentStatusChecks.Run();
     GasInstantIngressChecks.Run();
     LifecycleContextIngressChecks.Run();

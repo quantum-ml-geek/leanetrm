@@ -5,6 +5,7 @@ import {readContractDisplay} from './contract-display.js';
 import {isCurvePage,setupCurveWorkspace} from './curve-workspace.js';
 import {setupLifecycle} from './lifecycle-view.js';
 import {setupPhysicalOperations} from './physical-operations.js';
+import {setupPointTraderMark} from './point-trader-mark-view.js';
 
 import {riskReportViews,riskViewNames,riskViews,setupRiskViews} from './risk-views.js';
 import {setupDeliverySetupSwitch} from './delivery-setup-switch.js';
@@ -171,6 +172,12 @@ const directory=()=>{if(!navigation)throw Error('Market navigation is still load
 const frame=()=>{const found=directory().frames.find(f=>f.id===select('snapshot').value);if(!found)throw Error('Choose a market date above.');return found;};
 const selectedCurve=()=>exactRow(allCurves(data()),'code',curve);
 const listedCurve=()=>{const found=directory().curves.find(c=>c.code===curve);if(!found)throw Error('Some market details are missing or inconsistent. Refresh and try again.');return found;};
+function pointValueSelection(){
+ const listed=navigation?.curves.find(item=>item.code===curve);if(!listed)return;
+ const snapshot=select('snapshot').value;
+ return {source:listed.source,curveCode:listed.code,label:listed.name,frame:navigation?.frames.find(item=>item.id===snapshot)??null,
+  stamp:JSON.stringify([administrationScope,exampleId,currentProfile,snapshot,historicalContext()??null,contextDirty,closeSession])};
+}
 const isRates=()=>!!curve&&listedCurve().marketType==='rates';
 const row=(table:string,key:string,value:string,reference=false)=>exactRow((reference?data().references:data().definitions)[table],key,value);
 const observation=(id:string)=>exactRow(data().observations,'id',id);
@@ -194,7 +201,7 @@ function syncControls(){
   for(const id of ['source-contract','pricing-contract'])select(id).disabled=busy||showAllContracts||!result?.points.length;
   for(const id of ['source-all','pricing-all'])$<HTMLButtonElement>(id).disabled=busy||!result||!result.points.length||(result.points.length<2&&!showAllContracts);
   $('reference-previous').toggleAttribute('disabled',busy||!referencePage||referencePage.offset===0);$('reference-next').toggleAttribute('disabled',busy||!canAdvanceReference());
-  recInventory.sync();structuredPower.sync();deliverySetup.sync();referenceConsole.sync();riskViewsNav.sync();lifecycle.sync();physicalOperations.sync();curveWorkspace.sync();facilities.sync();futures.sync();futures.follow();accessPolicy.sync();assistantPolicy.sync();riskJobs.sync();parties.sync();agentGrants.sync();jobs.sync();dashboard.sync();aiSettings.sync();referenceEditor.sync();dateEditor.sync();priceSetup.sync();deliveryPrices.sync();intervalSeries.sync();intervalCurves.sync();ppa.sync();gas.sync();crude.sync();gasSetup.sync();crudeSetup.sync();marketCalendar.sync();renderCloseBadge();if(initialWorkspaceReady)customCurves.sync();assistant.sync();contractPanel.sync(busy);contractPanel.place();customCurves.place();refreshContextPanels();document.body.setAttribute('aria-busy',String(busy||!!curveRead||!!pageRead?.pending));markWorkspaceReady();
+  recInventory.sync();structuredPower.sync();deliverySetup.sync();referenceConsole.sync();riskViewsNav.sync();lifecycle.sync();physicalOperations.sync();pointTraderMark.sync();curveWorkspace.sync();facilities.sync();futures.sync();futures.follow();accessPolicy.sync();assistantPolicy.sync();riskJobs.sync();parties.sync();agentGrants.sync();jobs.sync();dashboard.sync();aiSettings.sync();referenceEditor.sync();dateEditor.sync();priceSetup.sync();deliveryPrices.sync();intervalSeries.sync();intervalCurves.sync();ppa.sync();gas.sync();crude.sync();gasSetup.sync();crudeSetup.sync();marketCalendar.sync();renderCloseBadge();if(initialWorkspaceReady)customCurves.sync();assistant.sync();contractPanel.sync(busy);contractPanel.place();customCurves.place();refreshContextPanels();document.body.setAttribute('aria-busy',String(busy||!!curveRead||!!pageRead?.pending));markWorkspaceReady();
 
 }
 function renderWorkspaceMode(){
@@ -308,6 +315,7 @@ async function mayLeave(move:Move='discards',modal?:HTMLDialogElement){
   }
   if(page==='lifecycle'&&move!=='keeps'&&move!=='follows'){if(modal?.open)modal.close();return lifecycle.leave();}
   if(page==='physical-operations'&&move!=='keeps'&&move!=='follows'){if(modal?.open)modal.close();return physicalOperations.leave();}
+  if(page==='market'&&move!=='keeps'&&move!=='follows'){if(modal?.open&&pointTraderMark.unsaved())modal.close();return pointTraderMark.leave();}
   if(page==='crude'&&move!=='keeps'&&move!=='follows'){if(modal?.open)modal.close();return crude.leave();}
   if(page==='crude-setup'&&move!=='keeps'&&move!=='follows'){if(modal?.open)modal.close();return crudeSetup.leave();}
   if(page==='gas-setup'&&move!=='keeps'&&move!=='follows'){if(modal?.open)modal.close();return gasSetup.leave();}
@@ -334,7 +342,7 @@ async function mayLeave(move:Move='discards',modal?:HTMLDialogElement){
 }
 // Whether the page showing holds edits that a move to another page, context or account gives up: the Blotter's amendment or the edits
 // its popped-out window holds, a custom curve's unsaved edits or a reference item's.
-function holdsEdits(){return (page==='rec-inventory'&&recInventory.unsaved())||(page==='physical-power'&&structuredPower.unsaved())||(page==='schedules'&&(dateEditor.datesUnsaved()||dateEditor.contractsEditing()||schedules.unsaved()))||(page==='configuration'&&priceSetup.editing())||(page==='gas-setup'&&gasSetup.unsaved())||(page==='crude-setup'&&crudeSetup.unsaved())||(page==='lifecycle'&&lifecycle.edited())||(page==='physical-operations'&&physicalOperations.edited())||(page==='facilities'&&facilities.edited())||futures.windowEdits()||(page==='futures'?futures.editing():page==='risk'?riskJobs.edited():page==='reference'?referenceEditor.editing():page==='custom-curves'&&customCurves.holds('edits'));}
+function holdsEdits(){return (page==='market'&&pointTraderMark.unsaved())||(page==='rec-inventory'&&recInventory.unsaved())||(page==='physical-power'&&structuredPower.unsaved())||(page==='schedules'&&(dateEditor.datesUnsaved()||dateEditor.contractsEditing()||schedules.unsaved()))||(page==='configuration'&&priceSetup.editing())||(page==='gas-setup'&&gasSetup.unsaved())||(page==='crude-setup'&&crudeSetup.unsaved())||(page==='lifecycle'&&lifecycle.edited())||(page==='physical-operations'&&physicalOperations.edited())||(page==='facilities'&&facilities.edited())||futures.windowEdits()||(page==='futures'?futures.editing():page==='risk'?riskJobs.edited():page==='reference'?referenceEditor.editing():page==='custom-curves'&&customCurves.holds('edits'));}
 // What the profile dialog does gives up what the Blotter holds, which is asked about with the dialog closed, for a modal dialog keeps the panel, and
 // the question, out of reach. Keeping the amendment leaves the dialog closed and nothing done, which is said, for a closed dialog looks like a done one.
 async function mayLeaveForDialog(notDone:string,move:Move='discards'){
@@ -539,6 +547,7 @@ async function selectCurve(code:string,signal?:AbortSignal){
 }
 function chooseCurve(code:string){
  if(busy)return;
+ if(pointTraderMark.unsaved()){void pointTraderMark.leave().then(leave=>{if(leave)chooseCurve(code);});return;}
  if(pageRead?.page==='market'){pageRead.controller.abort();pageRead=undefined;}
  cancelCurveRead();const reading=curveRead=new AbortController();$('market-page').dataset.readState='pending';$('error').hidden=true;syncControls();
  void selectCurve(code,reading.signal).catch(error=>{if(curveRead===reading&&!reading.signal.aborted){text('error',errorMessage(error));$('error').hidden=false;}})
@@ -1111,6 +1120,11 @@ async function updateFilters(){
   if(curve&&!navigationGroups(directory(),prefs.browseBy,prefs.market,prefs.marketType).some(g=>g.curves.some(c=>c.code===curve))){curve='';invalidateMarketDates();clearPrices();}
   renderContext();await loadBoard();syncControls();
 }
+async function changeMarketFilters(type?:Preferences['marketType']){
+ if(busy)return;
+ if(!await mayLeave()){renderContext();return;}
+ await act(async()=>{if(type)prefs.marketType=type;await updateFilters();});
+}
 async function openProfile(){
   try{
     const current=(await api<{permissions:string[]}>('access')).permissions;
@@ -1136,7 +1150,7 @@ $('show-inactive-contracts').onchange=()=>void act(async()=>{
  if(!await persist(true))throw Error('The contract view preference was not confirmed. Retry or reload your profile.');
  await build();
 });
-$('preferences-form').onsubmit=event=>{event.preventDefault();void (async()=>{if(busy)return;if(['lifecycle','physical-operations'].includes(page)&&!await mayLeaveForDialog('The preferences were not changed'))return;await profileAction($('profile-save'),async()=>{const zone=select('zone').value;if(!validTimeZone(zone))throw Error('Choose a valid time zone.');const selected=select('snapshot').value,zoneChanged=zone!==prefs.timeZone;prefs.timeZone=zone;if(zoneChanged){scheduleWorkspace?.calendar.reset();dateEditor.invalidatePreview();workspaceCloses=undefined;closeCheckDue=true;}await prepareAmountDisplay({points:result?.points,historyData},request=>transport<string[]>('amounts/display',request),decimalTick());prefs.browseBy=select('preferred-browse').value as Preferences['browseBy'];prefs.assistantHidden=!$<HTMLInputElement>('show-assistant').checked;if(!await persist(true))throw Error('Your preferences were not confirmed. Retry Save or reload your profile.');if(can('ReadMarketData'))try{await closeConventionDefaults.save(select('default-close-session').value||null);}catch(error){throw Error('Display preferences were saved, but the default close convention was not confirmed. Retry Save preferences. '+errorMessage(error));}assistant.sync();if(navigation){renderFrames(selected);renderContext();renderPrices();renderReference();schedules.refresh();dateEditor.refresh();curveDefinitions.refresh();power.refresh();}renderTimeZones();customCurves.refresh();riskJobs.refresh();jobs.refresh();if(page==='lifecycle')await lifecycle.refresh();if(page==='physical-operations')await physicalOperations.refresh();facilities.refresh();administration.refresh();aiSettings.refresh();parties.refresh();intervalSeries.refresh();intervalCurves.refresh();ppa.refresh();crude.sync();futures.refreshDisplay();$<HTMLDialogElement>('profile-dialog').close();});})();};
+$('preferences-form').onsubmit=event=>{event.preventDefault();void (async()=>{if(busy)return;if((['lifecycle','physical-operations'].includes(page)||page==='market'&&pointTraderMark.unsaved())&&!await mayLeaveForDialog('The preferences were not changed'))return;await profileAction($('profile-save'),async()=>{const zone=select('zone').value;if(!validTimeZone(zone))throw Error('Choose a valid time zone.');const selected=select('snapshot').value,zoneChanged=zone!==prefs.timeZone;prefs.timeZone=zone;if(zoneChanged){scheduleWorkspace?.calendar.reset();dateEditor.invalidatePreview();workspaceCloses=undefined;closeCheckDue=true;}await prepareAmountDisplay({points:result?.points,historyData},request=>transport<string[]>('amounts/display',request),decimalTick());prefs.browseBy=select('preferred-browse').value as Preferences['browseBy'];prefs.assistantHidden=!$<HTMLInputElement>('show-assistant').checked;if(!await persist(true))throw Error('Your preferences were not confirmed. Retry Save or reload your profile.');if(can('ReadMarketData'))try{await closeConventionDefaults.save(select('default-close-session').value||null);}catch(error){throw Error('Display preferences were saved, but the default close convention was not confirmed. Retry Save preferences. '+errorMessage(error));}assistant.sync();if(navigation){renderFrames(selected);renderContext();renderPrices();renderReference();schedules.refresh();dateEditor.refresh();curveDefinitions.refresh();pointTraderMark.refresh();power.refresh();}renderTimeZones();customCurves.refresh();riskJobs.refresh();jobs.refresh();if(page==='lifecycle')await lifecycle.refresh();if(page==='physical-operations')await physicalOperations.refresh();facilities.refresh();administration.refresh();aiSettings.refresh();parties.refresh();intervalSeries.refresh();intervalCurves.refresh();ppa.refresh();crude.sync();futures.refreshDisplay();$<HTMLDialogElement>('profile-dialog').close();});})();};
 function setHostMode(mode:string){
   if(mode!=='hosted-pilot'&&mode!=='local-synthetic-preview')throw Error('The workspace mode could not be verified. Please refresh.');
   hostedPilot=mode==='hosted-pilot';
@@ -1156,6 +1170,7 @@ async function loadIdentity(initialAccess?:unknown){
   closeConventionDefaults.invalidate();
   parkLoan.reset();$('park-loan-page').hidden=true;
   transportTicket.reset();$('transport-page').hidden=true;
+  pointTraderMark.reset();
   recInventory.reset();$('rec-inventory-page').hidden=true;structuredPower.reset();$('physical-power-page').hidden=true;lifecycle.reset();$('lifecycle-page').hidden=true;physicalOperations.reset();$('physical-operations-page').hidden=true;deliverySetup.reset();referenceConsole.reset();curveWorkspace.reset();customCurves.reset();$('custom-curves-page').hidden=true;volSurfaces.reset(true);$('vol-surfaces-page').hidden=true;optionChains.reset();$('options-page').hidden=true;riskJobs.reset();riskViewsNav.reset();$('risk-page').hidden=true;facilities.reset();$('facilities-page').hidden=true;jobs.reset();$('jobs-page').hidden=true;dashboard.reset();$('dashboard-page').hidden=true;
 
   deliveryPrices.reset();intervalSeries.reset();intervalCurves.reset();ppa.reset();gas.reset();crude.reset();lng.reset();$('lng-page').hidden=true;gasSetup.reset();crudeSetup.reset();$('crude-setup-page').hidden=true;$('gas-setup-page').hidden=true;$('gas-page').hidden=true;$('crude-page').hidden=true;referenceEditor.reset();$('delivery-page').hidden=true;$('interval-series-page').hidden=true;$('interval-curves-page').hidden=true;parties.reset();unitConverter.reset();futures.reset(null);blotterViews={listed:[],shown:null};renderBlotterViews();power.reset();touProducts.reset();schedules.reset();dateEditor.reset();priceSetup.reset();curveDefinitions.reset();$('curve-definitions-page').hidden=true;scheduleWorkspace?.reset();administration.reset();aiSettings.reset();agentGrants.reset();contextDirty=false;$('parties-page').hidden=true;$('power-page').hidden=true;$('futures-page').hidden=true;$('blotter-away').hidden=true;$('no-access-page').hidden=true;
@@ -1245,9 +1260,14 @@ function chooseClose(id:string,target?:CloseTarget){
   },'closes');
 }
 $('snapshot').onchange=()=>chooseClose(select('snapshot').value);
-$('example').onclick=()=>void act(async()=>{curve='';clearPrices();await currentInputs();const example=directory().example;if(!example)throw Error('No sample is configured.');const f=directory().frames.find(f=>directory().initialFrameIds.includes(f.id)&&new Date(f.at).getTime()===new Date(example.at).getTime());if(!f)throw Error('These sample prices are unavailable.');prefs.market=null;prefs.marketType='all';prefs.tab='prices';persist();curve=example.curve;clearPrices();renderFrames(f.id);await initializeContext();if(isCurvePage(page)||['custom-curves','curve-definitions','configuration'].includes(page))await loadSelectedClose();else await build();});
-$('browse-by').onchange=()=>void act(updateFilters);$('commodity').onchange=()=>void act(updateFilters);
-document.querySelectorAll<HTMLButtonElement>('[data-type]').forEach(b=>b.onclick=()=>void act(async()=>{prefs.marketType=b.dataset.type as Preferences['marketType'];await updateFilters();}));
+async function applyPointInputs(next:FrameSummary,current:()=>boolean){
+ if(!current()||!await mayLeave('closes')||!current())return;
+ await loadNavigation(next.id);if(!current())return;
+ renderFrames(next.id);closeChanged();await initializeContext();await loadSelectedClose();
+}
+$('example').onclick=()=>leaving(async()=>{curve='';clearPrices();await currentInputs();const example=directory().example;if(!example)throw Error('No sample is configured.');const f=directory().frames.find(f=>directory().initialFrameIds.includes(f.id)&&new Date(f.at).getTime()===new Date(example.at).getTime());if(!f)throw Error('These sample prices are unavailable.');prefs.market=null;prefs.marketType='all';prefs.tab='prices';persist();curve=example.curve;clearPrices();renderFrames(f.id);await initializeContext();if(isCurvePage(page)||['custom-curves','curve-definitions','configuration'].includes(page))await loadSelectedClose();else await build();});
+$('browse-by').onchange=()=>void changeMarketFilters();$('commodity').onchange=()=>void changeMarketFilters();
+document.querySelectorAll<HTMLButtonElement>('[data-type]').forEach(b=>b.onclick=()=>void changeMarketFilters(b.dataset.type as Preferences['marketType']));
 document.querySelectorAll<HTMLButtonElement>('.tab').forEach(b=>b.onclick=()=>{if(busy)return;prefs.tab=b.dataset.view as Preferences['tab'];persist();showView(prefs.tab);assistant.sync();});
 let scheduleWorkspace:ReturnType<typeof setupScheduleWorkspace>|undefined;
 const schedules=setupShortcutEditor(act,{time:api,load:()=>api('schedules'),preview:draft=>api('schedules/preview',draft),keep:draft=>api('schedules/keep',draft),resolve:body=>api('schedules/resolve',body)},()=>busy,()=>prefs.timeZone);
@@ -1263,6 +1283,9 @@ const physicalOperations=setupPhysicalOperations($('physical-operations-page'),{
 const facilities=setupFacilities({api,act,busy:()=>busy,zone:()=>prefs.timeZone,identity:()=>administrationScope+':'+exampleId+':'+currentProfile,permission:can,
  context:()=>{if(contextDirty)throw Error('Apply the changed context before reading facilities.');return {effectiveOn:$<HTMLInputElement>('date-context-on').value,knowledgeMode:historicalContext()?'retained':'current',retained:historicalContext()??null,convention:'facility_business_date_end_utc_v1'};},
  changed:()=>syncUnloadQuestion(),tradeInspection:()=>select('snapshot').value?null:'Choose a market close in the Blotter before opening trades. Facility quantities do not select a price close.',openTrade:async(id,revision)=>{if(!await mayLeave())return;await act(async()=>{await setPage('futures');await futures.load();await futures.openTrade(id,'physical_gas',revision);});}});
+const pointTraderMark=setupPointTraderMark($('point-trader-mark'),{api,act,busy:()=>busy,zone:()=>prefs.timeZone,
+ identity:()=>administrationScope+':'+exampleId+':'+currentProfile,permission:can,historical:()=>contextDirty||!!historicalContext()||!!navigation?.live,
+ selection:pointValueSelection,changed:()=>{if(initialWorkspaceReady){syncUnloadQuestion();assistant.sync();}},applyFrame:applyPointInputs});
 const administration=setupAdministration(act,api,()=>busy,()=>prefs.timeZone,()=>administrationScope+':'+currentProfile,profileChoices);
 // A person's own agent grants, in the profile dialog (docs/ai-assistant.md §7.1).
 const agentGrants=setupAgentGrants({api,act,busy:()=>busy,zone:()=>prefs.timeZone,identity:()=>administrationScope+':'+currentProfile});
@@ -1604,6 +1627,7 @@ const place=():Place=>({page,report:pageReport(pageState()),context:pageContext(
 // Edits not yet saved, and requests whose outcome is unconfirmed, on the page a move would leave.
 function unsaved(){
   switch(page){
+    case 'market':return pointTraderMark.unsaved()||pointTraderMark.pending();
     case 'lifecycle':return lifecycle.edited();
     case 'physical-operations':return physicalOperations.edited();
     case 'rec-inventory':return recInventory.unsaved();
@@ -1798,7 +1822,7 @@ window.addEventListener('pagehide',()=>{cancelCurveRead();pageRead?.controller.a
 const askBeforeUnload=(event:BeforeUnloadEvent)=>{if(sessionEnded)return;event.preventDefault();event.returnValue='';};
 let askingBeforeUnload=false;
 function syncUnloadQuestion(){
-  const holds=recInventory.unsaved()||structuredPower.unsaved()||futures.editing()||customCurves.editing()||page==='schedules'&&dateEditor.contractsUnsaved()||page==='configuration'&&priceSetup.unsaved()||futures.windowEdits()||riskJobs.edited()||riskJobs.unconfirmed()||facilities.edited();
+  const holds=recInventory.unsaved()||structuredPower.unsaved()||futures.editing()||customCurves.editing()||page==='schedules'&&dateEditor.contractsUnsaved()||page==='configuration'&&priceSetup.unsaved()||futures.windowEdits()||riskJobs.edited()||riskJobs.unconfirmed()||facilities.edited()||pointTraderMark.unsaved()||pointTraderMark.pending();
   if(holds===askingBeforeUnload)return;
   askingBeforeUnload=holds;
   if(holds)window.addEventListener('beforeunload',askBeforeUnload);else window.removeEventListener('beforeunload',askBeforeUnload);
