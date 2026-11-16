@@ -53,6 +53,9 @@ internal static class OptionPositionAnalytics
                     .ThenBy(r=>r.Position.Trade).Select(r=>r.Json())]),
                 ["subtotal"]=Sums(group,Measures)
             })]),
+            // The open lots held in each series, added across the positions that hold it, for a chain to show beside it.
+            ["held"]=new JsonArray([..rows.GroupBy(r=>r.Position.SeriesKey.Code).OrderBy(g=>g.Key,StringComparer.Ordinal).Select(series=>new JsonObject
+                {["series"]=series.Key,["openLots"]=series.Aggregate(default(ExactDecimal),(lots,r)=>lots+r.Position.OpenLots).ToString()})]),
             ["totals"]=new JsonArray([..rows.GroupBy(r=>r.Position.Series.Text("currency")).OrderBy(g=>g.Key,StringComparer.Ordinal).Select(total=>
             {
                 var sums=Sums(total,["value","theta"]);sums.Insert(0,"currency",total.Key);return sums;

@@ -2810,3 +2810,34 @@ header>div:first-child{flex:1 1 160px}
 .lifecycle-review-facts{display:grid;grid-template-columns:max-content 1fr;gap:.5rem 1rem}
 .lifecycle-review-facts dd{margin:0;overflow-wrap:anywhere}
 @media(max-width:600px){.lifecycle-review-facts{grid-template-columns:minmax(0,1fr);gap:.25rem}.lifecycle-review-facts dd{margin-bottom:.5rem}}
+/* Options (options-view.ts): the chain of one expiry, read from the product's stored surface. Calls mirror puts about the
+   strike column; a side in the money is washed, the at-the-money strike is marked, and a missing figure is a muted dash. */
+#options-page{display:flex;flex-direction:column;gap:16px;min-width:0}
+.options-views{display:inline-flex;gap:4px;padding:4px;border-radius:999px;background:var(--surface);border:1px solid var(--border)}
+.options-view{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:999px;border:0;background:transparent;color:var(--text-2);font-weight:500}
+.options-view[aria-pressed=true]{background:var(--accent);color:var(--on-accent)}
+.options-view:disabled{color:var(--text-disabled);cursor:default}
+.options-soon{font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;padding:2px 6px;border-radius:999px;background:var(--surface-3);color:var(--text-3)}
+.options-products,.options-expiries{display:flex;flex-wrap:wrap;align-items:center;gap:8px;min-width:0}
+.options-product{display:inline-flex;align-items:baseline;gap:8px;padding:8px 14px;border-radius:10px;font-weight:400;background:var(--surface-2);color:var(--text);border:1px solid var(--border)}
+.options-product:hover{border-color:var(--border-strong);background:var(--surface)}
+.options-product[aria-pressed=true]{background:var(--accent-soft);border-color:var(--accent)}
+.options-product-name{font-weight:600}
+.options-more{font-size:12px;color:var(--text-3)}
+.options-chain-view{display:flex;flex-direction:column;gap:12px;min-width:0}
+.options-facts{display:flex;flex-wrap:wrap;gap:6px 28px;margin:0;padding:12px 16px;border-radius:var(--radius-lg);background:var(--surface);border:1px solid var(--border);font-size:13px}
+.options-facts>div{display:flex;align-items:baseline;gap:8px}.options-facts dt{color:var(--text-3)}.options-facts dd{margin:0;font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--text)}
+.options-chain-host{overflow-x:auto;border-radius:var(--radius-lg);border:1px solid var(--border);background:var(--surface);box-shadow:var(--shadow)}
+.options-chain th{text-align:right}.options-chain-groups th{text-align:center;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-text);background:var(--surface)}
+.options-chain td{cursor:pointer}.options-chain td.options-unlisted{cursor:default;background:var(--surface-2)}
+.options-chain th.options-strike{text-align:center;font-family:var(--mono);font-size:13px;font-weight:650;color:var(--text);background:var(--surface-2);border-inline:1px solid var(--border-strong);position:static}
+.options-chain thead th.options-strike{position:sticky;font-size:10px;font-weight:600;color:var(--text-2)}
+.options-chain td.options-itm{background:var(--accent-soft)}
+.options-chain tr.options-atm th.options-strike{color:var(--on-accent);background:var(--accent)}
+.options-chain td.options-selected{box-shadow:inset 0 2px 0 var(--brand-cool),inset 0 -2px 0 var(--brand-cool)}
+.options-chain td.options-missing-figure{color:var(--text-3)}
+.options-chain td.options-settle{font-weight:600}
+.options-held-lots{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;background:var(--surface-3);color:var(--text);border:1px solid var(--border-strong)}
+.options-readout dl{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:6px 24px;max-width:560px;margin:12px 0;font-size:13px}
+.options-readout dl>dt{color:var(--text-3)}.options-readout dl>dd{margin:0;font-family:var(--mono);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.options-basis{margin:0;font-size:12px;line-height:1.55;color:var(--text-3);max-width:110ch}

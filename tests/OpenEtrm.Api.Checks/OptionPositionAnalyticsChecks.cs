@@ -89,6 +89,12 @@ internal static class OptionPositionAnalyticsChecks
         Expect(gasOnly.Count==1&&Amount(gasOnly[0]!["value"]!)==1000m&&Amount(gasOnly[0]!["theta"]!)==-10m,"Complete rows total exactly.");
         Console.WriteLine("PASS value and theta total per currency, and only when every member has one");
 
+        // What a chain shows beside a series: the open lots held in it, added across the positions that hold it.
+        var again=Position("on_f27_c3","call","3","2027-01-26T19:30:00+00:00","synthetic_ng_f27","-5");
+        var held=OptionPositionAnalytics.Build(Model,[call,again,put,closed],_=>null)["held"]!.AsArray().Select(h=>(h!["series"]!.GetValue<string>(),h!["openLots"]!.GetValue<string>())).ToArray();
+        Expect(held.SequenceEqual(new[]{("on_f27_c3","-3"),("on_f27_p3","-2")}),"Held lots are the exact sum of open lots per series, without closed positions.");
+        Console.WriteLine("PASS held lots per series are the exact sum of its positions' open lots");
+
         Expect(read["model"]!.GetValue<string>()==Model&&groups.Select(g=>g!["underlyingSeries"]!.GetValue<string>()).SequenceEqual(new[]{"synthetic_ng_f27","synthetic_cl_g27","synthetic_ng_g27"}),
             "Groups are ordered by expiry, then underlying.");
         Console.WriteLine("PASS groups run by expiry and underlying future");

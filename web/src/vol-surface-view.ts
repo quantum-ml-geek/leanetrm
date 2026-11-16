@@ -37,6 +37,7 @@ type SurfaceRead={definitionRevisionId:string;snapshotId:string;model:string;sta
 
 // The only vol model: an explicit input of every read and fit, shown read-only.
 const model='smile_quadratic_log_moneyness_v1';
+export {model as volModel};
 // How often the page reads again while a fit job is queued or running.
 const checkBackMs=1500;
 const active=(job:Job|null)=>!!job&&['queued','running','cancellation_requested'].includes(job.state);
@@ -213,6 +214,14 @@ function smile(host:HTMLElement,expiry:SurfaceExpiry,members:SurfaceSeries[],ext
 }
 
 /** The page's view of the header's As of frame and the moves it offers, which the app owns. */
+const longDay=(date:string)=>new Intl.DateTimeFormat('en',{weekday:'short',month:'short',day:'numeric',year:'numeric',timeZone:'UTC'}).format(new Date(date+'T00:00:00Z'));
+const longInstant=(at:string,zone:string)=>new Intl.DateTimeFormat('en',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit',timeZone:zone}).format(new Date(at));
+/** How a page's hero names where it reads: a recorded close by its session and business day, a working snapshot by its instant. */
+export function hereHeading(here:Here|undefined,sessionName:(code:string)=>string,zone:string):{kind:string;title:string}{
+ if(!here)return {kind:'',title:'Choose an As of date above'};
+ return here.close?{kind:'Close',title:`${sessionName(here.close.session)} · ${longDay(here.close.businessDate)}`}:{kind:'Working snapshot',title:longInstant(here.at,zone)};
+}
+
 export type VolSurfaceFrames={
  /** Where the page reads: the header's As of close, or working snapshot, and its instant. */
  here():Here;
@@ -302,10 +311,10 @@ export function setupVolSurfaces(o:{api:Api;context:()=>FuturesReadRequest;histo
   timeline:LibrarySurface[]|undefined,shown:SurfaceRead|undefined,drawn:View[]=[],view3d:{reset():void;dispose():void}|undefined,cells:HeatCell[]=[],
   drawnFor:VolSurfaceResult|undefined,drawnRevision='',here:Here|undefined;
  let generation=0,timer:ReturnType<typeof setTimeout>|undefined,submitting=false,fitMessage='',moveMessage='';
- const day=(date:string)=>new Intl.DateTimeFormat('en',{weekday:'short',month:'short',day:'numeric',year:'numeric',timeZone:'UTC'}).format(new Date(date+'T00:00:00Z'));
+ const day=longDay;
  const shortDay=(date:string)=>new Intl.DateTimeFormat('en',{month:'short',day:'numeric',timeZone:'UTC'}).format(new Date(date+'T00:00:00Z'));
  const expiryLabel=(e:SurfaceExpiry)=>new Intl.DateTimeFormat('en',{month:'short',day:'numeric',year:'numeric',timeZone:o.zone()}).format(new Date(e.expiryAt));
- const instant=(at:string)=>new Intl.DateTimeFormat('en',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit',timeZone:o.zone()}).format(new Date(at));
+ const instant=(at:string)=>longInstant(at,o.zone());
  const shortInstant=(at:string)=>new Intl.DateTimeFormat('en',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZone:o.zone()}).format(new Date(at));
  // A close is named by its session and business day; a working snapshot by its instant, since it has no session.
  const closeName=(close:{session:string;businessDate:string}|null,at:string,short=false)=>close
@@ -315,8 +324,7 @@ export function setupVolSurfaces(o:{api:Api;context:()=>FuturesReadRequest;histo
 
  function showHere(){
   try{here=o.frames.here();}catch{here=undefined;}
-  hereKind.textContent=here?.close?'Close':here?'Working snapshot':'';
-  hereTitle.textContent=here?(here.close?closeName(here.close,here.at):instant(here.at)):'Choose an As of date above';
+  const heading=hereHeading(here,o.frames.sessionName,o.zone());hereKind.textContent=heading.kind;hereTitle.textContent=heading.title;
  }
  function failed(cause:unknown){
   root.dataset.state='error';error.hidden=false;
