@@ -25,10 +25,11 @@ const trimmed=(value:string)=>value.includes('.')?value.replace(/0+$/,'').replac
 /**
  * The Options page. `refresh` reads the option products and booked option positions at the context and the chosen product's
  * stored surface; `open` shows a product's chain at an expiry and series, as a link from its surface does; `reset` clears
- * what an earlier context showed. `openSurface` opens the product's volatility surface, where a close is calibrated.
+ * what an earlier context showed. `openSurface` opens the product's volatility surface, where a close is calibrated;
+ * `book` opens the option ticket on a series.
  */
 export function setupOptions(o:{api:Api;context:()=>FuturesReadRequest;zone:()=>string;frames:Pick<VolSurfaceFrames,'here'|'sessionName'>;
- openSurface:(product:string,definitionRevisionId:string,series?:string)=>void}){
+ openSurface:(product:string,definitionRevisionId:string,series?:string)=>void;book:(series:string)=>void}){
  const root=document.getElementById('options-page')!;root.dataset.ownControls='';
 
  // The close in view, with the page's views beside it.
@@ -109,8 +110,9 @@ export function setupOptions(o:{api:Api;context:()=>FuturesReadRequest;zone:()=>
   row('Value',analytics?trimmed(analytics.value):`— ${measureReason(series.series.outcome)}`);
   row('Delta',stated(analytics?.delta));row('Gamma',stated(analytics?.gamma));row('Vega',stated(analytics?.vega));row('Theta',stated(analytics?.theta));
   if(analytics?.priceBump)row('Futures bump',trimmed(analytics.priceBump));
-  const open=button('secondary','Open on Vol surfaces','options-open-surface');open.onclick=()=>o.openSurface(product,definition!,series.series.code);
-  readout.append(list,open);
+  const actions=el('div','vol-missing-actions'),book=button('','Book this series','options-book'),open=button('secondary','Open on Vol surfaces','options-open-surface');
+  book.onclick=()=>o.book(series.series.code);open.onclick=()=>o.openSurface(product,definition!,series.series.code);
+  actions.append(book,open);readout.append(list,actions);
  }
  function renderChain(){
   const surface=shown!.surface!,expiries=chainExpiries(surface);

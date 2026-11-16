@@ -83,12 +83,31 @@ export async function run({command,evaluate,wait,click,persona,check,idle,fitsWi
   await check('the chain fits the page width',fitsWidth);
 
   await click(`#options-chain td[data-series="${call.series.code}"]`);
-  await check('choosing a series shows its stored figures and offers its surface',
-   `document.querySelector('#options-readout').textContent.includes(${q(call.series.code)})&&!!document.querySelector('#options-open-surface')&&
+  await check('choosing a series shows its stored figures and offers its ticket and its surface',
+   `document.querySelector('#options-readout').textContent.includes(${q(call.series.code)})&&!!document.querySelector('#options-open-surface')&&!!document.querySelector('#options-book')&&
     document.querySelectorAll('#options-chain td.options-selected').length===7`,"document.querySelector('#options-readout').textContent");
   await click('#options-open-surface');
-  await settled("document.querySelector('#page-title').textContent==='Vol surfaces'&&document.querySelector('.vol-product-card[aria-pressed=true]')?.dataset.product==='nymex_on'",30000);
-  await check('Open on Vol surfaces opens the product\'s surface','true');
+  await settled(`document.querySelector('#page-title').textContent==='Vol surfaces'&&document.querySelector('.vol-product-card[aria-pressed=true]')?.dataset.product==='nymex_on'&&
+   document.querySelector('#vol-readout').textContent.includes(${q(call.series.code)})`,30000);
+  await check('Open on Vol surfaces opens the product\'s surface with the series highlighted',`!!document.querySelector('#vol-open-chain')`);
+  // The surface links back to the series' row in its expiry's chain.
+  await click('#vol-open-chain');
+  await settled(`document.querySelector('#page-title').textContent==='Options'&&${state}==='fitted'&&document.querySelectorAll('#options-chain td.options-selected').length===7`,30000);
+  await check('Open chain returns to the same series in the chain of its expiry',
+   `document.querySelector('#options-chain td.options-selected').dataset.series===${q(call.series.code)}&&
+    document.querySelector('#options-expiries [aria-current=true]').dataset.expiry===${q(call.series.expiryAt)}&&document.querySelector('.options-product[aria-pressed=true]').dataset.product==='nymex_on'`,
+   "[document.querySelector('#options-chain td.options-selected')?.dataset.series,document.querySelector('#options-expiries [aria-current=true]')?.dataset.expiry]");
+  // Booking opens the Blotter's option ticket with the series selected as a person would select it. The risk analyst books nothing.
+  await persona('trader');await click('#example');await click('#nav-options');await choose('nymex_on');
+  await settled(`${state}==='fitted'&&!!document.querySelector('#options-chain tbody tr')`,30000);
+  await click(`#options-chain td[data-series="${call.series.code}"]`);await click('#options-book');
+  await settled("document.querySelector('#page-title').textContent==='Blotter'&&!!document.querySelector('#option-page')?.offsetParent&&document.querySelector('#option-strike').value!==''",30000);
+  await check('Book opens the option ticket on that series, with no execution terms filled in',
+   `document.querySelector('#option-right').value===${q(call.series.right)}&&document.querySelector('#option-strike').value===${q(call.series.strike)}&&
+    document.querySelector('#option-underlying').value===${q(call.series.underlyingCode)}&&document.querySelector('#option-page').textContent.includes(${q(call.series.code)})&&
+    ['#option-side','#option-lots','#option-premium'].every(id=>document.querySelector(id).value==='')`,
+   "['exchange','commodity','underlying','right','strike','side','lots','premium'].map(id=>document.querySelector('#option-'+id)?.value)");
+  await persona('risk');await click('#example');
 
   // Positions: the booked option positions with the backend's figures, subtotals and totals. The page adds nothing up.
   await click('#nav-options');await settled(`${state}==='fitted'`,30000);

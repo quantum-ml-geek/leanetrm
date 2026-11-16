@@ -1329,6 +1329,7 @@ const optionContext=()=>{
  const view=historicalContext();return {snapshotId:frame().id,convention:optionConvention,...(view?{knowledgeMode:'retained' as const,contextId:view.contextId!}:{knowledgeMode:'current' as const})};};
 const frameHere=()=>{const f=frame() as Frame&{close?:FrameClose|null};return {closeId:f.close?f.originCloseId??null:null,at:f.at,close:f.close?{session:f.close.session,businessDate:f.close.businessDate}:null};};
 const volSurfaces=setupVolSurfaces({api,zone:()=>prefs.timeZone,historical:()=>contextDirty||!!historicalContext(),context:optionContext,
+ chain:(product,expiryAt,series)=>void openOptionChain(product,expiryAt,series),
  // The page opens another close only as the header does: an offered one is chosen there, so every page reads it.
  // A frame's id is session-scoped, so a stored surface is found by its close, or for a working snapshot by its instant.
  frames:{here:frameHere,
@@ -1338,10 +1339,17 @@ const volSurfaces=setupVolSurfaces({api,zone:()=>prefs.timeZone,historical:()=>c
    return surface.closeId?!!close&&f.originCloseId===surface.closeId:!close&&Date.parse(f.at)===Date.parse(surface.valuationAt);});
    return matches.length===1?matches[0].id:null;}}});
 // An option links to its product's surface: Vol surfaces opens on that product as its navigation opens the page, at the applied context.
-const openVolSurface=(product:string,definitionRevisionId:string)=>leaving(async()=>{if(contextDirty)await applyContext();await setPage('vol-surfaces');await volSurfaces.open(product,definitionRevisionId);},contextDirty?'discards':'page');
-// Options reads its chains from those surfaces, and sends the person to Vol surfaces to calibrate a close.
+const openVolSurface=(product:string,definitionRevisionId:string,series?:string)=>leaving(async()=>{if(contextDirty)await applyContext();await setPage('vol-surfaces');await volSurfaces.open(product,definitionRevisionId,series);},contextDirty?'discards':'page');
+// Options reads its chains from those surfaces, sends the person to Vol surfaces to calibrate a close, and opens the option
+// ticket in the Blotter on a series: the ticket selects it as a person would, or says this close does not list it.
 const optionChains=setupOptions({api,zone:()=>prefs.timeZone,context:optionContext,frames:{here:frameHere,sessionName:code=>closeSessionNames.get(code)??code},
- openSurface:(product,definitionRevisionId)=>void openVolSurface(product,definitionRevisionId)});
+ openSurface:(product,definitionRevisionId,series)=>void openVolSurface(product,definitionRevisionId,series),
+ book:series=>void leaving(async()=>{
+  if(contextDirty)await applyContext();await setPage('futures');await futures.load();
+  optionTicket.request(series);try{await futures.openProduct('options');}finally{optionTicket.request(null);}
+ },contextDirty?'discards':'page')});
+// A series on its surface links to its row in the chain of its expiry.
+const openOptionChain=(product:string,expiryAt:string,series:string)=>leaving(async()=>{if(contextDirty)await applyContext();await setPage('options');await optionChains.open(product,expiryAt,series);},contextDirty?'discards':'page');
 const optionTicket=setupOptionTicket({api,source:()=>({snapshotId:frame().id}),historical:()=>contextDirty||!!historicalContext(),actor:()=>administrationScope+':'+currentProfile,instant,zone:()=>prefs.timeZone,onBooked:ticketBooked,surface:openVolSurface});
 const ppa=setupPpa({api,act,busy:()=>busy,zone:()=>prefs.timeZone,actor:()=>administrationScope+':'+currentProfile,can,historical:()=>contextDirty||!!historicalContext(),onBooked:ticketBooked});
 const intervalCurves=setupIntervalCurves({api,act,busy:()=>busy,zone:()=>prefs.timeZone,frame:()=>frame().id,unit:async quote=>{await loadWorkspace();return unit(quote);}});

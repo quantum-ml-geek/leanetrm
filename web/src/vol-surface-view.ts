@@ -239,7 +239,8 @@ export type VolSurfaceFrames={
  * an earlier context showed. A surface belongs to the close it was fitted at: when the selected close has none, the page offers
  * to calibrate it there or to open a close that has one, and never shows another close's surface in its place.
  */
-export function setupVolSurfaces(o:{api:Api;context:()=>FuturesReadRequest;historical:()=>boolean;zone:()=>string;frames:VolSurfaceFrames}){
+export function setupVolSurfaces(o:{api:Api;context:()=>FuturesReadRequest;historical:()=>boolean;zone:()=>string;frames:VolSurfaceFrames;
+ chain:(product:string,expiryAt:string,series:string)=>void}){
  const root=document.getElementById('vol-surfaces-page')!;root.dataset.ownControls='';
  const link=surfaceLink(),pending=new PendingCommand(definite);
  const button=(className:string,text:string,id?:string)=>{const b=el('button',className,text);b.type='button';if(id)b.id=id;return b;};
@@ -606,7 +607,9 @@ export function setupVolSurfaces(o:{api:Api;context:()=>FuturesReadRequest;histo
   row('Market',s.series.marketVolatility===null?'—':`${points(s.series.marketVolatility)} vol pts`);
   row('Fitted',s.fitted===null?'—':`${points(s.fitted)} vol pts`);
   row('Rich / cheap',s.richCheap===null?'—':`${points(s.richCheap,true)} vol pts`);
-  readout.append(list);
+  // The series' row in its expiry's chain, on Options.
+  const chain=button('secondary','Open chain','vol-open-chain');chain.onclick=()=>o.chain(product,s.series.expiryAt,s.series.code);
+  readout.append(list,chain);
   const why=cells.find(c=>c.series===s)?.reasons??[];
   if(why.length)readout.append(el('p','vol-readout-reason',why.join('; ')));
  }
@@ -634,7 +637,11 @@ export function setupVolSurfaces(o:{api:Api;context:()=>FuturesReadRequest;histo
  showHere();renderShelf();renderDetail();
  return {
   refresh,selectProduct,
-  async open(code:string,definition?:string){selectProduct(code,definition);await refresh();},
+  /** Shows a product's surface, with one of its series highlighted across the views where it is named. */
+  async open(code:string,definition?:string,series?:string){
+   selectProduct(code,definition);await refresh();
+   if(series&&drawnFor?.series.some(s=>s.series.code===series))link.set(series);
+  },
   // Left for another page: what was drawn is released, and no read or check-back under way draws it again while away.
   leave(){restart();clearViews();},
   reset(resetDefinition=false){
