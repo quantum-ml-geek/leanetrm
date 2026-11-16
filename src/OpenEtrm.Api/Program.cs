@@ -2759,7 +2759,6 @@ ReadPlan PrepareRead(PreviewSession session,ReadInput input)
         {
             FuturesReadRequest=>tradeReads.Directory,
             TradingPositionsRequest body=>(connection,view,ct)=>tradeReads.Positions(connection,view,body.BookIds,body.PortfolioIds,body.Offset,body.Limit,ct),
-            TradePositionReadRequest body=>(connection,view,ct)=>tradeReads.Position(connection,view,body,ct),
             TradingWorkspaceRequest body=>(connection,view,ct)=>body.BookingCatalog is null or "directory" or "priced_contracts"
                 ?tradeReads.Workspace(connection,view,body.View,body.Summaries.IsDefault?[]:body.Summaries,body.BookingCatalog=="directory",ct)
                 :throw new MarketDataException("blotter_view","Choose an available booking catalog projection."),
@@ -2804,16 +2803,9 @@ ReadPlan PrepareRead(PreviewSession session,ReadInput input)
 }
 Task<object> AsyncPortfolioRead(ReadInput input,NpgsqlConnection connection,PreviewData data,InputFrame frame,CancellationToken ct)=>input.Body switch
 {
-    PortfolioRiskCatalogRequest body when input.Operation=="portfolio.risk.statistical.setup.v1"=>portfolioRisk.StatisticalSetup(connection,data,frame,body,ct),
     PortfolioRiskCatalogRequest body=>portfolioRisk.Catalog(connection,data,frame,body,ct),
     PortfolioRiskRequest body=>portfolioRisk.Calculate(connection,data,frame,body,ct),
     PortfolioHistoryRequest body=>portfolioRisk.History(connection,data,frame,body,ct),
-    PortfolioParametricRequest body when input.Operation=="portfolio.risk.parametric.summary.v1"=>portfolioRisk.ParametricSummary(connection,data,frame,body,ct),
-    PortfolioParametricRequest body=>portfolioRisk.Calculate(connection,data,frame,PortfolioRiskPreview.StatisticalRequest(body),ct),
-    PortfolioHistoricalRequest body when input.Operation=="portfolio.risk.historical.summary.v1"=>portfolioRisk.HistoricalSummary(connection,data,frame,body,ct),
-    PortfolioHistoricalRequest body=>portfolioRisk.Calculate(connection,data,frame,PortfolioRiskPreview.HistoricalRequest(body),ct),
-    PortfolioHistoricalSampleRequest body=>portfolioRisk.HistoricalSample(connection,data,frame,body,ct),
-    PortfolioMonteCarloRequest body=>portfolioRisk.Calculate(connection,data,frame,PortfolioRiskPreview.MonteCarloRequest(body),ct),
     _=>throw AsyncReadContract.Invalid()
 };
 var asyncReads=new AsyncReads(database,app.Lifetime.ApplicationStopping,hosted is not null,app.Logger);

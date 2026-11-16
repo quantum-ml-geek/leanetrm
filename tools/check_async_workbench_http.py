@@ -89,8 +89,6 @@ def run_checks(url, query, psql, environment, manifest):
         'calendar': {'revision': {'catalogId': manifest['referenceCatalogId'], 'revisionId': manifest['referenceRevisionId']}, 'code': 'weekdays_utc'},
         'from':'2020-12-15','to':'2020-12-19','closeTime':'16:00:00','ambiguousTime':'reject','invalidTime':'reject'}
     history = c.call('portfolio/risk/history', history_body)
-    parametric = {'history':history['request'], 'policy':{**one['parametric']['profile'],'drift':one['parametric']['drifts']['zero'],'confidence':'0.99'},
-        'finiteDifference':{'convention':one['parametric']['finiteDifference'],'tradingTicks':1,'deltaTolerance':{'absolute':'0','relative':'0'}}}
     curve = {'snapshotId':frame['id'], 'curve':'local_power', 'includeSources':True, 'includeWorkspace':True,
              'contractDisplay':{'version':'curve_display_v1','contracts':'eligible_contracts_v1'}}
     curve_points=c.call('evaluate',curve)['points']
@@ -100,7 +98,6 @@ def run_checks(url, query, psql, environment, manifest):
         ('curve.shapes.v1','market/curve-shapes',{'snapshotId':frame['id'],'curves':['future','local_power'],'contractDisplay':curve['contractDisplay']}),
         ('trading.directory.v1','trading/directory',context),
         ('trading.positions.v1','trading/positions',{'context':context,'bookIds':[],'portfolioIds':[],'offset':0,'limit':64}),
-        ('trading.position.v1','trading/position',{'context':context,'tradeId':held['tradeId'],'bindingId':held['bindingId'],'revision':int(held['revision']),'instrumentType':'future'}),
         ('futures.editor.v1','futures/editor',{'context':{**context,'convention':working['futuresConvention']},'tradeId':held['tradeId'],'revision':int(held['revision'])}),
         ('swaps.editor.v1','swaps/editor',{'context':{**context,'convention':'independent_side_financial_swap_v2'},'tradeId':swap['tradeId'],'revision':int(swap['revision'])}),
         ('trading.workspace.v1','trading/workspace',{'context':context,'view':view,'summaries':[],'bookingCatalog':'directory'}),
@@ -109,9 +106,7 @@ def run_checks(url, query, psql, environment, manifest):
         ('portfolio.risk.calculate.v1','portfolio/risk',risk),
         ('portfolio.risk.jobs.list.v1','portfolio/risk/jobs',None),
         ('portfolio.risk.jobs.read.v1','portfolio/risk/jobs/'+retained_job['id'],None),
-        ('portfolio.risk.statistical.setup.v1','portfolio/risk/statistical/setup',single),
         ('portfolio.risk.history.v1','portfolio/risk/history',history['request']),
-        ('portfolio.risk.parametric.summary.v1','portfolio/risk/parametric/summary',parametric),
         ('portfolio.risk.archive.v1','portfolio/risk/statistical/archive?limit=10',None),
     ]
     expected = {operation:c.call(path,body) for operation,path,body in cases}

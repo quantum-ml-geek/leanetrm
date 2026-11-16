@@ -45,20 +45,15 @@ internal static class AsyncReadContract
         "curve.shapes.v1"=>typeof(CurveShapesRequest),
         "trading.directory.v1" or "trading.freshness.v1"=>typeof(FuturesReadRequest),
         "trading.positions.v1"=>typeof(TradingPositionsRequest),
-        "trading.position.v1"=>typeof(TradePositionReadRequest),
         "trading.workspace.v1"=>typeof(TradingWorkspaceRequest),
         "trading.blotter.v1"=>typeof(FuturesBlotterRequest),
         "futures.editor.v1"=>typeof(FuturesEditorRequest),
         "swaps.editor.v1"=>typeof(SwapEditorRequest),
         "options.strategy.analyze.v1"=>typeof(OptionStrategyAnalyzeRequest),
         "portfolio.risk.scope.v1"=>typeof(RiskScopeRequest),
-        "portfolio.risk.catalog.v1" or "portfolio.risk.statistical.setup.v1"=>typeof(PortfolioRiskCatalogRequest),
+        "portfolio.risk.catalog.v1"=>typeof(PortfolioRiskCatalogRequest),
         "portfolio.risk.calculate.v1"=>typeof(PortfolioRiskRequest),
         "portfolio.risk.history.v1"=>typeof(PortfolioHistoryRequest),
-        "portfolio.risk.parametric.calculate.v1" or "portfolio.risk.parametric.summary.v1"=>typeof(PortfolioParametricRequest),
-        "portfolio.risk.historical.calculate.v1" or "portfolio.risk.historical.summary.v1"=>typeof(PortfolioHistoricalRequest),
-        "portfolio.risk.historical.sample.v1"=>typeof(PortfolioHistoricalSampleRequest),
-        "portfolio.risk.monte_carlo.calculate.v1"=>typeof(PortfolioMonteCarloRequest),
         "portfolio.risk.jobs.list.v1"=>typeof(AsyncReadEmpty),
         "portfolio.risk.jobs.read.v1"=>typeof(AsyncReadJob),
         "portfolio.risk.archive.v1"=>typeof(AsyncReadArchive),
@@ -79,7 +74,6 @@ internal static class AsyncReadContract
             case CurveShapesRequest shapes:return Market(shapes.SnapshotId);
             case FuturesReadRequest directory:return Trading(directory);
             case TradingPositionsRequest positions:return Trading(positions.Context);
-            case TradePositionReadRequest position:return Trading(position.Context);
             case TradingWorkspaceRequest workspace:return Trading(workspace.Context);
             case FuturesBlotterRequest blotter:return Trading(blotter.Context);
             case FuturesEditorRequest future:return Trading(future.Context);
@@ -89,10 +83,6 @@ internal static class AsyncReadContract
             case PortfolioRiskCatalogRequest catalog:return Trading(catalog.Context,true);
             case PortfolioRiskRequest risk:return Trading(risk.Context,true);
             case PortfolioHistoryRequest riskHistory:return Trading(riskHistory.Scope?.Context,true);
-            case PortfolioParametricRequest parametric:return Trading(parametric.History?.Scope?.Context,true);
-            case PortfolioHistoricalRequest historical:return Trading(historical.History?.Scope?.Context,true);
-            case PortfolioHistoricalSampleRequest sample:return Trading(sample.Request?.History?.Scope?.Context,true);
-            case PortfolioMonteCarloRequest monteCarlo:return Trading(monteCarlo.History?.Scope?.Context,true);
             case AsyncReadEmpty:return Status();
             case AsyncReadJob job:return job.Id!=Guid.Empty?Status():throw Invalid();
             case AsyncReadArchive archive:
