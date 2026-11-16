@@ -5570,7 +5570,37 @@ catch a future-effective agreement already known at opening. Generated close
 activation, broader Park and Loan terms and other gas services need their own
 qualified consumers. See [Park and Loan contracts](gas-park-loan.md).
 
-## D407 · A fitted surface stores its series' value and sensitivities, and Options reads them
+## D407 — Requested assistant context and installation-owned prompts
+
+Assistant admission retains selection identity and configured prompt versions only.
+It does not read the page, serialize a market frame or capture financial knowledge.
+A financial tool request acquires the selected context once, with original actor,
+session, deadline and worker-generation fencing. Current knowledge is certified at
+that first financial request; retained knowledge stays at its explicitly selected
+certificate. Exact-operation discovery can acquire the certificate necessary to
+construct the financial request. Broad discovery and presentation remain independent
+of financial inputs. Current-only execution does not imply context-free execution.
+
+Exact recorded-close relationships replace repeated source-matrix copies for this
+consumer, preserving historical frame aliases separately. Existing retained frames,
+results and completed operation retries remain readable. No booked input or selected
+close is substituted, and no production database is rewritten by this change.
+
+Application, agent, page and tool guidance are installation-owned immutable settings.
+Missing optional guidance adds nothing; absence is pinned as well as configured
+versions. No production instructions or prompt defaults ship in public source or
+migrations. Provider connectivity tests also use configured text and retain its exact
+versions. Only explicitly synthetic test configuration belongs in verification fixtures.
+Formal tool schemas, business constraints, authorization and separate human approval
+remain enforced in code and cannot be overridden by any prompt.
+
+A selected Park and Loan trade admits questions under the Blotter prompt. Its
+unqualified trade read returns `page_not_supported` without financial acquisition;
+it cannot dispatch the swap reader. The UI identifies that read limitation.
+
+Publication and deployment remain separate from local implementation and qualification.
+
+## D408 · A fitted surface stores its series' value and sensitivities, and Options reads them
 
 2026-11-15. Decided by the owner, who left the choice of approach to the builder.
 Takes strategies' prerequisites, option sensitivities and their graphics from the
@@ -5606,7 +5636,7 @@ value they state are unchanged.
   the money, each expiry's at-the-money strike and days to expiry. The stated
   selection is part of what a refit is compared with: other content under the
   same inputs and selection stays `vol_surface_nondeterministic`, and another
-  selection is a new revision. Surfaces stored before migration 0339 state no
+  selection is a new revision. Surfaces stored before migration 0341 state no
   selection and are removed for refitting.
 - **Options.** A Trading page for readers of market data and trades draws a
   product's chain from its stored surface and lists booked option positions

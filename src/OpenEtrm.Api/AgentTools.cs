@@ -12,9 +12,9 @@ namespace OpenEtrm.Api;
 
 // A tool the worker offers (docs/ai-assistant.md §7.3): its definition, sent to the model, and the permissions its reads
 // need, which the turn's grant lists.
-public sealed record AgentTool(string Name,string Description,JsonElement InputSchema,ImmutableArray<string> Permissions)
+public sealed record AgentTool(string Name,JsonElement InputSchema,ImmutableArray<string> Permissions)
 {
-    public ModelTool Definition=>new(Name,Description,InputSchema);
+    public ModelTool Definition=>new(Name,"",InputSchema);
 }
 
 // What a read needs of the turn's pin before it runs (§7.2): its pinned context, with or without the As of frame,
@@ -63,9 +63,16 @@ public sealed record AgentIdentity(string Principal,Guid Delegation)
 
 // What a turn's reads run with: its pin, its agent, the page report stored at ask, the version's switched-on tools and its
 // time per read (D245).
-public sealed record TurnReads(TurnPin Pin,AgentIdentity Agent,JsonElement PageReport,ImmutableHashSet<string> Tools,Guid TurnId,TimeSpan ReadLimit,ToolOutputLimits OutputLimits)
+public sealed record TurnReads(TurnPin Selection,AgentIdentity Agent,JsonElement PageReport,ImmutableHashSet<string> Tools,Guid TurnId,TimeSpan ReadLimit,ToolOutputLimits OutputLimits)
 {
     public string Question{get;init;}="";
+    TurnPin? resolved;
+    public TurnPin Pin=>resolved??Selection;
+    internal Func<CancellationToken,Task<TurnPin>>? Resolve {get;set;}
+    internal async Task EnsureContext(CancellationToken ct)
+    {
+        if(!Pin.Resolved)resolved=await (Resolve??throw new ToolRefusal("context_required"))(ct);
+    }
 }
 
 // How a step ended: with a result or a refusal the model receives, a failure that ends the turn, or a read the worker
@@ -101,6 +108,11 @@ public sealed class TurnWrites
 
     internal CurveDraftSaver Saver(int step)=>CurveDraftSaver.Assistant(turn,step,token);
 
+    internal Task<JsonElement> Resolve(NpgsqlConnection connection,TurnPin selection,CancellationToken ct)=>ModelProviders.Read(connection,
+        "SELECT assistant.resolve_turn_context($1,$2,$3::date,$4::jsonb)::text",
+        [turn,token,selection.Working?(object?)selection.BusinessDate??(selection.Frame is {} frame?TradingView.WorkingDate(frame):DBNull.Value):DBNull.Value,
+            selection.Frame is {} selected?TurnPin.StoredFrame(selected):DBNull.Value],ct);
+
     // Records a step on `connection`, in whatever transaction it holds: its read's operation, instant and accesses, and a
     // Navigate step's target with the turn's pinned context.
     internal Task<JsonElement> Record(NpgsqlConnection connection,ToolStep step,TurnPin pin,CancellationToken ct)=>ModelProviders.Read(connection,
@@ -126,68 +138,44 @@ public sealed partial class AgentTools(PreviewDatabase database,MarketReads mark
     // The fixed tools, in the order every request offers them. Show card comes later.
     internal static readonly ImmutableArray<AgentTool> Tools=
     [
-        Tool("read_current_page","Reads the page the user asked from, with what it had selected then, at the knowledge and As of frame pinned when "+
-            "the question was asked. Navigating while you answer changes nothing it reads. On the Blotter, layout says whether its details and "+
-            "charts panes were open and whether the Blotter was in a window of its own. Takes no input.",
+        Tool("read_current_page",
             """
             {"type":"object","properties":{},"additionalProperties":false}
             """,[]),
-        Tool("read_market_data","Reads market data at the knowledge and As of frame pinned when the question was asked, never another date. View "+
-            "curves lists the curve directory. View curve returns one curve's dated contracts with their exact prices at the frame. View observations "+
-            "returns the input observations that curve's prices were built from. View contract_definitions lists the published shared contract date "+
-            "definitions. Name the curve for the curve and observations views, and send it as null for the others.",
+        Tool("read_market_data",
             """
             {"type":"object","properties":{"view":{"type":"string","enum":["curves","curve","observations","contract_definitions"]},
-             "curve":{"type":["string","null"],"minLength":1,"maxLength":64,"pattern":"^[A-Za-z0-9][A-Za-z0-9_.-]*$",
-              "description":"A curve code from the curves view for the curve and observations views; null for the others."}},
+             "curve":{"type":["string","null"],"minLength":1,"maxLength":64,"pattern":"^[A-Za-z0-9][A-Za-z0-9_.-]*$"}},
              "required":["view","curve"],"additionalProperties":false}
             """,MarketData),
-        Tool("read_trades","Reads trades at the pinned knowledge and As of frame. View blotter returns Blotter rows with their execution P&L or "+
-            "present value (mode trades), or totals grouped by its dimensions (mode pivot), for the listed books and portfolios; empty lists read "+
-            "every book you can read. View trade returns one trade's revision, or its latest under the pinned knowledge when revision is null, with "+
-            "its history. View ppa_book returns the PPA trades booked in the one book bookIds names, with their bindings. Send every member: those "+
-            "the view does not take are null.",
+        Tool("read_trades",
             $$$"""
             {"type":"object","properties":{"view":{"type":"string","enum":["blotter","trade","ppa_book"]},
-             "mode":{"type":["string","null"],"enum":["trades","pivot",null],"description":"Blotter: trade rows, or totals grouped by groupBy. Null for a trade."},
-             "bookIds":{"type":["array","null"],"items":{"type":"string","pattern":"{{{Uuid}}}"},"maxItems":64,"uniqueItems":true,
-              "description":"Blotter: the books to read, empty for every book. PPA book: exactly one book. Null for a trade."},
-             "portfolioIds":{"type":["array","null"],"items":{"type":"string","pattern":"{{{Uuid}}}"},"maxItems":64,"uniqueItems":true,
-              "description":"Blotter: the portfolios to read, empty for every portfolio. Null for a trade."},
-             "groupBy":{"type":["array","null"],"items":{"type":"string","enum":["portfolio","book","market","contract","instrumentType","commodity"]},"uniqueItems":true,
-              "description":"Blotter: empty for trade rows, at least one dimension for totals. Null for a trade."},
-             "measures":{"type":["array","null"],"items":{"type":"string","enum":["tradeCount","lots","quantity","executionPnl","presentValue"]},"uniqueItems":true,
-              "description":"Blotter: empty for trade rows, at least one measure for totals; lots need the contract dimension. Null for a trade."},
-             "tradeId":{"type":["string","null"],"pattern":"{{{Uuid}}}","description":"Trade: the trade to read. Null for the blotter."},
-             "instrumentType":{"type":["string","null"],"enum":["future","financial_swap","heat_rate","ppa","physical_gas","physical_crude","physical_lng",null],"description":"Trade: its instrument type. Null for the blotter."},
-             "revision":{"type":["integer","null"],"minimum":1,
-              "description":"Trade: a revision, or null for its latest under the pinned knowledge. Null for the blotter."}},
+             "mode":{"type":["string","null"],"enum":["trades","pivot",null]},
+             "bookIds":{"type":["array","null"],"items":{"type":"string","pattern":"{{{Uuid}}}"},"maxItems":64,"uniqueItems":true},
+             "portfolioIds":{"type":["array","null"],"items":{"type":"string","pattern":"{{{Uuid}}}"},"maxItems":64,"uniqueItems":true},
+             "groupBy":{"type":["array","null"],"items":{"type":"string","enum":["portfolio","book","market","contract","instrumentType","commodity"]},"uniqueItems":true},
+             "measures":{"type":["array","null"],"items":{"type":"string","enum":["tradeCount","lots","quantity","executionPnl","presentValue"]},"uniqueItems":true},
+             "tradeId":{"type":["string","null"],"pattern":"{{{Uuid}}}"},
+             "instrumentType":{"type":["string","null"],"enum":["future","financial_swap","heat_rate","ppa","physical_gas","physical_crude","physical_lng",null]},
+             "revision":{"type":["integer","null"],"minimum":1}},
              "required":["view","mode","bookIds","portfolioIds","groupBy","measures","tradeId","instrumentType","revision"],"additionalProperties":false}
             """,["ReadMarketData","ReadTrades"]),
-        Tool("futures_option_catalog","Reads the futures options of one option product and one expiry date bookable at the pinned knowledge "+
-            "and As of frame: each unexpired option series with its exact instrument identity, right, strike, expiry, underlying, multiplier, "+
-            "premium tick and style, and its daily settlement at the frame. It reads only; options are booked by the user. Both inputs are "+
-            "required: read_reference_data's futures_option_series table, searched by the product code, lists each series' product_code and "+
-            "its expiry date as last_trading_date.",
+        Tool("futures_option_catalog",
             """
-            {"type":"object","properties":{"product":{"type":"string","minLength":1,"maxLength":64,"pattern":"^[a-z][a-z0-9_]*$",
-             "description":"The option product's code, the series' product_code in the futures_option_series reference table."},
-             "expiry":{"type":"string","pattern":"^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
-             "description":"The options' expiry date, yyyy-mm-dd: the series' last_trading_date in the futures_option_series reference table."}},
+            {"type":"object","properties":{"product":{"type":"string","minLength":1,"maxLength":64,"pattern":"^[a-z][a-z0-9_]*$"},
+             "expiry":{"type":"string","pattern":"^[0-9]{4}-[0-9]{2}-[0-9]{2}$"}},
              "required":["product","expiry"],"additionalProperties":false}
             """,["ReadMarketData","ReadTrades"]),
-        Tool("read_trade_parties","Reads the legal entity or counterparty versions in force at the pinned As of frame, as known at the pinned knowledge.",
+        Tool("read_trade_parties",
             """
             {"type":"object","properties":{"kind":{"type":"string","enum":["legal_entity","counterparty"]}},"required":["kind"],"additionalProperties":false}
             """,["ReadMarketData","ReadTradeParties"]),
-        Tool("read_schedules","View library returns published date schedules and their calendars at the pinned knowledge. View tou_products returns "+
-            "the current published TOU products, and view power_hours their hourly masks with the As of frame's single-index power contracts; both "+
-            "are current definitions, read now and labeled with that instant, and a historical view does not read them.",
+        Tool("read_schedules",
             """
             {"type":"object","properties":{"view":{"type":"string","enum":["library","tou_products","power_hours"]}},"required":["view"],"additionalProperties":false}
             """,MarketData),
-        Tool("read_reference_data","Reads one reference table at the pinned knowledge, at most 200 rows: narrow a larger table with search, a literal "+
-            "case-insensitive match anywhere in a row; an empty search matches every row.",
+        Tool("read_reference_data",
             $$$"""
             {"type":"object","properties":{"table":{"type":"string","enum":[{{{string.Join(",",PreviewDatabase.ReferenceTables.Select(t=>$"\"{t}\""))}}}]},
              "search":{"type":"string","maxLength":160}},"required":["table","search"],"additionalProperties":false}
@@ -195,37 +183,34 @@ public sealed partial class AgentTools(PreviewDatabase database,MarketReads mark
         ..CurveTools,
         JobTool,
         ..WorkspaceTools,
-        Tool("navigate","Requests a move of the user to a page, or to what a read in this turn showed. Every read result names a target handle for its "+
-            "own view, and each curve and trade it lists names one too. Send page, with target null, to open a page as it opens; or send a handle as "+
-            "target, with page null. Ordinary moves keep the knowledge and As of frame pinned when the question was asked. Curve proposals instead request explicit review of an unpriced draft under the user's current header, retaining the proposal's origin dates. Say where it leads.",
+        Tool("navigate",
             $$$"""
-            {"type":"object","properties":{"page":{"type":["string","null"],"enum":[{{{string.Join(",",PageReports.Navigable.Order(StringComparer.Ordinal).Select(p=>$"\"{p}\""))}}},null],
-              "description":"A page to open, or null to open a target."},
-             "target":{"type":["string","null"],"pattern":"^n[1-9][0-9]{0,8}$","description":"A target handle a read in this turn returned, or null to open a page."}},
+            {"type":"object","properties":{"page":{"type":["string","null"],"enum":[{{{string.Join(",",PageReports.Navigable.Order(StringComparer.Ordinal).Select(p=>$"\"{p}\""))}}},null]},
+             "target":{"type":["string","null"],"pattern":"^n[1-9][0-9]{0,8}$"}},
              "required":["page","target"],"additionalProperties":false}
             """,[])
     ];
 
-    static AgentTool Tool(string name,string description,string schema,ImmutableArray<string> permissions)
+    static AgentTool Tool(string name,string schema,ImmutableArray<string> permissions)
     {
         using var parsed=JsonDocument.Parse(schema);
-        return new(name,description,parsed.RootElement.Clone(),permissions);
+        return new(name,parsed.RootElement.Clone(),permissions);
     }
 
     // What a started turn's reads run with (§7.1, §7.2), from start_turn's answer: its pin, rebuilt from its record for
     // this scope's catalog, the agent and grant it was asked under, its stored page report and its version's tools.
-    public TurnReads Reads(JsonElement turn,JsonElement started)=>new(
-        TurnPin.From(turn.GetProperty("context"),started.GetProperty("pins"),started.GetProperty("catalogId").GetGuid(),database.Manifest,turn.GetProperty("pageReport")),
+    public TurnReads Reads(JsonElement turn,JsonElement started,TurnPin? selection=null)=>new(
+        selection??TurnPin.From(turn.GetProperty("context"),started.GetProperty("pins"),started.GetProperty("catalogId").GetGuid(),database.Manifest,turn.GetProperty("pageReport")),
         new(started.GetProperty("agentPrincipal").GetString()!,started.GetProperty("delegationId").GetGuid()),turn.GetProperty("pageReport").Clone(),
         [..started.GetProperty("tools").EnumerateArray().Select(t=>t.GetString()!)],turn.GetProperty("id").GetGuid(),
         TimeSpan.FromSeconds(started.GetProperty("limits").GetProperty("readSeconds").GetInt32()),
         ToolOutputLimits.From(started.GetProperty("operatingLimits"))){Question=turn.GetProperty("question").GetString()!};
 
     // The definitions a version's request offers: its switched-on tools that this release implements, in the fixed order.
-    public static ImmutableArray<ModelTool> Offered(IEnumerable<string> switchedOn)
+    public static ImmutableArray<ModelTool> Offered(IEnumerable<string> switchedOn,JsonElement guidance=default)
     {
         var on=switchedOn.ToHashSet(StringComparer.Ordinal);
-        return [..Tools.Where(t=>on.Contains(t.Name)).Select(t=>t.Definition)];
+        return [..Tools.Where(t=>on.Contains(t.Name)).Select(t=>t.Definition with{Description=guidance.ValueKind==JsonValueKind.Object&&guidance.TryGetProperty(t.Name,out var text)?text.GetString()!:""})];
     }
 
     static readonly ImmutableDictionary<string,ToolOperation> Operations=new ToolOperation[]
@@ -354,18 +339,18 @@ public sealed partial class AgentTools(PreviewDatabase database,MarketReads mark
     // structured refusal this table does not name carries the generic sentence.
     static readonly ImmutableDictionary<string,string> Texts=new Dictionary<string,string>
     {
-        ["approval_required"]="Prepare a proposal and ask the user to review and authorize it in the application. No business change was saved.",
+        ["approval_required"]="A separate human authorization of the exact proposal is required. No business change was saved.",
         ["operation_unavailable"]="That operation is not available through this application's assistant catalog.",
-        ["operation_context_mismatch"]="This request must use the exact knowledge and market frame pinned for the question. Prepare it again after changing context.",
-        ["operation_refused"]="The ordinary page operation refused this request. Inspect its input contract and supply complete authorized terms.",
+        ["operation_context_mismatch"]="This request must use the exact knowledge and market frame pinned for the question.",
+        ["operation_refused"]="The ordinary page operation refused this request.",
         ["tool_arguments_invalid"]="The request's arguments are not ones this tool accepts: they do not match its input schema, name a target handle no "+
-            "read in this turn returned, or name a page this agent cannot open for the user. Correct them and ask again.",
+            "read in this turn returned, or name a page this agent cannot open for the user.",
         ["page_not_supported"]="The page this question was asked from is not one the assistant reads, so nothing was read from it.",
         ["tool_not_enabled"]="This agent version does not have the tool that reads the page this question was asked from switched on.",
         ["page_selection_unavailable"]="What the page had selected when the question was asked is not available at the pinned knowledge and As of frame.",
         ["snapshot_missing"]="The question was asked without an As of frame, so this read is unavailable.",
         ["power_historical"]="TOU products and power hours are current definitions, which a historical view does not read.",
-        ["result_too_large"]="The result is larger than one read returns, so nothing was returned rather than a truncated result. Narrow the request and ask again.",
+        ["result_too_large"]="The result is larger than one read returns, so nothing was returned rather than a truncated result.",
         ["access_denied"]="The read was denied under the agent's current access.",
         ["missing_curve"]="No curve with this code exists in the pinned market data.",
         ["missing_curve_view"]="The pinned As of frame selects no contracts for this curve.",
@@ -380,8 +365,8 @@ public sealed partial class AgentTools(PreviewDatabase database,MarketReads mark
         ["reference_catalog"]="The reference catalog is unavailable at the pinned knowledge.",
         ["reference_page"]="Choose a supported reference table and search text of at most 160 characters.",
         ["ambiguous_reference"]="A required exact reference is missing or ambiguous at the pinned knowledge.",
-        ["walkthrough_plan_invalid"]="Read the page first and use only its available presentation steps and issued targets.",
-        ["walkthrough_fill_requires_explicit_terms"]="Ask for the explicit terms. A fill ask contains only Fill unsaved futures ticket on its first line, followed by unique Set ticket.FIELD = \"value\" lines for lots, executionPrice or memo. Other prose, missing terms or duplicate fields refuse.",
+        ["walkthrough_plan_invalid"]="The plan requires a prior explicit page read, supported presentation steps and issued targets.",
+        ["walkthrough_fill_requires_explicit_terms"]="The fill request lacks complete, explicit, unambiguous terms.",
         ["market_navigation"]="The curve directory has missing or conflicting classifications.",
         ["revision_conflict"]="An observation has conflicting corrections.",
         ["snapshot_inputs"]="The pinned As of frame does not name each of its inputs exactly once.",
@@ -391,7 +376,7 @@ public sealed partial class AgentTools(PreviewDatabase database,MarketReads mark
         ["swap_trade"]="This swap is unavailable at the pinned knowledge.",
         ["futures_definition"]="A held futures contract cannot be resolved at the pinned knowledge.",
         ["swap_context"]="A swap market this read needs is unavailable at the pinned As of frame.",
-        ["valuation_convention"]="This read needs its exact valuation convention. Where the page's selected read states its input, repeat that input, which names it.",
+        ["valuation_convention"]="This read needs its exact valuation convention.",
         ["clock_rule"]="A market clock this read needs is incomplete or unreadable.",
         ["clock_tzdb"]="A market clock this read needs declares a time-zone release other than the installed one.",
         ["power_calendar"]="A settlement index calendar does not cover a whole delivery period.",
@@ -404,13 +389,13 @@ public sealed partial class AgentTools(PreviewDatabase database,MarketReads mark
         ["jobs_current_only"]="Jobs are current operational records, which a historical view does not read.",
         ["job_not_found"]="No job of the user's with this id exists. The assistant reads only the user's own jobs.",
         ["historical_read_only"]="A historical view is read-only: curve drafts are saved only over working data. Nothing was saved.",
-        ["custom_curve_open_unsaved"]="The user has this curve open with unsaved edits. Ask them to save or discard their edits first. Nothing was saved.",
+        ["custom_curve_open_unsaved"]="The user has this curve open with unsaved edits. Nothing was saved.",
         ["custom_curve_agent_scope"]="The assistant saves only a new curve, or a draft it saved in this conversation that no one has saved since; never a "+
             "published curve or a person's draft. Nothing was saved.",
         ["custom_curve_agent_claimed"]="The assistant saves one curve draft per step. Nothing was saved.",
         ["custom_curve_catalog_limit"]="This catalog already holds 64 custom curves, the most it can. Nothing was saved.",
         ["custom_curve_conflict"]="The curve or the exact references it was prepared with changed, or its code is already used. Nothing was saved: "+
-            "prepare it again, or choose another code.",
+            "the retained preparation no longer matches.",
         ["delegation_denied"]="The assistant saves a curve draft only while the user may author market data and the grant allows saving drafts. Nothing was saved.",
         ["agent_runtime_unavailable"]="The assistant's turn is no longer running here. Nothing was saved."
     }.ToImmutableDictionary();
@@ -484,6 +469,11 @@ public sealed partial class AgentTools(PreviewDatabase database,MarketReads mark
         ToolStep Step(string? code,string? content,ToolStepEnd end)=>new(tool,readAt is null?null:operation.Id,input,code,readAt,readAt is null?[]:access,content,end);
         try
         {
+            if(!turn.Pin.Resolved&&operation.Needs is ToolNeeds.View or ToolNeeds.Frame or ToolNeeds.CurrentOnlyFrame)
+            {
+                await database.WithAgent(turn.Agent,turn.ReadLimit,Tools.Single(t=>t.Name==operation.Tool).Permissions,_=>{},(_,_)=>Task.FromResult(true),ct);
+                await turn.EnsureContext(ct);
+            }
             var result=await database.WithAgent(turn.Agent,turn.ReadLimit,Tools.Single(t=>t.Name==operation.Tool).Permissions,at=>readAt=at,
                 (connection,read)=>Read(connection,turn.Pin,call,read),ct);
             if(!result.Access.IsDefaultOrEmpty)access=[..access.Concat(result.Access).Distinct()];

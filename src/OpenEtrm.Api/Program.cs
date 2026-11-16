@@ -97,7 +97,8 @@ const string malformed="The request is incomplete or malformed.";
         =>(422,p.MessageText,"Supply the complete supported settings within the stated bounds."),
     PostgresException p when p.SqlState=="P0001"&&p.MessageText=="operating_policy_missing"
         =>(409,p.MessageText,"The workspace operating policy must be explicitly provisioned before this operation."),
-    PostgresException p when p.SqlState=="P0001"&&p.MessageText.StartsWith("page_prompt_",StringComparison.Ordinal)=>(409,p.MessageText,"The page prompt or request changed. Reload its current version or retry the same request."),
+    PostgresException p when p.SqlState=="P0001"&&p.MessageText=="page_prompt_required"=>(409,p.MessageText,"Configure the provider-test question in Settings → AI → Prompts before running a test."),
+    PostgresException p when p.SqlState=="P0001"&&p.MessageText.StartsWith("page_prompt_",StringComparison.Ordinal)=>(409,p.MessageText,"The prompt or request changed. Reload its current version or retry the same request."),
     PostgresException p when p.SqlState=="P0001"&&p.MessageText=="proposal_not_ready"=>(409,p.MessageText,"Wait for the assistant answer to complete before reviewing this proposal."),
     // A missing or ended session is session_ended on the assistant's routes, which offer a reload; pages keep access_denied (§8).
     PreviewSessionEnded when apiPath.StartsWithSegments("/api/assistant") => (403,"session_ended",TurnStream.Refusal("session_ended")),
@@ -2314,10 +2315,10 @@ api.MapGet("/assistant/grants/workspace",(Func<HttpContext,Task<IResult>>)(c=>Lo
     database.WithIdentity(Profile(session),"ManageAccess",async(connection,ct)=>Results.Ok(await AgentGrants.Workspace(connection,ct)),c.RequestAborted))));
 api.MapPost("/assistant/grants/grant",(HttpContext c,GrantRequest body)=>GrantCommand(c,"UseAgents",(connection,ct)=>AgentGrants.Grant(connection,body,ct)));
 api.MapPost("/assistant/grants/revoke",(HttpContext c,RevokeRequest body)=>GrantCommand(c,null,(connection,ct)=>AgentGrants.Revoke(connection,body,ct)));
-// Turns (§7.2, §7.4, §8). An ask pins the knowledge its page shows: current knowledge only while no historical context
+// Turns (§7.2, §7.4, §8). An ask retains the selection its page shows: current knowledge only while no historical context
 // is selected, a retained context only when it is the selected one, and a frame only of the session's current market
-// context. Financial questions capture the frame's date; facility questions name an independent operating date.
-var agentTurns=new AgentTurns(database,turnScope,agentWorker,turnWorker,new AgentTools(database,marketReads,scheduleReads,partyReads,tradeReads,app.Logger){Workspace=assistantWorkspace},app.Logger);
+// context. Requested financial reads capture the frame's date; facility questions name an independent operating date.
+var agentTurns=new AgentTurns(database,turnScope,agentWorker,turnWorker,new AgentTools(database,marketReads,scheduleReads,partyReads,tradeReads,app.Logger){Workspace=assistantWorkspace});
 (string Mode,Guid? Retained,InputFrame? Frame) Knowledge(PreviewSession session,AskKnowledge? knowledge,JsonElement report)
 {
     var page=report.GetProperty("page").GetString()!;
@@ -2336,8 +2337,7 @@ var agentTurns=new AgentTurns(database,turnScope,agentWorker,turnWorker,new Agen
         if(frame is not null||businessDate is null||mode=="retained"&&session.MarketContext!.EffectiveOn!=businessDate.Value.ToString("yyyy-MM-dd",System.Globalization.CultureInfo.InvariantCulture))throw PinnedContext.Missing();
         return(mode,retained,null);
     }
-    return mode=="current"&&frame is null
-        ?PageReports.Operational(page)?("operational",null,null):throw PinnedContext.Missing():(mode,retained,frame);
+    return mode=="current"&&frame is null&&PageReports.Operational(page)?("operational",null,null):(mode,retained,frame);
 }
 api.MapPost("/assistant/turns/ask",(HttpContext c,AskRequest body)=>Locked(c,session=>
 {

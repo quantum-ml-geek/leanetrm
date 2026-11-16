@@ -36,7 +36,7 @@ instants and exchange option expiry retain their explicit timing and rate inputs
 required purpose bindings and Side-owned rules; omission checks are mandatory
 in the verification runner.
 
-The integrated verification runner requires 189 commands, including required
+The integrated verification runner requires 190 commands, including required
 Park and Loan native, populated-upgrade, retained-worker and browser qualifiers,
 with domain, native database, agent and browser coverage. Local checks at D406
 passed 738 managed core checks and 1,889 frontend checks. The earlier D403
@@ -1850,7 +1850,7 @@ Extend only after the baseline contracts are demonstrated:
 - Broader calendars, delivery shapes and schedule authoring.
 - Options beyond listed American futures options (D288): other exercise and
   settlement styles, volatility inputs and shocks, and nonlinear model diagnostics.
-- An option strategy viewer on the Options page (D407): legs of one expiry
+- An option strategy viewer on the Options page (D408): legs of one expiry
   combined from the chain, with profit and loss against the futures price at
   expiry and at stated earlier instants from an analysis read over the shared
   layers. Strategies across expiries need a declared relationship between
@@ -2455,3 +2455,13 @@ consumers keep their explicit statistical method policies. Progressive row
 delivery and retained command recovery keep their separate contracts. Broader
 operation coverage and throughput claims require
 consumer-specific qualification; a transport design alone establishes neither.
+
+
+### Assistant context and prompt configuration (D407)
+
+The local implementation removes automatic market-frame capture and bundled
+assistant guidance. Settings owns versioned application, page, tool and provider-test
+text, with no production seeds. Qualification covers no-data questions, exact requested
+financial reads, retained close aliases, configuration changes, authority and deadline
+fencing, upgrade drift and browser behavior. Hosted configuration, publication and
+rollout remain separate operations; no production activation is implied.

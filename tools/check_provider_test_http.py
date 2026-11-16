@@ -22,8 +22,7 @@ from preview_client import PreviewClient
 TEST = 'settings/ai/providers/test'
 CLOSE = 'assistant.close_test(uuid,bytea,text,text,text,bigint,text,bigint,text,bigint,text,bigint,text,bigint,text)'
 MODEL = 'model-synthetic-http'
-INSTRUCTION = "This is a connectivity test from OpenETRM's page assistant settings. It carries no workspace data."
-PROMPT = 'Reply with the single word: ready.'
+from assistant_prompt_fixture import INSTRUCTION, PROMPT, configure_probe
 UNKNOWN = {'count': None, 'source': 'unknown'}
 DIMENSIONS = ('uncachedInput', 'cacheRead', 'cacheWrite', 'output', 'reasoning')
 
@@ -86,6 +85,12 @@ def run_checks(url, query, psql, manifest, environment, log, fake, trap, admin, 
     def mark():
         return len(log.read_text(errors='replace'))
 
+    absent_requests = sent()
+    absent_calls = query('SELECT count(*) FROM assistant.model_calls;')
+    missing = test(expected=409)
+    check('an unconfigured connectivity test sends nothing and retains no partial call',
+          missing['code'] == 'page_prompt_required' and sent() == absent_requests and query('SELECT count(*) FROM assistant.model_calls;') == absent_calls)
+    configure_probe(admin)
     before, requests = generation(), sent()
     check('before serving, the API took the agent-worker lock and started a generation',
           before > 0 and query('SELECT worker_pid FROM assistant.worker_generation;') == query(f'SELECT pid FROM({HOLDERS})h;'))
@@ -98,7 +103,7 @@ def run_checks(url, query, psql, manifest, environment, log, fake, trap, admin, 
           sent() == requests + 1 and (request['method'], request['path']) == ('POST', '/v1/messages')
           and sorted(headers) == ['anthropic-version', 'content-length', 'content-type', 'host', 'x-api-key']
           and headers['x-api-key'] == KEY and headers['anthropic-version'] == '2023-06-01' and KEY[-4:].encode() not in request['body'])
-    check('the request is the fixed synthetic prompt without workspace data or tools, within the test output limit and at the chosen effort',
+    check('the request is the configured synthetic prompt without workspace data or tools, within the test output limit and at the chosen effort',
           json.loads(request['body']) == {'model': MODEL, 'max_tokens': 256, 'stream': True, 'system': [{'type': 'text', 'text': INSTRUCTION}],
                                           'messages': [{'role': 'user', 'content': [{'type': 'text', 'text': PROMPT}]}],
                                           'thinking': {'type': 'adaptive', 'display': 'omitted'}, 'output_config': {'effort': 'low'},
@@ -110,11 +115,25 @@ def run_checks(url, query, psql, manifest, environment, log, fake, trap, admin, 
               {'count': 9, 'source': 'reported'}, {'count': 0, 'source': 'reported'}]
           and first['maxOutputTokens'] == 256 and first['reasoning'] == 'low' and first['identifier'] == MODEL)
     requests = sent()
-    check('a retry of a finished test returns its outcome and sends nothing', test(operation=first['operationId']) == first and sent() == requests)
+    check('a connectivity test retains exact installation prompt versions', query(
+        f"SELECT count(*) FROM assistant.test_prompt_pins p JOIN assistant.model_calls c ON c.id=p.call_id WHERE c.operation_id='{first['operationId']}' AND p.version=1;") == '2')
+    admin.call('settings/ai/page-prompts/save', {'operationId': str(uuid4()), 'page': 'provider_test:question', 'expectedVersion': 1, 'instructions': ''})
+    check('a retry of a finished test returns its original outcome after its configured question is cleared and sends nothing',
+          test(operation=first['operationId']) == first and sent() == requests)
+    cleared_calls = query('SELECT count(*) FROM assistant.model_calls;')
+    check('a new test with explicitly empty guidance is refused before sending or recording a call', test(expected=409)['code'] == 'page_prompt_required'
+          and sent() == requests and query('SELECT count(*) FROM assistant.model_calls;') == cleared_calls)
+    configure_probe(admin)
+    admin.call('settings/ai/page-prompts/save', {'operationId': str(uuid4()), 'page': 'provider_test:instructions', 'expectedVersion': 1, 'instructions': ''})
+    fake.respond(stream(recording(MODEL)))
+    without_instructions = test()
+    check('optional test instructions are omitted on the wire without a fallback',
+          without_instructions['outcome'] == 'succeeded' and 'system' not in json.loads(fake.received[-1]['body']))
+    configure_probe(admin)
     listed = {p['vendor']: p for p in admin.call('settings/ai/providers')['providers']}
     check("the Providers tab lists each shipped adapter's endpoint, here the check endpoint marked as one, and each provider's last test",
           (listed['anthropic']['endpoint'], listed['anthropic']['lastTest']) == ({'url': f'{fake.url}/v1/messages', 'check': True},
-                                                                                 first | {'underCurrentAttestation': True})
+                                                                                 without_instructions | {'underCurrentAttestation': True})
           and all(p['endpoint'] is not None and p['endpoint']['check'] and p['lastTest'] is None for vendor, p in listed.items() if vendor != 'anthropic'))
 
     def outcome(response, **expected):

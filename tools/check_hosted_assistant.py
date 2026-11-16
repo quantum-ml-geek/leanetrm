@@ -164,13 +164,15 @@ def run_checks(Client, provision, query, manifest, fake, trap, origin, tls, keys
                  stream(recording(identifier, text='Review the proposed curve.')))
     proposed = ask(administrator, {'page': 'custom_curves', 'selection': {'curve': None, 'unsaved': False}})
     assert ended(proposed['id']) == 'completed:-'
+    captured = query(f"SELECT context_id::text FROM assistant.turns WHERE id='{proposed['id']}';")
     target = json.loads(query(f"SELECT payload->'target' FROM assistant.turn_events WHERE turn_id='{proposed['id']}' AND kind='navigation';"))
     header_frames = administrator.bootstrap()['frames']
     opened = api.call('assistant/curve-proposal', target['selection'])
     check('hosted curve preparation issues a server target and owner review returns the original unpriced draft without business writes',
           target['kind'] == 'proposal' and target['selection'] == {'turnId': proposed['id'], 'step': 1}
           and opened['definition'] == definition and opened['status'] == 'unpriced_draft' and 'preview' not in opened
-          and opened['origin']['contextId'] == proposed['context']['contextId']
+          and proposed['context']['contextId'] is None and captured
+          and opened['origin']['contextId'] == target['context']['contextId'] == captured
           and administrator.bootstrap()['frames'] == header_frames
           and query('SELECT count(*) FROM market_data.custom_curve_versions;') == before, (target, opened))
 

@@ -3,6 +3,7 @@ using System.Collections.Immutable;
 using System.Globalization;
 using OpenEtrm.Api;
 using OpenEtrm.MarketData;
+if(args is ["--assistant-prompts"]){TurnWorkerChecks.Run();AgentToolChecks.Run();await ModelProviderChecks.Run();return;}
 if(args is ["--async-reads"]){AsyncReadContractChecks.Run();await AsyncReadChecks.Run();return;}
 if(args is ["--async-read-contracts"]){AsyncReadContractChecks.Run();return;}
 if(args is ["--calendar-authoring"]){CalendarAuthoringSchemaChecks.Run();return;}
