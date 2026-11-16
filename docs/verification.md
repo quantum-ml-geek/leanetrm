@@ -483,46 +483,57 @@ production-runtime limit.
 
 ## Option strategy viewer (D408)
 
-Runs on 16 November 2026 at the branch head, with synthetic data, on the local
-machine (Apple M4 Pro, 14 cores, macOS 26.6, .NET 10.0.13, Node 24.22.0). It
+Runs on 16 November 2026 at the branch head, after merging the option analytics
+branch with master in it, with synthetic data, on the local machine (Apple M4
+Pro, 14 cores, macOS 26.6, .NET 10.0.13, Node 24.22.0), from Debug builds. It
 has no PostgreSQL, so nothing that needs a database ran here.
 
 | Run | Where | Result |
 | --- | --- | --- |
-| MarketData checks `--option-strategies` | local | 20 PASS |
-| MarketData checks `--option-sensitivities`, `--vol-surface`, `--futures-options` | local | LOCAL_OPTION_GROUPS |
-| Api checks `--schedules` (with the option request, position and strategy request checks) | local | exit 0, 425 PASS |
-| Api checks `--async-read-contracts` | local | PASS |
-| `npm test --prefix web` | local | LOCAL_WEB_TESTS |
-| `python3 -m unittest tests.test_ci_impact tests.test_check_all tests.test_migration_identity tests.test_ci_dependencies tests.test_public_routes` | local | 66 OK |
+| MarketData checks `--option-strategies` | local | exit 0, 24 PASS |
+| MarketData checks `--option-sensitivities`, `--vol-surface`, `--futures-options` | local | exit 0; 8, 19 and 68 PASS |
+| Api checks `--schedules` (with the option request, position and strategy request checks) | local | exit 0, 432 PASS |
+| Api checks `--async-read-contracts`, `--assistant-workspace` | local | exit 0; 1 and 21 PASS |
+| `npm test --prefix web` | local | 1,923 pass |
+| `python3 -m unittest tests.test_ci_impact tests.test_check_all tests.test_migration_identity tests.test_ci_dependencies tests.test_public_routes` | local | 67 OK |
 
 What the local checks cover:
 
-- **Payoff at expiry.** Ten cases worked by hand at a multiplier of 10,000: a
-  long call, a long straddle, a short put (its loss bounded by a futures price
-  of zero), a call spread, an iron condor, a butterfly, a risk reversal for no
-  premium (a breakeven range), a ratio spread (an unbounded loss), a breakeven
-  that is not a terminating decimal, and a payoff that is zero from a price
-  upward. Each states the net premium, both extremes with their bounds and the
-  breakevens; the curve is checked at price points and at a strike between
-  them.
+- **Payoff at expiry.** Thirteen cases worked by hand at a multiplier of
+  10,000: a long call, a long straddle, a short put (its loss bounded by a
+  futures price of zero), a call spread, an iron condor, a butterfly, a risk
+  reversal for no premium (a breakeven range), a ratio spread (an unbounded
+  loss), a breakeven that is not a terminating decimal, a payoff that is zero
+  from a price upward, one that only touches zero at a strike, one that is
+  zero at a futures price of zero, and a put bought for nothing. Each states
+  the net premium, both extremes with their bounds and the breakevens; the
+  curve is checked at price points, at a strike between them and with a strike
+  below them all. The independent review also compared 200,000 random leg sets
+  with a separate rational calculation and found no difference; that
+  comparison is not a check in the repository.
 - **Dated curves.** Bought calls and sold puts of the option fixture, at three
   futures prices, two instants and a volatility shift, against direct tree
   prices of each leg at that price, instant and volatility; the unshifted
   curve at the valuation instant against the legs' base values; a refusal when
-  a leg is valued at intrinsic or did not calibrate, and when the valuation
-  refuses the shifted volatility; and two runs from the same inputs agreeing.
+  a leg is valued at intrinsic or did not calibrate, and `scenario_volatility`
+  when the largest shift a request may state leaves no volatility; an instant
+  at the legs' instruction cutoff, too many prices and a missing portfolio
+  each failing as an error and not as a refusal; and two runs from the same
+  inputs agreeing.
 - **Requests.** Without a database: a complete request, 30 incomplete or
   unoffered ones each refused with its code, a request at every limit accepted
   and one beyond each refused, the asynchronous channel admitting the same
   typed request and nothing less, the setup's offer drawn from a stored
-  surface alone (templates, range, days on a clock, policies that an analysis
-  accepts back), and a strategy's figures as its legs' scaled and added.
+  surface alone (templates, range, days on a clock up to before the cutoff,
+  a clock the host cannot count on, policies that an analysis accepts back),
+  and a strategy's figures as its legs' scaled and added.
 - **Web.** The view model and chart options as unit tests, and the Strategy
   view drawn in a headless browser over stubbed reads: the setup's offers, a
   template analysed with the offered policies sent back, a leg from the chain,
-  a stale analysis, a refusal that keeps the legs, refused dated curves, and an
-  answer to a replaced choice dropped.
+  a stale analysis, a refusal that keeps the legs, refused dated curves, a
+  replaced analysis cancelled and its answer dropped, the keyboard's focus
+  kept when the legs are redrawn, an answer leaving a number being typed
+  alone, and another product chosen while an analysis is awaited.
 
 Measured here through the scenario layers, for the limits a request states
 (`MarketData checks --option-strategy-workload <points> <curves>`, two legs on
@@ -537,7 +548,8 @@ one thread):
 
 A tree price is one 400-step tree in 30-digit decimal arithmetic and allocates
 about 44 MB as it runs. A request at every limit (4 legs, 41 points, 3 curves)
-is 492 tree prices for its curves and about 68 for its sensitivities, beyond
+is about 500 tree prices for its curves (492 scenario prices and one base
+price per leg for each set) and about 68 for its sensitivities, beyond
 calibration: of the order of 20 s of one thread in Release here, spread over
 the curve sets and the sensitivities, which run side by side. That is why the
 analysis is an asynchronous read and why the limits are no higher. These are
@@ -550,7 +562,9 @@ Not run here, because they need PostgreSQL; they run in the pull request's CI:
   --exchange-check`): the setup and analysis over HTTP against the exchange
   example, a straddle's exact payoff, each leg's calibrated volatility against
   the stored surface, the dated curve, a volatility shift, eleven refusals, a
-  leg at intrinsic, and that an analysis stores no surface revision.
+  leg at intrinsic, and that an analysis stores no surface revision. As first
+  written it compared a count with `len()` and would have stopped there; the
+  review found that by reading, and the corrected script has still not run.
 - The Strategy step of `tests/browser/options.mjs`, which runs the analysis in
   the application over the asynchronous read channel.
 - Every other database-backed group.
@@ -558,8 +572,11 @@ Not run here, because they need PostgreSQL; they run in the pull request's CI:
 Not covered: no check compares the analysis over the asynchronous channel with
 the same analysis over ordinary HTTP value for value, as the workbench
 qualification does for its reads; the browser step exercises the channel and
-the HTTP check the ordinary route. No check times an analysis in the
-application.
+the HTTP check the ordinary route. No check runs the setup or the analysis at
+a recorded close or a retained context over HTTP (the example's frames are
+working snapshots; the close's clock rule is covered without a database), none
+asserts the refusal of a reader without Read trades (the endpoints are wired
+as the positions read is), and none times an analysis in the application.
 
 ## Option analytics and the Options page (D407)
 
