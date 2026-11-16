@@ -111,7 +111,7 @@ const pageNames:Record<string,string>={lifecycle:'Lifecycle',physical_operations
 export const reportedPages:readonly string[]=Object.freeze(Object.keys(pageNames));
 const dimensions:Record<string,string>={portfolio:'portfolio',book:'book',market:'market',contract:'contract',instrumentType:'instrument type',commodity:'commodity'};
 const counted=(n:number,noun:string)=>`${n} ${noun}${n===1?'':'s'}`;
-const unreadTrade=(report:PageReport)=>report.page==='blotter'&&report.selection.view==='trade'&&(report.selection.instrumentType==='physical_gas_park_loan'||report.selection.instrumentType==='physical_gas_transport');
+const unreadTrade=(report:PageReport)=>report.page==='blotter'&&report.selection.view==='trade'&&(report.selection.instrumentType==='physical_gas_park_loan'||report.selection.instrumentType==='physical_gas_park_custody'||report.selection.instrumentType==='physical_gas_transport');
 const joined=(names:string[])=>names.length>1?`${names.slice(0,-1).join(', ')} and ${names.at(-1)}`:names[0];
 export type Names={curve:(code:string)=>string;table:(code:string)=>string};
 

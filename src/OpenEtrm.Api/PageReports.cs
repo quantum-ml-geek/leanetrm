@@ -126,10 +126,10 @@ static class PageReports
         if(page.Tool is null)return selection.ValueKind==JsonValueKind.Object&&!selection.EnumerateObject().Any()?new(id,null,layout):null;
         try
         {
-            // A retained Park and Loan or Transport can host a question before its trade reader is qualified.
+            // A retained gas-service trade can host a question before its trade reader is qualified.
             // Validate its identity without offering or dispatching another product's reader.
             if(id=="blotter"&&selection.ValueKind==JsonValueKind.Object&&selection.TryGetProperty("instrumentType",out var instrument)
-                &&instrument.ValueKind==JsonValueKind.String&&instrument.GetString() is ("physical_gas_park_loan" or "physical_gas_transport"))
+                &&instrument.ValueKind==JsonValueKind.String&&instrument.GetString() is ("physical_gas_park_loan" or "physical_gas_park_custody" or "physical_gas_transport"))
             {
                 var trade=new ToolInput(selection);
                 trade.Exactly("view","mode","bookIds","portfolioIds","groupBy","measures","tradeId","instrumentType","revision");

@@ -522,21 +522,21 @@ static class AgentToolChecks
 
     static void Reports()
     {
-        foreach(var kind in new[]{"physical_gas_park_loan","physical_gas_transport"})
+        foreach(var kind in new[]{"physical_gas_park_loan","physical_gas_park_custody","physical_gas_transport"})
         {
-            var parkLoan=$$"""{"view":"trade",{{NoBlotter}},"tradeId":"{{Trade}}","instrumentType":"{{kind}}","revision":1}""";
-            var parkReport=Json(Report("blotter",parkLoan));
-            PageReports.Require(parkReport);
-            var parkTurn=new TurnReads(Pin("current",Guid.NewGuid(),Working),new("agent",Guid.NewGuid()),parkReport,
+            var tradeSelection=$$"""{"view":"trade",{{NoBlotter}},"tradeId":"{{Trade}}","instrumentType":"{{kind}}","revision":1}""";
+            var tradeReport=Json(Report("blotter",tradeSelection));
+            PageReports.Require(tradeReport);
+            var tradeTurn=new TurnReads(Pin("current",Guid.NewGuid(),Working),new("agent",Guid.NewGuid()),tradeReport,
                 ["read_current_page","read_trades"],Guid.NewGuid(),TimeSpan.FromSeconds(15),new(500,65536));
-            Require(PageReports.Dispatch(parkReport) is null
-                &&Code(()=>AgentTools.Requested(parkTurn,new("synthetic_park_read","read_current_page",Json("{}"))))=="page_not_supported"
-                &&Code(()=>AgentTools.Parse("read_trades",Json(parkLoan)))=="tool_arguments_invalid",
-                "a selected Park and Loan permits a question but cannot dispatch a swap or an unqualified trade read");
-            foreach(var invalid in new[]{parkLoan.Replace(Trade.ToString(),"invalid"),parkLoan.Replace("\"revision\":1","\"revision\":0"),
-                parkLoan.Replace("\"mode\":null","\"mode\":\"trades\""),parkLoan.Replace(kind,"unknown")})
+            Require(PageReports.Dispatch(tradeReport) is null
+                &&Code(()=>AgentTools.Requested(tradeTurn,new("synthetic_unread_trade","read_current_page",Json("{}"))))=="page_not_supported"
+                &&Code(()=>AgentTools.Parse("read_trades",Json(tradeSelection)))=="tool_arguments_invalid",
+                "a selected unqualified gas service permits a question but cannot dispatch a swap or an unqualified trade read");
+            foreach(var invalid in new[]{tradeSelection.Replace(Trade.ToString(),"invalid"),tradeSelection.Replace("\"revision\":1","\"revision\":0"),
+                tradeSelection.Replace("\"mode\":null","\"mode\":\"trades\""),tradeSelection.Replace(kind,"unknown")})
                 Require(Code(()=>PageReports.Require(Json(Report("blotter",invalid))))=="page_report_invalid","unsupported trade metadata is still strictly validated");
-            Console.WriteLine("PASS selected Park and Loan or Transport admits questions, validates metadata and refuses unqualified current-page reads");
+            Console.WriteLine("PASS selected unqualified gas service admits questions, validates metadata and refuses unqualified current-page reads");
         }
         var blotter=Blotter;
         foreach(var (report,page,operation) in new[]{

@@ -434,8 +434,8 @@ test('REC ticket and saved structured inspectors report identity with real Blott
  assert.deepEqual(ticket,{page:'blotter_new_rec',selection:{},layout});
 });
 
-test('a selected Park and Loan or Transport permits questions and identifies its unavailable trade read',()=>{
-  for(const kind of ['physical_gas_park_loan','physical_gas_transport']){
+test('a selected unqualified gas service permits questions and identifies its unavailable trade read',()=>{
+  for(const kind of ['physical_gas_park_loan','physical_gas_park_custody','physical_gas_transport']){
   const report=pageReport({page:'futures',...open,risk:false,trade:{tradeId:trade,instrumentType:kind,revision:1,reference:'TR-000009'},entry:null,view:blotter});
   assert.equal(report.page,'blotter');
   assert.equal(report.selection.instrumentType,kind);
