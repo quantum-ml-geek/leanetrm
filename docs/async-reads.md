@@ -2,8 +2,9 @@
 
 D404 uses HTTP submission and one same-origin SSE connection for named business
 reads. The server executes the same authorized managed operation as ordinary
-HTTP and publishes the same exact result. The client correlates responses by
-channel, request ID, operation and snapshot; completion order is independent of
+HTTP and publishes the same business projection and exact financial values.
+The client correlates responses by channel, request ID, operation and snapshot;
+completion order is independent of
 submission order. Each consuming view still validates its selected account,
 context and projection before installing a result.
 
@@ -81,6 +82,29 @@ admission and report contracts. Progressive trade rows retain their dedicated
 incremental stream. Identity bootstrap and context selection remain explicit
 HTTP operations.
 
+## Coverage boundaries
+
+The 25 allowlisted operations cover selected curve evaluation/history/shapes,
+trading directory/positions/workspace/Blotter, futures/swap editors and portfolio
+Risk setup, calculations, history and retained reports. Dashboard curve widgets
+inherit these reads; saved layouts and definitions remain ordinary HTTP.
+
+Distinct delivery-price, interval-data, hourly-price and volatility-surface paths
+remain ordinary HTTP, as do curve-definition authoring/catalogs, Trading P&L,
+lifecycle/physical operations, facilities, reference administration, product-specific
+booking paths, infrastructure Jobs, access and AI settings. Some economic-risk
+calculation/report consumers share mapped operations, while their setup and cash
+funding paths do not. Even covered pages still use HTTP for bootstrap, context
+selection and supporting reference reads. This is a selected-read rollout, not a
+universal server-response channel.
+
+Live refresh suppresses ordinary replays of the generation already running while
+retaining the newest pending update. Explicit forced refresh and failed-generation
+retry remain available. Risk display preparation checks its owner, generation,
+selected scope and page visibility before installing results or clearing a refused
+view. A current-owner denial still clears current values. These fences also apply
+when formatting finishes after a newer selection.
+
 ## Qualification
 
 Run the owned synthetic qualification with installed stock PostgreSQL 18,
@@ -93,9 +117,9 @@ python3 tools/run_preview.py --pg-bin /path/to/postgresql/bin \
 ```
 
 This check belongs to the required `workspace` verification partition. It
-compares complete ordinary HTTP and SSE results, proves mixed curve/Risk reads
-reach separate database sessions, and checks ordinary session requests while
-those reads wait. Browser checks hold actual SSE replies to exercise superseded
+compares ordinary HTTP and SSE business projections and exact financial values,
+proves mixed curve/Risk reads reach separate database sessions, and checks
+ordinary session requests while those reads wait. Browser checks hold actual SSE replies to exercise superseded
 curves and navigation during pending trade and VaR/ES setup and calculation
 reads. Risk graph execution counters can differ with warm graph reuse; the
 comparison excludes only those named work counters and preserves every

@@ -1,5 +1,22 @@
 # Current implementation record
 
+## Asynchronous workbench reads (D404)
+
+The main application delivers 25 selected curve, trading and Risk reads through
+HTTP admission and correlated SSE completion when bootstrap advertises
+`async_reads_v1`. Views track their own progress and discard superseded results;
+commands, retained job admission and progressive trade rows keep their existing
+contracts. Detached workers capture explicit identity and context, and publication
+revalidates current authority and exact source proofs. Cancellation includes an
+admission fence for requests not yet admitted.
+
+Local qualification covers ordinary-HTTP/SSE financial parity, separate database
+sessions, navigation during held replies, hosted sign-in expiry, duplicate Live
+generations and obsolete Risk display outcomes. Current frontend and Python suites
+passed 1,866 and 122 checks respectively. This establishes correctness for the
+named consumers, not production throughput or universal page coverage. See
+[the transport contract](async-reads.md) and [verification](verification.md).
+
 ## Explicit Side calendars and payment days (D403)
 
 Supported swaps, scheduled power, PPAs, physical gas, crude and LNG now require
@@ -17,10 +34,11 @@ negotiated correction due instants and exchange expiry retain instant semantics.
 Crude consideration and fee dates stay independent through invoice aging; gas
 and LNG dates survive booking, billing and retained replay.
 
-The integrated calendar/lifecycle runner requires 183 commands, including 63
-isolated application previews across fourteen CI partitions. Local checks passed
-737 managed core checks, 88 rate checks, 1,806 frontend checks and 121 Python
-checks. Domain, native database, populated-upgrade, agent and browser checks are
+The current integrated runner requires 185 commands, including 64 isolated
+application previews across fourteen CI partitions. The earlier D403 checkpoint
+passed 737 managed core checks, 88 rate checks, 1,806 frontend checks and 121
+Python checks; these are historical checkpoint counts. Domain, native database,
+populated-upgrade, agent and browser checks are
 mandatory in the runner and CI. Independent adversarial review findings were
 resolved with verified fixes. These checks use stock PostgreSQL 18 and disposable
 synthetic resources; the required aggregate CI result gates publication readiness.

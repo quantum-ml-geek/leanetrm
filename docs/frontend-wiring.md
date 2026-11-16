@@ -1,5 +1,10 @@
 # Frontend operation wiring
 
+The routes below name logical business operations. When bootstrap advertises
+`async_reads_v1`, the main adapter sends the 25 selected reads through HTTP 202
+admission and correlated SSE responses. Other reads, commands and dedicated row
+streams retain their existing paths. See [exact coverage and protocol](async-reads.md).
+
 This map connects frontend control groups to their backend operations and executable checks. Constructed paths and retained commands are listed with the widgets that consume them.
 
 Business calculations, validation, authorization, revisions and persistence remain backend responsibilities. Display controls can correctly operate entirely in the browser. A field is considered connected when its selected value reaches the operation that consumes it; merely finding a matching route was insufficient.
@@ -8,6 +13,8 @@ Business calculations, validation, authorization, revisions and persistence rema
 
 | Trigger | Required behavior | Regression evidence |
 | --- | --- | --- |
+| A Risk display preparation completes after its selection changes | Install results or clear refused values only for the current owner, read generation, scope and visible page. Current-owner denial still clears its own values. | [Risk ownership](../web/tests/risk-inline-owner.test.mjs) |
+| Live replays the generation already refreshing | Suppress ordinary duplicates, retain the newest pending generation and allow explicit forced refresh or retry after failure. | [Live generations](../web/tests/live-context.test.mjs) |
 | A late eligible ticket choice changes a previewed draft | Mark Updating and disable Save until a successful preview matches the exact draft and amendment reason. The control and submission guard share the same readiness test; retained-request recovery remains available. | [Held ticket choices](../web/tests/ticket-choices-browser.test.mjs), [identity/recovery](../web/tests/ticket-identity-browser.test.mjs), [native amendment](../tests/browser/gas-amendments.mjs) |
 | Change the shared close, session or knowledge controls | Group session/As of separately from knowledge; accessible help explains the date, cutoff and close-in-force policy. Native context and calendar reads retain exact authority without broad observation enumeration. Business-date pages hide inapplicable market-close controls. | [Header presentation](../web/tests/context-header.test.mjs), [date header](../tests/browser/date-context.mjs), [native context demand](../tools/check_context_read_demand.py) |
 | Edit knowledge on Dashboard, fail Apply, then return to Working data | Prior widget figures disappear as soon as the context is unapplied. Show Apply/recovery guidance rather than an unrelated missing-calendar error; fresh successful reads restore values. | [Context recovery](../tests/browser/context-recovery.mjs) |
