@@ -43,6 +43,7 @@ if(args is ["--accounting-owners"]){AccountingOwnerChecks.Run();return;}
 if(args is ["--binding-discounting"]){BindingDiscountingChecks.Run();return;}
 if(args is ["--instant-rate-graph"]){InstantRateGraphChecks.Run();return;}
 if(args is ["--option-clock"]){FuturesOptionChecks.ClockLayers();return;}
+if(args is ["--option-sensitivities"]){OptionSensitivityChecks.Run();return;}
 if(args is ["--valuation-environment"]){ValuationEnvironmentChecks.Run();return;}
 if(args is ["--pnl-attribution"]){TradingPnlAttributionChecks.Run();return;}
 if(args is ["--unpaid-cash"]){UnpaidCashChecks.Run();return;}
@@ -631,6 +632,7 @@ ContractObservationRecipeChecks.Run();
 CustomProjectionChecks.Run();
 ConnectedPortfolioChecks.Run();
 ValuationEnvironmentChecks.Run();passed++;
+OptionSensitivityChecks.Run();passed++;
 JointScenarioRiskChecks.Run();
 AlignedFactorHistoryChecks.Run();
 ParametricRiskChecks.Run();

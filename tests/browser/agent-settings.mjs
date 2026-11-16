@@ -36,7 +36,7 @@ export async function run({command,evaluate,wait,click,set,submit,persona,check,
   const tick=(group,values)=>evaluate(`(()=>{for(const box of document.querySelectorAll('#${group} input[type=checkbox]'))box.checked=${JSON.stringify(values)}.includes(box.value);})()`);
   const agentsTab=async()=>{await click('#nav-ai');await click('#ai-tab-agents');};
   async function fill(changes={}){
-    const entry={description:'Answers questions about the page it is opened on.',instructions:'Quote only values you read.\nSay when something is unavailable.',
+    const entry={description:'Answers questions about the page it is opened on.',instructions:'Synthetic agent test instructions.\nSynthetic additional instructions.',
       model:added.id,effort:'low',caching:'off',operatingRole:'none',tools:['read_current_page','read_trades'],roles:['trader','risk_analyst'],toolSteps:'8',inputTokens:'200000',outputTokens:'2048',
       elapsed:'120',read:'15',retries:'2',history:'20',grant:'28',...changes};
     for(const [id,value] of [['description',entry.description],['instructions',entry.instructions],['model',entry.model],['effort',entry.effort],['caching',entry.caching],
@@ -105,18 +105,18 @@ export async function run({command,evaluate,wait,click,set,submit,persona,check,
   await fill({toolSteps:'99999999999'});await submit('#ai-agent-form');
   await check('tool steps beyond what the server can read are refused with the ranges the entries keep, and nothing is kept',
     `(async()=>${shown}.includes('1 to 100 tool steps')&&${sent('save')}.at(-1).body.limits.toolSteps===99999999999&&${sent('save')}.length===${refused+1}&&${unsaved})()`);
-  await fill({instructions:'Quote only values you read.\n'+'x'.repeat(32*1024)});await submit('#ai-agent-form');
+  await fill({instructions:'Synthetic agent test instructions.\n'+'x'.repeat(32*1024)});await submit('#ai-agent-form');
   await check('instructions past the request size limit are refused the same way',
     `(async()=>${shown}.includes('instructions within the limit stated with them')&&${sent('save')}.length===${refused+2}&&${unsaved})()`);
   await fill();await submit('#ai-agent-form');
   await check('a save creates a draft version that the table and card show, and the audit records it',
     `(()=>{const r=${row('ai-agent-table',name)};return r&&r[2]==='Version 1 · draft'&&r[3]==='Not published'&&document.querySelector('#error').hidden;})()`
-    +`&&document.querySelector('#ai-agent-draft').textContent.includes('Quote only values you read.')&&${row('ai-agent-audit',name)}?.[3]==='Version saved'`);
+    +`&&document.querySelector('#ai-agent-draft').textContent.includes('Synthetic agent test instructions.')&&${row('ai-agent-audit',name)}?.[3]==='Version saved'`);
   await check('the save sent every field, with the exact model version the directory listed',
     `(()=>{const b=${sent('save')}.at(-1).body;return b.operatingRole==='none'&&b.modelId===${JSON.stringify(added.id)}&&b.modelVersion===1&&b.reasoning==='low'&&b.caching===false`
     +"&&JSON.stringify(b.tools)==='[\"read_current_page\",\"read_trades\"]'&&JSON.stringify(b.allowedRoles)==='[\"risk_analyst\",\"trader\"]'"
     +"&&JSON.stringify(b.limits)==='{\"toolSteps\":8,\"inputTokens\":200000,\"outputTokens\":2048,\"elapsedSeconds\":120,\"readSeconds\":15,\"retries\":2,\"historyTurns\":20}'&&b.grantDays===28"
-    +"&&b.instructions==='Quote only values you read.\\nSay when something is unavailable.';})()");
+    +"&&b.instructions==='Synthetic agent test instructions.\\nSynthetic additional instructions.';})()");
   // A chosen role that no longer uses agents is named rather than offered, after a refresh as when its agent opens, and
   // is chosen again once it is offered again; a stubbed directory drops one.
   await evaluate("window.__dropRole=true;window.__tracked1=window.fetch;window.fetch=async(...args)=>{const r=await window.__tracked1(...args);"

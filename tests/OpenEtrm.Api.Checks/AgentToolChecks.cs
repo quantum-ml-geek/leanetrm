@@ -102,9 +102,8 @@ static class AgentToolChecks
             Input.Replace("\"curveId\":null","\"curveId\":\"synthetic\""),Input.Replace("custom_curve_recipe_v2","unknown"),Input.Replace("}",",\"publish\":true}")})
             Require(Code(()=>AgentTools.Parse("save_custom_curve_draft",Json(invalid)))=="tool_arguments_invalid",$"save_custom_curve_draft refuses {invalid}");
         var tool=AgentTools.Tools.Single(t=>t.Name=="save_custom_curve_draft");
-        Require(tool.Permissions.SequenceEqual(["ReadMarketData","WriteMarketDefinitions"])&&tool.Description.Contains("prepare_custom_curve",StringComparison.Ordinal)
-            &&tool.Description.Contains("never publishes",StringComparison.OrdinalIgnoreCase),
-            "Save curve draft is listed with the permissions the database lists for it and tells the model to prepare first and that it never publishes");
+        Require(tool.Permissions.SequenceEqual(["ReadMarketData","WriteMarketDefinitions"])&&tool.Definition.Description=="",
+            "Save curve draft is listed with the permissions the database lists for it and contains no bundled prompt");
 
         // Its key is the turn and step (D238): the request and a new curve's identity are the same for a retried step only.
         var turn=Guid.Parse("a1000000-0000-0000-0000-000000000001");
@@ -172,6 +171,16 @@ static class AgentToolChecks
 
     static void TurnPins()
     {
+        var close=Guid.Parse("c1000000-0000-0000-0000-000000000001");
+        var alias=Guid.Parse("c1000000-0000-0000-0000-000000000002");
+        var large=Working with{Id=alias,OriginCloseId=close,ObservationIds=[..Enumerable.Range(0,8000).Select(_=>Guid.NewGuid())]};
+        Require(Encoding.UTF8.GetByteCount(JsonSerializer.Serialize(large.ObservationIds))>262144,"synthetic input IDs alone exceed the old frame-copy limit");
+        var pending=TurnPin.Deferred("current",null,large,null);
+        Require(!pending.Resolved&&pending.ContextId==Guid.Empty&&ReferenceEquals(pending.Frame,large),"admission retains only the immutable selection without serializing inputs or acquiring context");
+        var compact=Json(TurnPin.StoredFrame(large));
+        Require(compact.EnumerateObject().Count()==2&&compact.GetProperty("frameId").GetGuid()==alias&&compact.GetProperty("closeId").GetGuid()==close&&
+            Encoding.UTF8.GetByteCount(compact.GetRawText())<150,"large historical aliases retain independent selected-frame and exact-close identities in a bounded reference");
+        Console.WriteLine("PASS oversized close selections retain exact compact references, including historical aliases");
         var (a,b,c)=(Guid.NewGuid(),Guid.NewGuid(),Guid.NewGuid());
         var working=new InputFrame(Guid.NewGuid(),"Initial synthetic inputs",DateTimeOffset.Parse("2020-12-18T16:00:00Z"),OpenEtrm.Shared.Temporal.BusinessTime.UtcSnapshot(DateTimeOffset.Parse("2020-12-18T16:00:00Z")).Date,[a,b],
             ImmutableDictionary<string,ImmutableArray<Guid>>.Empty.Add("future",[c]));
@@ -230,7 +239,7 @@ static class AgentToolChecks
         foreach(var tool in AgentTools.Tools)
         {
             Require(tool.InputSchema.GetProperty("type").GetString()=="object"&&tool.InputSchema.GetProperty("additionalProperties").ValueKind==JsonValueKind.False
-                &&tool.Definition==new ModelTool(tool.Name,tool.Description,tool.InputSchema)&&tool.Description.Length>0,$"{tool.Name} states a closed object input schema");
+                &&tool.Definition==new ModelTool(tool.Name,tool.Definition.Description,tool.InputSchema)&&tool.Definition.Description.Length==0,$"{tool.Name} states a closed object input schema");
             // A member a view does not take is null rather than absent, so an input the schema accepts names every member,
             // and the schema needs no top-level composition, which a provider's input schema need not accept.
             var stated=tool.InputSchema.GetProperty("properties").EnumerateObject().Select(p=>p.Name).Order(StringComparer.Ordinal);
@@ -238,10 +247,10 @@ static class AgentToolChecks
             Require(stated.SequenceEqual(required)&&!new[]{"anyOf","oneOf","allOf","if","then","else","not"}.Any(k=>tool.InputSchema.TryGetProperty(k,out _)),
                 $"{tool.Name} requires every member it states, with no top-level composition");
         }
-        Require(RuntimeSet.Turns=="turns_v21"&&RuntimeSet.MaxReadSeconds==30&&PreviewDatabase.AgentCommandSeconds==RuntimeSet.MaxReadSeconds,
+        Require(RuntimeSet.Turns=="turns_v22"&&RuntimeSet.MaxReadSeconds==30&&PreviewDatabase.AgentCommandSeconds==RuntimeSet.MaxReadSeconds,
             "The operating-policy runtime preserves the existing versioned read deadline ceiling.");
         Console.WriteLine("PASS a version's switched-on tools are offered in the fixed order, Navigate after the read tools, with closed schemas that "+
-            "require every member they state, and their permissions; turns_v21 retains admitted operating limits and bounds reads by their version's time per read and their turn, and their results, and keeps workspace turns below the agent pools");
+            "require every member they state, and their permissions; turns_v22 retains admitted operating limits and bounds reads by their version's time per read and their turn, and their results, and keeps workspace turns below the agent pools");
     }
 
     const string Book="d1000000-0000-0000-0000-000000000001",Trade="71000000-0000-0000-0000-000000000009";
@@ -462,6 +471,19 @@ static class AgentToolChecks
 
     static void Reports()
     {
+        var parkLoan=$$"""{"view":"trade",{{NoBlotter}},"tradeId":"{{Trade}}","instrumentType":"physical_gas_park_loan","revision":1}""";
+        var parkReport=Json(Report("blotter",parkLoan));
+        PageReports.Require(parkReport);
+        var parkTurn=new TurnReads(Pin("current",Guid.NewGuid(),Working),new("agent",Guid.NewGuid()),parkReport,
+            ["read_current_page","read_trades"],Guid.NewGuid(),TimeSpan.FromSeconds(15),new(500,65536));
+        Require(PageReports.Dispatch(parkReport) is null
+            &&Code(()=>AgentTools.Requested(parkTurn,new("synthetic_park_read","read_current_page",Json("{}"))))=="page_not_supported"
+            &&Code(()=>AgentTools.Parse("read_trades",Json(parkLoan)))=="tool_arguments_invalid",
+            "a selected Park and Loan permits a question but cannot dispatch a swap or an unqualified trade read");
+        foreach(var invalid in new[]{parkLoan.Replace(Trade.ToString(),"invalid"),parkLoan.Replace("\"revision\":1","\"revision\":0"),
+            parkLoan.Replace("\"mode\":null","\"mode\":\"trades\""),parkLoan.Replace("physical_gas_park_loan","unknown")})
+            Require(Code(()=>PageReports.Require(Json(Report("blotter",invalid))))=="page_report_invalid","unsupported trade metadata is still strictly validated");
+        Console.WriteLine("PASS selected Park and Loan admits questions, validates metadata and refuses unqualified current-page reads");
         var blotter=Blotter;
         foreach(var (report,page,operation) in new[]{
             ("""{"page":"curves","selection":{"view":"curves","curve":null}}""","curves","market_data.curves_v1"),
@@ -480,7 +502,7 @@ static class AgentToolChecks
             PageReports.Require(Json(report));
             Require(PageReports.Dispatch(Json(report)) is {Call:{} dispatchedCall} read&&read.Page==page&&dispatchedCall.Operation.Id==operation,$"{report} dispatches {operation}");
         }
-        var unsupported=new[]{"dashboard","vol_surfaces","facility_definitions","facility_activity","blotter_new_lng","blotter_new_ppa","blotter_new_gas","blotter_new_park_loan","blotter_new_crude","blotter_new_option","physical_gas","physical_crude"};
+        var unsupported=new[]{"dashboard","vol_surfaces","options","facility_definitions","facility_activity","blotter_new_lng","blotter_new_ppa","blotter_new_gas","blotter_new_park_loan","blotter_new_crude","blotter_new_option","physical_gas","physical_crude"};
         var workspace=new[]{"lifecycle","physical_operations","gas_setup","crude_setup","facility_quantities","risk_jobs","blotter_risk","blotter_risk_lens","blotter_new_trade","blotter_new_future","blotter_new_swap","delivery_prices","interval_series","interval_curves","users_access","settings_ai"};
         Require(PageReports.NotSupported.Order().SequenceEqual(unsupported.Order())&&PageReports.Supported.Order()
                 .SequenceEqual(new[]{"curves","contract_definitions","schedules","power_tous","reference_data","parties","blotter","custom_curves","jobs","ppa"}.Concat(workspace).Order()),

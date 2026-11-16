@@ -10,7 +10,7 @@ export async function run({command,evaluate,wait,click,set,submit,persona,check,
   const script=async answers=>{if(!(await fetch(new URL('/respond',control),{method:'POST',body:JSON.stringify(answers)})).ok)throw Error('Synthetic provider refused the script.');};
   const side=await sideSession(url);
   // The retained contract_definitions catalog entry navigates to Date rules; Contract pricing and Publications have no report contract.
-  const reportPages=(await side.call('settings/ai/page-prompts')).pages.map(page=>page.id).filter(id=>id!=='contract_definitions').sort();
+  const reportPages=(await side.call('settings/ai/page-prompts')).pages.filter(page=>page.kind==='page').map(page=>page.id).filter(id=>id!=='contract_definitions').sort();
   const agent=(await side.call('settings/ai/agents')).agents.find(a=>a.name.includes('workspace operations'));
   if(!agent)throw Error('The workspace fixture must publish its explicitly enabled guide.');
   await side.call('profile',{profile:'trader'});
@@ -42,7 +42,7 @@ export async function run({command,evaluate,wait,click,set,submit,persona,check,
     const states=[{page:'market',curve:null,tab:'prices'},{page:'power',frame:true},{page:'schedules'},
       {page:'reference',table:'units',search:''},{page:'parties',kind:'counterparty'},{page:'jobs',job:null},{page:'lifecycle'},{page:'ppa',trade:null,book:null},{page:'custom-curves',curve:null,unsaved:false},
       base,{...base,risk:true},{...base,lens:'risk'},...[null,'futures','options','swaps','ppa','gas','park-loan','crude','lng'].map(product=>({...base,entry:{product}})),
-      {page:'risk',view:'risk'},...['physical-operations','facilities','dashboard','crude-setup','gas-setup','gas','crude','delivery','interval-series','interval-curves','vol-surfaces','admin','ai'].map(page=>({page})),
+      {page:'risk',view:'risk'},...['physical-operations','facilities','dashboard','crude-setup','gas-setup','gas','crude','delivery','interval-series','interval-curves','vol-surfaces','options','admin','ai'].map(page=>({page})),
       {page:'facilities',facilitySection:'definitions'},{page:'facilities',facilitySection:'activity'}];
     const actual=[...new Set(states.map(state=>pageReport(state).page))].sort();return JSON.stringify(actual)===${JSON.stringify(JSON.stringify(reportPages))}&&JSON.stringify(actual)===JSON.stringify(reportedPages.filter(page=>page!=='contract_definitions').sort());});})()`);
   await check('Contract pricing and Publications refuse an assistant report until they have an admitted read contract',`import('/assistant-pages.js').then(({pageReport})=>{try{pageReport({page:'configuration'});return false;}catch(error){return error.message==='The assistant’s page is inconsistent. Reload it.';}})`);
@@ -62,7 +62,7 @@ export async function run({command,evaluate,wait,click,set,submit,persona,check,
   await wait("!document.querySelector('#assistant-panel').hidden");
   await wait(`[...document.querySelector('#assistant-agent').options].some(o=>o.value===${JSON.stringify(agent.id+':'+agent.publishedVersion)})`);
   await set('#assistant-agent',agent.id+':'+agent.publishedVersion);
-  await check('Looking at states the selection and the server digest',"document.querySelector('#assistant-looking-shows').textContent.includes('3 selected positions')&&document.querySelector('#assistant-looking-shows').textContent.includes('server will read a page digest')");
+  await check('Looking at states the selection without promising an automatic read',"document.querySelector('#assistant-looking-shows').textContent.includes('3 selected positions')&&!document.querySelector('#assistant-looking-shows').textContent.includes('server will read a page digest')");
   await check('the prefilled ask remains editable and unsent',"document.querySelector('#assistant-question').value.includes('selected positions')&&!__selectionRequests.some(r=>r.path.endsWith('/assistant/turns/ask'))");
   await sendQuestion();await wait("!document.querySelector('#assistant-consent').hidden");
   const answers=[{tools:[['toolu_selection_digest','read_page_digest',{mode:'overview'}]]},{text:'Synthetic selected positions were read at the question pin.'}];

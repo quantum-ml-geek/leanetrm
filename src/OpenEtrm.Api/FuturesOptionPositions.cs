@@ -146,7 +146,7 @@ internal static class FuturesOptionPositions
              SELECT k.id contract_id,k.revision_id definition_revision_id,s.catalog_id reference_catalog_id,s.revision_id reference_revision_id,s.code series_code,
               s.option_right,trim_scale(s.strike)::text strike,s.underlying_series_code,s.expiry_at,pr.code product_code,pr.name product_name,fp.name underlying_product_name,trim_scale(pr.multiplier)::text multiplier,
               pr.lot_quantity_code,ex.code exchange_code,ex.name exchange_name,co.code commodity_code,co.name commodity_name,q.currency_code,cu.display_code currency,
-              pr.contrary_instructions_allowed,u.symbol unit,us.delivery_from,us.delivery_to,c.code curve_code,c.name curve_name
+              pr.contrary_instructions_allowed,u.symbol unit,qu.symbol quote_unit,us.delivery_from,us.delivery_to,c.code curve_code,c.name curve_name
              FROM market_data.contracts k
              JOIN ref_data.futures_option_series s ON(s.catalog_id,s.revision_id,s.code)=(k.reference_catalog_id,k.reference_revision_id,k.futures_option_series_code)
              JOIN ref_data.futures_option_products pr ON(pr.catalog_id,pr.revision_id,pr.code)=(s.catalog_id,s.revision_id,s.product_code)
@@ -156,6 +156,8 @@ internal static class FuturesOptionPositions
              JOIN ref_data.currencies cu ON(cu.catalog_id,cu.revision_id,cu.code)=(q.catalog_id,q.revision_id,q.currency_code)
              JOIN ref_data.quantity_specifications n ON(n.catalog_id,n.revision_id,n.code)=(pr.catalog_id,pr.revision_id,pr.lot_quantity_code)
              JOIN ref_data.units u ON(u.catalog_id,u.revision_id,u.code)=(n.catalog_id,n.revision_id,n.unit_code)
+             JOIN ref_data.quantity_specifications qn ON(qn.catalog_id,qn.revision_id,qn.code)=(q.catalog_id,q.revision_id,q.quantity_code)
+             JOIN ref_data.units qu ON(qu.catalog_id,qu.revision_id,qu.code)=(qn.catalog_id,qn.revision_id,qn.unit_code)
              JOIN ref_data.futures_series us ON(us.catalog_id,us.revision_id,us.code)=(s.catalog_id,s.revision_id,s.underlying_series_code)
              JOIN ref_data.futures_products fp ON(fp.catalog_id,fp.revision_id,fp.code)=(us.catalog_id,us.revision_id,us.product_code)
              JOIN market_data.curve_members m ON(m.catalog_id,m.revision_id,m.contract_id)=(k.catalog_id,k.revision_id,k.id)

@@ -1,7 +1,7 @@
 import {isCashStatus,cashStatusLabels} from './cash-status.js';
 import type {Holding} from './desk-model.js';
 import {trackEdits} from './edit-tracking.js';
-import {keepOffered,noOptionPick,optionChoices,optionLevels,optionTicketStatus,pickOption,underlyingLabel,type OptionCatalog,type OptionLevel,type OptionPick} from './futures-option-model.js';
+import {keepOffered,noOptionPick,optionChoices,optionLevels,optionTicketStatus,pickOption,pickSeries,underlyingLabel,type OptionCatalog,type OptionLevel,type OptionPick} from './futures-option-model.js';
 import {displayInstant,publicText} from './market-view.js';
 import {bookingAllowed} from './new-trade.js';
 import {actorTransport,PendingCommand,restoreTradeRequest,type RequestCommand} from './pending-command.js';
@@ -77,7 +77,7 @@ export function setupOptionTicket(o:{api:Api;source:()=>{snapshotId:string};hist
  fields.append(contract,execution,trade,backend,more);form.append(fields,booking);root.replaceChildren(status,form);
  const annotations=tradeAnnotations('option',o.zone,executed);
  const pending=new PendingCommand(definite);
- let catalog:Catalog|undefined,pick:OptionPick={...noOptionPick},sending=false;
+ let catalog:Catalog|undefined,pick:OptionPick={...noOptionPick},sending=false,requested:string|undefined;
 
  function refreshDisplay(){
   annotations.refresh();
@@ -150,6 +150,9 @@ export function setupOptionTicket(o:{api:Api;source:()=>{snapshotId:string};hist
    status.textContent='Loading the listed options…';
    const read=await o.api<Catalog>('options/catalog',{snapshotId:o.source().snapshotId,convention:optionConvention,knowledgeMode:'current'});
    catalog=read;pick=keepOffered(read,pick);
+   // A series named by the page that opened the ticket is selected as the person would select it; one this close does not
+   // list selects nothing and is said so.
+   if(requested){const series=requested;requested=undefined;try{pick=pickSeries(read,series);}catch(error){said.textContent=reason(error);}}
    const books=document.getElementById('option-book') as HTMLSelectElement;
    books.replaceChildren(new Option('Choose…',''),...read.books.map(b=>new Option(publicText(`${b.portfolio} · ${b.name}`),b.id)));
    annotations.populate(read.bookingActor,read);
@@ -162,6 +165,8 @@ export function setupOptionTicket(o:{api:Api;source:()=>{snapshotId:string};hist
    }
    draw();
   },
+  /** Names the series the next new ticket opens on, or none. */
+  request(series:string|null){requested=series??undefined;},
   inspect:()=>Promise.reject(Error('A booked futures option opens in the Details pane.')),
   unsaved:()=>!!catalog&&(edits.edited()||!!pending.command),
   pending:()=>!!pending.command||restoreTradeRequest(requests.read())?.path==='options/book',

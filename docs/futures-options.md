@@ -278,6 +278,28 @@ See [the lifecycle contract](exchange-futures.md#option-lifecycle) for the full 
   does (D395). A report that values options states its option valuation policy
   in its heading, and the Risk page opens a retained run as a scope's current
   report only when it was valued under the stated pricing policy (D396).
+- **Options.** A Trading page for readers of market data and trades (D408). Its
+  **Chain** view draws one expiry of a product from the product's stored
+  [volatility surface](vol-surfaces.md#option-analytics): calls and puts about
+  the strike, each with its settlement, implied volatility, delta, gamma, vega,
+  theta and the open lots held, the at-the-money strike marked and sides in the
+  money shaded. A figure the fit could not state is a dash that says why. A
+  chosen series can be booked, which opens the option ticket with the series
+  selected through its own lists and no execution terms, or opened on its
+  surface. A product with no surface at the close shows that and links to Vol
+  surfaces to calibrate it. Its **Positions** view lists booked option positions
+  with open lots under their underlying future, from
+  **`POST /api/options/positions`** `{context, model}`: each row's value and
+  sensitivities are the stored series figures times the multiplier and the signed
+  open lots, computed in the backend. Delta and gamma are quantities in the unit
+  the underlying is quoted per, and each group states the selection its surface
+  was fitted under with the day its thetas run to. Delta, gamma and vega are
+  subtotalled within one underlying future, value and theta totalled per
+  currency; a sum with a missing member is missing, and thetas that run to
+  different days are not added (`theta_days_differ`). A product whose inputs
+  cannot be read at the close is a row state, not a failed read. The read prices
+  nothing. **Strategy** reads
+  *Coming soon*.
 - **New trade.** The option ticket selects exchange, commodity, underlying future,
   call or put, then strike; each list comes from the backend catalog and resets
   those below it. Once a series is chosen, the ticket links to its product's
@@ -301,9 +323,10 @@ See [the lifecycle contract](exchange-futures.md#option-lifecycle) for the full 
 
 - **Volatility.** Stored volatility surfaces under a versioned vol model, with
   rich/cheap and their graphics, are shipped for viewing as
-  [volatility surfaces](vol-surfaces.md) (D304). Valuing options from the surface,
-  interpolated values for unsettled series, surface-driven vega, scheduled
-  fitting, strategies and payoff diagrams remain. The shared valuation layer
+  [volatility surfaces](vol-surfaces.md) (D304), and each fit stores its series'
+  value, delta, gamma, vega and theta for the Options page (D408). Valuing
+  options from the surface, interpolated values for unsettled series, volatility
+  in Risk, scheduled fitting, strategies and payoff diagrams remain. The shared valuation layer
   supports held calibrated-series IV and weighted-node shocks with explicit
   annualized-volatility units; the stored analytical surface is still not a pricing
   source. See [valuation layers](valuation-context-layers.md).

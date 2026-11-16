@@ -20,7 +20,7 @@ const open={pane:{details:true,charts:true},poppedOut:false},layout={pane:{detai
 const blotter={mode:'trades',bookIds:[book],portfolioIds:[],groupBy:['contract'],measures:['lots']};
 
 test('dashboard, setup and volatility reports retain their labels and supported read capabilities',()=>{
-  for(const [page,label] of [['dashboard','Dashboard'],['gas-setup','Gas delivery setup'],['crude-setup','Crude delivery setup'],['vol-surfaces','Vol surfaces']]){
+  for(const [page,label] of [['dashboard','Dashboard'],['gas-setup','Gas delivery setup'],['crude-setup','Crude delivery setup'],['vol-surfaces','Vol surfaces'],['options','Options']]){
     const report=pageReport({page}),seen=lookingAt(report,{mode:'current',frameId:frame,frameLabel:'Synthetic close'},{curve:String,table:String});
     assert.deepEqual(report.selection,{});assert.equal(seen.page,label);assert.equal(seen.askable,true);assert.equal(seen.supported,page==='gas-setup'||page==='crude-setup');if(!seen.supported)assert.match(seen.shows,/does not read this page/);
   }
@@ -52,7 +52,7 @@ test('every other page reports the view it shows in its read tool input form, an
     {page:'blotter',layout,selection:{view:'trade',mode:null,bookIds:null,portfolioIds:null,groupBy:null,measures:null,tradeId:trade,instrumentType:'future',revision:2}});
   assert.deepEqual(pageReport({page:'futures',...open,risk:true,trade:null,entry:null,view:blotter}),{page:'blotter_risk',selection:{},layout});
   for(const [page,id] of [['facilities','facility_quantities'],['dashboard','dashboard'],['gas-setup','gas_setup'],['crude-setup','crude_setup'],['gas','physical_gas'],['crude','physical_crude'],['delivery','delivery_prices'],['interval-series','interval_series'],['interval-curves','interval_curves'],
-    ['admin','users_access'],['ai','settings_ai'],['vol-surfaces','vol_surfaces']])assert.deepEqual(pageReport({page}),{page:id,selection:{}});
+    ['admin','users_access'],['ai','settings_ai'],['vol-surfaces','vol_surfaces'],['options','options']])assert.deepEqual(pageReport({page}),{page:id,selection:{}});
 });
 
 test('Jobs reports the list of your jobs, or the history of the job whose details are open, as Read jobs takes them',()=>{
@@ -80,9 +80,9 @@ test('custom curves describes the saved library as a supported page without send
  assert.equal(webPage('custom_curves'),'custom-curves');
 });
 
-test('an ask pins working data only at a chosen As of frame, and a historical view at its own context, with or without a frame',()=>{
+test('an ask retains the explicit knowledge selection with or without an As of frame',()=>{
   assert.deepEqual(askKnowledge({mode:'current',frameId:frame,frameLabel:'18 Dec 2020'}),{mode:'current',contextId:null,frameId:frame});
-  assert.equal(askKnowledge({mode:'current',frameId:null,frameLabel:null}),undefined);
+  assert.deepEqual(askKnowledge({mode:'current',frameId:null,frameLabel:null}),{mode:'current',contextId:null,frameId:null});
   assert.deepEqual(askKnowledge({mode:'retained',contextId:context,effectiveOn:'2020-12-18',knownAtLabel:'18 Dec 2020 18:00',frameId:null,frameLabel:null}),
     {mode:'retained',contextId:context,frameId:null});
 });
@@ -97,7 +97,7 @@ test('Looking at names the page, what it shows and the context the next question
   assert.deepEqual(lookingAt(pageReport({page:'admin'}),working,names),
     {page:'Users & access',shows:'Authorized page operations, reads and previews. Changes require your authorization.',context:'Working data · As of 18 Dec 2020 16:00',supported:true,askable:true});
   assert.deepEqual(lookingAt(pageReport({page:'schedules'}),{mode:'current',frameId:null,frameLabel:null},names),
-    {page:'Schedules',shows:'Schedule library',context:'Working data · choose an As of date to ask about it',supported:true,askable:false});
+    {page:'Schedules',shows:'Schedule library',context:'Working data · no As of date selected',supported:true,askable:true});
   assert.equal(lookingAt(pageReport({page:'reference',table:'units',search:'mega'}),
     {mode:'retained',contextId:context,effectiveOn:'2020-12-18',knownAtLabel:'18 Dec 2020 18:00',frameId:null,frameLabel:null},names).context,
     'Historical view · 2020-12-18, as known at 18 Dec 2020 18:00 · no As of date chosen');
@@ -389,8 +389,8 @@ test('an ask sends the Blotter report whole, its layout with it, and a kept ask 
 test('facility questions retain the selected operating date and ledger without borrowing a pricing frame',()=>{
  const report=pageReport({page:'facilities',businessDate:'2026-11-05',facilityLedger:trade});
  assert.deepEqual(report,{page:'facility_quantities',businessDate:'2026-11-05',selection:{ledgerId:trade}});
- assert.deepEqual(askKnowledge({mode:'current',businessDate:'2026-11-05',frameId:null,frameLabel:null},report.page),{mode:'current',contextId:null,frameId:null});
- assert.equal(askKnowledge({mode:'current',frameId:null,frameLabel:null},report.page),undefined);
+ assert.deepEqual(askKnowledge({mode:'current',businessDate:'2026-11-05',frameId:null,frameLabel:null}),{mode:'current',contextId:null,frameId:null});
+ assert.deepEqual(askKnowledge({mode:'current',frameId:null,frameLabel:null}),{mode:'current',contextId:null,frameId:null});
  assert.equal(webPage('gas_setup'),'gas-setup');
  assert.equal(webPage('crude_setup'),'crude-setup');
 });
@@ -409,4 +409,14 @@ test('Looking at says which physical instrument revision, tab, gas day and stage
  assert.equal(shows({physical}),'Selected physical instrument, revision 2 · Delivery · Gas day 2020-12-19 · Scheduling stage. Unsaved edits are not sent.');
  assert.equal(shows({physical:{...physical,tab:'cash',day:null,obligationId:null,stage:null}}),'Selected physical instrument, revision 2 · Billing & corrections. Unsaved edits are not sent.');
  assert.equal(shows({}),'Physical instrument operations under the header context. Unsaved edits are not sent.');
+});
+
+test('a selected Park and Loan permits questions and identifies its unavailable trade read',()=>{
+  const report=pageReport({page:'futures',...open,risk:false,trade:{tradeId:trade,instrumentType:'physical_gas_park_loan',revision:1,reference:'TR-000009'},entry:null,view:blotter});
+  assert.equal(report.page,'blotter');
+  assert.equal(report.selection.instrumentType,'physical_gas_park_loan');
+  const seen=lookingAt(report,{mode:'current',frameId:frame,frameLabel:'Synthetic close'},{curve:String,table:String},{trade:'TR-000009'});
+  assert.equal(seen.askable,true);
+  assert.equal(seen.supported,false);
+  assert.equal(seen.shows,'Trade TR-000009, revision 1. The assistant does not read this trade.');
 });
