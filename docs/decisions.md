@@ -355,6 +355,10 @@ remaining bounds are recorded with the executable consumers in the linked contra
 | D318 | Author curves from a rolling date-mapping window with explicit, matching terms | Owner-directed, 2026-11-04 ([curve-definitions.md](curve-definitions.md)). A curve names its commodity, location, quote, delivery profile, contract kind (with an exact futures product for futures), an exact published date-mapping version and how many of its positions it carries, its settlement target, a direct price rule and explicit missing-price and interpolation policies; none is defaulted. Contracts roll because the mapping resolves against the context date; the curve adds no roll rule, and publishers supply each close's marks. Curves are defined on Curves & prices and previewed at the header's selected close, in that close's exact context (current knowledge on its date, or the selected historical context on that date); schedules and date mappings stay on their own Settings page. Terms the contract and the curve both name must be equal: a futures product's and an index target's commodity, location, currency, unit and multiplier, and each futures position matches exactly one series of an executable product by delivery period and known last-trading instant. A preview reads reference terms and resolves its mapping in one exact retained context. Futures settle to their exchange settlement, OTC forwards to one published index. Index spreads, hourly physical settlement (nodal LMP), forwards settling to futures, formula contracts, carry-forward or interpolated prices and linear interpolation are shown as Coming soon and refused. First increment: catalog and read-only preview operations and the Curves step of Schedules & date mappings; durable versions follow in D358; D359 admits published interest-rate definitions into market revisions and prices from them, and D362 admits contract curves |
 | D334 | Close by regional session; the latest close for a session and business day is in force | Owner decisions and implementation recorded in [regional closes](regional-closes.md); design calls await review. Refines D162 and D219: a close names an exact versioned close session (clock, local cutoff, business calendar, curves) and an explicit business day, and its UTC instant is the session cutoff on that day. For each session and business day the close with the highest publication order is in force, evaluated on read; earlier ones are history and are refused for new work (`close_replaced`). A close must carry exactly its session's curves; nothing is carried forward. Recording needs a per-session grant. Every view, historical ones included, reads the close in force; this lifts only the knowledge-time checks on the close and its pins and is a recorded exception to the knowledge-cutoff rule. Saved results keep their exact close; pilot reports disclose replacement, while portfolio-job disclosure and historical worker close-session binding remain documented limitations. Each person's chosen session is remembered; no session is chosen for anyone. Only recorded closes are closes; unrecorded snapshots are working data offered separately, and built-in demo frames are seeded as session closes. Existing closes are retired and deployments reseeded (migration 0202 refuses a non-empty close history). Implemented in the repository; hosted activation requires separate qualification |
 
+| D412 | Keep consumed facility parameters separate from saved operating rights, their independent Sides and evidenced REC ownership | Decided 2026-11-16; [facility contract](operating-facilities.md), [trading and inventory contract](structured-power-trading.md), [details](#d412--operating-facility-versions-and-supplied-plan-previews). Extend exact reference locations with consumed physical/model parameters. Book complete exclusive supplied-plan rights through retained membership-owned schedules; compare separately booked financial hedges under shared scenarios. Standalone REC forwards own delivery/consideration Sides; durable manual inventory uses exact serial evidence, delivery capacity, certified history and idempotent commands. GUI consumers use those same authorized operations. Optimization and external registry submission remain separate. |
+
+| D417 | Use explicit independent Sides for every non-exchange Instrument, including one-Side cash, holdings and service rights | Owner requirement, 2026-11-16. Futures and futures options are the only exceptions. Side owns valuation and schedule behavior; Instrument owns memberships and composition. UI booking, review and saved-trade inspection show those actual memberships. [Details](#d417--explicit-sides-for-every-non-exchange-instrument). Implementation and qualification remain separate. |
+
 ## Proposed implementation choices
 
 These are working proposals, not additional user requirements. Resolve them
@@ -405,6 +409,36 @@ through the evidence and acceptance criteria in the plan.
 | P42 | Move operational limits out of code into explicit, versioned configuration | [operational-limits.md](operational-limits.md): each limit keeps a fixed ceiling in code and the database, and its operating value moves to the agent version, installation settings (revisioned, under `ManageAgents` or `ManageAccess`) or hosted configuration, by owner. No value is filled in by code; a missing or out-of-range value is refused. Every operation records the revision or configuration digest it applied. Contract constants, calculation limits and pre-authorization guards stay fixed. Proposed 2026-10-27 after D251; awaiting the owner's review |
 | P43 | Execute D253's booked schedules directly with dynamic inputs under one resolved context | [side-plans.md](side-plans.md): answers D253's row-node question for D258's retained schedules. Rows are retained relationally but are not individual calculation-graph nodes. The owner's 2026-10-29 amendment supersedes compilation per calculation: booking retains the complete executable schedule, and valuation directly reads its price, quantity and discount inputs under one context with explicit per-role cutoffs. Independent authorized source reads run concurrently in bounded batches; source selection and evaluated row states vary with context while the stored instructions do not. Scenarios recompute affected terms and report no per-node amount. No cross-calculation value cache. Accepted for the local implementation trial on 2026-10-28, amended 2026-10-29; direct-execution implementation and qualification remain pending |
 | P44 | Compose typed physical lifecycle and cash objects around trade bindings | Proposed implementation of D303: [ownership, capabilities, lineage, valuation and staged consumers](physical-lifecycle-design.md). Preserve existing crude/swap behavior, prove a selected gas consumer and a distinct power geometry, and extract only matching mechanisms. Proposed ledger/schedule, constraint-assessment and lifecycle types are not current APIs. Qualify native-interval conservation, measured-breach preservation, enforced-plan races and scoped idempotent notifications for the facility consumer; no universal invoice/finality/rounding/title/operating-limit rule or LNG/NGL model is selected. |
+
+### Local proposal — structured power products
+
+Proposed 2026-11-15; no agreed decision is changed. The
+[investigation](structured-power-products.md) covers solar, generation tolling,
+battery tolls/operating rights and standalone U.S. RECs. Reuse independent sides,
+each with its own retained whole-term schedule, exact facility/right references
+and common immutable scenarios. The proposed toll composition can express thermal
+conversion, solar output rights and battery storage rights with explicit
+technology-specific quantity/state rules. Coupled sides consume one consistent
+operating plan through declared inputs and retain their own valuation contributions.
+Begin tolling and storage with supplied feasible operating plans; propose complete
+specified rights as unit instruments where arbitrary per-MW scaling is invalid. Shared
+physical constraints require joint feasibility and explicit allocation. REC
+issuance/ownership evidence stays distinct from current modeled PPA holdings.
+
+The implemented supplied-plan perspective, operating constraints, terminal
+policies and bounded REC eligibility/delivery terms are recorded in D412. Broader
+meter/settlement and optional-right contracts require separate explicit choices.
+No optimizer dependency, schema, financial default or automatic reinterpretation
+of existing trades is selected. Existing PPA, heat-rate, certificate-holding and
+settlement contracts retain their meaning.
+
+The [industry contract conventions](power-contract-conventions.md) refine this
+proposal: retain PPA, physical toll, storage-service and financial-payoff forms
+according to actual rights; retain contractual schedules separately from
+operational forecasts, submissions, awards and meter evidence. Resource-access
+fees, accredited capacity, ancillary-service awards and environmental rights are
+distinct. Initial/provisional market settlement requires an explicit new rule
+and correction lifecycle; existing final-only fixing admission is unchanged.
 
 ## Clarifications that must survive implementation
 
@@ -5570,6 +5604,73 @@ catch a future-effective agreement already known at opening. Generated close
 activation, broader Park and Loan terms and other gas services need their own
 qualified consumers. See [Park and Loan contracts](gas-park-loan.md).
 
+## D412 — Operating-facility versions and supplied-plan previews
+
+Status: decided 2026-11-16. The supplied-plan capability was checked in an
+isolated worktree on the current master base. The continuation adds saved trading,
+shared-scenario hedge reporting, standalone REC forwards and durable manual REC
+inventory with the bounded contracts below. Local verification is recorded in
+the [trading contract](structured-power-trading.md); release qualification and
+activation remain separate.
+
+- Physical operating setup extends the existing exact reference location. It
+  stores no duplicate name, location type or coordinates, and no planned field
+  without a current feasibility/pricing consumer. Unsupported fields appear
+  disabled as **Coming soon**. Thermal/battery require exact MW/MWh references;
+  solar consumes MWh and stage, with no unused MW relationship. Fuel identity is
+  the exact selected thermal fuel specification.
+- Static limits, consumption performance and supported physical policies belong
+  to the operating version. Thermal fuel guarantees, solar entitlement,
+  economic perspective, complete-right unit, state, dispatch, payment rules and
+  fees belong to explicit calculation/right inputs. Facility setup never creates
+  a legal trade, measured actual or external operating instruction.
+- Independent `FixedSide`/`FloatingSide` schedules consume typed quantity outputs
+  from one consistent feasible plan and expose gross payment rows.
+  `OperatingRightInstrument` sums their signed contributions for one complete
+  specified right. The current preview is supplied-plan, right-holder,
+  remaining-operating value and explicitly undiscounted; it neither optimizes the
+  plan nor values unexercised flexibility.
+- Operating versions append with effective windows and commit-certified
+  knowledge. Expected heads fence conflicting changes; request retries return
+  their first outcome and repeated business facts return their original version
+  without another publication (D238). Historical reads retain exact selected
+  versions and current authority. A known future-effective version is readable
+  before delivery; each priced interval must fit its saved window. Current
+  control state governs authoring and command recovery.
+- The pure REC kernel remains the immutable state-transition evaluator. The
+  authorized durable consumer records supplied issuance/incoming-transfer evidence,
+  exact lot/range ownership, allocation, release, transfer and retirement under
+  certified knowledge with current authority. It does not submit an external
+  registry action, manufacture inventory from forecasts, choose lots automatically
+  or provide inventory costing. Exact registry/program/class and purpose references
+  are added only for those current operations.
+- Saved operating contracts pin the facility version and supplied plan, hold one
+  complete exclusive right, and retain independent membership-owned programs.
+  Native UTC-only future admission refuses overlapping rights and started
+  delivery. Ordinary Blotter, Side inspection and portfolio PV read those same
+  identities. Fixed native prices and explicitly selected covering flat
+  contracts are supported; no mark implies an undeclared dependency.
+- The price hedge report reprices explicit operating and financial holdings under
+  one certified context and immutable base/up/down scenarios. Base measures stay
+  separate; only like-currency price changes and derivatives are added. Empty
+  factors, excluded selected holdings and incomplete results refuse. Financial
+  hedges create no physical flow or certificate and imply no hedge-accounting
+  qualification.
+- Standalone REC forwards retain separate physical and consideration schedules
+  for an exact product/vintage and one future UTC day. Explicit fixed/flat prices,
+  opposite directions, whole certificate counts and undiscounted payment rules
+  are required. Booking creates a native delivery capacity, never inventory.
+  Manual allocations and outgoing transfer evidence consume that capacity;
+  purchase fulfillment and cash settlement are separate future consumers.
+- Scheduling contains facility/trade/hedge and inventory/REC-forward forms; New
+  Trade reuses the REC editor. Every write retains its exact request for
+  first-outcome recovery; retained views are read-only. Planned physical
+  parameters have disabled Coming soon controls and no inert persisted columns.
+- Intrinsic/stochastic dispatch optimization, external registry connectivity,
+  hybrid/shared-resource pooling and broader optional structures remain later
+  scope. No proposed interface or plan establishes implementation. See the
+  [structured power contract](structured-power-products.md).
+
 ## D407 — Requested assistant context and installation-owned prompts
 
 Assistant admission retains selection identity and configured prompt versions only.
@@ -5748,7 +5849,7 @@ qualify generated closes, cross-clock P&L or complete economic horizon risk;
 source-known zero, future-effective, completed and cash-only states require
 the same explicit continuation fence. See the [contract](gas-park-custody.md).
 
-## D412 · Explicit gross transport capacity across shared paths
+## D413 · Explicit gross transport capacity across shared paths
 
 **Status:** locally qualified capacity operating consumer; financial Transport
 booking and deployment qualification remain open.
@@ -5781,7 +5882,7 @@ loss, transit, asset linepack, financial booking or any valuation. Those
 consumers require their own explicit qualified policies and complete current
 authority. See [Transport implementation status](gas-transport.md).
 
-## D413 · Retained routes over exclusive exact capacity-plan sources
+## D414 · Retained routes over exclusive exact capacity-plan sources
 
 **Status:** locally qualified operating consumer; integrated release remains open.
 
@@ -5802,7 +5903,7 @@ uniform claim per segment, no node storage and no inferred interconnects. It doe
 not establish physical performance, title, cash, financial Transport value or
 broader assignment rights. See the [route contract](gas-transport-routes.md).
 
-## D414 · Direct Transport rights values with independent fixed-fee cash
+## D415 · Direct Transport rights values with independent fixed-fee cash
 
 **Status:** bounded implementation with local native, managed and actual browser
 qualification; first-value market publication and integrated release remain open.
@@ -5844,3 +5945,46 @@ qualified contracts. Current-clock price risk does not establish cross-clock
 P&L or generated-close support. Exact operating and valuation reference versions
 remain independent; equal currency labels do not authorize netting. See the
 [financial contract and qualification gates](gas-transport-financial.md).
+
+
+## D417 · Explicit Sides for every non-exchange Instrument
+
+**Status:** owner-directed requirement, 2026-11-16; alignment in implementation.
+
+**Requirement.** Every Instrument has one or more independent reusable Sides,
+except exchange-traded futures and futures options. The user must be able to
+see the Sides in booking, review and saved-trade details. This replaces the
+previous allowance for arbitrary side-less leaf pricing models.
+
+**Decision.** Sides own contractual parameters, declared inputs, schedules and
+valuation behavior. Instrument owns exact memberships, coefficients, ordering
+and permitted connections; risk continues to call ordinary black-box Instrument
+PV under immutable shared scenarios. A single cash payment, gas holding or
+service-right value has a genuine Side. A payment schedule is not fabricated for
+a holding or an already-discounted rights mark. A Side never calls its owning
+Instrument's PV, and no unused discount provider is introduced to satisfy the
+interface.
+
+Retained Side programs are evaluated as booked, with exact Side/member IDs and
+program digests; loading does not regenerate schedules. Paid amounts, lifecycle
+state and observed performance belong to the exact trade binding or independent
+native owner, not a mutable reusable Side. Existing title, entitlement, activity
+and cash identities and supported financial policies remain distinct. Adding
+Sides does not grant quantity scaling, settlement, new pricing or lifecycle
+capabilities. Economic definition versions explicitly distinguish any changed
+canonical composition; existing inputs are never silently reinterpreted.
+
+The managed/backend contract supplies actual Side memberships and their roles,
+directions, units and contractual terms to UI consumers. Booking and review use
+the same supported composition as saved details and inspection. Independent fee
+cash Instruments show their own cash Sides; they do not become hidden members of
+the service-rights Instrument. UI grouping cannot invent additional economics,
+mark signs or ownership. Futures and futures options retain their exchange
+contract presentation.
+
+**Qualification.** Inventory all concrete production Instrument types, enforce
+the two explicit exceptions, and test independent Side delegation and retained
+identity/state behavior. Native financial and lifecycle consumers, shared price
+risk and actual integrated browser entry/review/detail/inspection flows must pass
+before the affected financial work is ready to merge. A class hierarchy or UI
+label alone is not evidence that this requirement is complete.

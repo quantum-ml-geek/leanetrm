@@ -1,18 +1,25 @@
 # Architecture and domain contracts
 
-D414 implements the selected first [financial Transport rights and fixed-fee
+D417 requires every non-exchange Instrument to expose independent reusable Sides
+through explicit memberships. Futures and futures options are the only exceptions.
+The Side owns its schedule, inputs and valuation; the Instrument owns composition.
+Booking, review and saved-trade views must show those same memberships and their
+roles and terms. The alignment is in implementation, including cash, gas holdings,
+retained programs and service rights; see [the decision](decisions.md#d417--explicit-sides-for-every-non-exchange-instrument).
+
+D415 implements the selected first [financial Transport rights and fixed-fee
 contract](gas-transport-financial.md). Direct signed whole-package values,
 independent ordinary cash and explicit expiry retain separate owners. Native, managed and actual browser consumers have local qualification, including
 explicit expiry recovery and independent cash. First-value market publication,
 integrated upstream qualification and release remain separate gates.
 
-D413 adds locally qualified [retained chosen routes](gas-transport-routes.md)
+D414 adds locally qualified [retained chosen routes](gas-transport-routes.md)
 over exact native capacity claims and exclusive logical source-plan memberships.
 Managed/native, populated-upgrade and actual browser checks qualify persisted
 route adoption and release. Integrated release, physical performance and financial
 value remain separate.
 
-D412 adds [commercial Transport capacity operations](gas-transport-capacity-operations.md)
+D413 adds [commercial Transport capacity operations](gas-transport-capacity-operations.md)
 over independent exact entitlement, capacity-version and chosen-plan identities.
 Shared gross limits, explicit empty release and retained source/authority
 admission have local managed/native, upgrade and actual browser qualification.
@@ -446,6 +453,22 @@ composition booking, future replacement amendments and independent indexed
 consideration through the existing FloatingSide. These preserve contractual net
 MTM and do not admit started-delivery cash lifecycle operations.
 
+D412 adds [versioned operating facilities](operating-facilities.md) and bounded
+supplied-plan thermal toll, battery and solar calculation through independent
+Side schedules. Physical operating parameters extend exact existing locations;
+trade entitlement, guarantees, state and prices stay separate. Saved complete-right
+trades retain their exact facility version, supplied plan and membership-owned
+programs. Ordinary Instrument/Side reads, Blotter and shared factor scenarios
+consume those programs. The hedge report keeps base measures distinct and adds
+only like-currency price changes under one scenario set. Standalone REC forwards
+own independent physical-delivery and consideration schedules; the durable manual
+inventory consumer records evidenced serial ownership and exact outgoing delivery
+allocations. Both use current authorization, certified history and idempotent
+commands. See [trading and inventory contracts](structured-power-trading.md).
+Optimization and external registry submission remain separate work.
+[Structured power](structured-power-products.md)
+and [contract conventions](power-contract-conventions.md) record the boundaries.
+
 D229 integrates PPA bindings into the common blotter and interactive/queued
 portfolio risk, with an explicit pending-meter policy and distinct value measure.
 Heat-rate examples use the existing typed factor contract and independent
@@ -855,7 +878,8 @@ Portfolio
 
 Instrument
   FuturesContract: exact immutable futures-series reference; typed LotSize
-  SidedInstrument: explicit side memberships where composition is contractual
+  FuturesOptionInstrument: exact exchange option contract and model binding
+  SidedInstrument: every other instrument has explicit independent side memberships
     Side reference, signed coefficient, role and order
     Side definition: index/curve, observation/averaging and payment conventions
     Separate resolved pricing bindings and generated dated schedules
@@ -898,8 +922,10 @@ These are distinct concepts:
   size. See [unit instruments and trade bindings](instrument-contracts.md) for
   identity, reuse, storage compatibility and the persisted-forward boundary.
 - `SidedInstrument` retains one or more independent sides through explicit
-  memberships where the product actually requires composition, including the
-  current fixed/floating financial swap. A simple contract needs no artificial side.
+  memberships for every non-exchange instrument, including an instrument with
+  one cash, holding or rights-value Side. Futures and futures options are the
+  only side-less instruments (D417). A Side owns real schedule and valuation
+  behavior; a wrapper that calls back to Instrument PV does not satisfy this rule.
 - Coefficients and ordering belong to instrument memberships. They do not make a
   new side definition merely because another instrument uses different weights.
 - Signed booked quantities belong to the trade's instrument bindings, with an

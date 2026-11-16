@@ -14,9 +14,9 @@ def run():
     root = Path(__file__).resolve().parents[1]
 
     def before(query, migration):
-        if migration.name != '0347_gas_transport_financial.sql':
+        if migration.name != '0354_gas_transport_financial.sql':
             return
-        guard_checks(query, migration, number='0347', guard='gas_transport_financial_upgrade',
+        guard_checks(query, migration, number='0354', guard='gas_transport_financial_upgrade',
             signatures=('assistant.is_prompt_page(text)',))
         reference, market, access, manifest = fixture(root)
         for sql in [reference, market, access]:

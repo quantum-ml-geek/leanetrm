@@ -26,6 +26,8 @@ if(args is ["--gas-transport-route-metadata"]){GasTransportRouteMetadataChecks.R
 if(args is ["--gas-transport-capacity-metadata"]){GasTransportCapacityMetadataChecks.Run();GasTransportCapacityPresentationChecks.Run();return;}
 if(args is ["--gas-transport-capacity-normalize",var transportInput,var transportOutput]){GasTransportCapacityPacket.Normalize(transportInput,transportOutput);return;}
 if(args is ["--storage-facility-setup"]){StorageFacilityMetadataChecks.Run();return;}
+if(args is ["--structured-power"]){StructuredPowerChecks.Run();return;}
+if(args is ["--power-hedge"]){StructuredPowerHedgeChecks.Run();return;}
 if(args is ["--assistant-prompts"]){TurnWorkerChecks.Run();AgentToolChecks.Run();await ModelProviderChecks.Run();return;}
 if(args is ["--async-reads"]){AsyncReadContractChecks.Run();await AsyncReadChecks.Run();return;}
 if(args is ["--async-read-contracts"]){AsyncReadContractChecks.Run();return;}
@@ -260,6 +262,7 @@ if (args is ["--schedules"])
     GasTransportCapacityMetadataChecks.Run();
     GasTransportCapacityPresentationChecks.Run();
     StorageFacilityMetadataChecks.Run();
+    StructuredPowerChecks.Run();
     FuturesMarginSourceChecks.Run();
     CashInstrumentChecks.Run();
     CurveDisplayChecks.Run();

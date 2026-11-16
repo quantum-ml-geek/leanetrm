@@ -4673,7 +4673,7 @@ on desktop and phone. All owned resources were removed. The complete CI matrix
 still gates the exact commit. These checks do not qualify complete economic
 continuation, quantity scaling, correction adapters or production activation.
 
-After integrating the current master and facility foundation, migration 0343
+After integrating the current master and facility foundation, migration 0350
 retains the original fee SQL unchanged. Local qualification passes 740 managed
 core, the full API schedule suite, 1,966 frontend and 144 Python checks. Native
 qualification retains all 26 independent whole-book checkpoints; populated
@@ -4742,7 +4742,7 @@ resources. Aggregate CI gates the exact published commit; release and production
 activation remain separate.
 
 After integrating the current master, facilities and balance-time fees,
-migration 0344 retains the custody SQL unchanged. The integrated artifact passes
+migration 0351 retains the custody SQL unchanged. The integrated artifact passes
 741 managed core checks, the full API schedule suite, 1,993 frontend and 146
 Python checks. Native qualification retains all 18 source/value checkpoints;
 populated upgrade, three retained PRICE jobs, four original-authority wait
@@ -4806,7 +4806,7 @@ The repository verification group also passes. The complete 190-command runner
 was not executed locally; aggregate CI and release checks remain required.
 
 
-## Commercial Transport capacity integration (D412)
+## Commercial Transport capacity integration (D413)
 
 The integrated capacity artifact passes 742 managed core checks, the full API
 schedule suite, 2,009 frontend and 148 Python checks. Native source, concurrency,
@@ -4820,7 +4820,7 @@ results do not qualify physical performance, financial Transport, complete
 economic continuation or production activation.
 
 
-## Retained Transport route integration (D413)
+## Retained Transport route integration (D414)
 
 The integrated route artifact passes 743 managed core checks, the full API
 schedule suite, 2,020 frontend and 154 Python checks. Nine actual managed route
@@ -4836,7 +4836,7 @@ Transport, physical performance, complete economic continuation or production
 activation.
 
 
-## Direct Transport rights and independent cash (D414)
+## Direct Transport rights and independent cash (D415)
 
 The local financial Transport artifact passes 744 managed core checks, the full
 API schedule suite, 2,020 frontend and 155 Python checks, with zero API build
@@ -4856,7 +4856,7 @@ remain separate gates; no production activation or complete economic horizon
 continuation is implied.
 
 
-## Integrated financial Transport qualification (D414)
+## Integrated financial Transport qualification (D415)
 
 The combined current-master and service-stack artifact passes 745 managed core
 checks, the full API schedule suite, 2,044 frontend and 157 Python checks, with
@@ -4870,7 +4870,7 @@ and native postconditions. The retained-window regression preserves business
 date independently of the UTC valuation date.
 
 Independent source and merge review preserves both parents' contracts and
-verification registrations. The only native change beyond migration 0347
+verification registrations. The only native change beyond migration 0354
 renumbering is the exact protected prompt-helper fingerprint for the approved
 Options identifier; all original metadata/ACL guards and drift refusals remain.
 Disposable synthetic resources were cleaned. First-value market publication,

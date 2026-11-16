@@ -84,6 +84,25 @@ const string malformed="The request is incomplete or malformed.";
 (int Status,string Code,string Message) Failure(Exception e,PathString apiPath,HttpContext context)=>e switch
 {
     AsyncReadException refusal=>(refusal.Status,refusal.Code,refusal.Message),
+    MarketDataException m when m.Code is "rec_request_conflict" or "rec_generation_conflict" or "rec_trade_conflict" or "rec_forward_request_conflict" or "rec_forward_revision_conflict"
+        => (409,m.Code,m.Message),
+    PostgresException p when p.SqlState=="P0001" && p.MessageText is "rec_request_conflict" or "rec_generation_conflict" or "rec_trade_conflict" or "rec_forward_request_conflict" or "rec_forward_revision_conflict"
+        => (409,p.MessageText,"Recover the original certificate command or reload its exact retained revision before recording another fact."),
+    PostgresException p when p.SqlState=="P0001" && p.MessageText.StartsWith("rec_",StringComparison.Ordinal)
+        => (422,p.MessageText,"Supply exact certificate references, native serial ranges, eligible evidence and explicit future delivery terms."),
+    PostgresException p when p.SqlState=="P0001" && p.MessageText is "power_facility_request_conflict" or "power_facility_revision_conflict"
+        => (409,p.MessageText,"This facility or request changed. Reload its exact version or recover the original save outcome."),
+    PostgresException p when p.SqlState=="P0001" && p.MessageText.StartsWith("power_facility_",StringComparison.Ordinal)
+        => (422,p.MessageText,"Choose an available exact facility version and compatible operating parameters under the selected context."),
+    PostgresException p when p.SqlState=="P0001" && p.MessageText is "operating_request_conflict" or "operating_right_overlap"
+        => (409,p.MessageText,"Recover the original command or select an uncommitted complete operating-right horizon."),
+    PostgresException p when p.SqlState=="P0001" && p.MessageText=="operating_booking_clock"
+        => (422,p.MessageText,"Booking operating plans on non-UTC clocks is Coming soon. This profile requires an explicitly selected UTC fixed-offset clock."),
+    PostgresException p when p.SqlState=="P0001" && (p.MessageText.StartsWith("operating_booking_",StringComparison.Ordinal)||
+        p.MessageText.StartsWith("operating_schedule",StringComparison.Ordinal)||p.MessageText.StartsWith("operating_battery_",StringComparison.Ordinal)||
+        p.MessageText.StartsWith("operating_thermal_",StringComparison.Ordinal)||p.MessageText.StartsWith("operating_solar_",StringComparison.Ordinal)||
+        p.MessageText is "operating_right_quantity" or "operating_delivery_lifecycle" or "operating_facility_unavailable" or "operating_position_scope" or "operating_position_metadata" or "operating_quantity")
+        => (422,p.MessageText,"Supply exact available operating references, a feasible future plan, explicit prices and complete retained Side memberships."),
             ToolRefusal refusal=>(422,refusal.Code,AgentTools.Text(refusal.Code)),
     PostgresException p when p.SqlState=="P0001"&&p.MessageText=="catalogue_choice_changed"
         => (409,p.MessageText,"The offered product definition changed. Reload the available trade terms before booking."),
@@ -307,6 +326,14 @@ const string malformed="The request is incomplete or malformed.";
     PostgresException p when p.SqlState=="P0001" && p.MessageText is "knowledge_coverage" or "knowledge_clock" or "knowledge_tracking" or "knowledge_retention" or "knowledge_limit" or "knowledge_timeline" => (422,p.MessageText,"The requested knowledge cutoff cannot be certified. Check retained coverage, clock health and commit tracking."),
     PostgresException p when p.SqlState=="42501" => (403,"access_denied","Database permissions rejected this operation."),
     PostgresException p when p.SqlState is "23514" or "55000" => (422,"definition_rejected","The value or operation violates an explicit database specification."),
+    Exception when context.Items.ContainsKey("rec_inventory_attempted") && e is NpgsqlException or OperationCanceledException
+        => (503,"rec_inventory_outcome_unknown","The certificate evidence outcome is unknown. Recover the original command before retrying."),
+    Exception when context.Items.ContainsKey("rec_trade_attempted") && e is NpgsqlException or OperationCanceledException
+        => (503,"rec_trade_outcome_unknown","The certificate trade outcome is unknown. Recover the original booking command before retrying."),
+    Exception when context.Items.ContainsKey("operating_trade_attempted") && e is NpgsqlException or OperationCanceledException
+        => (503,"operating_trade_outcome_unknown","The operating-right outcome is unknown. Recover the original booking command before retrying."),
+    Exception when context.Items.ContainsKey("power_facility_attempted") && e is NpgsqlException or OperationCanceledException
+        => (503,"power_facility_outcome_unknown","The facility save outcome is unknown. Recover the original save command before retrying."),
     PostgresException when context.Items.ContainsKey("administration_attempted") => (503,"administration_outcome_unknown","The administrative outcome cannot be confirmed. Retain the original request and inspect the audit before retrying."),
     Exception when context.Items.ContainsKey("model_admin_attempted") && e is NpgsqlException or OperationCanceledException
         => (503,"model_admin_outcome_unknown","The outcome is unknown. Check Settings › AI and its audit, or repeat the identical request."),
@@ -647,6 +674,159 @@ api.MapPost("/units/convert",(HttpContext c,UnitConvertRequest body)=>Locked(c,s
 },c.RequestAborted)));
 api.MapPost("/amounts/display",(HttpContext c,System.Collections.Immutable.ImmutableArray<DisplayNumberRequest> body)=>Locked(c,session=>
     database.WithIdentity(Profile(session),null,(_,_)=>Task.FromResult<IResult>(Results.Ok(UnitOperations.Display(body))),c.RequestAborted)));
+var powerFacilities=new PhysicalOperatingFacilityStore(database.Manifest.CatalogId);
+// Capture current knowledge once per read, or bind the exact retained context. Authoring
+// stays in current control state; the facility store certifies its committed revision.
+Task<IResult> PhysicalPowerOperation(HttpContext c,Guid snapshotId,string permission,bool authoring,
+    Func<NpgsqlConnection,PreviewData,InputFrame,ScheduleContext?,bool,CancellationToken,Task<IResult>> work)=>Locked(c,session=>
+        PhysicalPowerSessionOperation(c,session,snapshotId,permission,authoring,work));
+Task<IResult> PhysicalPowerSessionOperation(HttpContext c,PreviewSession session,Guid snapshotId,string permission,bool authoring,
+    Func<NpgsqlConnection,PreviewData,InputFrame,ScheduleContext?,bool,CancellationToken,Task<IResult>> work)=>
+    database.WithIdentity(Profile(session),permission,async(connection,ct)=>
+    {
+        if(!await PreviewDatabase.HasPermission(connection,"ReadPhysical",ct)||!await PreviewDatabase.HasPermission(connection,"ReadMarketData",ct))
+            throw new PreviewDeniedException();
+        var pin=Pin(session,snapshotId);var frame=pin.RequireFrame();var current=pin.Context is null;
+        ScheduleContext? context=null;
+        await pin.Bind(connection,database.Manifest.CatalogId,ct);
+        if(authoring)
+        {
+            if(pin.Context is not null)throw new MarketDataException("historical_read_only","Return to working data before changing operating facilities.");
+        }
+        else
+        {
+            var view=pin.Context is {} retained?TradingView.Retained(frame,retained):
+                await TradingView.Capture(connection,new KnowledgeStore(database.Manifest.CatalogId),frame,ct);
+            context=view.Context;
+            if(pin.Context is null)await view.Bind(connection,database.Manifest.CatalogId,ct);
+            frame=view.CalculationFrame;
+        }
+        if(context is not null&&await PreviewDatabase.HasPermission(connection,"ReadTrades",ct))
+            await TradingContext.Bind(connection,database.Manifest.CatalogId,frame,context,ct);
+        using var visibility=new AsyncReadVisibility();
+        var data=await MarketInputSelection.Root(database,connection,frame,ct,
+            referenceScope:ReferenceReadScope.AllVisible,includeCalendarDays:true);
+        var result=await work(connection,data,frame,context,current,ct);
+        await visibility.Seal().Require(connection,ct);
+        if(!await PreviewDatabase.HasPermission(connection,"ReadPhysical",ct)||!await PreviewDatabase.HasPermission(connection,"ReadMarketData",ct))
+            throw new PreviewDeniedException();
+        return result;
+    },c.RequestAborted);
+api.MapPost("/physical/power-facilities/catalog",(HttpContext c,PhysicalPowerCatalogRequest body)=>
+    PhysicalPowerOperation(c,body.SnapshotId,"ReadPhysical",false,async(connection,data,frame,_,current,ct)=>
+        Results.Ok(StructuredPowerPreview.Catalog(data,current&&await PreviewDatabase.HasPermission(connection,"ManagePhysicalSetup",ct),
+            await PreviewDatabase.HasPermission(connection,"RunScenario",ct)) with{PriceContracts=StructuredPowerTradeCatalog.Prices(data,frame)})));
+api.MapPost("/physical/power-trades/catalog",(HttpContext c,PhysicalPowerCatalogRequest body)=>
+    PhysicalPowerOperation(c,body.SnapshotId,"ReadTrades",false,async(connection,data,frame,context,current,ct)=>
+        Results.Ok(await StructuredPowerTradeCatalog.Read(connection,data,frame,context!.KnownAt,current,ct))));
+var operatingTrades=new StructuredPowerBookingStore(database);
+api.MapPost("/physical/power-trades/preview",(HttpContext c,StructuredPowerBookRequest body)=>
+    PhysicalPowerOperation(c,(body.Plan??throw new MarketDataException("operating_booking","Supply the complete reviewed plan.")).SnapshotId,
+        "BookTrade",false,async(connection,data,frame,context,current,ct)=>
+    {
+        if(!current)throw new MarketDataException("historical_read_only","Return to working data to prepare a new operating-right trade.");
+        var saved=await powerFacilities.ReadExact(connection,body.Plan.FacilityId,body.Plan.FacilityVersion,
+            context!.ContextId!.Value,frame.At,frame.Time.Date,ct);
+        return Results.Ok((await operatingTrades.Prepare(connection,data,frame,saved,SchedulePreview.ParseAt(context.KnownAt),body,ct)).Preview);
+    }));
+api.MapPost("/physical/power-trades/get",(HttpContext c,StructuredPowerTradeReadRequest body)=>
+    PhysicalPowerOperation(c,body.SnapshotId,"ReadTrades",false,async(connection,_,frame,_,_,ct)=>
+        Results.Ok(await operatingTrades.ReadExact(connection,frame,body.TradeId,ct))));
+api.MapPost("/physical/power-trades/valuation",(HttpContext c,StructuredPowerTradeReadRequest body)=>
+    PhysicalPowerOperation(c,body.SnapshotId,"ReadTrades",false,async(connection,_,frame,_,_,ct)=>
+        Results.Ok(await operatingTrades.Value(connection,frame,body.TradeId,ct))));
+api.MapPost("/physical/power-trades/directory",(HttpContext c,StructuredPowerTradeDirectoryRequest body)=>
+    PhysicalPowerOperation(c,body.SnapshotId,"ReadTrades",false,async(connection,_,frame,_,_,ct)=>
+        Results.Ok(await operatingTrades.Directory(connection,frame,body.BookIds,body.Offset,body.Limit,ct))));
+async Task RequireOperatingTradeAuthority(NpgsqlConnection connection,CancellationToken ct)
+{
+    if(!await PreviewDatabase.HasPermission(connection,"ReadPhysical",ct)||
+       !await PreviewDatabase.HasPermission(connection,"ReadMarketData",ct)||
+       !await PreviewDatabase.HasPermission(connection,"ReadTrades",ct))throw new PreviewDeniedException();
+}
+api.MapPost("/physical/power-trades/status",(HttpContext c,StructuredPowerTradeStatusRequest body)=>Locked(c,session=>
+    database.WithIdentity(Profile(session),"BookTrade",async(connection,ct)=>
+    {
+        if(Pin(session).Context is not null)throw new MarketDataException("historical_read_only","Recover booking outcomes from current working data.");
+        await RequireOperatingTradeAuthority(connection,ct);
+        var result=await operatingTrades.OperationStatus(connection,body.OperationId,ct);
+        await RequireOperatingTradeAuthority(connection,ct);
+        return Results.Ok(result);
+    },c.RequestAborted)));
+api.MapPost("/physical/power-trades/book",(HttpContext c,StructuredPowerBookRequest body)=>Locked(c,async session=>
+{
+    c.Items["operating_trade_attempted"]=true;
+    if(Pin(session).Context is not null)throw new MarketDataException("historical_read_only","Return to working data to book an operating right.");
+    var profile=Profile(session);var retained=new RetainedScheduleStore(database);
+    var staged=await database.WithIdentity(profile,"BookTrade",async(connection,ct)=>
+    {
+        await RequireOperatingTradeAuthority(connection,ct);
+        // Retry first: its original outcome does not depend on a new market
+        // capture or a snapshot that the workspace may since have replaced.
+        var prior=await operatingTrades.RequestStatus(connection,body,ct);
+        if(prior is not null)return (Receipt:prior,Plan:(StructuredPowerBookingPrepared?)null,Frame:(InputFrame?)null);
+        var pin=Pin(session,(body.Plan??throw new MarketDataException("operating_booking","Supply a complete operating plan.")).SnapshotId);
+        if(pin.Context is not null)throw new MarketDataException("historical_read_only","Book from the selected working financial snapshot.");
+        var frame=pin.RequireFrame();
+        var view=await TradingView.Capture(connection,new KnowledgeStore(database.Manifest.CatalogId),frame,ct);
+        await view.Bind(connection,database.Manifest.CatalogId,ct);
+        var selected=view.CalculationFrame;
+        await TradingContext.Bind(connection,database.Manifest.CatalogId,selected,view.Context,ct);
+        using var visibility=new AsyncReadVisibility();
+        var data=await MarketInputSelection.Root(database,connection,selected,ct,referenceScope:ReferenceReadScope.AllVisible,includeCalendarDays:true);
+        var facility=await powerFacilities.ReadExact(connection,body.Plan.FacilityId,body.Plan.FacilityVersion,
+            view.Context.ContextId!.Value,selected.At,selected.Time.Date,ct);
+        var prepared=await operatingTrades.Prepare(connection,data,selected,facility,SchedulePreview.ParseAt(view.Context.KnownAt),body,ct);
+        await visibility.Seal().Require(connection,ct);
+        await RequireOperatingTradeAuthority(connection,ct);
+        return (Receipt:(StructuredPowerBookingReceipt?)null,Plan:(StructuredPowerBookingPrepared?)prepared,Frame:(InputFrame?)selected);
+    },c.RequestAborted);
+    if(staged.Receipt is not null)return Results.Ok(staged.Receipt);
+    var plan=staged.Plan!;
+    await retained.Stage(profile,body.OperationId,body,"BookTrade",null,null,plan.Retained.Generate(c.RequestAborted),c.RequestAborted);
+    return await database.WithIdentity(profile,"BookTrade",async(connection,ct)=>
+    {
+        await RequireOperatingTradeAuthority(connection,ct);
+        await retained.Lock(connection,body.OperationId,ct);
+        var receipt=await operatingTrades.Save(connection,staged.Frame!,body,plan,ct);
+        if(receipt.Changed)
+        {
+            var instrument=await retained.Publish(connection,body.OperationId,ct);
+            if(instrument!=receipt.InstrumentId)throw new MarketDataException("operating_booking","The retained programs must publish the exact accepted instrument.");
+        }
+        await RequireOperatingTradeAuthority(connection,ct);
+        return Results.Ok(receipt);
+    },c.RequestAborted);
+}));
+api.MapPost("/physical/power-facilities/list",(HttpContext c,PhysicalPowerListRequest body)=>
+    PhysicalPowerOperation(c,body.SnapshotId,"ReadPhysical",false,async(connection,_,frame,context,_,ct)=>
+        Results.Ok(await powerFacilities.List(connection,context!.ContextId!.Value,frame.At,frame.Time.Date,body.SelectionPolicy,ct))));
+api.MapPost("/physical/power-facilities/get",(HttpContext c,PhysicalPowerGetRequest body)=>
+    PhysicalPowerOperation(c,body.SnapshotId,"ReadPhysical",false,async(connection,_,frame,context,_,ct)=>
+        Results.Ok(await powerFacilities.ReadExact(connection,body.FacilityId,body.Version,context!.ContextId!.Value,frame.At,frame.Time.Date,ct))));
+api.MapPost("/physical/power-facilities/save",(HttpContext c,PhysicalPowerSaveRequest body)=>Locked(c,async session=>
+{
+    c.Items["power_facility_attempted"]=true;
+    if(Pin(session).Context is not null)throw new MarketDataException("historical_read_only","Return to working data before changing operating facilities.");
+    var request=new PhysicalOperatingFacilitySaveRequest(body.RequestId,body.ExpectedVersion,body.Facility);
+    var prior=await database.WithIdentity(Profile(session),"ManagePhysicalSetup",async(connection,ct)=>
+        await powerFacilities.Replay(connection,request,ct),c.RequestAborted);
+    if(prior is not null)return Results.Ok(prior);
+    return await PhysicalPowerSessionOperation(c,session,body.SnapshotId,"ManagePhysicalSetup",true,async(connection,data,_,_,_,ct)=>
+        Results.Ok(await powerFacilities.Save(connection,data,request,ct)));
+}));
+api.MapPost("/physical/power-facilities/status",(HttpContext c,PhysicalPowerStatusRequest body)=>Locked(c,session=>
+    database.WithIdentity(Profile(session),"ManagePhysicalSetup",async(connection,ct)=>
+    {
+        if(Pin(session).Context is not null)throw new MarketDataException("historical_read_only","Recover facility save outcomes from current working data.");
+        return Results.Ok(await powerFacilities.RequestStatus(connection,body.RequestId,ct));
+    },c.RequestAborted)));
+api.MapPost("/physical/power-facilities/preview",(HttpContext c,StructuredPowerPreviewRequest body)=>
+    PhysicalPowerOperation(c,body.SnapshotId,"RunScenario",false,async(connection,data,frame,context,_,ct)=>
+    {
+        var facility=await powerFacilities.ReadExact(connection,body.FacilityId,body.FacilityVersion,context!.ContextId!.Value,frame.At,frame.Time.Date,ct);
+        return Results.Ok(StructuredPowerPreview.Calculate(data,frame,facility,SchedulePreview.ParseAt(context.KnownAt),body));
+    }));
 api.MapGet("/power-imports",(Func<HttpContext,Task<IResult>>)(c=>PowerOperation(c,"ReadMarketData",async(_,connection,ct)=>Results.Ok(await PowerHistory.Catalog(connection,ct)))));
 api.MapPost("/power-imports/period",(HttpContext c,PowerHistoryPeriodRequest body)=>PowerOperation(c,"ReadMarketData",async(_,connection,ct)=>Results.Ok(await PowerHistory.Period(connection,body,ct))));
 api.MapPost("/power-imports/history",(HttpContext c,PowerHistoryRequest body)=>PowerOperation(c,"ReadMarketData",async(_,connection,ct)=>Results.Ok(await PowerHistory.Read(connection,body,ct))));
@@ -943,6 +1123,39 @@ api.MapPost("/date-schedules/publish",(HttpContext c,SchedulePublishRequest body
     Results.Ok(await scheduleStore.Publish(connection,body,ct))));
 api.MapPost("/date-schedules/context",(HttpContext c,ContextCaptureRequest body)=>DateOperation(c,"ReadMarketData",async(session,connection,ct)=>
     Results.Ok(await knowledgeStore.Capture(connection,body,ct))));
+var recInventory=new RecInventoryStore(database);
+Task<IResult> RecInventoryOperation(HttpContext c,string permission,
+    Func<NpgsqlConnection,ScheduleContext?,CancellationToken,Task<object>> work)=>Locked(c,session=>
+    database.WithIdentity(Profile(session),permission,async(connection,ct)=>
+    {
+        async Task Require()
+        {
+            if(!await PreviewDatabase.HasPermission(connection,"ReadTrades",ct)||
+               !await PreviewDatabase.HasPermission(connection,"ReadMarketData",ct))throw new PreviewDeniedException();
+        }
+        await Require();
+        if(permission is "ConfigureRecInventory" or "RecordRecInventory")c.Items["rec_inventory_attempted"]=true;
+        // The inventory owns its explicit business-date capture/bind. Binding
+        // the session here as well would change the native retained-read contract.
+        var result=await work(connection,session.MarketContext,ct);
+        await Require();return Results.Ok(result);
+    },c.RequestAborted));
+api.MapPost("/rec/directory",(HttpContext c,RecInventoryDirectoryRequest body)=>RecInventoryOperation(c,"ReadRecInventory",
+    (connection,selected,ct)=>recInventory.Directory(connection,body,selected,ct)));
+api.MapPost("/rec/read",(HttpContext c,RecInventoryReadRequest body)=>RecInventoryOperation(c,"ReadRecInventory",
+    (connection,selected,ct)=>recInventory.Read(connection,body,selected,ct)));
+api.MapPost("/rec/account",(HttpContext c,RecInventoryAccountRequest body)=>RecInventoryOperation(c,"ConfigureRecInventory",
+    async(connection,selected,ct)=>await recInventory.ConfigureAccount(connection,body,selected,ct)));
+api.MapPost("/rec/destination",(HttpContext c,RecInventoryDestinationRequest body)=>RecInventoryOperation(c,"ConfigureRecInventory",
+    async(connection,selected,ct)=>await recInventory.ConfigureDestination(connection,body,selected,ct)));
+api.MapPost("/rec/record",(HttpContext c,RecInventoryWriteRequest body)=>RecInventoryOperation(c,"RecordRecInventory",
+    async(connection,selected,ct)=>await recInventory.Record(connection,body,selected,ct)));
+api.MapPost("/rec/status",(HttpContext c,RecInventoryStatusRequest body)=>RecInventoryOperation(c,"ReadRecInventory",
+    async(connection,selected,ct)=>
+    {
+        if(selected is not null)throw new MarketDataException("historical_read_only","Recover certificate command outcomes from current working data.");
+        return await recInventory.Status(connection,body,ct);
+    }));
 async Task<(ImmutableArray<ScheduleVersion> Versions,ScheduleContext Context)> ScheduleView(NpgsqlConnection connection,ScheduleContext? context,CancellationToken ct)
 {
     if(context is null)throw new TemporalException("schedule_context","Choose an explicit temporal context.");
@@ -1511,7 +1724,7 @@ void RequireConvention(FuturesReadRequest body,string? expected)
 {
     if(expected==PhysicalLngStore.Convention){if(body.Convention!=expected)throw new MarketDataException("lng_context","Select the explicit supported LNG cargo valuation convention.");}
     else if(expected==PhysicalCrudeStore.Convention){if(body.Convention!=expected)throw new MarketDataException("crude_context","Select the explicit supported physical crude valuation convention.");}
-    else if(expected is SwapStore.Convention or PhysicalGasStore.Convention or TradingBlotter.Convention){if(body.Convention!=expected)throw new MarketDataException("valuation_convention","Select the read's explicit supported valuation convention.");}
+    else if(expected is SwapStore.Convention or PhysicalGasStore.Convention or TradingBlotter.Convention or RecForwardStore.Convention){if(body.Convention!=expected)throw new MarketDataException("valuation_convention","Select the read's explicit supported valuation convention.");}
     else if(expected==FuturesOptionStore.Convention)FuturesOptionStore.RequireConvention(body.Convention);
     else FuturesStore.Convention(body.Convention);
 }
@@ -1521,7 +1734,9 @@ async Task Rights(NpgsqlConnection connection,System.Text.Json.Nodes.JsonObject 
     var working=selection.Working;
     json["context"]=JsonSerializer.SerializeToNode(view.Context,new JsonSerializerOptions{PropertyNamingPolicy=JsonNamingPolicy.CamelCase});json["asOf"]=JsonSerializer.SerializeToNode(selection.Frame.At);
     json["canRunDealRisk"]=JsonSerializer.SerializeToNode(await PreviewDatabase.HasPermission(connection,"RunDealRisk",ct));
-    json["canBook"]=JsonSerializer.SerializeToNode(working&&await PreviewDatabase.HasPermission(connection,"BookTrade",ct));
+    var canBook=working&&await PreviewDatabase.HasPermission(connection,"BookTrade",ct);
+    if(json["canBook"] is System.Text.Json.Nodes.JsonValue offered&&offered.TryGetValue<bool>(out var eligible))canBook&=eligible;
+    json["canBook"]=JsonSerializer.SerializeToNode(canBook);
     if(!booking)return;
     json["canConfigureGasServices"]=JsonSerializer.SerializeToNode(working&&await PreviewDatabase.HasPermission(connection,"ReadGasOperations",ct)&&await PreviewDatabase.HasPermission(connection,"ConfigureGasServices",ct));
     json["canRecordGasOperations"]=JsonSerializer.SerializeToNode(working&&await PreviewDatabase.HasPermission(connection,"ReadGasOperations",ct)&&await PreviewDatabase.HasPermission(connection,"RecordGasOperations",ct)&&await PreviewDatabase.HasPermission(connection,"AmendTrade",ct));
@@ -1583,6 +1798,64 @@ api.MapPost("/trade-formats/save",(HttpContext c,DealFormatSave body)=>Locked(c,
  if(session.MarketContext is not null)throw new MarketDataException("historical_read_only","Return to working data to edit deal presentation.");
  return Results.Ok(await DealAmountFormats.Save(connection,database.Manifest.CatalogId,body,ct));
 },c.RequestAborted)));
+var recTrades=new RecForwardStore(database);
+Task<IResult> RecTradeRead(HttpContext c,FuturesReadRequest body,
+    Func<NpgsqlConnection,PreviewData,InputFrame,ScheduleContext,bool,CancellationToken,Task<object>> work)=>TradingRead(c,
+    body??throw new MarketDataException("rec_forward","Select the shared financial context."),async(connection,view,ct)=>
+    {
+        using var visibility=new AsyncReadVisibility();
+        var result=await tradeReads.Read(connection,view,data=>work(connection,data,view.CalculationFrame,view.Context,view.Working,ct),ct,
+            referenceScope:ReferenceReadScope.AllVisible,observationScope:ObservationReadScope.ExactPins);
+        await visibility.Seal().Require(connection,ct);return result;
+    },expectedConvention:RecForwardStore.Convention);
+api.MapPost("/rec/trades/catalog",(HttpContext c,RecForwardCatalogRequest body)=>RecTradeRead(c,body.Context,
+    (connection,data,frame,context,current,ct)=>RecForwardCatalog.Read(connection,database,data,frame,context.KnownAt!,current,ct)));
+api.MapPost("/rec/trades/preview",(HttpContext c,RecForwardPreviewRequest body)=>RecTradeRead(c,body.Context,
+    async(connection,data,frame,context,_,ct)=>await recTrades.Preview(connection,data,frame,SchedulePreview.ParseAt(context.KnownAt),body,ct)));
+api.MapPost("/rec/trades/get",(HttpContext c,RecForwardReadRequest body)=>RecTradeRead(c,body.Context,
+    async(connection,_,frame,_,_,ct)=>await recTrades.ReadExact(connection,frame,body.TradeId,body.Revision,ct)));
+api.MapPost("/rec/trades/valuation",(HttpContext c,RecForwardReadRequest body)=>RecTradeRead(c,body.Context,
+    async(connection,_,frame,_,_,ct)=>await recTrades.Value(connection,frame,body.TradeId,body.Revision,ct)));
+api.MapPost("/rec/trades/status",(HttpContext c,RecForwardStatusRequest body)=>Locked(c,session=>
+    database.WithIdentity(Profile(session),"ReadTrades",async(connection,ct)=>
+    {
+        if(Pin(session).Context is not null)throw new MarketDataException("historical_read_only","Recover certificate trade outcomes from current working data.");
+        return Results.Ok(await recTrades.Status(connection,body,ct));
+    },c.RequestAborted)));
+api.MapPost("/rec/trades/book",(HttpContext c,RecForwardBookRequest body)=>Locked(c,async session=>
+{
+    c.Items["rec_trade_attempted"]=true;
+    if(Pin(session).Context is not null)throw new MarketDataException("historical_read_only","Return to working data before booking a certificate trade.");
+    var profile=Profile(session);var retained=new RetainedScheduleStore(database);
+    var selected=await database.WithIdentity(profile,"BookTrade",async(connection,ct)=>
+    {
+        var receipt=await recTrades.RequestStatus(connection,body,ct);
+        if(receipt is not null)return (Receipt:receipt,Prepared:(RecForwardPrepared?)null,Frame:(InputFrame?)null);
+        if(body.Context is null||body.Context.KnowledgeMode!="current")throw new MarketDataException("historical_read_only","Book from an explicitly selected working financial snapshot.");
+        var pin=Pin(session,body.Context.SnapshotId);
+        if(pin.Context is not null)throw new MarketDataException("historical_read_only","Book from the selected working financial snapshot.");
+        var view=await TradingView.Capture(connection,new KnowledgeStore(database.Manifest.CatalogId),pin.RequireFrame(),ct);
+        await view.Bind(connection,database.Manifest.CatalogId,ct);
+        var frame=view.CalculationFrame;await TradingContext.Bind(connection,database.Manifest.CatalogId,frame,view.Context,ct);
+        using var visibility=new AsyncReadVisibility();
+        var data=await MarketInputSelection.Root(database,connection,frame,ct,referenceScope:ReferenceReadScope.AllVisible,includeCalendarDays:true);
+        var prepared=await recTrades.PrepareBook(connection,data,frame,SchedulePreview.ParseAt(view.Context.KnownAt),body,ct);
+        await visibility.Seal().Require(connection,ct);
+        return (Receipt:(RecForwardBookingReceipt?)null,Prepared:(RecForwardPrepared?)prepared,Frame:(InputFrame?)frame);
+    },c.RequestAborted);
+    if(selected.Receipt is not null)return Results.Ok(selected.Receipt);
+    var prepared=selected.Prepared!;
+    await retained.Stage(profile,body.OperationId,body,"BookTrade",null,null,prepared.Retained.Generate(c.RequestAborted),c.RequestAborted);
+    return await database.WithIdentity(profile,"BookTrade",async(connection,ct)=>
+    {
+        await retained.Lock(connection,body.OperationId,ct);
+        var receipt=await recTrades.Save(connection,selected.Frame!,body,prepared,ct);
+        if(receipt.Changed&&await retained.Publish(connection,body.OperationId,ct)!=receipt.InstrumentId)
+            throw new MarketDataException("rec_forward_schedule","Publish the exact independently retained certificate Side schedules.");
+        return Results.Ok(receipt);
+    },c.RequestAborted);
+}));
+
 api.MapPost("/futures/catalog",(HttpContext c,FuturesReadRequest body)=>FuturesRead(c,body,futuresStore.Catalog));
 api.MapPost("/futures/editor",(HttpContext c,FuturesEditorRequest body)=>TradingRead(c,body.Context??throw new MarketDataException("futures_trade","Supply the selected context."),
     (connection,view,ct)=>tradeReads.FuturesTrade(connection,view,body.TradeId,body.Revision,ct),headTrade:body.TradeId));
@@ -2165,6 +2438,15 @@ api.MapPost("/portfolio/risk/catalog",(HttpContext c,PortfolioRiskCatalogRequest
 api.MapPost("/portfolio/risk",(HttpContext c,PortfolioRiskRequest body)=>PortfolioRead(c,
     body.Context??throw new MarketDataException("risk_context","Select the shared financial context."),
     (connection,data,frame,ct)=>portfolioRisk.Calculate(connection,data,frame,body,ct)));
+api.MapPost("/physical/power-trades/hedges",(HttpContext c,StructuredPowerHedgeRequest body)=>PortfolioRead(c,
+    body.Context??throw new MarketDataException("risk_context","Select the shared financial context."),
+    async(connection,data,frame,ct)=>
+    {
+        if(!await PreviewDatabase.HasPermission(connection,"ReadPhysical",ct))throw new PreviewDeniedException();
+        var result=await new StructuredPowerHedgeService(database).Calculate(connection,data,frame,body,ct);
+        if(!await PreviewDatabase.HasPermission(connection,"ReadPhysical",ct))throw new PreviewDeniedException();
+        return result;
+    }));
 api.MapPost("/portfolio/risk/history",(HttpContext c,PortfolioHistoryRequest body)=>PortfolioRead(c,
     body.Scope?.Context??throw new MarketDataException("risk_context","Select the retained risk scope and context."),
     (connection,data,frame,ct)=>portfolioRisk.History(connection,data,frame,body,ct)));

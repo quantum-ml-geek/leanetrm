@@ -1,12 +1,21 @@
 # Delivery plan and acceptance criteria
 
-D414 implements the selected [financial Transport rights and fixed-fee
+D417 aligns every non-exchange Instrument with explicit reusable Sides and makes
+their memberships visible in booking, review and saved-trade views. Futures and
+futures options remain the only exceptions. Acceptance requires independent Side
+valuation and honest schedule inspection, complete production-type coverage,
+unchanged native ownership and retained-program identities, and cash, lifecycle
+and shared-scenario regression checks. Actual browser checks must verify the
+integrated booking and inspection flows before release. This work is in
+implementation; it does not qualify the affected financial PRs for merge.
+
+D415 implements the selected [financial Transport rights and fixed-fee
 contract](gas-transport-financial.md). Native and managed value/upgrade controls
 and actual shared browser checks provide local evidence. First-value market
 publication, integrated upstream qualification and release remain delivery gates.
 Physical performance and commercial Storage retain separate planned contracts.
 
-D413 locally qualifies [retained chosen routes](gas-transport-routes.md) with
+D414 locally qualifies [retained chosen routes](gas-transport-routes.md) with
 explicit graph/law definitions, complete exact source claims and exclusive
 logical memberships. Correction makes a current assessment unavailable until
 explicit re-adoption, while own release can free stale memberships. Local native,
@@ -20,7 +29,7 @@ deferred source changes, original authority, historical reads and populated
 upgrades. The same frozen application artifact passed 55 route, 64 capacity and
 30 storage browser checks, with desktop, local-zone and phone views reviewed.
 
-D412 implements [commercial Transport capacity operations](gas-transport-capacity-operations.md)
+D413 implements [commercial Transport capacity operations](gas-transport-capacity-operations.md)
 with immutable legal/reference/path scope, complete dated gross limits and
 independent chosen plans. Explicit empty release permits cleanup while retaining
 other breaches. Local managed/native, populated-upgrade and actual browser
@@ -28,7 +37,7 @@ checks passed. Integration/release gates remain open.
 This operating consumer does not enable financial Transport booking, route
 conservation, accepted flow or complete service value.
 
-The D412 checkpoint passed 741 managed core, 1,984 frontend and 146 Python
+The D413 checkpoint passed 741 managed core, 1,984 frontend and 146 Python
 checks, the full API schedule suite, native source/concurrency/receipt/authority
 controls and populated predecessor/drift checks. Actual browser qualification
 passed 64 Transport checks and 30 existing-storage regression checks against
@@ -1887,6 +1896,42 @@ The next physical LNG/cargo slice includes the saved Incoterms edition, rule and
 named place. Physical cargo logistics and tanker freight need distinct explicit
 contracts. Additional fee types/amounts remain deferred to their first executable
 consumer; no unused catalog is added in this increment.
+
+## Authorized structured power continuation (D412)
+
+The [operating-facility slice](operating-facilities.md) retains supported thermal,
+battery and solar physical parameters on exact existing locations, with supplied
+plan feasibility and independent Side valuation. Its initial managed, storage,
+HTTP and browser qualification is recorded in that capability contract.
+
+The continuation implements saved trading and hedging plus durable REC inventory:
+
+1. Retain exact operating-right terms and immutable, membership-owned schedules
+   through current trade booking, party/book authorization, command receipts and
+   certified historical reads. Preserve native Instrument/Side PV and existing
+   physical delivery ownership; pin physical facility versions and explicit plan
+   state/quantities without turning a forecast into an actual.
+2. Price saved rights and separately booked financial hedges under one captured
+   market/scenario context. Report gross sides, separate base measures and
+   operating/hedge/net price changes using ordinary holdings; hedges do not
+   change physical feasibility or infer an exposure from a price level.
+3. Persist manually evidenced REC issuance/incoming holdings, exact certificate
+   lots/ranges, allocation/release and transfer/retirement under current authority,
+   exact registry/program/class/purpose references, append-only corrections,
+   request replay and semantic fact idempotency. Reuse the pure range evaluator
+   and native publication/history patterns. Provide the same authorized backend
+   operations to UI and other clients, with retained unknown-outcome recovery.
+4. Require independent numerical, temporal, authorization, overlap/conservation,
+   concurrent retry and populated additive-upgrade cases, then exercise saved
+   trade/hedge/inventory workflows in the shared UI. Record actual capability
+   and remaining cash, balancing and settlement bounds in the
+   [trading and inventory contract](structured-power-trading.md).
+
+No optimizer, stochastic dispatch, external registry action, automatic lot
+selection, inventory costing or shared-resource pooling is authorized by this
+increment. The [structured product contract](structured-power-products.md) keeps
+those extensions separate; proposed APIs or new reference seeds alone are not
+implementation evidence.
 
 ## Later scope
 
