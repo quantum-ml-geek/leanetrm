@@ -63,3 +63,19 @@ test('only committed financial-source operations invalidate current valuation in
  for(const path of ['lifecycle/policies/save','lifecycle/futures/policies/save','lifecycle/swaps/net/configure','lifecycle/futures/delivery/configure'])assert.equal(lifecycleChangesFinancialSource({path,body:{}}),false);
  for(const action of ['account','bind_policy'])assert.equal(lifecycleChangesFinancialSource({path:'lifecycle/gas/configure',body:{action}}),false);
 });
+
+test('target-scoped custody evidence retains its exact source for recovery and invalidates financial inputs',async()=>{
+ const {lifecycleChangesFinancialSource}=await import('../dist/lifecycle-model.js');
+ const body={operationId:'observation-operation',context,target:{handler:'gas_park_custody',scopeId:'agreement',bindingId:'instrument'},selection:{evidence:'Synthetic receipt'}};
+ const saved={operationId:body.operationId,path:'gas/park-custody/evidence',body,uncertain:true};
+ assert.deepEqual(restoreLifecycleRequest(saved),saved);
+ assert.equal(lifecycleChangesFinancialSource(saved),true);
+ assert.equal(restoreLifecycleRequest({...saved,path:'gas/park-custody/evidence/status'}),undefined);
+});
+
+test('ordinary accepted cash payment recovery retains its flat membership, source and allocation revision',async()=>{
+ const {lifecycleChangesFinancialSource}=await import('../dist/lifecycle-model.js');
+ const body={operationId:'cash-operation',snapshotId:'close',knowledgeMode:'current',tradeId:'service',bindingId:'cash',allocationId:'payment',expectedRevision:2,paidAt:context.asOf,amount:'-5.000000000000000001',policy:'explicit_paid_cash_nominal_due_v1'};
+ const saved={operationId:body.operationId,path:'cash-payments/record',body,uncertain:true};
+ assert.deepEqual(restoreLifecycleRequest(saved),saved);assert.equal(lifecycleChangesFinancialSource(saved),true);
+});

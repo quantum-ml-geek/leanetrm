@@ -66,6 +66,7 @@ public sealed partial class TradingBlotter(PreviewDatabase database,FuturesStore
        OR EXISTS(SELECT 1 FROM trading.ppa_trade_revisions WHERE catalog_id=$1)
        OR EXISTS(SELECT 1 FROM trading.gas_trade_revisions WHERE catalog_id=$1)
        OR EXISTS(SELECT 1 FROM trading.trades t WHERE t.catalog_id=$1 AND security.gas_park_loan_trade_head(t.catalog_id,t.id))
+       OR EXISTS(SELECT 1 FROM trading.trades t WHERE t.catalog_id=$1 AND security.gas_park_custody_trade_head(t.catalog_id,t.id))
        OR EXISTS(SELECT 1 FROM trading.lng_trade_revisions WHERE catalog_id=$1)
        OR EXISTS(SELECT 1 FROM trading.crude_trade_revisions WHERE catalog_id=$1)
        OR EXISTS(SELECT 1 FROM trading.futures_option_trade_revisions WHERE catalog_id=$1)
@@ -92,13 +93,14 @@ public sealed partial class TradingBlotter(PreviewDatabase database,FuturesStore
   var ppaRun=await PpaBlotter.Run(connection,database,data,frame,view.BookIds,view.PortfolioIds,ct);
   var gasRun=await GasBlotter.Run(connection,database,frame,view.BookIds,view.PortfolioIds,ct);
   var parkLoanRun=await GasParkLoanBlotter.Run(connection,database,frame,view.BookIds,view.PortfolioIds,ct);
+  var custodyRun=await GasParkCustodyBlotter.Run(connection,database,frame,view.BookIds,view.PortfolioIds,ct);
   var crudeRun=await CrudeBlotter.Run(connection,database,frame,view.BookIds,view.PortfolioIds,ct);
   var lngRun=await LngBlotter.Run(connection,database,frame,view.BookIds,view.PortfolioIds,ct);
   var optionRun=await FuturesOptionBlotter.Run(connection,database,data,frame,view.BookIds,view.PortfolioIds,ct);
   var operatingRun=await OperatingBlotter.Run(connection,database,frame,view.BookIds,view.PortfolioIds,ct);
   var recRun=await RecBlotter.Run(connection,database,frame,view.BookIds,view.PortfolioIds,ct);
   var formats=await DealAmountFormats.All(connection,manifest.CatalogId,ct);
-  return new(view,summaries,futuresRun,swapRun,ppaRun,formats,sideSchedules,gasRun,crudeRun,optionRun,lngRun,parkLoanRun,[operatingRun,recRun]);
+  return new(view,summaries,futuresRun,swapRun,ppaRun,formats,sideSchedules,gasRun,crudeRun,optionRun,lngRun,parkLoanRun,custodyRun,[operatingRun,recRun]);
  }
  // The report of a view and, grouped from the same valuation, each requested summary in request order.
  public sealed record BlotterRead(object Blotter,ImmutableArray<Summary> Summaries);

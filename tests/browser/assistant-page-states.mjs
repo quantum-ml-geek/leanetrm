@@ -20,6 +20,8 @@ export function assistantPageCases(){
       .map(([product,page])=>[page,{...blotter,entry:{product}}]),
     ['risk_jobs',{page:'risk',view:'risk'}],
     ['physical_power',{page:'physical-power'}],
+    ['facility_definitions',{page:'facilities',facilitySection:'definitions'}],
+    ['facility_activity',{page:'facilities',facilitySection:'activity'}],
     ['rec_inventory',{page:'rec-inventory'}],
     ['options',{page:'options'}],
     ...[['physical-operations','physical_operations'],['facilities','facility_quantities'],['dashboard','dashboard'],['crude-setup','crude_setup'],['gas-setup','gas_setup'],['gas','physical_gas'],['crude','physical_crude'],['delivery','delivery_prices'],['interval-series','interval_series'],['interval-curves','interval_curves'],['vol-surfaces','vol_surfaces'],['admin','users_access'],['ai','settings_ai']]

@@ -48,6 +48,14 @@ internal static class TicketDescriptionChecks
         Reject("two fields of one side kind on a band row", WithBuy(Field("a", band: "price"), Field("b", band: "price")));
         Reject("a dependency on an unknown field", WithTrade(Field("book", dependsOn: "missing")));
         Reject("a refresh dependency on an unknown field", WithTrade(Field("book") with { RefreshOn = ["missing"] }));
+        var refreshing=WithTrade(Field("profile",choices:"profiles") with{Type="choice",RefreshDescription=true});
+        Check("an editable trade choice may request a backend description refresh",()=>TicketDescriptions.Validate(refreshing with{Selection=ImmutableDictionary<string,string>.Empty}));
+        Reject("a refreshing description without an explicit selection attestation",refreshing);
+        Reject("an attestation for an undeclared selector",refreshing with{Selection=ImmutableDictionary<string,string>.Empty.Add("unknown","value")});
+        Reject("an empty selected value instead of explicit absence",refreshing with{Selection=ImmutableDictionary<string,string>.Empty.Add("profile","")});
+        Reject("a non-choice description refresh",WithTrade(Field("profile",choices:"profiles") with{RefreshDescription=true}));
+        Reject("a description refresh without choices",WithTrade(Field("profile") with{Type="choice",RefreshDescription=true}));
+        Reject("a side-field description refresh",WithBuy(Field("profile",choices:"profiles") with{Type="choice",RefreshDescription=true}));
         Reject("a row shape other than flow", valid with { RowShape = "cargo" });
         Reject("empty levels", valid with { Levels = [] });
         Reject("levels out of order", valid with { Levels = ["day", "month"] });

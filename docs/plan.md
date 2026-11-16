@@ -57,6 +57,28 @@ browser, native financial and populated-upgrade qualifiers passed. Aggregate CI,
 release and service economic-horizon qualification remain open. Broader service
 terms require separately qualified executable profiles.
 
+D414 adds a [storage physical operations consumer](storage-facility-operations.md):
+versioned asset rules, pipeline ports, dated opening evidence and independent
+planned/measured activity. Native persistence, explicit coverage, concurrent plan
+admission, existing allocation links and shared UI have local qualification.
+Complete commercial Storage/Transport, further operating laws and integrated
+release checks remain open.
+
+D410 implements [outstanding-balance elapsed-hour fees](gas-park-loan-balance-fee.md)
+with explicit timing, remaining-return plans and cumulative cash rounding. Native
+and managed determination, independent contributions and refunds, shared entry,
+current-clock price scenarios and retained PRICE workers have disposable local
+qualification. Complete economic horizon risk, broader service laws and source
+reconciliation remain separate qualification work. The exact combined artifact
+still requires its integration and release gates.
+
+D411 implements [retained-title parking](gas-park-custody.md) as a distinct
+Park and Loan profile. It preserves customer title through identified-lot
+reservations, accepts provider foreign custody without a stock account, and
+uses ordinary independent fee cash. Native operations, shared entry, browser
+workflows and current-clock pricing have disposable local qualification. Transport, commercial
+Storage, wider rights, correction adapters and economic continuation remain open.
+
 D404 is implemented for 25 selected main-workbench curve, trading and Risk reads,
 with independent view progress, bounded execution, cancellation admission fences
 and exact authorization/context checks before SSE publication. Local qualification
@@ -86,7 +108,7 @@ instants and exchange option expiry retain their explicit timing and rate inputs
 required purpose bindings and Side-owned rules; omission checks are mandatory
 in the verification runner.
 
-The integrated verification runner requires 190 commands, including required
+The integrated verification runner requires all selected checks, including required
 Park and Loan native, populated-upgrade, retained-worker and browser qualifiers,
 with domain, native database, agent and browser coverage. Local checks at D406
 passed 738 managed core checks and 1,889 frontend checks. The earlier D403
