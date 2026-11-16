@@ -101,7 +101,9 @@ public sealed partial class ScheduleMarketSources
         var scenarioResolver=ReferenceEquals(scenario,basis)?baseResolver:!needsNativePrices||read is null?null:new IntervalPriceResolver(scenario,read.Curves,baseResolver);
         var currency=program.Document.Instructions[program.Document.Roots.Single(root=>root.Name=="pv").Row].Output.Currency!.Value;
         var deliveryMarks=PhysicalLifecycle.ReadsDeliveryMarks(program);
-        SidePaymentKey Key(ScheduleDefinitionRow row)=>new(sideId,row.PaymentOrdinal!.Value,row.ValueAt!.Value,currency);
+        var instantOrdinals=program.Document.Instructions.Where(i=>i.Output.Operation=="output_guard"&&i.Output.Parameters["lifecycle"]==OperatingContractScheduleSource.DeliveryLifecycle).Select(i=>i.Output.PaymentOrdinal).ToHashSet();
+        SidePaymentKey Key(ScheduleDefinitionRow row)=>new(sideId,row.PaymentOrdinal!.Value,row.ValueAt!.Value,currency)
+            {Timing=instantOrdinals.Contains(row.PaymentOrdinal)?ValueTimingKind.Instant:ValueTimingKind.UtcPaymentDay};
         var keys=demand.Sources.Select(source=>program.Document.Instructions[source.Instruction].Output)
             .Where(row=>row.Operation=="discount").Select(Key).Distinct().ToImmutableArray();
         var factors=keys.IsEmpty?ImmutableArray<SidePaymentFactor>.Empty:discounting.Resolve(keys,basis.Snapshot);
@@ -162,6 +164,10 @@ public sealed partial class ScheduleMarketSources
                             var capacity=Capacity(instruction,grid,cell);
                             Set(cell,capacity.Value,new(VolumeState.Contractual,SchedulePriceFacts.None));
                             evidence.Add(new(source.Instruction,cell,id),capacity.Evidence);break;
+                        case OperatingContractScheduleSource.Operation:
+                            var operating=OperatingPrice(instruction,market);
+                            Set(cell,new(operating.Price.NumeratorValue,operating.Price.DenominatorValue),new(null,operating.State));
+                            evidence.Add(new(source.Instruction,cell,id),operating.Evidence);break;
                         case ContractObservationScheduleSource.Operation:
                             var sampled=ContractObservation(instruction,market);
                             Set(cell,new(sampled.Price.NumeratorValue,sampled.Price.DenominatorValue),new(null,sampled.State));

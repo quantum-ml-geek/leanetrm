@@ -22,7 +22,7 @@ public sealed record RecRelease(RecRange Range, RecFactKey Allocation) : RecInve
 public sealed record RecTransfer(RecRange Range, RecFactKey Allocation, RecAccountKey Destination, RecEvidence Evidence) : RecInventoryAction;
 public sealed record RecRetirement(RecRange Range, PartyKey Beneficiary, ReferenceKey Purpose, RecEvidence Evidence) : RecInventoryAction;
 
-public sealed record RecInventoryFact(RecFactKey Key, DateTimeOffset EffectiveAt, DateTimeOffset KnownAt, RecInventoryAction Action);
+public sealed record RecInventoryFact(RecFactKey Key, DateTimeOffset EffectiveAt, DateTimeOffset KnownAt, RecInventoryAction Action, long BusinessOrder);
 public sealed record RecInventoryRequest(Guid RequestId, Guid BusinessId, int ExpectedGeneration,
     DateTimeOffset EffectiveAt, RecInventoryAction Action, string Implementation);
 public sealed record RecFactOutcome(RecFactKey Fact, bool IsBusinessNoOp);
@@ -50,7 +50,7 @@ public sealed record RecApplyResult(RecInventoryLog Log, RecFactOutcome Outcome)
 public static class RecInventory
 {
     public const string Implementation = "rec_inventory_events_v1";
-    public const string SelectionPolicy = "latest_knowledge_effective_then_first_knowledge_v1";
+    public const string SelectionPolicy = "latest_knowledge_revision_effective_then_business_order_v2";
     public const int MaximumFacts = 4096;
     public const int MaximumRequests = 8192;
     public static RecApplyResult Apply(RecInventoryLog log, RecInventoryRequest request, DateTimeOffset publishedAt)
@@ -85,8 +85,8 @@ public static class RecInventory
         if (previous is not null && (previous.EffectiveAt != request.EffectiveAt || previous.Action.GetType() != request.Action.GetType() ||
                 Range(previous.Action).Lot != Range(request.Action).Lot))
             throw Error("rec_correction", "A revision keeps its original effective occurrence, action kind and lot identity.");
-        if (previous is not null && previous.KnownAt >= publishedAt) throw Error("rec_knowledge", "A changed business fact requires a later knowledge coordinate.");
-        var fact = new RecInventoryFact(new(request.BusinessId, previous is null ? 1 : previous.Key.Revision + 1), request.EffectiveAt, publishedAt, request.Action);
+        if (previous is not null && previous.KnownAt > publishedAt) throw Error("rec_knowledge", "A changed business fact cannot precede its retained certified knowledge.");
+        var fact = new RecInventoryFact(new(request.BusinessId, previous is null ? 1 : previous.Key.Revision + 1), request.EffectiveAt, publishedAt, request.Action, previous?.BusinessOrder ?? checked(log.Facts.Select(f=>f.BusinessOrder).DefaultIfEmpty(0).Max()+1));
         var applied = new RecFactOutcome(fact.Key, false);
         var next = log with { Facts = log.Facts.Add(fact), Requests = log.Requests.Add(new(request, applied)) };
         // Validate the complete retained effective horizon, including later
@@ -98,14 +98,14 @@ public static class RecInventory
     public static RecInventoryView Evaluate(RecInventoryLog log, RecInventoryContext context)
     {
         ValidateLog(log, context);
-        // Corrections replace the value of an original occurrence, not its
-        // business ordering. Equal effective instants use the occurrence's
-        // first publication coordinate, never enumeration/insertion order.
-        var firstKnowledge = log.Facts.GroupBy(f => f.Key.Id).ToDictionary(g => g.Key, g => g.Min(f => f.KnownAt));
+        // Stable business order is supplied explicitly by the evidence owner.
+        // Corrections retain that order; actual certified timestamps can tie.
+        // The admitted log carries its certified publication prefix independently
+        // of this wall-clock cutoff, so a retained read never invents prior facts.
         var selected = log.Facts.Where(f => f.KnownAt <= context.KnownAt)
-            .GroupBy(f => f.Key.Id).Select(g => g.MaxBy(f => f.KnownAt)!)
+            .GroupBy(f => f.Key.Id).Select(g => g.OrderByDescending(f=>f.KnownAt).ThenByDescending(f=>f.Key.Revision).First())
             .Where(f => f.EffectiveAt <= context.EffectiveAt)
-            .OrderBy(f => f.EffectiveAt).ThenBy(f => firstKnowledge[f.Key.Id]).ThenBy(f => Order(f.Action)).ThenBy(f => f.Key.Id).ToImmutableArray();
+            .OrderBy(f => f.EffectiveAt).ThenBy(f => f.BusinessOrder).ToImmutableArray();
         var segments = new List<RecHoldingSegment>();
         foreach (var fact in selected)
         {
@@ -174,18 +174,20 @@ public static class RecInventory
             !Reference(log.Account.Registry, context.References) || log.Facts.IsDefault || log.Requests.IsDefault)
             throw Error("rec_context", "Supply the exact account, reference revision and explicit effective/knowledge selection policy.");
         if (log.Facts.Length > MaximumFacts || log.Requests.Length > MaximumRequests) throw Error("rec_limit", "The inventory log exceeds its bounded input size.");
-        if (log.Facts.Any(f => f is null || f.Key.Id == Guid.Empty || f.Key.Revision <= 0 || !Utc(f.EffectiveAt) || !Utc(f.KnownAt)) ||
+        if (log.Facts.Any(f => f is null || f.Key.Id == Guid.Empty || f.Key.Revision <= 0 || f.BusinessOrder<=0 || f.BusinessOrder==long.MaxValue || !Utc(f.EffectiveAt) || !Utc(f.KnownAt)) ||
             log.Facts.Select(f => f.Key).Distinct().Count() != log.Facts.Length)
             throw Error("rec_fact", "Facts need unique exact revision identities and supported temporal coordinates.");
         foreach (var fact in log.Facts) ValidateAction(fact.Action, context.References, log.Account);
+        if(log.Facts.GroupBy(f=>f.Key.Id).Select(g=>g.First().BusinessOrder).Distinct().Count()!=log.Facts.Select(f=>f.Key.Id).Distinct().Count())
+            throw Error("rec_fact","Distinct business occurrences require distinct explicit stable order within an account.");
         foreach (var group in log.Facts.GroupBy(f => f.Key.Id))
         {
-            var versions = group.OrderBy(f => f.KnownAt).ToArray();
+            var versions = group.OrderBy(f => f.Key.Revision).ToArray();
             for (var i = 0; i < versions.Length; i++)
             {
-                if (versions[i].Key.Revision != i + 1 || i > 0 && versions[i].KnownAt <= versions[i - 1].KnownAt)
-                    throw Error("rec_knowledge", "Business fact revisions require a unique increasing knowledge order and complete revision lineage.");
-                if (versions[i].EffectiveAt != versions[0].EffectiveAt || versions[i].Action.GetType() != versions[0].Action.GetType() ||
+                if (versions[i].Key.Revision != i + 1 || i > 0 && versions[i].KnownAt < versions[i - 1].KnownAt)
+                    throw Error("rec_knowledge", "Business facts require complete revision lineage with nondecreasing certified knowledge.");
+                if (versions[i].BusinessOrder!=versions[0].BusinessOrder || versions[i].EffectiveAt != versions[0].EffectiveAt || versions[i].Action.GetType() != versions[0].Action.GetType() ||
                     Range(versions[i].Action).Lot != Range(versions[0].Action).Lot)
                     throw Error("rec_correction", "A business occurrence retains its original effective coordinate, action kind and lot identity.");
             }
@@ -243,7 +245,7 @@ public static class RecInventory
     }
     private static void Product(RecProduct product, ReferenceRevision references, ReferenceKey registry)
     {
-        if (product is null || product.Certificates is null || product.Registry != registry || product.Certificates.Dimension.Code != "certificate" || product.Certificates.Unit.Code != "rec" ||
+        if (product is null || product.Certificates is null || product.Registry != registry || product.Certificates.Unit.Code != "rec" ||
             new[] { product.Class, product.Registry, product.Program, product.Technology, product.Geography, product.Certificates.Key,
                 product.Certificates.Commodity, product.Certificates.MeasurementBasis, product.Certificates.Unit, product.Certificates.Dimension }.Any(k => !Reference(k, references)))
             throw Error("rec_eligibility", "Certificate product, registry, program, technology, geography and quantity require exact selected references.");
@@ -264,8 +266,6 @@ public static class RecInventory
         RecTransfer transfer => transfer.Range, RecRetirement retirement => retirement.Range,
         _ => throw Error("rec_action", "Supply an implemented inventory action.")
     };
-    private static int Order(RecInventoryAction action) => action switch
-    { RecReceipt => 0, RecAllocation => 1, RecRelease => 2, RecTransfer => 3, RecRetirement => 4, _ => throw Error("rec_action", "The inventory action is unsupported.") };
     private static bool SameValue(RecInventoryAction left, RecInventoryAction right) => (left, right) switch
     {
         (RecReceipt a, RecReceipt b) => a.Lot == b.Lot && a.Range == b.Range && a.Kind == b.Kind,

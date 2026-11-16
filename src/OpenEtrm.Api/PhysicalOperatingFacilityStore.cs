@@ -69,6 +69,19 @@ public sealed class PhysicalOperatingFacilityStore(Guid catalog)
         return await command.ExecuteScalarAsync(ct) is string value?JsonSerializer.Deserialize<PhysicalOperatingFacilityReceipt>(value,Json):null;
     }
 
+    // The immutable actor receipt proves this is a retry before any new bundle
+    // is resolved. The native operation compares the complete canonical command;
+    // status alone cannot authorize a conflicting reuse of the request identity.
+    public async Task<PhysicalOperatingFacilityReceipt?> Replay(NpgsqlConnection connection,
+        PhysicalOperatingFacilitySaveRequest request,CancellationToken ct)
+    {
+        if(request is null||await RequestStatus(connection,request.RequestId,ct) is null)return null;
+        await using var command=ScheduleStore.Command(connection,
+            "SELECT physical.save_power_operating_facility($1,$2,$3,$4::jsonb)::text",catalog,request.RequestId,
+            request.ExpectedVersion,JsonSerializer.Serialize(request.Facility,Json));
+        return JsonSerializer.Deserialize<PhysicalOperatingFacilityReceipt>((string)(await command.ExecuteScalarAsync(ct))!,Json)!;
+    }
+
     private static void RequireRead(Guid id,int version,Guid context,DateTimeOffset asOf)
     {
         if(id==Guid.Empty||version<1||context==Guid.Empty||!StructuredPowerPreview.Utc(asOf))

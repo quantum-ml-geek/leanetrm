@@ -16,6 +16,7 @@ static class AgentToolChecks
 {
     public static void Run()
     {
+        StructuredProductIdentityReports();
         CurvePreparation();
         CurveDrafts();
         JobReads();
@@ -30,6 +31,56 @@ static class AgentToolChecks
         Results();
         Display();
         Navigation();
+    }
+    static void StructuredProductIdentityReports()
+    {
+        var background=JsonSerializer.SerializeToElement(new{mode="trades",bookIds=new[]{Book},portfolioIds=Array.Empty<Guid>(),
+            groupBy=Array.Empty<string>(),measures=new[]{"quantity"},primaryMeasure="quantity"});
+        var workspace=new JsonObject{["blotter"]=new JsonObject{["holdings"]=new JsonArray(JsonSerializer.SerializeToNode(new{
+            tradeId=Trade,bindingId=Guid.NewGuid(),revision="1",tradeReference="TR-000009",instrumentReference="Synthetic background future",
+            instrumentType="future",bookId=Book,book="Synthetic book",unit="lots",currency="USD",deliveryFrom="2021-01-01",deliveryTo="2021-02-01",quantity="5",
+            quantitySpecification=new{revision=new{catalogId=Catalog,revisionId=Catalog},code="synthetic_lots"},
+            currencyReference=new{revision=new{catalogId=Catalog,revisionId=Catalog},code="usd"}}))}};
+        foreach(var page in new[]{"blotter_new_rec","blotter_operating_right","blotter_rec_forward"})
+        {
+            var report=JsonSerializer.SerializeToElement(new{page,selection=new{},
+                layout=new{pane=new{details=true,charts=false},poppedOut=true},focus=new{tradeIds=new[]{Trade},pivotCell=(object?)null}});
+            PageReports.Require(report);
+            Require(PageReports.Dispatch(report) is null&&PageReports.DigestView(report) is null&&
+                !PageReports.Supported.Contains(page)&&!PageReports.Navigable.Contains(page),
+                "The actual structured-product ticket and saved-inspector layout report only their identity, with no read or navigation dispatch.");
+            Require(Code(()=>PageReports.Require(Json(Report(page,"{\"tradeId\":\""+Trade+"\"}"))))=="page_report_invalid",
+                "Identity-only structured pages cannot smuggle financial selections into an assistant read.");
+
+            var withBackground=JsonSerializer.SerializeToElement(new{page,selection=new{},view=background,
+                layout=new{pane=new{details=true,charts=false},poppedOut=true},focus=new{tradeIds=new[]{Trade},pivotCell=(object?)null}});
+            PageReports.Require(withBackground);
+            var turn=new TurnReads(TurnPin.Deferred("current",null,Working,null),new("agent",Guid.NewGuid()),withBackground,
+                ["read_current_page","read_page_digest","read_trades"],Guid.NewGuid(),TimeSpan.FromSeconds(15),new(500,65536));
+            Require(Code(()=>AgentTools.Requested(turn,new("synthetic_structured_current","read_current_page",Json("{}"))))=="page_not_supported"
+                &&!turn.Pin.Resolved&&turn.Pin.ContextId==Guid.Empty,
+                "A retained background view does not enable the unsupported selected-product read or acquire its financial context.");
+            var (call,dispatched)=AgentTools.Requested(turn,new("synthetic_structured_overview","read_page_digest",Json("{\"mode\":\"overview\"}")));
+            var view=PageReports.DigestView(withBackground)!;
+            var docked=PageReports.Dispatch(withBackground)?.Call?.Arguments as TradeArguments;
+            Require(call is {Operation.Id:"workspace.digest_v1",Arguments:DigestArguments{Mode:"overview"}}&&dispatched is null&&docked is null
+                &&view.BookIds.SequenceEqual([Guid.Parse(Book)])&&view.Trades.BookIds.SequenceEqual([Guid.Parse(Book)])&&view.PrimaryMeasure=="quantity"
+                &&PageFocus.From(withBackground)?.TradeIds.SequenceEqual([Guid.Parse(Trade)])==true,
+                "An explicit overview retains the separate background Blotter scope and focus without reading docked product terms.");
+            var digest=PageDigest.Blotter(workspace,view,Pin("current",Guid.NewGuid(),Working),1,docked,focus:PageFocus.From(withBackground));
+            Require(digest.Text.Contains("Selected: n2 TR-000009 | Synthetic book | future Synthetic background future",StringComparison.Ordinal)
+                &&digest.Text.Contains("quantity=5 lots",StringComparison.Ordinal)&&!digest.Text.Contains("Docked:",StringComparison.Ordinal)
+                &&digest.Text.Contains("drafts/close-out drafts: unavailable (unsaved browser state)",StringComparison.Ordinal),
+                "The qualified background digest reports ordinary server positions while unsaved forms and unsupported docked terms stay unread.");
+        }
+        var operation=AssistantOperations.RequireRead("trading.workspace_v1");
+        Require(operation.NeedsFinancialContext&&!operation.CurrentOnly&&operation.Permissions.Order().SequenceEqual(new[]{"ReadMarketData","ReadTrades"})
+            &&AssistantOperations.Catalog.All(o=>o.Page is not("physical_power" or "rec_inventory" or "blotter_new_rec" or "blotter_operating_right" or "blotter_rec_forward")),
+            "Background financial overview keeps the ordinary workspace authority and explicit-context requirement, without adding product operations.");
+        foreach(var kind in new[]{"operating_right","rec_forward"})
+            Require(Code(()=>AgentTools.Parse("read_trades",Json($$"""{"view":"trade",{{NoBlotter}},"tradeId":"{{Trade}}","instrumentType":"{{kind}}","revision":1}""")))=="tool_arguments_invalid",
+                "Structured-product identity reporting does not create an unsupported financial read or a swap fallback.");
+        Console.WriteLine("PASS structured-product assistant identity: unsupported product reads remain closed; explicit background Blotter overview retains ordinary scope and authority");
     }
     // Futures option catalog (R27, R16, R17): one option product's series of one expiry date among those options/catalog lists,
     // at the pinned frame under the Blotter's accesses, for a required product and expiry; its result keeps the series and convention without the booking
@@ -502,7 +553,7 @@ static class AgentToolChecks
             PageReports.Require(Json(report));
             Require(PageReports.Dispatch(Json(report)) is {Call:{} dispatchedCall} read&&read.Page==page&&dispatchedCall.Operation.Id==operation,$"{report} dispatches {operation}");
         }
-        var unsupported=new[]{"physical_power","dashboard","vol_surfaces","options","facility_definitions","facility_activity","blotter_new_lng","blotter_new_ppa","blotter_new_gas","blotter_new_park_loan","blotter_new_crude","blotter_new_option","physical_gas","physical_crude"};
+        var unsupported=new[]{"physical_power","facility_definitions","facility_activity","rec_inventory","blotter_new_rec","blotter_operating_right","blotter_rec_forward","dashboard","vol_surfaces","options","blotter_new_lng","blotter_new_ppa","blotter_new_gas","blotter_new_park_loan","blotter_new_crude","blotter_new_option","physical_gas","physical_crude"};
         var workspace=new[]{"lifecycle","physical_operations","gas_setup","crude_setup","facility_quantities","risk_jobs","blotter_risk","blotter_risk_lens","blotter_new_trade","blotter_new_future","blotter_new_swap","delivery_prices","interval_series","interval_curves","users_access","settings_ai"};
         Require(PageReports.NotSupported.Order().SequenceEqual(unsupported.Order())&&PageReports.Supported.Order()
                 .SequenceEqual(new[]{"curves","contract_definitions","schedules","power_tous","reference_data","parties","blotter","custom_curves","jobs","ppa"}.Concat(workspace).Order()),

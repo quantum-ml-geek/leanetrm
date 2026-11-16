@@ -7,7 +7,12 @@ internal static class RecInventoryChecks
 {
     public static int Run()
     {
-        var f = new Fixture(); var log = RecInventoryLog.Empty(f.Account);
+        var f = new Fixture();
+        var countProduct=f.Product with{Certificates=f.Product.Certificates with{Dimension=f.R("declared_count")}};
+        var countLot=f.Lot with{Product=countProduct};
+        var countLog=RecInventoryLog.Empty(f.Account);
+        Count(f.View(RecInventory.Apply(countLog,f.Request(countLog,new RecReceipt(countLot,f.Range(0,3),f.Evidence(),RecReceiptKind.Issuance)),f.Known).Log),RecHoldingState.Available,"3");
+        var log = RecInventoryLog.Empty(f.Account);
         var receipt = f.Request(log, new RecReceipt(f.Lot, f.Range(0, 100), f.Evidence(), RecReceiptKind.Issuance));
         var issued = RecInventory.Apply(log, receipt, f.Known);
         log = issued.Log;
@@ -49,6 +54,14 @@ internal static class RecInventoryChecks
         Reject("rec_inventory_overlap", () => RecInventory.Apply(initial, f.Request(initial, new RecReceipt(f.Lot, f.Range(50, 101), f.Evidence(), RecReceiptKind.Issuance)), f.Known.AddMinutes(1)));
         Reject("rec_generation_conflict", () => RecInventory.Apply(initial, f.Request(empty, new RecRetirement(f.Range(0, 1), f.Beneficiary, f.R("voluntary_use"), f.Evidence())), f.Known.AddMinutes(1)));
 
+        var tied=RecInventory.Apply(empty,receipt,f.Known).Log;
+        var tiedAllocation=RecInventory.Apply(tied,f.Request(tied,new RecAllocation(f.Range(0,100),f.Delivery,f.Eligible)),f.Known);tied=tiedAllocation.Log;
+        tied=RecInventory.Apply(tied,f.Request(tied,new RecTransfer(f.Range(0,100),tiedAllocation.Outcome.Fact,f.Destination,f.Evidence())),f.Known).Log;
+        tied=RecInventory.Apply(tied,f.Request(tied,new RecReceipt(f.Lot,f.Range(0,100),f.Evidence(),RecReceiptKind.IncomingTransfer)),f.Known).Log;
+        Count(f.View(tied),RecHoldingState.Available,"100");
+        Reject("rec_fact",()=>RecInventory.Evaluate(initial with{Facts=[initial.Facts[0] with{BusinessOrder=0}]},f.Context));
+        Reject("rec_fact",()=>RecInventory.Evaluate(initial with{Facts=initial.Facts.Add(initial.Facts[0] with{Key=new(Guid.NewGuid(),1)})},f.Context));
+        if(!f.View(tied with{Facts=[..tied.Facts.Reverse()]}).Segments.SequenceEqual(f.View(tied).Segments))throw new Exception("Equal certified times still require stable explicit business ordering under reordered input.");
         var changed = receipt with { RequestId = Guid.NewGuid(), ExpectedGeneration = 1, Action = new RecReceipt(f.Lot, f.Range(0, 120), f.Evidence(), RecReceiptKind.Issuance) };
         var revised = RecInventory.Apply(initial, changed, f.Known.AddMinutes(1));
         if (revised.Log.Facts.Length != 2 || revised.Outcome.Fact != new RecFactKey(receipt.BusinessId, 2)) throw new Exception("Changed business facts append an explicit revision.");
@@ -58,7 +71,10 @@ internal static class RecInventoryChecks
         if (!reassert.Outcome.IsBusinessNoOp || reassert.Outcome.Fact.Revision != 1 || reassert.Log.Facts.Length != 2)
             throw new Exception("Reasserting an earlier fact returns it without restoring it as the current revision.");
         Count(f.View(reassert.Log), RecHoldingState.Available, "120");
-        Reject("rec_knowledge", () => RecInventory.Apply(initial, changed, f.Known));
+        var sameClockCorrection=RecInventory.Apply(initial,changed,f.Known);
+        Count(f.View(sameClockCorrection.Log),RecHoldingState.Available,"120");
+        if(sameClockCorrection.Log.Facts[1].BusinessOrder!=initial.Facts[0].BusinessOrder)throw new Exception("A correction must retain its original business occurrence order.");
+        Reject("rec_knowledge", () => RecInventory.Apply(initial, changed, f.Known.AddTicks(-10)));
         Reject("rec_context", () => RecInventory.Evaluate(initial, f.Context with { SelectionPolicy = "unknown" }));
         Reject("rec_context", () => RecInventory.Evaluate(initial, f.Context with { Account = f.Destination }));
         Reject("rec_range", () => RecInventory.Apply(initial, f.Request(initial, new RecRetirement(f.Range(1, 1), f.Beneficiary, f.R("voluntary_use"), f.Evidence())), f.Known.AddMinutes(1)));
@@ -69,7 +85,7 @@ internal static class RecInventoryChecks
         var returned = RecInventory.Apply(log, f.Request(log, new RecReceipt(f.Lot, f.Range(0, 60), f.Evidence(), RecReceiptKind.IncomingTransfer)) with { EffectiveAt = f.Effective.AddMinutes(1) }, f.Known.AddMinutes(5)).Log;
         Count(f.View(returned), RecHoldingState.Available, "60"); Count(f.View(returned), RecHoldingState.Retired, "40");
         Reject("rec_inventory_overlap", () => RecInventory.Apply(log, f.Request(log, new RecReceipt(f.Lot, f.Range(0, 60), f.Evidence(), RecReceiptKind.Issuance)) with { EffectiveAt = f.Effective.AddMinutes(1) }, f.Known.AddMinutes(5)));
-        var invalid = initial with { Facts = initial.Facts.Add(new(new(Guid.NewGuid(), 1), f.Effective, f.Known.AddMinutes(1), receipt.Action)) };
+        var invalid = initial with { Facts = initial.Facts.Add(new(new(Guid.NewGuid(), 1), f.Effective, f.Known.AddMinutes(1), receipt.Action,2)) };
         Reject("rec_inventory_overlap", () => RecInventory.Apply(invalid, f.Request(invalid, receipt.Action), f.Known.AddMinutes(2)));
         var fine = RecInventoryLog.Empty(f.Account);
         fine = RecInventory.Apply(fine, f.Request(fine, new RecReceipt(f.Lot, f.Range(0, 10), f.Evidence(), RecReceiptKind.Issuance)), f.Known).Log;

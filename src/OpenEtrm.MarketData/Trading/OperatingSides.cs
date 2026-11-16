@@ -34,7 +34,7 @@ public sealed record OperatingSidePeriod
 }
 [EconomicDefinition("operating_side_terms_v1")]
 public sealed record OperatingSideTerms([property:IdentityField]Quantity UnitQuantity,
-    [property:IdentityField]QuoteSpecification Quote,[property:IdentityField]PaymentRule Payment,
+    [property:IdentityField]QuoteSpecification Quote,[property:IdentityField]PaymentRule? Payment,
     [property:IdentityField]ComponentKind Kind,[property:IdentityField]ImmutableArray<OperatingSidePeriod> Periods,
     [property:IdentityField]string Implementation,[property:IdentityField]SideCalendarPolicy CalendarPolicy)
 {
@@ -128,6 +128,8 @@ public sealed record OperatingRightInstrument:SidedInstrument
     [IdentityField]public AssetKey Resource { get; }
     [IdentityField]public override ReferenceKey Currency { get; }
     [IdentityField]public override Quantity UnitQuantity { get; }
+    public override bool SupportsQuantityScaling=>false;
+    public override bool SupportsFixedUnitBinding=>true;
     internal override bool SupportsSettlement=>false;
     public OperatingRightInstrument(Guid id,AssetKey resource,Quantity unitQuantity,ReferenceKey currency,
         ImmutableArray<SideMembership> sides):base(id,sides)
@@ -147,13 +149,13 @@ public sealed record OperatingRightInstrument:SidedInstrument
     }
     public override void ValidateBinding(Quantity quantity,DeliveryCoverage? coverage)
     {
+        if(quantity!=UnitQuantity)throw OperatingSchedules.Invalid("operating_right_quantity","A specified exclusive resource right is booked once; fractional or multiplied rights need a separately qualified contract.");
         base.ValidateBinding(quantity,coverage);
-        if(quantity.Amount!=ExactDecimal.Parse("1"))throw OperatingSchedules.Invalid("operating_right_quantity","A specified exclusive resource right is booked once; fractional or multiplied rights need a separately qualified contract.");
     }
 }
 
 internal sealed record OperatingScheduleRow(SidePaymentKey Key,Quantity UnitQuantity,OperatingSidePeriod Period,
-    GeneratedPaymentDate GeneratedDate,PaymentRule Rule,FixedPriceTerm? FixedPrice,QuoteSpecification Quote,ComponentKind Kind);
+    GeneratedPaymentDate? GeneratedDate,PaymentRule? Rule,FixedPriceTerm? FixedPrice,QuoteSpecification Quote,ComponentKind Kind);
 
 internal static class OperatingSchedules
 {
@@ -176,7 +178,7 @@ internal static class OperatingSchedules
     }
     internal static void Validate(OperatingSideTerms terms,bool floating)
     {
-        if(terms is null||terms.UnitQuantity is null||terms.Quote is null||terms.Payment is null||terms.Implementation!=OperatingSideTerms.SupportedImplementation||
+        if(terms is null||terms.UnitQuantity is null||terms.Quote is null||(terms.Kind==ComponentKind.Payment)!=(terms.Payment is not null)||terms.Implementation!=OperatingSideTerms.SupportedImplementation||
             terms.UnitQuantity.Amount!=ExactDecimal.Parse("1")||terms.Kind is not(ComponentKind.Payment or ComponentKind.Delivery)||
             terms.Periods.IsDefaultOrEmpty||terms.Periods.Length>4096)
             throw Invalid("operating_terms","Supply explicit whole-term side, quantity, price, payment and implementation terms.");
@@ -186,8 +188,8 @@ internal static class OperatingSchedules
             throw Invalid("operating_terms","Resource-right and native quote references must share one exact reference revision.");
         _=PriceUnit.FromQuote(terms.Quote);
         terms.CalendarPolicy.RequirePurposes(false,false,false);
-        if(terms.Payment.Calendar is not null||terms.Payment.DayBasis==OpenEtrm.MarketData.Trading.PaymentDayBasis.BusinessDays||
-            terms.Payment.Adjustment!=OpenEtrm.Shared.Temporal.DateRoll.Unadjusted)
+        if(terms.Payment is {} payment&&(payment.Calendar is not null||payment.DayBasis==OpenEtrm.MarketData.Trading.PaymentDayBasis.BusinessDays||
+            payment.Adjustment!=OpenEtrm.Shared.Temporal.DateRoll.Unadjusted))
             throw Invalid("operating_calendar","The supplied native grid and calendar-day unadjusted payments require explicit not-applicable calendar bindings.");
         DateTimeOffset? end=null;
         foreach(var period in terms.Periods)
@@ -197,9 +199,9 @@ internal static class OperatingSchedules
             Interval(period.Interval);
             if(end is {} previous&&period.Interval.Start<previous)throw Invalid("operating_grid","Side rows retain explicit order without overlapping delivery intervals.");
             end=period.Interval.End;
-            var generated=terms.Payment.Generate(period.PaymentFrom,period.PaymentTo);
+            var generated=terms.Payment?.Generate(period.PaymentFrom,period.PaymentTo);
             if(period.Interval.OperatingDate<period.PaymentFrom||period.Interval.OperatingDate>=period.PaymentTo||
-                FixedSide.PaymentBoundary(generated.Date)<period.Interval.End)
+                generated is {} selected&&FixedSide.PaymentBoundary(selected.Date)<period.Interval.End)
                 throw Invalid("operating_payment","The row must belong to its explicit payment period, with payment no earlier than delivery ends.");
             var quantity=period.Quantity.Literal?.Specification??period.Quantity.Port!.Quantity;
             if(quantity!=terms.Quote.Quantity||period.Quantity.Literal is {} literal&&literal.Amount.CompareTo(default)<0)
@@ -224,8 +226,10 @@ public sealed record OperatingSideSchedule:SideSchedule
         var fixedPrice=(side as FixedSide)?.Price;
         Periods=[..terms.Periods.Select((period,n)=>
         {
-            var date=terms.Payment.Generate(period.PaymentFrom,period.PaymentTo);
-            return new ScheduleRow(new OperatingScheduleRow(new(side.Id,n,FixedSide.PaymentBoundary(date.Date),Currency),UnitQuantity,
+            var date=terms.Payment?.Generate(period.PaymentFrom,period.PaymentTo);
+            var key=new SidePaymentKey(side.Id,n,date is {} selected?FixedSide.PaymentBoundary(selected.Date):period.Interval.End,Currency)
+                {Timing=terms.Kind==ComponentKind.Payment?ValueTimingKind.UtcPaymentDay:ValueTimingKind.Instant};
+            return new ScheduleRow(new OperatingScheduleRow(key,UnitQuantity,
                 period,date,terms.Payment,fixedPrice,terms.Quote,terms.Kind));
         })];
         Dependencies=[..terms.Periods.Select(p=>p.Projection).OfType<CurveRequest>().Distinct()];
@@ -250,7 +254,7 @@ public sealed record OperatingSideSchedule:SideSchedule
             var amount=quantity.Times(price);var factor=selected[row.Key];
             return new ScheduleRowValue(row.SideId,null,operation.Kind,operation.Period.Interval,quantity,selectedQuantity?.State??VolumeState.Contractual,null,[],[],
                 [new PriceComponent(quantity,price,operation.FixedPrice is null?RowPriceState.Projected:RowPriceState.Fixed,operation.Period.Projection?.Curve,null,ExactDecimal.Parse("1"),null)],
-                amount,ExactDecimal.Parse("1"),PaymentRule.Implementation,row.PaymentAt,factor,amount.Scale(factor.DiscountFactor),null,null,ValueCoverage.Discounted,null){Row=row,OperatingEvidence=selectedQuantity?.Evidence};
+                amount,ExactDecimal.Parse("1"),operation.Rule is null?OperatingSideTerms.SupportedImplementation:PaymentRule.Implementation,row.PaymentAt,factor,amount.Scale(factor.DiscountFactor),null,null,ValueCoverage.Discounted,null){Row=row,OperatingEvidence=selectedQuantity?.Evidence};
         }).ToImmutableArray();
         return new OperatingSideValuation(this,context,rows);
     }

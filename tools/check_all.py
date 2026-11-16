@@ -16,6 +16,7 @@ CHECK_PROJECTS = (
     ('tests/OpenEtrm.Shared.Checks/OpenEtrm.Shared.Checks.csproj', ()),
     ('tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj', ('--context-resolution',)),
     ('tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj', ('--schedules',)),
+    ('tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj', ('--power-hedge',)),
     ('tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj', ('--async-reads',)),
     ('tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj', ('--assistant-prompts',)),
     ('tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj', ('--published-clock',)),
@@ -89,6 +90,12 @@ def run_checks(pg_bin, dotnet, browser, *, group='all', run=subprocess.run):
     check('owned automation database',[sys.executable,'tools/check_automation.py','--pg-bin',str(pg_bin),'--dotnet',str(dotnet)], suite='database')
     check('owned operating settings database',[sys.executable,'tools/check_operating_settings.py','--pg-bin',str(pg_bin)], suite='database')
     check('owned operating facility versions',[sys.executable,'tools/check_operating_facilities.py','--pg-bin',str(pg_bin)],suite='physical')
+    for helper,label in (
+        ('check_operating_schedule_storage','operating schedule grammar and predecessor contracts'),
+        ('check_operating_trades','native operating-right admission'),
+        ('check_rec_inventory','evidenced certificate ownership and conservation'),
+        ('check_rec_forward_storage','native certificate forward admission')):
+        check(label,[sys.executable,f'tools/{helper}.py','--pg-bin',str(pg_bin)],suite='physical')
     check('native volatility-fit admission expiry',[sys.executable,'tools/check_vol_surface_admission_expiry.py','--pg-bin',str(pg_bin)], suite='database')
     check('owned reference metadata database',[sys.executable,'tools/check_reference_editing.py','--pg-bin',str(pg_bin)], suite='database')
     check('populated payment-day program upgrade',[sys.executable,'tools/check_payment_day_upgrade.py','--pg-bin',str(pg_bin)], suite='database')
@@ -184,7 +191,7 @@ def run_checks(pg_bin, dotnet, browser, *, group='all', run=subprocess.run):
     def preview_check(label, command, *, suite='workspace'):
         check(label, command, suite=suite)
 
-    preview_check('structured power facility pricing',[*preview,'--structured-power-check'],suite='physical')
+    preview_check('structured power facilities, trading, REC inventory and browser',[*preview,'--structured-power-check','--browser-check','--browser',str(browser)],suite='physical')
     preview_check('integrated live calculation and browser',[*preview,'--live-calculation-check','--browser-check','--browser',str(browser)])
     preview_check('private inactive reference intake',[*preview,'--reference-import-check'], suite='reference')
     preview_check('standard preview and browser', [*preview, '--browser-check', '--browser', str(browser)], suite='standard')

@@ -7,6 +7,7 @@ if(args is ["--storage-facility-native",var storageFixture]){await StorageFacili
 if(args is ["--storage-facility-adapters"]){StorageFacilityAdapterChecks.Run();return;}
 if(args is ["--storage-facility-setup"]){StorageFacilityMetadataChecks.Run();return;}
 if(args is ["--structured-power"]){StructuredPowerChecks.Run();return;}
+if(args is ["--power-hedge"]){StructuredPowerHedgeChecks.Run();return;}
 if(args is ["--assistant-prompts"]){TurnWorkerChecks.Run();AgentToolChecks.Run();await ModelProviderChecks.Run();return;}
 if(args is ["--async-reads"]){AsyncReadContractChecks.Run();await AsyncReadChecks.Run();return;}
 if(args is ["--async-read-contracts"]){AsyncReadContractChecks.Run();return;}

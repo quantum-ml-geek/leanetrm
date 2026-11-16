@@ -37,7 +37,7 @@ LIFECYCLE_PORTFOLIO={f'tools/{name}.py' for name in (
 OPTION_VALUE_APPS={'tools/check_lifecycle_valuation_browser.py'}
 AGENT_SETTINGS_BROWSER={'tools/check_agent_operating_settings.py'}
 STORAGE_FACILITY={f'tools/{name}.py' for name in ('check_storage_facility','check_storage_facility_upgrade','check_storage_facility_browser')}
-OPERATING_FACILITIES={'tools/check_operating_facilities.py'}
+OPERATING_FACILITIES={'tools/check_operating_facilities.py','tools/check_operating_schedule_storage.py','tools/check_operating_trades.py','tools/check_rec_inventory.py','tools/check_rec_forward_storage.py'}
 
 
 class CheckAllTests(unittest.TestCase):
@@ -52,7 +52,11 @@ class CheckAllTests(unittest.TestCase):
             commands=[]
             run_checks(Path('/pg'),Path('/dotnet'),Path('/browser'),group=group,run=lambda command,**options:commands.append(command))
             selected=[command for command in commands if OPERATING_FACILITIES.intersection(command) or '--structured-power-check' in command]
-            self.assertEqual(len(selected),2 if group=='physical' else 0)
+            self.assertEqual(len(selected),6 if group=='physical' else 0)
+            browser=[command for command in selected if '--structured-power-check' in command]
+            if browser:
+                self.assertIn('--browser-check',browser[0])
+                self.assertEqual(browser[0][browser[0].index('--browser')+1],'/browser')
 
     def test_assistant_prompt_and_demand_checks_are_required(self):
         for group in ALL_GROUPS:
@@ -378,7 +382,7 @@ class CheckAllTests(unittest.TestCase):
         self.assertEqual(executed, expected)
         schedule_commands = [c for c in commands if '--project' in c and 'Api.Checks' in c[c.index('--project') + 1]]
         self.assertEqual([c[-2:] for c in schedule_commands],
-                         [['--', flag] for flag in ('--context-resolution', '--schedules', '--async-reads', '--assistant-prompts', '--published-clock', '--calendar-authoring', '--gas-ticket', '--historical-risk', '--monte-carlo-risk', '--close-risk', '--automation',
+                         [['--', flag] for flag in ('--context-resolution', '--schedules', '--power-hedge', '--async-reads', '--assistant-prompts', '--published-clock', '--calendar-authoring', '--gas-ticket', '--historical-risk', '--monte-carlo-risk', '--close-risk', '--automation',
                            '--live-calculation', '--reference-intake', '--preview-data', '--side-observation-compatibility',
                            '--lifecycle-actions','--economic-risk-contract','--lifecycle-schedule-contract','--gas-owned-setup',
                           '--shared-native-markets','--derivative-methods','--gas-accepted-order','--lifecycle-residual-currencies','--gas-operator-contract')])

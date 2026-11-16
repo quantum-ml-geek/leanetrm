@@ -62,3 +62,13 @@ export class StructuredPowerPendingStore {
  save(identity:string,pending:PendingCommand){if(!identity)return;try{if(pending.command)this.storage.setItem(this.key(identity),JSON.stringify(pending.command));else this.storage.removeItem(this.key(identity));}catch{/* The exact command remains in memory for this identity. */}}
  private key(identity:string){return `openetrm.physical-power.request.${identity}`;}
 }
+
+export type OperatingPriceContract={curveCode:string;contractId:string;quoteCode:string;quantityCode:string;currencyCode:string;deliveryFrom:string;deliveryTo:string;label:string;definitionRevisionId:string};
+export function operatingPrice(mode:string,quoteCode:string,fixedPrice:string,selected:Pick<OperatingPriceContract,'curveCode'|'contractId'|'quoteCode'>|null){
+ if(mode==='fixed')return {mode,quoteCode,fixedPrice,curveCode:null,contractId:null};
+ if(mode==='selected_contract_flat_v1'){
+  if(!selected)throw Error('Select an exact market contract for this side.');
+  return {mode,quoteCode:selected.quoteCode,fixedPrice:null,curveCode:selected.curveCode,contractId:selected.contractId};
+ }
+ throw Error('Choose an explicit side price mode.');
+}
