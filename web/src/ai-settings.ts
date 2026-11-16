@@ -55,7 +55,8 @@ const modelPaths=['add','rename','price','withdraw','edit','enable','disable'].m
 const providerPaths=['terms','attest','enable','disable'].map(path=>'settings/ai/providers/'+path),keyPath='settings/ai/providers/key',testPath='settings/ai/providers/test';
 // A test refused for these opened nothing. One in progress or whose answer was lost is retained, and so is one refused
 // access_denied, which the answer can be after the test was recorded and sent.
-const testRejections=['model_unpriced','parameter_required','credential_unavailable','agent_runtime_unavailable'];
+const testRejections=['model_unpriced','parameter_required','credential_unavailable','agent_runtime_unavailable','page_prompt_required'];
+export const knownTestRejection=(code:string|undefined)=>code!=='access_denied'&&(knownAiRejection(code)||!!code&&testRejections.includes(code));
 const inconsistent=()=>Error('The AI settings directory is inconsistent. Refresh AI settings.');
 const grouped=(count:number)=>count.toLocaleString('en-US');
 
@@ -207,7 +208,7 @@ export function setupAiSettings(options:{api:Api;act:(work:()=>Promise<void>)=>P
   const instant=(at:string)=>displayInstant(at,options.zone());
   const [priceFrom,priceTo,withdrawFrom,withdrawTo]=['ai-price-from','ai-price-to','ai-withdraw-from','ai-withdraw-to'].map(id=>zonedInput(input(id),options.zone,options.api));
   const pending=new PendingCommand(knownAiRejection),providerPending=new PendingCommand(knownAiRejection);
-  const testPending=new PendingCommand(code=>code!=='access_denied'&&(knownAiRejection(code)||!!code&&testRejections.includes(code)));
+  const testPending=new PendingCommand(knownTestRejection);
   // The key itself is never part of the retained request (§5.2); a retry asks for it again.
   const keyPending=new PendingCommand(code=>knownAiRejection(code)||code==='credential_unavailable');
   let models:Models|undefined,providers:Providers|undefined,labels=new Map<string,string>(),selected:string|undefined,selectedVendor:string|undefined,keyVendor:string|undefined,generation=0;

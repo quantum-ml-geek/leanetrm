@@ -147,7 +147,7 @@ is a market level.
 
 ## Option analytics
 
-D407. The fit also values every calibrated series and stores, per unit of quote,
+D408. The fit also values every calibrated series and stores, per unit of quote,
 its `value` and four sensitivities: `delta` per 1.00 of the underlying futures
 price, `gamma` per 1.00 squared, `vega` per volatility point and `theta` for one
 calendar day, later minus earlier. Each is `{value, missing}`: an exact decimal,
@@ -183,7 +183,7 @@ or the code of why there is none. `priceBump` is the nominal futures bump used.
   the day's sample. The expiries are valued in parallel.
 - **Identity.** A refit is compared with the latest revision of the same
   location and the same stated selection (migration
-  `0339_vol_surface_sensitivities.sql`).
+  `0341_vol_surface_sensitivities.sql`).
 
 These are the option model's own figures for the [Options page](futures-options.md#reads-and-entry-points).
 They enter no Risk, VaR or P&L report.

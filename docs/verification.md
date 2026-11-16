@@ -38,7 +38,7 @@ The gas partition includes the Park and Loan native, populated-upgrade, retained
 price-worker and real application browser qualifiers, alongside its existing
 amendment upgrades and application checks.
 
-The current integrated runner contains 189 commands: 64 shared checks,
+The current integrated runner contains 190 commands: 65 shared checks,
 64 isolated application previews and 61 partition-specific native/application
 checks. The D404 local checkpoint passed 1,866 frontend checks and 122 Python
 checks. The earlier calendar/lifecycle checkpoint passed 737 managed core checks,
@@ -481,10 +481,10 @@ without an assertion failure. Other verification groups retain 45 minutes. All g
 and release dependencies remain unchanged; this is CI capacity, not a pricing or
 production-runtime limit.
 
-## Option strategy viewer (D408)
+## Option strategy viewer (D409)
 
 Runs on 16 November 2026 at the branch head, after merging the option analytics
-branch with master in it, with synthetic data, on the local machine (macOS 26.6
+branch with master in it up to D407, with synthetic data, on the local machine (macOS 26.6
 arm64 with 14 logical processors, .NET 10.0.13, Node 24.22.0), from Debug builds. It
 has no PostgreSQL, so the database-backed exchange check ran in a disposable
 PostgreSQL 18 cluster in a container on a separate two-CPU Linux host, from a
@@ -495,11 +495,11 @@ this change; they run in the pull request's CI.
 | --- | --- | --- |
 | MarketData checks `--option-strategies` | local | exit 0, 24 PASS |
 | MarketData checks `--option-sensitivities`, `--vol-surface`, `--futures-options` | local | exit 0; 8, 19 and 68 PASS |
-| Api checks `--schedules` (with the option request, position and strategy request checks) | local | exit 0, 432 PASS |
+| Api checks `--schedules` (with the option request, position and strategy request checks) | local | exit 0, 434 PASS |
 | Api checks `--async-read-contracts`, `--assistant-workspace` | local | exit 0; 1 and 21 PASS |
-| `npm test --prefix web` | local | 1,923 pass |
-| `python3 -m unittest tests.test_ci_impact tests.test_check_all tests.test_migration_identity tests.test_ci_dependencies tests.test_public_routes` | local | 67 OK |
-| `run_preview.py --check --exchange-check` | container | exit 0, 363 PASS |
+| `npm test --prefix web` | local | 1,924 of 1,925 pass; the other passed when its file was run again |
+| `python3 -m unittest tests.test_ci_impact tests.test_check_all tests.test_migration_identity tests.test_ci_dependencies tests.test_public_routes` | local | 68 OK |
+| `run_preview.py --check --exchange-check`, before master's D407 was merged | container | exit 0, 363 PASS |
 
 What the local checks cover:
 
@@ -560,6 +560,13 @@ analysis is an asynchronous read and why the limits are no higher. These are
 observations on one machine, not a performance qualification; CI's runners
 have been about half as fast per thread.
 
+The one web test that failed in the full run is a crude delivery-setup browser
+test whose local browser did not start within 60 s; its file's eleven tests
+pass when run again, and this change does not touch it. The exchange run was
+made before master's migrations 0339 and 0340 were merged in ahead of the
+option analytics migration, now 0341; it has not been repeated on this tree,
+and CI applies them in that order.
+
 The exchange run covers, against the exchange example with its surface fitted
 at a working snapshot: the setup offering the seven templates at the series'
 settlements, a price range, the days before the cutoff on the surface's clock
@@ -599,7 +606,7 @@ working snapshots; the close's clock rule is covered without a database), none
 asserts the refusal of a reader without Read trades (the endpoints are wired
 as the positions read is), and none times an analysis in the application.
 
-## Option analytics and the Options page (D407)
+## Option analytics and the Options page (D408)
 
 Runs on 15 November 2026 at the branch head, with synthetic data. The local
 machine has no PostgreSQL, so database-backed checks ran in a disposable
@@ -617,7 +624,7 @@ this change; they run in the pull request's CI.
 | `tools/check_risk_fit_authority.py` | container | exit 0, 29 PASS |
 | `tools/check_vol_surface_admission_expiry.py` | container | exit 0, 3 PASS |
 
-The exchange run applies migration 0339 and covers: a fit that states no
+The exchange run applies migration 0341 and covers: a fit that states no
 supported selection or the wrong clock is refused at submit; a fit at a working
 snapshot and one at a recorded close each complete with analytics and state
 their clock and day; every calibrated series has each measure or the code of
@@ -1437,7 +1444,7 @@ variable names a trap:
   and tests run under it. No request waits for the worker's connection: with its backend
   stopped, a test still runs under the generation, and the worker keeps its lock.
 - **The request:** a test sends exactly one request to the Messages path, with the key
-  only in its `x-api-key` header. It carries the fixed synthetic prompt without workspace
+  only in its `x-api-key` header. It carries the configured synthetic prompt without workspace
   data or tools, within the test output limit and at the chosen effort.
 - **Outcomes:**
   - success, at an end of turn, at the output limit and when served by an accepted
@@ -1873,20 +1880,20 @@ and the worker with a session of its own holding the agent-worker lock):
 Turns over HTTP (`tools/check_agent_turn_http.py`, in the same run after the SQL turn
 checks, through the API against the loopback fake provider):
 
-- **Asking:** an ask is admitted, pinned over working data at its frame and run by the
+- **Asking:** a text-only ask is admitted without acquiring market inputs and run by the
   worker to completion, keeping the streamed answer and closing its call with the usage
   the stream reported before the terminal event. Its one request carries the key only
-  in its header, and sends the fixed preamble with the version's instructions, the
+  in its header, and sends the pinned installation and agent instructions, the
   question, the version's output limit and effort, and, for a version without tools,
   none; this check's agents have none, and the tool checks below give theirs. The turn
-  records the frame's exact pins. A repeat answers with its turn as it stands and sends
+  retains its selected frame identity but no pins, financial context or capture time. A repeat answers with its turn as it stands and sends
   nothing. A follow-up sends the earlier turn as history, labeled with its ending and
-  pinned context, before the question. An answer streamed in many deltas at once is
+  context state (including no acquired context), before the question. An answer streamed in many deltas at once is
   coalesced and published whole and in order, in pieces of at most 2,048 bytes.
-- **Knowledge:** working data is asked only at a frame of the session
-  (`snapshot_missing` without one or for another). While a historical view is
-  selected, its retained context is asked with a frame of it, pinned as named with the
-  frame's pins and capturing nothing, and working data is refused, as is any retained
+- **Knowledge:** a supplied frame must belong to the session (`snapshot_missing`
+  for another); a conceptual question needs no frame. While a historical view is
+  selected, its retained context is asked with a frame of it, retained as a selection
+  without copying inputs, and working data is refused, as is any retained
   context the session has not selected (`context_required`).
 - **Refusals:** an ask without a covering grant (`grant_required`) or while a turn is
   active (`turn_active`) is refused, as are a question too long (`question_too_long`)
@@ -4732,7 +4739,7 @@ continuous integration runs the complete suite.
 These are synthetic local checks. They do not qualify a Side, trade or cash
 consumer, explicit roll boundaries, or a production activation.
 
-## Park and Loan local qualification (D405)
+## Park and Loan local qualification (D406)
 
 The bounded [commercial profile](gas-park-loan.md) is checked through:
 
@@ -4757,3 +4764,57 @@ changes after preview, knowledge-first payment heads, worker source authority an
 UI time-resolution races. Aggregate CI and exact-release checks remain mandatory;
 local qualification does not activate a production schema or qualify service
 horizon continuation.
+
+## Requested assistant context and private prompt configuration (D407)
+
+Local verification on 2026-11-16 uses disposable PostgreSQL databases, synthetic
+prompt text and loopback model providers. The managed `--assistant-prompts`
+checks pass: prompt composition contains only configured text; absent tool
+guidance stays empty; all five provider mappings omit absent optional system
+instructions. An oversized synthetic close retains separate selected-frame and
+exact-close identities without copying its input matrix.
+
+`--assistant-workspace-check --browser-check` passes 65 integration and 43
+browser checks. Coverage includes questions and administrative reads without
+financial acquisition, exact requested financial reads, recorded-close proposals,
+historical aliases, explicit human authorization, and application/page/tool
+configuration. An in-flight configuration edit cannot change the prompt or add
+guidance absent at admission. Both migrations refuse helper definition or privilege
+drift; populated upgrade checks preserve existing prompt rows exactly and add no
+default guidance.
+
+The initial checkpoint passed the provider and administration modules of
+`--assistant-check`: provider, model catalog, qualification, model version, configured connectivity test,
+agent administration and grant checks. `--assistant-runtime-check --browser-check`
+exited successfully with 108 native turn, 22 HTTP turn, 65 HTTP tool, 20 stream,
+44 usage and 295 owned browser checks. Permission refusal
+before the first financial read retains no context or business sources;
+source-based replay checks still protect earlier financial evidence, including
+inherited conversation sources.
+
+The initial `--physical-assistant-check --browser-check` passed 51 business
+scenarios and nine browser checks. Facility quantities use corrections available at the first
+requested read; retained reads preserve that certificate after subsequent
+corrections. Gas operations retain their selected day and native authorization.
+After integrating D405 and D406, the complete frontend suite passes 1,891 tests
+with none skipped. The verification runner's 29 contract tests pass and require
+the managed prompt checks, workspace browser checks and migration checks. Independent adversarial review found no
+remaining findings. These results establish local synthetic behavior; hosted
+prompt configuration, publication and deployment remain separate operations.
+
+The combined upgrade applies the published Park and Loan migration before the
+installation-prompt and requested-context migrations. Their exact predecessor
+checks, helper drift refusals and existing prompt preservation all pass. The
+populated Park and Loan upgrade preserves its original native owners, cash and
+retry outcomes. Selected Park and Loan questions are admitted with the full
+Blotter report; an explicit request for the unqualified trade reader returns
+`page_not_supported` without financial pins or context. Managed and frontend
+regressions first reproduced the rejected question and incorrect capability label.
+
+The owned `--hosted-check --browser-check` also passes. Proposal review verifies
+that admission has no acquired context and that the later persisted tool context,
+navigation target and reopened draft use the same exact certificate. Hosted
+sign-out, expiry, cross-account refusal and browser checks remain enforced.
+
+The repository verification group also passes. The complete 190-command runner
+was not executed locally; aggregate CI and release checks remain required.

@@ -278,7 +278,7 @@ See [the lifecycle contract](exchange-futures.md#option-lifecycle) for the full 
   does (D395). A report that values options states its option valuation policy
   in its heading, and the Risk page opens a retained run as a scope's current
   report only when it was valued under the stated pricing policy (D396).
-- **Options.** A Trading page for readers of market data and trades (D407). Its
+- **Options.** A Trading page for readers of market data and trades (D408). Its
   **Chain** view draws one expiry of a product from the product's stored
   [volatility surface](vol-surfaces.md#option-analytics): calls and puts about
   the strike, each with its settlement, implied volatility, delta, gamma, vega,
@@ -298,7 +298,7 @@ See [the lifecycle contract](exchange-futures.md#option-lifecycle) for the full 
   currency; a sum with a missing member is missing, and thetas that run to
   different days are not added (`theta_days_differ`). A product whose inputs
   cannot be read at the close is a row state, not a failed read. The read prices
-  nothing. Its **Strategy** view combines legs on the expiry in view (D408):
+  nothing. Its **Strategy** view combines legs on the expiry in view (D409):
   from a template or from the chain's selected series, each a buy or a sale in
   whole lots at an entry price, which starts as the settlement shown.
   **`POST /api/options/strategy/setup`** `{context, product, model, expiryAt}`
@@ -332,7 +332,7 @@ See [the lifecycle contract](exchange-futures.md#option-lifecycle) for the full 
 
 ## Strategies
 
-A strategy is option legs on one expiry and one underlying future (D408). The
+A strategy is option legs on one expiry and one underlying future (D409). The
 pure analysis is `OptionStrategies` in
 [OptionStrategies.cs](../src/OpenEtrm.MarketData/Trading/OptionStrategies.cs);
 the reads are [OptionStrategyRead.cs](../src/OpenEtrm.Api/OptionStrategyRead.cs).
@@ -392,10 +392,10 @@ The sensitivities are the option model's own; Risk reports keep theirs.
 - **Volatility.** Stored volatility surfaces under a versioned vol model, with
   rich/cheap and their graphics, are shipped for viewing as
   [volatility surfaces](vol-surfaces.md) (D304), and each fit stores its series'
-  value, delta, gamma, vega and theta for the Options page (D407). Valuing
+  value, delta, gamma, vega and theta for the Options page (D408). Valuing
   options from the surface, interpolated values for unsettled series, volatility
   in Risk and scheduled fitting remain. Strategies on one expiry and their
-  payoff are analysed and drawn (D408); strategies across expiries, futures
+  payoff are analysed and drawn (D409); strategies across expiries, futures
   legs, saved strategies and booking a strategy in one action remain. The shared valuation layer
   supports held calibrated-series IV and weighted-node shocks with explicit
   annualized-volatility units; the stored analytical surface is still not a pricing

@@ -22,7 +22,7 @@ export async function run({command,evaluate,wait,click,set,persona,check,idle,ur
   const modelVersion=(await side.call('settings/ai/agents')).models.find(m=>m.id===model.id).version;
   const agent=await side.call('settings/ai/agents/create',{operationId:crypto.randomUUID(),name:'Browser pop-out guide '+stamp});
   const saved=await side.call('settings/ai/agents/save',{operationId:crypto.randomUUID(),agentId:agent.id,expectedVersion:agent.version,
-    description:'Moves the page where it is asked to.',instructions:'Quote only values you read.',modelId:model.id,modelVersion,reasoning:'low',
+    description:'Moves the page where it is asked to.',instructions:'Synthetic agent test instructions.',modelId:model.id,modelVersion,reasoning:'low',
     caching:false,tools:['read_current_page','read_trades','navigate'],allowedRoles:['trader'],limits:{toolSteps:8,inputTokens:200000,outputTokens:2048,elapsedSeconds:120,readSeconds:15,retries:2,historyTurns:20},grantDays:28});
   const guide=await side.call('settings/ai/agents/publish',{operationId:crypto.randomUUID(),agentId:saved.id,expectedVersion:saved.version});
 

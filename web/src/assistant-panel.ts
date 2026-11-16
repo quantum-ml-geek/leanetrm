@@ -372,7 +372,7 @@ export function setupAssistant(options:PanelOptions){
     if(command){const named=command.body as {agentId:string;version:number};agent=agents.find(a=>a.id===named.agentId&&a.version===named.version);}
     else{
       agent=chosen();if(!agent)return;
-      const place=options.place(),knowledge=askKnowledge(place.context,place.report.page);
+      const place=options.place(),knowledge=askKnowledge(place.context);
       if(lookingKey(place)!==lookedAt){error='The page changed. Check Looking at, then send again.';sync();return;}
       if(!knowledge||!askable||options.pageBusy()||!question.value.trim()||asking.command)return;
       command=asking.begin('assistant/turns/ask',{conversationId:conversation?.id??null,agentId:agent.id,version:agent.version,question:question.value,
@@ -480,7 +480,7 @@ export function setupAssistant(options:PanelOptions){
 
   function renderLooking(){
     try{
-      const place=options.place(),seen=lookingAt(place.report,place.context,options.names(),{trade:options.trade(),digest:chosen()?.tools?.includes('read_page_digest')===true});
+      const place=options.place(),seen=lookingAt(place.report,place.context,options.names(),{trade:options.trade()});
       text('assistant-looking-page',seen.page);text('assistant-looking-shows',seen.shows);text('assistant-looking-context',seen.context);
       get('assistant-looking-layout').hidden=seen.layout===undefined;text('assistant-looking-layout',seen.layout??'');
       lookedAt=lookingKey(place);askable=seen.askable;

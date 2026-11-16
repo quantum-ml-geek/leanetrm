@@ -119,7 +119,7 @@ Recent schema groups and their contracts:
 - 0184–0185: [facility quantity ledgers and bounded read plans](../docs/facility-quantity-ledger.md).
 - 0186–0188: [volatility surface calibration and retained fit jobs](../docs/vol-surfaces.md),
   with exact source custody and current authority at admission.
-- 0339: [option analytics stored with a fitted surface](../docs/vol-surfaces.md): the stated
+- 0341: [option analytics stored with a fitted surface](../docs/vol-surfaces.md): the stated
   sensitivity selection joins the fit request and the identity a refit is compared against.
 
 - 0189: complete historical statistical jobs, exact factor declarations, shared
@@ -1698,7 +1698,7 @@ function, preserves its owner and privileges, and requires a qualified schema
 release. The owned stock PostgreSQL regression observes both advisory waits,
 expires the bound token naturally and also checks valid replay and reuse.
 
-## Migration 0339: option sensitivities of a fitted surface
+## Migration 0341: option sensitivities of a fitted surface
 
 A fit request states its option sensitivity selection under the `sensitivities`
 key, which admission now requires to be an object. A stored surface states the

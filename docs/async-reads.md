@@ -45,7 +45,7 @@ The 26 admitted operations cover these existing consumers:
 | Risk | Scope, catalog, scenario calculation, dated-factor history and statistical setup. |
 | Statistical Risk | Parametric calculation/summary, historical calculation/summary/sample and Monte Carlo calculation. |
 | Retained Risk | Recent job list, exact job read and paged statistical archive. |
-| Options | The analysis of a strategy of option legs on one expiry (D408). |
+| Options | The analysis of a strategy of option legs on one expiry (D409). |
 
 ## Lifecycle and limits
 

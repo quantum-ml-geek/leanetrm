@@ -26,6 +26,8 @@ def recording(vendor, model, served=None):
 
 
 def run_checks(query, manifest, fake, trap, admin):
+    from assistant_prompt_fixture import configure_probe
+    configure_probe(admin)
     check_identifier_policy_cutover(query)
     for vendor, mapping in [('openai', 'openai_responses_v1'), ('google', 'generate_content_v1'),
                             ('xai', 'xai_responses_v1'), ('meta', 'meta_responses_v1')]:

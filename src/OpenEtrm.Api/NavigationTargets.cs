@@ -125,7 +125,7 @@ static class NavigationTargets
     public static JsonObject Json(NavigationTarget target,TurnPin pin)=>new()
     {
         ["page"]=target.Page,["selection"]=target.Selection?.DeepClone(),
-        ["context"]=new JsonObject{["mode"]=pin.Operational?"operational":pin.Working?"current":"retained",["contextId"]=pin.Operational?null:pin.ContextId.ToString(),["frameId"]=pin.Frame?.Id.ToString()},
+        ["context"]=new JsonObject{["mode"]=pin.Operational?"operational":pin.Working?"current":"retained",["contextId"]=pin.ContextId==Guid.Empty?null:pin.ContextId.ToString(),["frameId"]=pin.Frame?.Id.ToString()},
         ["kind"]=target.Kind,["label"]=target.Label
     };
 

@@ -51,6 +51,10 @@ static class ModelProviderChecks
 
     static async Task TextCall()
     {
+        var unconfigured=new FakeProvider(Sse(Text()));
+        Require((await Call(unconfigured,Request() with{System=""})).End is ModelCompleted&&
+            !JsonDocument.Parse(unconfigured.Bodies[0]).RootElement.TryGetProperty("system",out _),
+            "an unconfigured optional instruction sends no system block and no substituted prompt");
         var fake=new FakeProvider(Sse(Text()));
         var (text,end)=await Call(fake,Request());
         Require(fake.Bodies.Count==1&&Same(fake.Bodies[0],"""
@@ -405,7 +409,7 @@ static class ModelProviderChecks
         foreach(var (name,request) in new[]{("a reply replayed to another model",Request(model:"synthetic-other-model",messages:[new ModelUserText("q"),replied,new ModelToolResults([new("toolu_synthetic_01","r",false)])])),
             ("a conversation ending with a reply",Request(messages:[new ModelUserText("q"),replied])),("no output tokens",Request(maxTokens:0)),
             ("an unset list of accepted identifiers",Request() with{Model=new("anthropic",Model,default)}),("an unset tool list",Request() with{Tools=default}),
-            ("an empty system instruction",Request() with{System=""}),("empty user text",Request(messages:[new ModelUserText("")])),
+            ("empty user text",Request(messages:[new ModelUserText("")])),
             ("no tool results",Request(caching:true,messages:[new ModelUserText("q"),replied,new ModelToolResults([])]))})
         {
             var fake=new FakeProvider();

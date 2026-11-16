@@ -1,8 +1,20 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {priceTerms,endChoice,aiChange,segmentLabel,capabilityRequest,termsRequest,stateLabel,attestationStatement,capabilityRows,
-  testOutcome,testRows,lastTestLabel,lastTestSummary,endpointLabel,testableModels,testRequest,knownAiRejection,aiRefusal} from '../dist/ai-settings.js';
+  testOutcome,testRows,lastTestLabel,lastTestSummary,endpointLabel,testableModels,testRequest,knownAiRejection,knownTestRejection,aiRefusal} from '../dist/ai-settings.js';
 import {currencyKey,currencyLabels} from '../dist/currency-labels.js';
+import {PendingCommand} from '../dist/pending-command.js';
+
+test('missing test guidance releases a refused first request but preserves an earlier uncertain attempt',()=>{
+  const pending=new PendingCommand(knownTestRejection);
+  pending.begin('settings/ai/providers/test',{modelId:'synthetic_model',reasoning:'low'});
+  pending.failed('page_prompt_required',pending.sending());
+  assert.equal(pending.command,undefined);
+  const command=pending.begin('settings/ai/providers/test',{modelId:'synthetic_model',reasoning:'low'});
+  pending.sending();pending.failed('response_unknown');
+  pending.failed('page_prompt_required',pending.sending());
+  assert.equal(pending.command,command);
+});
 
 const usd={catalogId:'c1',revisionId:'r1',code:'usd',displayCode:'USD',name:'US Dollar',catalogCode:'synthetic_reference',revisionKey:'initial_v1'};
 const entry=(changes={})=>({currency:{catalogId:'c1',revisionId:'r1',code:'usd'},cacheReadRequired:false,

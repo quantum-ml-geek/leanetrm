@@ -714,7 +714,7 @@ def run_checks(url, query, psql, manifest, environment, dotnet):
 
     def ask_sql(turn, profile='trader', operation=None, scope='api', conversation=None, agent_id=None, version=1, question='What does this page show?',
                 report=None, mode='current', context=None, frame=None, generation=None, limit=4000, workspace=4, deadline=30, session='c' * 64,
-                ends="clock_timestamp()+interval '30 minutes'", runtime="turns_v21"):
+                ends="clock_timestamp()+interval '30 minutes'", runtime="turns_v22"):
         # The asking process names the catalog, the session binding, the token's digest under its worker generation and
         # the runtime set it applies: its version, the question bound, the workspace's turns and the admission deadline.
         return (f"assistant.ask_turn({literal(operation or uuid4())},'{scope}',{literal(conversation)},{literal(agent_id or guide['id'])},{version},"
@@ -884,7 +884,7 @@ def run_checks(url, query, psql, manifest, environment, dotnet):
     check('an admitted ask creates the conversation and the queued turn under the covering grant, with its accepted event, and is answered '
           'as admitted', asked.get('admitted') is True and asked['turn']['state'] == 'queued' and asked['turn']['ordinal'] == 1 and asked['turn']['version'] == 1 and not asked['turn']['draft']
           and query(f"SELECT delegation_id||' '||cardinality(included_turns)||' '||generation||' '||token_digest||' '||runtime_set FROM assistant.turns "
-                    f"WHERE id='{first.id}';") == f"{covering['id']} 0 {worker.generation} {first.digest} turns_v21"
+                    f"WHERE id='{first.id}';") == f"{covering['id']} 0 {worker.generation} {first.digest} turns_v22"
           and kinds(first) == 'accepted', asked)
     records = query(RECORDS)
     operation = query(f"SELECT operation_id FROM assistant.turns WHERE id='{first.id}';")
@@ -893,11 +893,12 @@ def run_checks(url, query, psql, manifest, environment, dotnet):
         refusal('trader', 'turn_conflict', operation=operation, **request)
     check('repeating the ask answers with its turn, not as admitted, and writes nothing; any other ask under its identity conflicts',
           replayed == {'turn': asked['turn']} and query(RECORDS) == records, replayed)
-    write_refused('turn_state_conflict', 'start_turn', first)
+    pending_start=as_worker(f"BEGIN;SELECT {worker_sql('start_turn', first)}::text;ROLLBACK;")
+    check('a turn starts without acquiring financial context', pending_start['turn']['state']=='running' and pending_start['turn']['context']['contextId'] is None and state(first)=='queued:-')
     contexts.runtime('viewer', expect(f'PERFORM {pin_sql(first)};', '42501'))
     for profile, token in (('risk', None), ('trader', secrets.token_bytes(32))):
         contexts.runtime(profile, refused(f'PERFORM {pin_sql(first, token=token)};', 'agent_runtime_unavailable'))
-    check('a turn starts only once pinned, and only the asking person presenting its token pins it', query(RECORDS) == records)
+    check('only the asking person presenting its token may record the selected context', query(RECORDS) == records)
     before = contexts_count()
     contexts.runtime('trader', refused(f'PERFORM {pin_sql(first, reserve=4096 - before)};', 'knowledge_budget_reserved'))
     check("an ask over working data is refused while fewer than the reserve of the catalog's retained contexts would remain",
@@ -912,7 +913,7 @@ def run_checks(url, query, psql, manifest, environment, dotnet):
     started = start(first)
     check("the worker starts the pinned turn and is given the version, its limits, the question, no earlier turn, and the catalog, pins, "
           "grant and agent principal its reads run under", started['turn']['state'] == 'running'
-          and started['started']['instructions'] == 'Quote only values you read.'
+          and started['started']['instructions'] == 'Synthetic agent instructions.'
           and started['started']['limits'] == {'toolSteps': 8, 'inputTokens': 200000, 'outputTokens': 2048, 'elapsedSeconds': 120, 'readSeconds': 15, 'retries': 2}
           and started['started']['modelId'] == usable and started['started']['earlier'] == [] and started['turn']['question'] == 'What does this page show?'
           and (started['started']['catalogId'], started['started']['pins'], started['started']['delegationId']) == (catalog, None, covering['id'])
@@ -927,12 +928,12 @@ def run_checks(url, query, psql, manifest, environment, dotnet):
     # definition, then current admission is restored. Immutable turn history is never rewritten.
     signature = 'assistant.ask_turn(uuid,text,uuid,uuid,integer,text,jsonb,uuid,text,uuid,uuid,text,text,timestamptz,text,bigint,text,integer,integer,integer)'
     admission = query(f"SELECT pg_get_functiondef('{signature}'::regprocedure);")
-    assert admission.count("runtime_set<>'turns_v21'") == 1
+    assert admission.count("runtime_set<>'turns_v22'") == 1
     legacy_person = persona('legacy_plan', ['trader'])
     grant(legacy_person, guide)
     legacy_plan_turn = Turn()
     try:
-        query(admission.replace("runtime_set<>'turns_v21'", "runtime_set<>'turns_v19'"))
+        query(admission.replace("runtime_set<>'turns_v22'", "runtime_set<>'turns_v19'"))
         legacy_admitted = ask(legacy_plan_turn, profile=login('legacy_plan'), runtime='turns_v19')
         assert legacy_admitted.get('admitted') is True, legacy_admitted
     finally:
@@ -2190,6 +2191,50 @@ def run_checks(url, query, psql, manifest, environment, dotnet):
           lapsed_in(lapsed, 'ask_turn') and lapsed_in(lapsed_agent, 'ask_turn') and lapsed_in(lapsed_pin, 'pin_turn')
           and lapsed_in(lapsed_retained, 'pin_turn') and unwritten and query(RECORDS) == records, (lapsed, lapsed_agent, lapsed_pin, lapsed_retained))
     end(retained_wait, 'failed', 'request_cancelled')
+
+    # The running-turn resolver is a distinct mutation contract: no admission capture, exact retry, and fresh authority.
+    requested = Turn()
+    ask(requested)
+    start(requested)
+    def resolve_sql(turn, token=None, pins='NULL', date=EFFECTIVE):
+        return f"assistant.resolve_turn_context('{turn.id}',{bytea(token or turn.token)},'{date}',{pins})"
+    unresolved_records, unresolved_count = query(RECORDS), contexts_count()
+    contexts.runtime('trader', refused(f'PERFORM {resolve_sql(requested, token=secrets.token_bytes(32))};', 'agent_runtime_unavailable'))
+    contexts.runtime('risk', expect(f'PERFORM {resolve_sql(requested)};', '42501'))
+    check('requested context resolution refuses a wrong token or owner without recording a context',
+          query(RECORDS) == unresolved_records and contexts_count() == unresolved_count)
+    resolved = as_person('trader', f'SELECT {resolve_sql(requested)};')
+    resolved_records = query(RECORDS)
+    retry = as_person('trader', f'SELECT {resolve_sql(requested)};')
+    conflicting_pins = resolve_sql(requested, pins="'{}'::jsonb")
+    contexts.runtime('trader', refused(f'PERFORM {conflicting_pins};', 'turn_conflict'))
+    contexts.runtime('trader', refused(f"PERFORM {resolve_sql(requested, date='2020-12-19')};", 'turn_conflict'))
+    check('requested context resolution returns the exact first outcome and refuses different pins or dates',
+          retry == resolved and contexts_count() == unresolved_count + 1 and query(RECORDS) == resolved_records)
+    end(requested, 'failed', 'request_cancelled')
+
+    expiring_read = Turn()
+    ask(expiring_read)
+    start(expiring_read)
+    before_records, before_contexts = query(RECORDS), contexts_count()
+    expired_read = contexts.expiring(psql, environment, 'context', 'SELECT pg_advisory_xact_lock(730849102)',
+        f'SELECT {resolve_sql(expiring_read)};', held=('assistant.turns', 'RowShareLock'), subject='trader')
+    check('context authority expiring during requested capture rolls back every context and pin',
+          expired_read is not None and '42501' in expired_read and query(RECORDS) == before_records and contexts_count() == before_contexts)
+    end(expiring_read, 'failed', 'request_cancelled')
+
+    cancelling_read = Turn()
+    ask(cancelling_read)
+    start(cancelling_read)
+    before_contexts = contexts_count()
+    thread, answers = holding(psql, environment, f"SELECT 1 FROM assistant.turns WHERE id='{cancelling_read.id}' FOR UPDATE",
+        lambda: waits(lambda: contexts.runtime('trader', refused(f'PERFORM {resolve_sql(cancelling_read)};', 'turn_state_conflict')), 'resolve_turn_context'),
+        ending=f"SELECT assistant.request_cancel('{cancelling_read.id}',NULL);COMMIT")
+    thread.join(timeout=15)
+    check('a cancellation committed while resolution waits prevents its capture',
+          'answer' in answers and state(cancelling_read) == 'cancel_requested:-' and contexts_count() == before_contexts
+          and query(f"SELECT context_id IS NULL AND pins IS NULL FROM assistant.turns WHERE id='{cancelling_read.id}';") == 't')
+    end(cancelling_read, 'failed', 'request_cancelled')
 
     # Recovery (§7.4): a worker start waits for a worker write in flight, then interrupts every turn an earlier
     # generation left queued, running or cancel requested, closing its open call.
