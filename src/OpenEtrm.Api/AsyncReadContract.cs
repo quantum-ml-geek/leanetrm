@@ -59,12 +59,13 @@ internal static class AsyncReadContract
         "portfolio.risk.archive.v1"=>typeof(AsyncReadArchive),
         _=>throw new AsyncReadException(422,"async_operation","This operation is not an admitted asynchronous read.")
     };
-    // The input of an already-typed body: an ordinary route and the channel classify one read identically.
-    internal static ReadInput Input(string operation,object body)
+    // The input of an already-typed body: an ordinary route and the channel classify one read identically. The channel
+    // requires the exact selection here; an ordinary route passes exactSelection false and refuses a missing one itself.
+    internal static ReadInput Input(string operation,object body,bool exactSelection=true)
     {
         if(body.GetType()!=BodyType(operation))throw Invalid();
-        ReadInput Market(Guid snapshot)=>snapshot!=Guid.Empty?new(operation,body,snapshot,["ReadMarketData"]):throw Invalid();
-        ReadInput Trading(FuturesReadRequest? context,bool risk=false)=>context is {SnapshotId:var snapshot}&&snapshot!=Guid.Empty?
+        ReadInput Market(Guid snapshot)=>snapshot!=Guid.Empty||!exactSelection?new(operation,body,snapshot,["ReadMarketData"]):throw Invalid();
+        ReadInput Trading(FuturesReadRequest? context,bool risk=false)=>context is {SnapshotId:var snapshot}&&(snapshot!=Guid.Empty||!exactSelection)?
             new(operation,body,snapshot,risk?["ReadTrades","ReadMarketData","RunScenario"]:["ReadTrades","ReadMarketData"],context):throw Invalid();
         ReadInput Status()=>new(operation,body,null,["RunScenario"]);
         switch(body)
@@ -84,8 +85,9 @@ internal static class AsyncReadContract
             case PortfolioRiskRequest risk:return Trading(risk.Context,true);
             case PortfolioHistoryRequest riskHistory:return Trading(riskHistory.Scope?.Context,true);
             case AsyncReadEmpty:return Status();
-            case AsyncReadJob job:return job.Id!=Guid.Empty?Status():throw Invalid();
+            case AsyncReadJob job:return job.Id!=Guid.Empty||!exactSelection?Status():throw Invalid();
             case AsyncReadArchive archive:
+                if(!exactSelection)return Status();
                 if(archive.Method is not("statistical" or "parametric" or "historical" or "monte_carlo")||archive.Limit is <1 or >100||
                     (archive.Before is null)!=(archive.Id is null)||archive.Id==Guid.Empty)throw Invalid();
                 if(archive.Before is not null)_=SchedulePreview.ParseAt(archive.Before);

@@ -166,6 +166,7 @@ memory or work on untrusted input), *storage* (a stored field's length) or
 | Limit | Where | Value | Decision |
 | --- | --- | --- | --- |
 | Request deadline | `Program.cs:88` | 15 s; 20 s for `/api/ppa` | **Move:** hosted |
+| Reads at once | `PreviewSession.MaximumReads` (`Program.cs`); `AsyncReadChannel.cs:21` | 2 ordinary reads per session outside its gate; 2 active reads per response channel, 4 channels per session | Fixed: contract ([async-reads.md](async-reads.md)); a further ordinary read waits within its request deadline. Sized to the hosted application pool of 8 connections |
 | Gateway read timeout | `deploy/nginx.conf.template:25` | 20 s | **Move:** hosted, written from the same value (must exceed the longest deadline) |
 | Page request timeout | `web/src/app.ts:120` | 20 s for everything | **Move:** served by the API from the hosted deadline; the page keeps none of its own |
 | Request body | `Program.cs:35`, `:240`; `deploy/nginx.conf.template:16`, `:96`, `:103`, `:108` | 32 KiB; 8 MiB for interval-series revisions | **Move:** hosted, written to both; ceilings fixed |

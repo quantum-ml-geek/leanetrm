@@ -68,5 +68,13 @@ internal static class AsyncReadContractChecks
             catch(AsyncReadException e)when(e.Code==code){continue;}
             throw new Exception($"A typed {operation} input of the wrong shape or without its exact selection must be refused {code}.");
         }
+        // An ordinary route refuses a missing selection in its own words; classifying its body must not answer first.
+        var unselected=AsyncReadContract.Input("curve.evaluate.v1",new BuildRequest(Guid.Empty,"synthetic"),exactSelection:false);
+        var unnamed=AsyncReadContract.Input("portfolio.risk.jobs.read.v1",new AsyncReadJob(Guid.Empty),exactSelection:false);
+        if(unselected.SnapshotId!=Guid.Empty||!unselected.Permissions.SequenceEqual(["ReadMarketData"])||!unnamed.Permissions.SequenceEqual(["RunScenario"]))
+            throw new Exception("An ordinary route's input must keep its permissions and leave a missing selection to the route's own refusal.");
+        try{AsyncReadContract.Input("curve.evaluate.v1",new HistoryRequest(snapshot,"synthetic"),exactSelection:false);}
+        catch(AsyncReadException e)when(e.Code=="async_request"){return;}
+        throw new Exception("An ordinary route's input of another operation's shape must still be refused.");
     }
 }

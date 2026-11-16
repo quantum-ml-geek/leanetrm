@@ -1453,40 +1453,12 @@ api.MapPost("/reference/commit",(HttpContext c,ReferenceCommitRequest body)=>Ref
 api.MapGet("/market/contract-display",()=>Results.Ok(new{version=CurveDisplay.Version,choices=new[]{
     new{value=CurveDisplay.All,label="All recorded contracts · show status"},
     new{value=CurveDisplay.Live,label="Live contracts at selected close"}}}));
-api.MapPost("/evaluate",(HttpContext c,BuildRequest body)=>Locked(c,async session=>
-{
-    var pin=Pin(session,body.SnapshotId);
-    var read=await database.WithIdentity(Profile(session),"ReadMarketData",(connection,ct)=>marketReads.Evaluate(connection,pin,body.Curve,ct,body.IncludeWorkspace,body.ContractDisplay),c.RequestAborted);
-    return Results.Ok(AsyncReadProjections.Curve(read,pin,body,body.IncludeWorkspace?
-        WorkspaceProjection(session,read.Workspace??throw new InvalidOperationException("The requested workspace projection is missing."),true,pin):null));
-}));
 // The same pin, identity and permission as /evaluate, for the contract prices of several curves in one read; a selected context is stated as there.
-api.MapPost("/market/curve-shapes",(HttpContext c,CurveShapesRequest body)=>Locked(c,async session=>
-{
-    var pin=Pin(session,body.SnapshotId);
-    var curves=await database.WithIdentity(Profile(session),"ReadMarketData",(connection,ct)=>marketReads.CurveShapes(connection,pin,body.Curves,ct,body.ContractDisplay),c.RequestAborted);
-    return pin.Context is {} context?Results.Ok(new {curves,context}):Results.Ok(new {curves});
-}));
 api.MapPost("/market/input-curve-shapes",(HttpContext c,CurveInspectionsRequest body)=>Locked(c,async session=>
 {
     var pin=Pin(session,body.SnapshotId);
     var curves=await database.WithIdentity(Profile(session),"ReadMarketData",(connection,ct)=>marketReads.InspectCurveShapes(connection,pin,body.Curves,ct,body.ContractDisplay),c.RequestAborted);
     return pin.Context is {} context?Results.Ok(new{curves,context}):Results.Ok(new{curves});
-}));
-api.MapPost("/history",(HttpContext c,HistoryRequest body)=>Locked(c,async session=>
-{
-    var policy=HistoryRevisionPolicy.Require(body.RevisionPolicy);
-    if(!session.HasDiscoveredFrames)await RefreshFrames(session,c.RequestAborted);
-    var pin=Pin(session,body.SnapshotId);
-    // Current history includes initial inputs and every offered stored close;
-    // unselected manual edits remain separate explicit input choices.
-    var offered=session.MarketContext is null?session.InitialFrames.Select(id=>Frame(session,id)).Where(frame=>frame.PpaBundle is null).Concat(session.VisibleFrames.Where(frame=>frame.OriginCloseId is not null)):session.VisibleFrames;
-    // A close's history is its own session's closes (D334); other regions' closes at the same instants are not its samples.
-    var frames=pin.Frame?.Close is {} pinned?offered.Where(frame=>frame.Close is null||frame.Close.Session==pinned.Session):offered;
-    var points=await database.WithIdentity(Profile(session),"ReadMarketData",(connection,ct)=>marketReads.History(connection,pin,[..frames],body.Curve,body.ContractId,body.SeriesId,policy,ct,
-        session.Live is not null?data=>session.SelectContextAliases(data,pin.Context!):null,
-        session.Live is not null?[..session.InitialFrames.SelectMany(id=>session.Frames[id].ObservationIds).Distinct()]:null),c.RequestAborted);
-    return Results.Ok(AsyncReadProjections.History(points,pin,body,policy));
 }));
 api.MapGet("/analytics/overlays",(Func<HttpContext,Task<IResult>>)(c=>Locked(c,session=>database.WithIdentity(Profile(session),"ReadMarketData",(_,_)=>
     Task.FromResult(Results.Ok(new {policy=OpenEtrm.Shared.Analytics.Overlays.Policy,overlays=OpenEtrm.Shared.Analytics.Overlays.Catalog})),c.RequestAborted))));
@@ -1823,8 +1795,6 @@ api.MapPost("/rec/trades/book",(HttpContext c,RecForwardBookRequest body)=>Locke
 }));
 
 api.MapPost("/futures/catalog",(HttpContext c,FuturesReadRequest body)=>FuturesRead(c,body,futuresStore.Catalog));
-api.MapPost("/futures/editor",(HttpContext c,FuturesEditorRequest body)=>TradingRead(c,body.Context??throw new MarketDataException("futures_trade","Supply the selected context."),
-    (connection,view,ct)=>tradeReads.FuturesTrade(connection,view,body.TradeId,body.Revision,ct),headTrade:body.TradeId));
 api.MapPost("/futures/amend-preview",(HttpContext c,FuturesAmendRequest body)=>FuturesRead(c,new(body.SnapshotId,body.Convention,body.KnowledgeMode),
     async(connection,data,frame,ct)=>await futuresStore.PreviewAmendment(connection,data,frame,body,ct),headTrade:body.TradeId,amendmentPreview:true));
 api.MapPost("/futures/amend",(HttpContext c,FuturesAmendRequest body)=>Locked(c,async session=>
@@ -2050,10 +2020,6 @@ async Task<IResult> BookParkLoan(HttpContext c,PreviewSession session,TicketBook
 api.MapPost("/physical/operations/directory",(HttpContext c,TradingPositionsRequest body)=>TradingRead(c,
  body.Context??throw new MarketDataException("position_facts","Supply the selected header context."),
  (connection,view,ct)=>tradeReads.PhysicalPositions(connection,view,body.BookIds,body.PortfolioIds,body.Offset,body.Limit,ct),expectedConvention:TradingBlotter.Convention));
-api.MapPost("/trading/positions",(HttpContext c,TradingPositionsRequest body)=>TradingRead(c,
- body.Context??throw new MarketDataException("position_facts","Supply the selected context."),
- (connection,view,ct)=>tradeReads.Positions(connection,view,body.BookIds,body.PortfolioIds,body.Offset,body.Limit,ct),
- expectedConvention:TradingBlotter.Convention));
 // The foreground reuse check and the update waiter share the exact authorization/selection contract.
 Task<string> BlotterVersion(PreviewSession session,FuturesReadRequest body,CancellationToken cancellation)=>
  database.WithIdentity(Profile(session),"ReadTrades",async(connection,ct)=>
@@ -2071,8 +2037,6 @@ Task<string> BlotterVersion(PreviewSession session,FuturesReadRequest body,Cance
  await RequireReadAccess(connection,ct);selection.RequireSession(session);
  return version;
 },cancellation);
-api.MapPost("/trading/freshness",(HttpContext c,FuturesReadRequest body)=>Locked(c,async session=>
- Results.Ok(new{version=await BlotterVersion(session,body,c.RequestAborted)})));
 api.MapPost("/trading/changes",async Task<IResult>(HttpContext c,BlotterChangesRequest body)=>
 {
  if(body.Context is null)throw new MarketDataException("blotter_context","Supply the exact displayed selection.");
@@ -2094,8 +2058,6 @@ api.MapPost("/trading/changes",async Task<IResult>(HttpContext c,BlotterChangesR
  }
  finally{session.BlotterWait.Release();}
 });
-api.MapPost("/trading/directory",(HttpContext c,FuturesReadRequest body)=>TradingRead(c,body,
- (connection,view,ct)=>tradeReads.Directory(connection,view,ct),expectedConvention:TradingBlotter.Convention));
 api.MapPost("/trading/gas",(HttpContext c,TradePositionReadRequest body)=>TradingRead(c,body.Context,
     (connection,view,ct)=>tradeReads.GasTrade(connection,view,body,ct),expectedConvention:TradingBlotter.Convention));
 api.MapPost("/trading/side-schedules",(HttpContext c,SideScheduleReadRequest body)=>TradingRead(c,body.Position?.Context??throw new MarketDataException("side_schedule_inspection","Select the exact position context."),
@@ -2110,14 +2072,6 @@ api.MapPost("/trading/position",(HttpContext c,TradePositionReadRequest body)=>T
 api.MapPost("/trading/close-out-draft",(HttpContext c,CloseOutDraftRequest body)=>TradingRead(c,
  body.Context??throw new MarketDataException("close_out","Supply the selected context."),
  (connection,view,ct)=>tradeReads.CloseOutDraft(connection,view,body,ct),expectedConvention:TradingBlotter.Convention));
-api.MapPost("/trading/workspace",(HttpContext c,TradingWorkspaceRequest body)=>
-{
- if(body.BookingCatalog is not(null or "directory" or "priced_contracts"))throw new MarketDataException("blotter_view","Choose an available booking catalog projection.");
- return TradingRead(c,body.Context??throw new MarketDataException("blotter_view","Supply the selected context."),
-  (connection,view,ct)=>tradeReads.Workspace(connection,view,body.View,body.Summaries.IsDefault?[]:body.Summaries,body.BookingCatalog=="directory",ct),
-  expectedConvention:TradingBlotter.Convention,combinedWorkspace:true,concurrent:body.Progressive,
-  recheck:async(connection,view,ct)=>{await tradeReads.Positions(connection,view,body.View.BookIds,body.View.PortfolioIds,0,1,ct);});
-});
 // The workspace's Blotter valuation as NDJSON frames (D268):
 // refused as trading/workspace refuses before start; then start, the rows of each completed unit, and complete once the
 // result passes the final recheck under the session gate. The read runs outside the gate and authorizes every frame.
@@ -2167,8 +2121,6 @@ api.MapPost("/trading/workspace/stream",async(HttpContext c,TradingWorkspaceStre
  await writer.Complete(complete,c.RequestAborted);
  return Results.Empty;
 });
-api.MapPost("/trading/blotter",(HttpContext c,FuturesBlotterRequest body)=>TradingRead(c,body.Context??throw new MarketDataException("blotter_view","Supply the selected context."),
- (connection,view,ct)=>tradeReads.Blotter(connection,view,body.View,ct),expectedConvention:TradingBlotter.Convention));
 api.MapPost("/swaps/catalog",(HttpContext c,FuturesReadRequest body)=>FuturesRead(c,body,swapStore.Catalog,expectedConvention:SwapStore.Convention));
 api.MapPost("/swaps/settlement/preview",(HttpContext c,SwapSettlementPreviewRequest body)=>FuturesRead(c,body.Context??throw new MarketDataException("settlement_context","Supply the selected certified context."),
  (connection,data,frame,ct)=>swapStore.SettlementPreview(connection,data,frame,body,ct),expectedConvention:SwapStore.Convention));
@@ -2220,8 +2172,6 @@ api.MapPost("/swaps/contract-observation-preview",(HttpContext c,SwapContractObs
 api.MapPost("/swaps/observation-options",(HttpContext c,SwapObservationOptionsRequest body)=>FuturesRead(c,
  body.Context??throw new MarketDataException("swap_context","Supply the selected observation context."),
  (connection,data,frame,ct)=>swapStore.ObservationOptions(connection,data,frame,body,ct),expectedConvention:SwapStore.Convention));
-api.MapPost("/swaps/editor",(HttpContext c,SwapEditorRequest body)=>TradingRead(c,body.Context??throw new MarketDataException("swap_context","Supply the selected context."),
- (connection,view,ct)=>tradeReads.SwapTrade(connection,view,body.TradeId,body.Revision,ct),headTrade:body.TradeId,expectedConvention:SwapStore.Convention));
 api.MapPost("/swaps/quantity-schedule",(HttpContext c,SwapEditorRequest body)=>TradingRead(c,body.Context,
  (connection,view,ct)=>tradeReads.Read(connection,view,data=>swapStore.QuantitySchedule(connection,view.CalculationFrame,body.TradeId,body.Revision,ct),ct),headTrade:body.TradeId,expectedConvention:SwapStore.Convention));
 api.MapPost("/swaps/scheduled-periods",(HttpContext c,SwapScheduledPeriodsRequest body)=>FuturesRead(c,body.Context,
@@ -2302,20 +2252,10 @@ Task<IResult> PortfolioRead(HttpContext c,FuturesReadRequest body,Func<NpgsqlCon
         data=>read(connection,data,view.CalculationFrame,ct),ct,
         referenceScope:ReferenceReadScope.TradeValuation,observationScope:ObservationReadScope.ExactPins),
         scenario:true,expectedConvention:TradingBlotter.Convention);
-api.MapPost("/portfolio/risk/scope",(HttpContext c,RiskScopeRequest body)=>TradingRead(c,
-    body.Context??throw new MarketDataException("risk_context","Select the shared financial context."),
-    (connection,view,ct)=>tradeReads.ReadBound(connection,view,()=>RiskTradeScope.Directory(connection,database.Manifest.CatalogId,view.CalculationFrame,body,ct),ct),
-    scenario:true,expectedConvention:TradingBlotter.Convention));
 api.MapPost("/portfolio/risk/setup",(HttpContext c,PortfolioRiskCatalogRequest body)=>TradingRead(c,
     body.Context??throw new MarketDataException("risk_context","Select the shared financial context."),
     (connection,view,ct)=>tradeReads.ReadBound(connection,view,()=>portfolioRisk.Setup(connection,view.CalculationFrame,body,ct),ct),
     scenario:true,expectedConvention:TradingBlotter.Convention));
-api.MapPost("/portfolio/risk/catalog",(HttpContext c,PortfolioRiskCatalogRequest body)=>PortfolioRead(c,
-    body.Context??throw new MarketDataException("risk_context","Select the shared financial context."),
-    (connection,data,frame,ct)=>portfolioRisk.Catalog(connection,data,frame,body,ct)));
-api.MapPost("/portfolio/risk",(HttpContext c,PortfolioRiskRequest body)=>PortfolioRead(c,
-    body.Context??throw new MarketDataException("risk_context","Select the shared financial context."),
-    (connection,data,frame,ct)=>portfolioRisk.Calculate(connection,data,frame,body,ct)));
 api.MapPost("/physical/power-trades/hedges",(HttpContext c,StructuredPowerHedgeRequest body)=>PortfolioRead(c,
     body.Context??throw new MarketDataException("risk_context","Select the shared financial context."),
     async(connection,data,frame,ct)=>
@@ -2325,9 +2265,6 @@ api.MapPost("/physical/power-trades/hedges",(HttpContext c,StructuredPowerHedgeR
         if(!await PreviewDatabase.HasPermission(connection,"ReadPhysical",ct))throw new PreviewDeniedException();
         return result;
     }));
-api.MapPost("/portfolio/risk/history",(HttpContext c,PortfolioHistoryRequest body)=>PortfolioRead(c,
-    body.Scope?.Context??throw new MarketDataException("risk_context","Select the retained risk scope and context."),
-    (connection,data,frame,ct)=>portfolioRisk.History(connection,data,frame,body,ct)));
 api.MapPost("/portfolio/risk/economic/sources",(HttpContext c,PortfolioEconomicSourceRequest body)=>PortfolioRead(c,
     body.Scope?.Context??throw new MarketDataException("risk_economic_scope","Select the exact economic opening scope."),
     (connection,data,frame,ct)=>portfolioRisk.EconomicSources(connection,data,frame,body,ct)));
@@ -2390,18 +2327,6 @@ api.MapPost("/portfolio/risk/parametric/jobs",(HttpContext c,SubmitParametricRis
     return PortfolioRead(c,request.Context,(connection,data,frame,ct)=>
     {c.Items["risk_job_attempted"]=true;return RiskJobs.Submit(connection,database.Manifest,portfolioRisk,data,frame,new(body.RequestId,request),ct);});
 });
-Task<IResult> StatisticalArchive(HttpContext c,string method)=>Locked(c,session=>
-    database.WithIdentity(Profile(session),"RunScenario",async(connection,ct)=>
-    {
-        if(!int.TryParse(c.Request.Query["limit"],out var limit)||limit is <1 or >100)throw new MarketDataException("risk_archive_input","Choose a report page size from 1 to 100.");
-        var before=c.Request.Query["before"].ToString();var cursor=c.Request.Query["id"].ToString();
-        if((before.Length==0)!=(cursor.Length==0)||cursor.Length>0&&!Guid.TryParse(cursor,out _))throw new MarketDataException("risk_archive_input","Use both fields of the retained archive cursor.");
-        return Results.Ok(await RiskJobs.StatisticalArchive(connection,database.Manifest.CatalogId,limit,before.Length==0?null:SchedulePreview.ParseAt(before),cursor.Length==0?null:Guid.Parse(cursor),method,ct));
-    },c.RequestAborted));
-api.MapGet("/portfolio/risk/parametric/archive",(Func<HttpContext,Task<IResult>>)(c=>StatisticalArchive(c,"parametric")));
-api.MapGet("/portfolio/risk/monte-carlo/archive",(Func<HttpContext,Task<IResult>>)(c=>StatisticalArchive(c,"monte_carlo")));
-api.MapGet("/portfolio/risk/historical/archive",(Func<HttpContext,Task<IResult>>)(c=>StatisticalArchive(c,"historical")));
-api.MapGet("/portfolio/risk/statistical/archive",(Func<HttpContext,Task<IResult>>)(c=>StatisticalArchive(c,"statistical")));
 api.MapPost("/portfolio/risk/jobs",(HttpContext c,SubmitPortfolioRiskJob body)=>PortfolioRead(c,
     body.Request?.Context??throw new MarketDataException("risk_job_context","Supply the risk request and exact retained context."),
     (connection,data,frame,ct)=>
@@ -2409,10 +2334,6 @@ api.MapPost("/portfolio/risk/jobs",(HttpContext c,SubmitPortfolioRiskJob body)=>
         c.Items["risk_job_attempted"]=true;
         return RiskJobs.Submit(connection,database.Manifest,portfolioRisk,data,frame,body,ct);
     }));
-api.MapGet("/portfolio/risk/jobs",(Func<HttpContext,Task<IResult>>)(c=>Locked(c,session=>
-    database.WithIdentity(Profile(session),"RunScenario",async(connection,ct)=>Results.Ok(await RiskJobs.List(connection,database.Manifest.CatalogId,PortfolioRiskPreview.Convention,ct)),c.RequestAborted))));
-api.MapGet("/portfolio/risk/jobs/{id:guid}",(HttpContext c,Guid id)=>Locked(c,session=>
-    database.WithIdentity(Profile(session),"RunScenario",async(connection,ct)=>Results.Ok(await RiskJobs.Read(connection,database.Manifest.CatalogId,id,ct,expectedConvention:PortfolioRiskPreview.Convention)),c.RequestAborted)));
 api.MapPost("/portfolio/risk/jobs/{id:guid}/cancel",(HttpContext c,Guid id)=>Locked(c,session=>
     database.WithIdentity(Profile(session),"RunScenario",async(connection,ct)=>Results.Ok(await RiskJobs.Read(connection,database.Manifest.CatalogId,id,ct,cancel:true,expectedConvention:PortfolioRiskPreview.Convention)),c.RequestAborted)));
 api.MapGet("/risk/definitions",(Func<HttpContext,Task<IResult>>)(c=>Locked(c,session=>
@@ -2479,8 +2400,6 @@ api.MapPost("/options/positions",(HttpContext c,OptionPositionsRequest body)=>Tr
 // for those who read trades and market data, and book and store nothing; the analysis is also an asynchronous read.
 api.MapPost("/options/strategy/setup",(HttpContext c,OptionStrategySetupRequest body)=>TradingRead(c,body.Context??throw new MarketDataException("option_context","Supply the selected context."),
     (connection,view,ct)=>tradeReads.ReadBound(connection,view,()=>OptionStrategyRead.Setup(connection,database,view,body,ct),ct),expectedConvention:FuturesOptionStore.Convention));
-api.MapPost("/options/strategy/analyze",(HttpContext c,OptionStrategyAnalyzeRequest body)=>TradingRead(c,body.Context??throw new MarketDataException("option_context","Supply the selected context."),
-    (connection,view,ct)=>OptionStrategyRead.Read(tradeReads,connection,database,view,body,ct),expectedConvention:FuturesOptionStore.Convention));
 // Volatility surfaces: a fit is a job on the retained risk queue, admitted over working data by those who may publish market data
 // and read trades; the read returns the stored revision fitted at the selected close and known at the selected context, and the
 // library lists the stored surfaces with the close each belongs to. No agent tool fits.
@@ -2808,6 +2727,73 @@ Task<object> AsyncPortfolioRead(ReadInput input,NpgsqlConnection connection,Prev
     PortfolioHistoryRequest body=>portfolioRisk.History(connection,data,frame,body,ct),
     _=>throw AsyncReadContract.Invalid()
 };
+// The ordinary route of a registered read (docs/async-reads.md). The session gate covers its capture and the
+// authorization before its answer, never its database work. A delegated assistant invocation stays inside the gate,
+// where its own guards apply and nothing is authorized a second time.
+async Task<IResult> ServeRead(HttpContext c,string operation,object body)
+{
+    var input=AsyncReadContract.Input(operation,body,exactSelection:false);
+    if(c.Features.Get<AssistantInvocation>() is not null)
+        return await Locked(c,async session=>Results.Ok((await PrepareRead(session,input).Execute(c.RequestAborted)).Value));
+    var session=Session(c);var digest=hosted is null?null:session.Digest;
+    return Results.Ok(await UngatedRead.Run(session,captured=>PrepareRead(captured,input),
+        (profile,plan,outcome,ct)=>ReadAuthority.Require(database,profile,digest,plan.Input.Permissions,ct,outcome.Recheck),c.RequestAborted));
+}
+// Each route keeps its own refusal of a missing selection; PrepareRead is the one definition of the read itself.
+T Selected<T>(T body,FuturesReadRequest? context,string code,string message)=>context is null?throw new MarketDataException(code,message):body;
+api.MapPost("/evaluate",(HttpContext c,BuildRequest body)=>ServeRead(c,"curve.evaluate.v1",body));
+api.MapPost("/market/curve-shapes",(HttpContext c,CurveShapesRequest body)=>ServeRead(c,"curve.shapes.v1",body));
+api.MapPost("/history",async(HttpContext c,HistoryRequest body)=>
+{
+    // Frame discovery assigns session state, so it stays a gated step of this route; the channel refuses an unprepared session.
+    HistoryRevisionPolicy.Require(body.RevisionPolicy);
+    await Locked(c,async session=>{if(!session.HasDiscoveredFrames)await RefreshFrames(session,c.RequestAborted);return Results.Empty;});
+    return await ServeRead(c,"curve.history.v1",body);
+});
+api.MapPost("/trading/freshness",(HttpContext c,FuturesReadRequest body)=>ServeRead(c,"trading.freshness.v1",body));
+api.MapPost("/trading/directory",(HttpContext c,FuturesReadRequest body)=>ServeRead(c,"trading.directory.v1",body));
+api.MapPost("/trading/positions",(HttpContext c,TradingPositionsRequest body)=>ServeRead(c,"trading.positions.v1",
+    Selected(body,body.Context,"position_facts","Supply the selected context.")));
+// The progressive form keeps its own gate release and recheck; the ordinary form is the registered read.
+api.MapPost("/trading/workspace",(HttpContext c,TradingWorkspaceRequest body)=>
+{
+ if(body.BookingCatalog is not(null or "directory" or "priced_contracts"))throw new MarketDataException("blotter_view","Choose an available booking catalog projection.");
+ if(body.Context is null)throw new MarketDataException("blotter_view","Supply the selected context.");
+ if(!body.Progressive)return ServeRead(c,"trading.workspace.v1",body);
+ return TradingRead(c,body.Context,
+  (connection,view,ct)=>tradeReads.Workspace(connection,view,body.View,body.Summaries.IsDefault?[]:body.Summaries,body.BookingCatalog=="directory",ct),
+  expectedConvention:TradingBlotter.Convention,combinedWorkspace:true,concurrent:true,
+  recheck:async(connection,view,ct)=>{await tradeReads.Positions(connection,view,body.View.BookIds,body.View.PortfolioIds,0,1,ct);});
+});
+api.MapPost("/trading/blotter",(HttpContext c,FuturesBlotterRequest body)=>ServeRead(c,"trading.blotter.v1",
+    Selected(body,body.Context,"blotter_view","Supply the selected context.")));
+api.MapPost("/futures/editor",(HttpContext c,FuturesEditorRequest body)=>ServeRead(c,"futures.editor.v1",
+    Selected(body,body.Context,"futures_trade","Supply the selected context.")));
+api.MapPost("/swaps/editor",(HttpContext c,SwapEditorRequest body)=>ServeRead(c,"swaps.editor.v1",
+    Selected(body,body.Context,"swap_context","Supply the selected context.")));
+api.MapPost("/options/strategy/analyze",(HttpContext c,OptionStrategyAnalyzeRequest body)=>ServeRead(c,"options.strategy.analyze.v1",
+    Selected(body,body.Context,"option_context","Supply the selected context.")));
+api.MapPost("/portfolio/risk/scope",(HttpContext c,RiskScopeRequest body)=>ServeRead(c,"portfolio.risk.scope.v1",
+    Selected(body,body.Context,"risk_context","Select the shared financial context.")));
+api.MapPost("/portfolio/risk/catalog",(HttpContext c,PortfolioRiskCatalogRequest body)=>ServeRead(c,"portfolio.risk.catalog.v1",
+    Selected(body,body.Context,"risk_context","Select the shared financial context.")));
+api.MapPost("/portfolio/risk",(HttpContext c,PortfolioRiskRequest body)=>ServeRead(c,"portfolio.risk.calculate.v1",
+    Selected(body,body.Context,"risk_context","Select the shared financial context.")));
+api.MapPost("/portfolio/risk/history",(HttpContext c,PortfolioHistoryRequest body)=>ServeRead(c,"portfolio.risk.history.v1",
+    Selected(body,body.Scope?.Context,"risk_context","Select the retained risk scope and context.")));
+api.MapGet("/portfolio/risk/jobs",(Func<HttpContext,Task<IResult>>)(c=>ServeRead(c,"portfolio.risk.jobs.list.v1",new AsyncReadEmpty())));
+api.MapGet("/portfolio/risk/jobs/{id:guid}",(HttpContext c,Guid id)=>ServeRead(c,"portfolio.risk.jobs.read.v1",new AsyncReadJob(id)));
+Task<IResult> StatisticalArchive(HttpContext c,string method)
+{
+    if(!int.TryParse(c.Request.Query["limit"],out var limit)||limit is <1 or >100)throw new MarketDataException("risk_archive_input","Choose a report page size from 1 to 100.");
+    var before=c.Request.Query["before"].ToString();var cursor=c.Request.Query["id"].ToString();
+    if((before.Length==0)!=(cursor.Length==0)||cursor.Length>0&&!Guid.TryParse(cursor,out _))throw new MarketDataException("risk_archive_input","Use both fields of the retained archive cursor.");
+    return ServeRead(c,"portfolio.risk.archive.v1",new AsyncReadArchive(method,limit,before.Length==0?null:before,cursor.Length==0?null:Guid.Parse(cursor)));
+}
+api.MapGet("/portfolio/risk/parametric/archive",(Func<HttpContext,Task<IResult>>)(c=>StatisticalArchive(c,"parametric")));
+api.MapGet("/portfolio/risk/monte-carlo/archive",(Func<HttpContext,Task<IResult>>)(c=>StatisticalArchive(c,"monte_carlo")));
+api.MapGet("/portfolio/risk/historical/archive",(Func<HttpContext,Task<IResult>>)(c=>StatisticalArchive(c,"historical")));
+api.MapGet("/portfolio/risk/statistical/archive",(Func<HttpContext,Task<IResult>>)(c=>StatisticalArchive(c,"statistical")));
 var asyncReads=new AsyncReads(database,app.Lifetime.ApplicationStopping,hosted is not null,app.Logger);
 asyncReadServices.Add(asyncReads);asyncReads.Map(api,Session,PrepareRead);
 }
