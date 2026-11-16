@@ -2249,6 +2249,9 @@ api.MapPost("/options/instruction",(HttpContext c,FuturesOptionInstructionReques
 api.MapPost("/options/expiry",(HttpContext c,FuturesOptionExpiryRequest body)=>OptionWrite(c,body.SnapshotId,(connection,frame,ct)=>optionStore.Expire(connection,frame,body,ct)));
 api.MapPost("/options/holding",(HttpContext c,FuturesOptionHoldingRequest body)=>TradingRead(c,body.Context??throw new MarketDataException("option_context","Supply the selected context."),
     (connection,view,ct)=>tradeReads.ReadBound(connection,view,()=>optionStore.Holding(connection,body.TradeId,ct),ct),expectedConvention:FuturesOptionStore.Convention));
+// Booked option positions with their series' stored analytics, for those who read trades and market data. It prices nothing.
+api.MapPost("/options/positions",(HttpContext c,OptionPositionsRequest body)=>TradingRead(c,body.Context??throw new MarketDataException("option_context","Supply the selected context."),
+    (connection,view,ct)=>tradeReads.ReadBound(connection,view,()=>OptionPositionAnalytics.Read(connection,database,view,body,ct),ct),expectedConvention:FuturesOptionStore.Convention));
 // Volatility surfaces: a fit is a job on the retained risk queue, admitted over working data by those who may publish market data
 // and read trades; the read returns the stored revision fitted at the selected close and known at the selected context, and the
 // library lists the stored surfaces with the close each belongs to. No agent tool fits.

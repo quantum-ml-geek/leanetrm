@@ -46,7 +46,8 @@ def checks(query,manifest):
         source=dict(definitionRevisionId=manifest['revisionId'],referenceCatalogId=manifest['referenceCatalogId'],referenceRevisionId=manifest['referenceRevisionId']))
     request=dict(convention='vol_surface_fit_v1',engineVersion='synthetic_fit_authority_v1',businessDate=day,
         futuresConvention=manifest['futuresConvention'],solverPolicy='american_futures_option_crr_v1',model='smile_quadratic_log_moneyness_v1',
-        product=dict(referenceCatalogId=manifest['referenceCatalogId'],referenceRevisionId=manifest['referenceRevisionId'],code='nymex_on'))
+        product=dict(referenceCatalogId=manifest['referenceCatalogId'],referenceRevisionId=manifest['referenceRevisionId'],code='nymex_on'),
+        sensitivities=dict(policy='synthetic_selection'))
     def submit():return json.loads(user(scope+f"SELECT risk.submit_vol_surface_fit('{catalog}','{uuid4()}','{context}','{manifest['revisionId']}','{at}',{literal(request)},{literal(frame)})::text;"))
     def worker(sql):return query('SET SESSION AUTHORIZATION synthetic_fit_reader;'+sql)
     def claim():return json.loads(worker("SELECT risk.claim(30,'synthetic_fit_authority_v1')::text;"))

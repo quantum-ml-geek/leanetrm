@@ -1,6 +1,6 @@
 # Operating facilities and supplied-plan valuation
 
-Status: bounded local implementation (D408). Managed checks, 44 disposable
+Status: bounded local implementation (D412). Managed checks, 44 disposable
 database cases and owned HTTP qualification pass on the current base. Browser component tests qualify form transport, recovery and desktop/phone
 layout. Thirteen owned live-server browser checks also pass native save/reopen,
 pricing, lost-response recovery, leave guards and account isolation. The
@@ -14,7 +14,7 @@ physical calculations retain separate implementations.
 
 ## Saved identity and history
 
-Migration [0341](../db/migrations/0341_power_operating_facilities.sql) stores
+Migration [0342](../db/migrations/0342_power_operating_facilities.sql) stores
 immutable operating versions. Location name, type and coordinates come from
 `ref_data.locations`; the operating extension creates no second facility master.
 Each version pins the exact definition/reference bundles, location, clock and

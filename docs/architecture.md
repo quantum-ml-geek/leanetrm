@@ -409,7 +409,7 @@ composition booking, future replacement amendments and independent indexed
 consideration through the existing FloatingSide. These preserve contractual net
 MTM and do not admit started-delivery cash lifecycle operations.
 
-D408 adds [versioned operating facilities](operating-facilities.md) and bounded
+D412 adds [versioned operating facilities](operating-facilities.md) and bounded
 supplied-plan thermal toll, battery and solar calculation through independent
 Side schedules. Physical operating parameters extend exact existing locations;
 trade entitlement, guarantees, state and prices stay separate. The pure REC

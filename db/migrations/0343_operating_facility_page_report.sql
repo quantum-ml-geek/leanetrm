@@ -8,7 +8,7 @@ DO $page$
 DECLARE helper pg_proc;definition text;before text:='''lifecycle'');';
 BEGIN
  SELECT * INTO STRICT helper FROM pg_proc WHERE oid='assistant.is_prompt_page(text)'::regprocedure;
- IF encode(sha256(convert_to(helper.prosrc,'UTF8')),'hex')<>'21db4a160b14eb3892e4e9531fa640b67e47abb4af33e8f6a92691a741865a33'
+ IF encode(sha256(convert_to(helper.prosrc,'UTF8')),'hex')<>'014b7efdfdbf88e677edbab9e85d05a713702f95750cf3003428089f37b205a4'
   OR helper.proowner<>'openetrm_security_owner'::regrole OR helper.prosecdef OR helper.provolatile<>'i'
   OR helper.proisstrict OR helper.proleakproof OR helper.proparallel<>'u'
   OR helper.proconfig IS DISTINCT FROM ARRAY['search_path=pg_catalog']

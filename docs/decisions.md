@@ -355,7 +355,7 @@ remaining bounds are recorded with the executable consumers in the linked contra
 | D318 | Author curves from a rolling date-mapping window with explicit, matching terms | Owner-directed, 2026-11-04 ([curve-definitions.md](curve-definitions.md)). A curve names its commodity, location, quote, delivery profile, contract kind (with an exact futures product for futures), an exact published date-mapping version and how many of its positions it carries, its settlement target, a direct price rule and explicit missing-price and interpolation policies; none is defaulted. Contracts roll because the mapping resolves against the context date; the curve adds no roll rule, and publishers supply each close's marks. Curves are defined on Curves & prices and previewed at the header's selected close, in that close's exact context (current knowledge on its date, or the selected historical context on that date); schedules and date mappings stay on their own Settings page. Terms the contract and the curve both name must be equal: a futures product's and an index target's commodity, location, currency, unit and multiplier, and each futures position matches exactly one series of an executable product by delivery period and known last-trading instant. A preview reads reference terms and resolves its mapping in one exact retained context. Futures settle to their exchange settlement, OTC forwards to one published index. Index spreads, hourly physical settlement (nodal LMP), forwards settling to futures, formula contracts, carry-forward or interpolated prices and linear interpolation are shown as Coming soon and refused. First increment: catalog and read-only preview operations and the Curves step of Schedules & date mappings; durable versions follow in D358; D359 admits published interest-rate definitions into market revisions and prices from them, and D362 admits contract curves |
 | D334 | Close by regional session; the latest close for a session and business day is in force | Owner decisions and implementation recorded in [regional closes](regional-closes.md); design calls await review. Refines D162 and D219: a close names an exact versioned close session (clock, local cutoff, business calendar, curves) and an explicit business day, and its UTC instant is the session cutoff on that day. For each session and business day the close with the highest publication order is in force, evaluated on read; earlier ones are history and are refused for new work (`close_replaced`). A close must carry exactly its session's curves; nothing is carried forward. Recording needs a per-session grant. Every view, historical ones included, reads the close in force; this lifts only the knowledge-time checks on the close and its pins and is a recorded exception to the knowledge-cutoff rule. Saved results keep their exact close; pilot reports disclose replacement, while portfolio-job disclosure and historical worker close-session binding remain documented limitations. Each person's chosen session is remembered; no session is chosen for anyone. Only recorded closes are closes; unrecorded snapshots are working data offered separately, and built-in demo frames are seeded as session closes. Existing closes are retired and deployments reseeded (migration 0202 refuses a non-empty close history). Implemented in the repository; hosted activation requires separate qualification |
 
-| D408 | Keep consumed physical parameters in versioned facility extensions and value supplied thermal, battery and solar plans through common independent Sides | Decided 2026-11-16; [contract and verification](operating-facilities.md), [details](#d408--operating-facility-versions-and-supplied-plan-previews). Extend existing reference locations with exact relationship FKs and only implemented physical/model parameters. Contract guarantees, entitlement, state, dispatch, prices and fees remain explicit calculation inputs. Migration 0341 supplies idempotent version writes and certified exact reads under current authority. Managed previews expose gross Side rows under the complete-right, undiscounted remaining-value contract; the REC addition is a pure evidence/range ledger. Prior isolated checks qualify that bounded slice; current-master integration is being qualified. Saved operating contracts, ordinary hedge reporting and durable manual REC inventory are the authorized next increment; optimization and external registry submission remain excluded. |
+| D412 | Keep consumed physical parameters in versioned facility extensions and value supplied thermal, battery and solar plans through common independent Sides | Decided 2026-11-16; [contract and verification](operating-facilities.md), [details](#d412--operating-facility-versions-and-supplied-plan-previews). Extend existing reference locations with exact relationship FKs and only implemented physical/model parameters. Contract guarantees, entitlement, state, dispatch, prices and fees remain explicit calculation inputs. Migration 0342 supplies idempotent version writes and certified exact reads under current authority. Managed previews expose gross Side rows under the complete-right, undiscounted remaining-value contract; the REC addition is a pure evidence/range ledger. Prior isolated checks qualify that bounded slice; current-master integration is being qualified. Saved operating contracts, ordinary hedge reporting and durable manual REC inventory are the authorized next increment; optimization and external registry submission remain excluded. |
 
 ## Proposed implementation choices
 
@@ -5601,7 +5601,7 @@ catch a future-effective agreement already known at opening. Generated close
 activation, broader Park and Loan terms and other gas services need their own
 qualified consumers. See [Park and Loan contracts](gas-park-loan.md).
 
-## D408 — Operating-facility versions and supplied-plan previews
+## D412 — Operating-facility versions and supplied-plan previews
 
 Status: decided 2026-11-16. The supplied-plan capability was checked in an
 isolated worktree on the current master base. Saved trading, hedge reporting
@@ -5678,3 +5678,56 @@ unqualified trade read returns `page_not_supported` without financial acquisitio
 it cannot dispatch the swap reader. The UI identifies that read limitation.
 
 Publication and deployment remain separate from local implementation and qualification.
+
+## D408 · A fitted surface stores its series' value and sensitivities, and Options reads them
+
+2026-11-15. Decided by the owner, who left the choice of approach to the builder.
+Takes strategies' prerequisites, option sensitivities and their graphics from the
+items D288 left open. Option valuation, Risk reports, trading P&L and every
+value they state are unchanged.
+
+- **One route.** A listed series' delta, gamma, vega and one-day theta are
+  differences of its ordinary instrument PV under the shared price, volatility
+  and clock layers, through the common finite-difference sampler
+  ([valuation layers](valuation-context-layers.md)). Each series is a
+  one-contract holding of its own instrument. No pricer, discount formula or
+  derivative algorithm is added, and none is approximated for display.
+- **Selection.** Policy `option_sensitivities_layers_v1` is stated in full by
+  the fit that uses it: the price bump and the agreement its estimates must
+  reach, as a trading P&L report selects them (D394), and a volatility bump of
+  0.01. Delta and gamma come from the underlying future's price axis, vega from
+  the series' declared volatility input, held under the price and clock samples
+  (`option_implied_volatility_held_v1`), and theta from one calendar day of
+  model decay (D398) with the shared discount roll.
+- **Clock.** A fit at a recorded close counts its day on that close
+  convention's calendar clock and names none. A fit at a working snapshot names
+  one of the offered clocks. Either is refused otherwise with
+  `option_sensitivity_policy`. Admission pins the clock with the fit's other
+  inputs; where a convention's clock cannot be read no day is selected and
+  theta is missing.
+- **Missing is missing.** A series valued at intrinsic has its settlement as
+  its value and no sensitivities (`option_at_intrinsic`). An estimate whose
+  half, whole and double bumps do not agree is `sensitivity_unstable`. A sample
+  the valuation refuses leaves its measures missing with the refusing code, and
+  a day that reaches expiry leaves theta missing. Nothing is clamped or zero.
+- **Stored with the surface.** The fit job computes the analytics and the
+  surface states them per series with the selection, whether each series is in
+  the money, each expiry's at-the-money strike and days to expiry. The stated
+  selection is part of what a refit is compared with: other content under the
+  same inputs and selection stays `vol_surface_nondeterministic`, and another
+  selection is a new revision. Surfaces stored before migration 0341 state no
+  selection and are removed for refitting.
+- **Options.** A Trading page for readers of market data and trades draws a
+  product's chain from its stored surface and lists booked option positions
+  with those figures scaled by multiplier and signed open lots in the backend.
+  It prices nothing. Sensitivities are added within one underlying future only,
+  and value and theta per currency; a sum with a missing member is missing, and
+  thetas that run to different days are not one sum. A product with no surface
+  at the close shows that and where it is calibrated.
+- **Not Risk.** These are the option model's own sensitivities at the stated
+  selection. They enter no Risk, VaR or P&L report, and the page says so.
+- **Still open.** The strategy viewer and its analysis read; spread, storage,
+  tolling and transport models; strategies across expiries, which need a
+  declared relationship between futures months; futures legs; valuing options
+  from the fitted smile; volatility in Risk; rho; scheduled fitting; assistant
+  reading of the page.

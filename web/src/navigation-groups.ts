@@ -8,7 +8,7 @@ import {aiTabs} from './agent-settings.js';
 export type NavigationGroup={id:'overview'|'trading'|'markets'|'risk'|'scheduling'|'reference'|'administration';label:string;pages:readonly string[];opened?:readonly string[]};
 export const navigationGroups:readonly NavigationGroup[]=[
  {id:'overview',label:'Overview',pages:['dashboard']},
- {id:'trading',label:'Trading',pages:['futures'],opened:['ppa','gas','crude']},
+ {id:'trading',label:'Trading',pages:['futures','options'],opened:['ppa','gas','crude']},
  {id:'markets',label:'Markets',pages:['market','delivery','interval-series','vol-surfaces','interval-curves']},
  {id:'risk',label:'Risk',pages:['risk','risk-pnl','risk-scenarios','risk-var','risk-runs']},
  {id:'scheduling',label:'Scheduling',pages:['lifecycle','physical-operations','facilities','physical-power']},
@@ -29,8 +29,8 @@ export function pageAvailable(page:string,permissions:string[]):boolean{
  switch(page){
   case 'physical-power':return has('ReadMarketData','ReadPhysical');
   case 'facilities':return has('ReadMarketData','ReadTrades','ReadFacilityQuantities');
-  // Vol surfaces read option products, which trade readers see.
-  case 'lifecycle':case 'physical-operations':case 'futures':case 'ppa':case 'gas':case 'crude':case 'vol-surfaces':return has('ReadMarketData','ReadTrades');
+  // Options and Vol surfaces read option products, which trade readers see.
+  case 'lifecycle':case 'physical-operations':case 'futures':case 'options':case 'ppa':case 'gas':case 'crude':case 'vol-surfaces':return has('ReadMarketData','ReadTrades');
   case 'dashboard':case 'market':case 'custom-curves':case 'curve-definitions':case 'delivery':case 'interval-series':case 'interval-curves':
   case 'configuration':case 'schedules':case 'power':case 'gas-setup':case 'crude-setup':case 'reference':return has('ReadMarketData');
   case 'parties':return has('ReadMarketData','ReadTradeParties');
