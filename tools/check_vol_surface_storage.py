@@ -23,7 +23,9 @@ def run_checks(query, manifest):
     actor = query(f"SELECT principal_id FROM security.identity_bindings WHERE issuer='{manifest['identityIssuer']}' AND subject='trader';")
     observations = query(f"SELECT string_agg(id::text,',' ORDER BY id) FROM(SELECT id FROM market_data.observations WHERE catalog_id='{catalog}' AND observed_at<='{frame_at}' ORDER BY id LIMIT 3)x;").split(',')
     first_inputs, second_inputs = observations[:2], observations[1:]
-    first_surface, second_surface = {'synthetic': 'first fit'}, {'synthetic': 'second fit'}
+    # A stored surface states the sensitivity selection it was computed under; these two share one.
+    selection = {'policy': 'synthetic_selection'}
+    first_surface, second_surface = {'synthetic': 'first fit', 'sensitivities': selection}, {'synthetic': 'second fit', 'sensitivities': selection}
     first_frame = str(uuid4())
 
     def check(name, condition, actual=None):
@@ -198,3 +200,22 @@ def run_checks(query, manifest):
     check('a product whose reference data the reader cannot read is refused exactly as an unknown one',
           read_refused(later, 'vol_surface_product', setup=withdrawn(f"reference_catalog_scopes WHERE catalog_id='{manifest['referenceCatalogId']}'")))
     check('nothing was recorded by the refused and rolled-back checks', counts() == f"{int(settled.split('|')[0]) + 1}|{int(settled.split('|')[1]) + 1}", counts())
+
+    # The selection is an input: the same observations under another selection are another fact, not a conflicting refit.
+    check('a surface that states no sensitivity selection is refused',
+          refused(record(uuid4(), first_inputs, {'synthetic': 'first fit'}), 'vol_surface_input')
+          and refused(record(uuid4(), first_inputs, {'synthetic': 'first fit', 'sensitivities': 'synthetic_selection'}), 'vol_surface_input'))
+    settled = counts()
+    other_surface = {'synthetic': 'first fit', 'sensitivities': {'policy': 'synthetic_other_selection'}}
+    reselected = json.loads(query(record(uuid4(), first_inputs, other_surface) + ';'))
+    check('the same inputs under another sensitivity selection record a new revision, which the read returns',
+          reselected['created'] and reselected['revision'] != first['revision'] and reselected['publicationOrder'] > first['publicationOrder']
+          and counts() == f"{int(settled.split('|')[0]) + 1}|{int(settled.split('|')[1]) + 1}"
+          and json.loads(read(later, pins=first_inputs))['revision'] == reselected['revision'], (reselected, counts()))
+    settled = counts()
+    unchanged = json.loads(query(record(uuid4(), first_inputs, first_surface) + ';'))
+    check('each selection keeps its own latest revision: a refit under either records nothing new, and other content under either is nondeterministic',
+          unchanged == {**first, 'created': False} and json.loads(query(record(uuid4(), first_inputs, other_surface) + ';')) == {**reselected, 'created': False}
+          and refused(record(uuid4(), first_inputs, {**other_surface, 'synthetic': 'changed'}), 'vol_surface_nondeterministic') and counts() == settled,
+          (unchanged, counts()))
+    check('the Options page is a page whose guidance can be configured', query("SELECT assistant.is_prompt_page('options') AND NOT assistant.is_prompt_page('option');") == 't')

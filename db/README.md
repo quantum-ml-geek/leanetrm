@@ -119,6 +119,8 @@ Recent schema groups and their contracts:
 - 0184–0185: [facility quantity ledgers and bounded read plans](../docs/facility-quantity-ledger.md).
 - 0186–0188: [volatility surface calibration and retained fit jobs](../docs/vol-surfaces.md),
   with exact source custody and current authority at admission.
+- 0338: [option analytics stored with a fitted surface](../docs/vol-surfaces.md): the stated
+  sensitivity selection joins the fit request and the identity a refit is compared against.
 
 - 0189: complete historical statistical jobs, exact factor declarations, shared
   retained history custody and authorized method/combined archives (D305,
@@ -1695,3 +1697,21 @@ request outcomes are retained. The migration changes only the existing definer
 function, preserves its owner and privileges, and requires a qualified schema
 release. The owned stock PostgreSQL regression observes both advisory waits,
 expires the bound token naturally and also checks valid replay and reuse.
+
+## Migration 0338: option sensitivities of a fitted surface
+
+A fit request states its option sensitivity selection under the `sensitivities`
+key, which admission now requires to be an object. A stored surface states the
+selection its analytics were computed under, and the recording compares a refit
+with the latest revision of the same location and the same stated selection: the
+same inputs and selection with other content remain `vol_surface_nondeterministic`,
+and another selection records a new revision that the read returns as the
+newest. A surface that states no selection is refused with `vol_surface_input`.
+
+Surfaces stored before this release state no selection. The migration removes
+them with their pinned inputs and command receipts; their fit jobs and request
+identities remain as operational history, so each product is refitted after the
+release. The three existing functions are patched in place and keep their
+owners and privileges; a function that no longer reads as expected stops the
+migration. `options` joins the pages whose assistant guidance can be configured.
+It requires a qualified schema release.
