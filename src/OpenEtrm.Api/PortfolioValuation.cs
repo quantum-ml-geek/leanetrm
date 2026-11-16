@@ -374,6 +374,22 @@ public sealed class PortfolioValuation(PreviewDatabase database)
             materialized.Add(new(market.Data,market.Frame,market.Snapshot,market.Portfolio,LngPositions.Measure));
             evidence.AddRange(market.Evidence);
         }
+        var operating=await OperatingPortfolio.Prepare(connection,database,frame,
+            await OperatingPositions.Read(connection,database.Manifest,bookIds,[],ct,trades:selection?.Ids),
+            MarketInputSelection.WithRoot(data,frame,supplemental),retainedGraphs is not null,ct);
+        foreach(var market in operating)
+        {
+            materialized.Add(new(market.Data,market.Frame,market.Snapshot,market.Portfolio,OperatingPositions.Measure));
+            evidence.AddRange(market.Evidence);
+        }
+        var recs=await RecPortfolio.Prepare(connection,database,frame,
+            await RecPositions.Read(connection,database.Manifest,bookIds,[],ct,trades:selection?.Ids),
+            MarketInputSelection.WithRoot(data,frame,supplemental),retainedGraphs is not null,ct);
+        foreach(var market in recs)
+        {
+            materialized.Add(new(market.Data,market.Frame,market.Snapshot,market.Portfolio,RecPositions.Measure));
+            evidence.AddRange(market.Evidence);
+        }
         var crude=await CrudePortfolio.Prepare(connection,database,frame,
             await CrudePositions.Read(connection,database.Manifest,bookIds,[],ct,trades:selection?.Ids),
             MarketInputSelection.WithRoot(data,frame,supplemental),retainedGraphs is not null,ct);

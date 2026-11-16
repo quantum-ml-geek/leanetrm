@@ -29,12 +29,12 @@ test('permission refresh retires pending reads before temporarily clearing accou
   permissions:['ReadMarketData'],marketGeneration:0,curveRead:curveController,pageRead:{controller:pageController},
   $:node,select:node,choose:noop,clearPrices:noop,clearReference:noop,setCurveNames:noop,renderBlotterViews:noop,scheduleWorkspace:undefined,
   parkLoan:{reset(){parkLoanResets++;}}};
- for(const name of ['structuredPower','closeConventionDefaults','lifecycle','physicalOperations','deliverySetup','referenceConsole','curveWorkspace','customCurves',
+ for(const name of ['recInventory','structuredPower','closeConventionDefaults','lifecycle','physicalOperations','deliverySetup','referenceConsole','curveWorkspace','customCurves',
   'volSurfaces','optionChains','riskJobs','riskViewsNav','facilities','jobs','dashboard','deliveryPrices','intervalSeries','intervalCurves','ppa','gas','crude',
   'lng','gasSetup','crudeSetup','referenceEditor','parties','unitConverter','futures','power','touProducts','schedules','dateEditor','priceSetup',
   'curveDefinitions','administration','aiSettings','agentGrants','referenceNavigation','marketCalendar','accessPolicy','assistantPolicy'])
   context[name]={reset:noop,invalidate:noop,clear:noop};
- for(const name of ['structuredPower','optionChains'])context[name]={reset:()=>productResets.push(name)};
+ for(const name of ['recInventory','structuredPower','optionChains'])context[name]={reset:()=>productResets.push(name)};
  let stream,submitted,accessReads=0,denyAccess;
  const heldAccess=new Promise((resolve,reject)=>{denyAccess=reject;});
  context.api=async path=>{assert.equal(path,'access');return ++accessReads===1?{permissions:['ReadMarketData','ReadTrading']}:heldAccess;};
@@ -53,7 +53,8 @@ test('permission refresh retires pending reads before temporarily clearing accou
   refreshing=context.openProfile().catch(error=>error.message);await flush();
   assert.equal(accessReads,2,'a changed permission list must enter identity refresh and await fresh access');
   assert.equal(parkLoanResets,1,'the Park and loan ticket must release the previous account draft');
-  assert.deepEqual(productResets.sort(),['optionChains','structuredPower'],'power and options must each release the prior account state before access returns');
+  assert.deepEqual(productResets.sort(),['optionChains','recInventory','structuredPower'],'REC, power and options must each release the prior account state before access returns');
+  assert.equal(node('rec-inventory-page').hidden,true,'the previous account REC view must be hidden while access is pending');
   assert.equal(node('physical-power-page').hidden,true,'the previous account power view must be hidden while access is pending');
   assert.equal(node('options-page').hidden,true,'the previous account option view must be hidden while access is pending');
   assert.equal(context.navigation,undefined,'the new account metadata is still loading');

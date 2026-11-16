@@ -12,12 +12,15 @@ export function assistantPageCases(){
     ['ppa',{page:'ppa',trade:null,book:null}],
     ['custom_curves',{page:'custom-curves',curve:null,unsaved:false}],
     ['blotter',blotter],
+    ...[['operating_right','blotter_operating_right'],['rec_forward','blotter_rec_forward']]
+      .map(([instrumentType,page])=>[page,{...blotter,trade:{tradeId:'71000000-0000-4000-8000-000000000009',instrumentType,revision:1,reference:'TR-000009'}}]),
     ['blotter_risk',{...blotter,risk:true}],
     ['blotter_risk_lens',{...blotter,lens:'risk'}],
-    ...[[null,'blotter_new_trade'],['futures','blotter_new_future'],['options','blotter_new_option'],['swaps','blotter_new_swap'],['ppa','blotter_new_ppa'],['gas','blotter_new_gas'],['park-loan','blotter_new_park_loan'],['crude','blotter_new_crude'],['lng','blotter_new_lng']]
+    ...[[null,'blotter_new_trade'],['futures','blotter_new_future'],['options','blotter_new_option'],['swaps','blotter_new_swap'],['ppa','blotter_new_ppa'],['gas','blotter_new_gas'],['park-loan','blotter_new_park_loan'],['crude','blotter_new_crude'],['lng','blotter_new_lng'],['rec','blotter_new_rec']]
       .map(([product,page])=>[page,{...blotter,entry:{product}}]),
     ['risk_jobs',{page:'risk',view:'risk'}],
     ['physical_power',{page:'physical-power'}],
+    ['rec_inventory',{page:'rec-inventory'}],
     ['options',{page:'options'}],
     ...[['physical-operations','physical_operations'],['facilities','facility_quantities'],['dashboard','dashboard'],['crude-setup','crude_setup'],['gas-setup','gas_setup'],['gas','physical_gas'],['crude','physical_crude'],['delivery','delivery_prices'],['interval-series','interval_series'],['interval-curves','interval_curves'],['vol-surfaces','vol_surfaces'],['admin','users_access'],['ai','settings_ai']]
       .map(([page,report])=>[report,{page}])

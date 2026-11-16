@@ -24,6 +24,7 @@ public static class StructuredPowerChecks
         var json=JsonSerializer.Serialize(terms,Options);RejectJson(json.Replace("\"kind\":\"battery\"","\"kind\":\"battery\",\"fallback\":true"));
         RejectJson(json.Replace("\"maximumStoredMwh\":\"20\",", ""));
         Calculations(f,from,to);
+        OperatingSideSelectionChecks.Run();
         Console.WriteLine("PASS strict structured power facility references, variants, policies and required JSON fields");return 27;
     }
     static void RejectJson(string json){try{JsonSerializer.Deserialize<StructuredPowerFacilityTerms>(json,Options);throw new Exception("Expected closed JSON rejection.");}catch(JsonException){}}

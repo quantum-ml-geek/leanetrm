@@ -127,7 +127,7 @@ async function readNavigation(context:BlotterContext){
 function apply(context:BlotterContext,next:MarketNavigation){applied=context;navigation=next;setCurveNames(next.curveNames);}
 
 // PPA and physical gas trades are entered and inspected in the main window, whose editors this window does not host.
-const mainWindowTickets:ProductTickets={async open(product){throw Error(`${product==='ppa'?'PPA':'Physical gas'} trades are entered and inspected in the main window.`);},
+const mainWindowTickets:ProductTickets={async open(product){throw Error(`${product==='rec'?'REC forward':product==='ppa'?'PPA':'Physical product'} trades are entered and inspected in the main window.`);},
   detach:()=>undefined,active:()=>undefined,trade:()=>undefined,unsaved:()=>false,pending:()=>[],sync:()=>undefined};
 const futures=setupFutures({volSurface:null,riskReportUrl:id=>{if(!tied)throw Error('This window has no verified workspace for a report link.');return riskReportAddress(id,{hosted,example:tied.example});},window:{kind:'popout',close:()=>bringBack(),example:tied?.example},api,stream:async(body,handlers,signal)=>{await streamBlotter(responseFor,body,handlers,signal);if(!busy)checkAccount();},act,busy:()=>busy,updatesBlocked:()=>false,zone:()=>prefs.timeZone,profile:()=>scope,knowledge,
   narrow:()=>main.clientWidth<dockedGroupsFrom,canRunRisk:()=>can('RunScenario'),contextDirty:()=>false,bookingUnavailableReason:()=>bookingFallback({contextDirty:false,view:knowledge(),canBook:can('BookTrade')}),

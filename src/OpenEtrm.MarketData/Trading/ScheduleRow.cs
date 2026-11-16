@@ -44,7 +44,7 @@ public readonly record struct ScheduleRow
     public IntervalSchedulePrice? IntervalPrice=>block?.Retained is {} retained&&retained.NativeRows[Ordinal].FixedPrice is {} price?
         new FixedIntervalSchedulePrice(new RetainedFixedPrice(price)):block?.Price;
     public GeneratedPaymentDate? GeneratedDate=>dated?.GeneratedDate??operating?.GeneratedDate;
-    public PaymentRule? PaymentConvention=>dated is not null?dated.PaymentConvention:operating?.Rule??Block.Terms.DateRule;
+    public PaymentRule? PaymentConvention=>dated is not null?dated.PaymentConvention:operating is not null?operating.Rule:Block.Terms.DateRule;
     public DateTimeOffset? FirstFixingAt=>Dated.FirstFixingAt;
     public FloatingAveraging? Averaging=>Dated.Averaging;
     public SwapObservationCalendar? Calendar=>Dated.Calendar;

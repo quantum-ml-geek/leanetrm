@@ -4,7 +4,8 @@ Status: bounded local implementation (D412). Managed checks, 44 disposable
 database cases and owned HTTP qualification pass on the current base. Browser component tests qualify form transport, recovery and desktop/phone
 layout. Thirteen owned live-server browser checks also pass native save/reopen,
 pricing, lost-response recovery, leave guards and account isolation. The
-saved-trading/inventory continuation remains separate work.
+[saved trading, hedging and inventory continuation](structured-power-trading.md)
+defines its additional native and GUI contracts separately.
 
 Scheduling → Operating facilities attaches supported operating parameters to
 an existing reference location. A facility specification, a contractual operating
@@ -117,9 +118,10 @@ request to 1,024 intervals. Each payment Side owns its whole-term schedule;
 ordinary `FixedSide`/`FloatingSide` and `OperatingRightInstrument` consume typed
 outputs from the same feasible plan. Gross schedule rows retain quantity, price,
 payment instant, amount and PV. Each Side exposes its coefficient and signed
-contribution; instrument value sums those contributions. These transient preview
-schedules establish no new trade booking, retained booked-program admission or
-cash-settlement lifecycle.
+contribution; instrument value sums those contributions. A preview creates no
+trade. The separate reviewed booking operation retains the supplied plan and
+membership-owned programs under the saved complete-right contract; cash
+settlement remains outside that profile.
 
 ## Disabled future fields and REC boundary
 
@@ -136,10 +138,12 @@ optimization and stochastic option value also remain future work.
 immutable ledger for supplied evidence-backed certificate ranges: receipt,
 allocation, release, transfer, retirement and corrections under explicit
 effective/knowledge coordinates. It checks ownership, eligibility and overlap,
-with request replay and business-fact no-ops. It provides no persisted registry
-service, external transfer, issuance adapter or standalone REC booking. Forecast
-solar entitlement never creates issued inventory; battery discharge never issues
-another generation certificate.
+with request replay and business-fact no-ops. The continuation adds its
+[durable manual evidence consumer and standalone forwards](structured-power-trading.md),
+with exact ownership/delivery references and current authority. External registry
+submission and automatic issuance remain future work. Forecast solar entitlement
+never creates issued inventory; battery discharge never issues another generation
+certificate.
 
 ## Verification and remaining qualification
 
@@ -168,5 +172,6 @@ python3 tools/run_preview.py \
   --structured-power-check
 ```
 
-Portfolio hedge reporting, production
-performance, operational dispatch, booking and settlement remain separate gates.
+Production performance, operational dispatch, broader optional rights and cash
+settlement remain separate gates. Saved booking and price hedging use the bounded
+continuation contract linked above.

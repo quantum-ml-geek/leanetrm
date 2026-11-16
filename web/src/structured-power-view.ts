@@ -1,12 +1,13 @@
+import {setupStructuredPowerTrades} from './structured-power-trades-view.js';
 import {amountText,prepareAmountDisplay} from './amount-display.js';
 
-import {StructuredPowerPendingStore,comingSoonFields,facilityTerms,operatingParameterFields,structuredPreviewRequest,type OperatingField,type StructuredPowerKind,type StructuredPowerPins,type StructuredPowerVersion} from './structured-power-model.js';
+import {operatingPrice,StructuredPowerPendingStore,comingSoonFields,facilityTerms,operatingParameterFields,structuredPreviewRequest,type OperatingField,type OperatingPriceContract,type StructuredPowerKind,type StructuredPowerPins,type StructuredPowerVersion} from './structured-power-model.js';
 
 type Api=<T>(path:string,body?:unknown)=>Promise<T>;
 type Choice={code:string;label:string};
 type QuantityChoice=Choice&{commodityCode:string;unitCode:string;dimensionCode:string};
 type QuoteChoice=Choice&{quantityCode:string;currencyCode:string;multiplier:string};
-type Catalog={pins:StructuredPowerPins;locations:Choice[];clocks:Choice[];kinds:(Choice&{intervalMinutes:number[]})[];powerQuantities:QuantityChoice[];energyQuantities:QuantityChoice[];fuelQuantities:QuantityChoice[];rightQuantities:QuantityChoice[];currencies:Choice[];quotes:QuoteChoice[];paymentImplementation:string;canSave:boolean;canPreview:boolean};
+type Catalog={pins:StructuredPowerPins;locations:Choice[];clocks:Choice[];kinds:(Choice&{intervalMinutes:number[]})[];powerQuantities:QuantityChoice[];energyQuantities:QuantityChoice[];fuelQuantities:QuantityChoice[];rightQuantities:QuantityChoice[];currencies:Choice[];quotes:QuoteChoice[];priceContracts?:OperatingPriceContract[];operatingBookingClockCodes?:string[];paymentImplementation:string;canSave:boolean;canPreview:boolean};
 type Fraction={numerator:string;denominator:string};
 type Quantity=Fraction&{specification:{code:string}};
 type Money=Fraction&{currency:{code:string}};
@@ -15,7 +16,7 @@ type Preview={previewId:string;kind:string;clockFingerprint:string;knownAt:strin
  closingState:{at:string;commitment:string|null;elapsedMinutes:number|null;startsUsed:number|null;quantities:{name:string;quantity:Quantity}[]}|null;
  valuation:{measure:string;perspective:string;currency:{code:string};value:Money;sides:{id:string;name:string;coefficient:string;quote:{code:string};grossValue:Money;contribution:Money;rows:{interval:Interval;paymentAt:string;quantity:Quantity;price:Fraction;amount:Money;presentValue:Money;state:number;evidenceId:string|null;knownAt:string|null}[]}[]}|null;limitations:string[]};
 type Receipt={requestId:string;changed:boolean;facility:StructuredPowerVersion};
-type Options={api:Api;busy:()=>boolean;act:(work:()=>Promise<void>)=>Promise<void>;source:()=>{snapshotId:string;contextKey:string};identity:()=>string};
+type Options={api:Api;busy:()=>boolean;act:(work:()=>Promise<void>)=>Promise<void>;source:()=>{snapshotId:string;contextKey:string};identity:()=>string;trading?:{available?:()=>boolean;canHedge?:()=>boolean;openTrade:(tradeId:string,revision:number)=>Promise<void>}};
 const prefix='physical/power-facilities/';
 const fraction=(value:Fraction)=>value.denominator==='1'?value.numerator:`${value.numerator}/${value.denominator}`;
 const label=(value:string)=>value.replace(/_/g,' ');
@@ -40,6 +41,7 @@ export function setupStructuredPower(host:HTMLElement,o:Options){
  const button=(title:string,run:()=>Promise<void>)=>{const node=el('button',title);node.type='button';node.onclick=()=>void o.act(run);return node;};
  const card=(title:string)=>{const node=el('div');node.className='card';node.append(el('h3',title));host.append(node);return node;};
  const note=(parent:HTMLElement,text:string)=>{const node=el('p',text);node.className='field-help';parent.append(node);return node;};
+ let tradeWorkspace:ReturnType<typeof setupStructuredPowerTrades>|undefined;
  let catalog:Catalog|undefined,versions:StructuredPowerVersion[]=[],saved:StructuredPowerVersion|undefined,dirty=false,generation=0,newId='';
  const controls=new Map<string,HTMLInputElement|HTMLSelectElement>(),stateControls=new Map<string,HTMLInputElement|HTMLSelectElement>();
  const requestStore=new StructuredPowerPendingStore({getItem:key=>sessionStorage.getItem(key),setItem:(key,value)=>sessionStorage.setItem(key,value),removeItem:key=>sessionStorage.removeItem(key)});
@@ -68,9 +70,12 @@ export function setupStructuredPower(host:HTMLElement,o:Options){
  const previewFields=grid();previewForm.append(previewFields);const operatingDate=input(previewFields,'First operating date','date'),firstInterval=input(previewFields,'First native interval (one-based)','number');firstInterval.min='1';firstInterval.step='1';
  const stateFields=grid();previewForm.append(stateFields);
  const plan=el('textarea');plan.required=true;plan.rows=5;plan.spellcheck=false;field(previewForm,'Supplied interval plan',plan);const planHelp=note(previewForm,'Choose an operating kind.');
- const priceEnabled=select(previewForm,'Valuation');options(priceEnabled,[{code:'none',label:'Feasibility and quantities only'},{code:'fixed',label:'Fixed native prices; explicitly undiscounted'}]);
+ const priceEnabled=select(previewForm,'Valuation');options(priceEnabled,[{code:'none',label:'Feasibility and quantities only'},{code:'fixed',label:'Independent side prices; explicitly undiscounted'}]);
  const priceFields=grid();previewForm.append(priceFields);
- const right=select(priceFields,'One complete resource-right quantity for valuation'),currency=select(priceFields,'Valuation currency'),saleQuote=select(priceFields,'Energy sale/payment quote'),salePrice=input(priceFields,'Energy sale/payment price'),chargeQuote=select(priceFields,'Charging energy quote'),chargePrice=input(priceFields,'Charging energy purchase price'),fuelQuote=select(priceFields,'Fuel quote'),fuelPrice=input(priceFields,'Fuel price');
+ const right=select(priceFields,'One complete resource-right quantity for valuation'),currency=select(priceFields,'Valuation currency');
+ const saleMode=select(priceFields,'Energy sale/payment pricing'),saleContract=select(priceFields,'Energy sale/payment market contract'),saleQuote=select(priceFields,'Energy sale/payment quote'),salePrice=input(priceFields,'Energy sale/payment price');
+ const chargeMode=select(priceFields,'Charging energy pricing'),chargeContract=select(priceFields,'Charging energy market contract'),chargeQuote=select(priceFields,'Charging energy quote'),chargePrice=input(priceFields,'Charging energy purchase price');
+ const fuelMode=select(priceFields,'Fuel pricing'),fuelContract=select(priceFields,'Fuel market contract'),fuelQuote=select(priceFields,'Fuel quote'),fuelPrice=input(priceFields,'Fuel price');
  const fuelBasis=select(priceFields,'Fuel pricing quantity');options(fuelBasis,[{code:'guaranteed',label:'Contract guaranteed fuel'},{code:'consumption',label:'Modeled consumption fuel'}]);
  const perspective=select(priceFields,'Perspective');options(perspective,[{code:'resource_right_holder_v1',label:'Holder of the complete operating right'}]);
  const measure=select(priceFields,'Value measure');options(measure,[{code:'remaining_operating_value_v1',label:'Remaining operating value; excludes historical P&L and opening cost basis'}]);
@@ -84,8 +89,8 @@ export function setupStructuredPower(host:HTMLElement,o:Options){
  const accessBasis=select(priceFields,'Access fee period (only with fee)');options(accessBasis,[{code:'preview_horizon_once_v1',label:'Once for the complete supplied preview horizon'}]);accessBasis.required=false;
  const previewButton=el('button','Preview');previewButton.type='submit';previewForm.append(previewButton);
  const output=card('Preview result');output.hidden=true;
- function sync(){host.inert=o.busy();saveButton.disabled=!catalog?.canSave||!!pending.command;add.disabled=!catalog?.canSave||!!pending.command;previewButton.disabled=!catalog?.canPreview||!saved||dirty;recovery.hidden=!pending.command;refresh.disabled=false;}
- function clearResult(){output.hidden=true;output.replaceChildren(el('h3','Preview result'));}
+ function sync(){tradeWorkspace?.sync();host.inert=o.busy();saveButton.disabled=!catalog?.canSave||!!pending.command;add.disabled=!catalog?.canSave||!!pending.command;previewButton.disabled=!catalog?.canPreview||!saved||dirty;recovery.hidden=!pending.command;refresh.disabled=false;}
+ function clearResult(){tradeWorkspace?.invalidate();output.hidden=true;output.replaceChildren(el('h3','Preview result'));}
  function selectedKind():StructuredPowerKind|undefined{return ['battery','thermal','solar'].includes(kind.value)?kind.value as StructuredPowerKind:undefined;}
  function renderFields(parent:HTMLElement,map:Map<string,HTMLInputElement|HTMLSelectElement>,fields:readonly OperatingField[],values:Record<string,unknown>={}){
   parent.replaceChildren();map.clear();for(const descriptor of fields){let control:HTMLInputElement|HTMLSelectElement;
@@ -95,12 +100,23 @@ export function setupStructuredPower(host:HTMLElement,o:Options){
   }
  }
  function capture(map:Map<string,HTMLInputElement|HTMLSelectElement>,fields:readonly OperatingField[]){return Object.fromEntries(fields.map(f=>{const value=map.get(f.key)!.value;return [f.key,f.type==='integer'?Number(value):f.optional&&value===''?null:value];}));}
+ const priceKey=(value:Pick<OperatingPriceContract,'curveCode'|'contractId'>)=>JSON.stringify([value.curveCode,value.contractId]);
  function priceChoices(){if(!catalog)return;const quotes=(quantity:string)=>catalog!.quotes.filter(x=>x.quantityCode===quantity&&(!currency.value||x.currencyCode===currency.value));
   for(const [control,quantity] of [[saleQuote,energy.value],[chargeQuote,energy.value],[fuelQuote,fuel.value],[accessQuote,right.value]] as const){const selected=control.value;options(control,quotes(quantity),selected);}accessQuote.required=false;
+  for(const [mode,contract,quantity] of [[saleMode,saleContract,energy.value],[chargeMode,chargeContract,energy.value],[fuelMode,fuelContract,fuel.value]] as const){
+   const rows=(catalog.priceContracts??[]).filter(row=>row.quantityCode===quantity&&(!currency.value||row.currencyCode===currency.value));
+   options(contract,rows.map(row=>({code:priceKey(row),label:row.label})),contract.value);
+   options(mode,[{code:'fixed',label:'Fixed agreed value'},...(rows.length?[{code:'selected_contract_flat_v1',label:'Selected market contract applied flat across supplied intervals'}]:[])],mode.value);
+  }
+  showPricing();
  }
  function showPricing(){const pricing=priceEnabled.value==='fixed',k=selectedKind();priceFields.hidden=!pricing;for(const node of priceFields.querySelectorAll<HTMLInputElement|HTMLSelectElement>('input,select'))node.disabled=!pricing;
-  for(const control of [chargeQuote,chargePrice]){control.parentElement!.parentElement!.hidden=k!=='battery';control.disabled=!pricing||k!=='battery';}
-  for(const control of [fuelQuote,fuelPrice,fuelBasis]){control.parentElement!.parentElement!.hidden=k!=='thermal';control.disabled=!pricing||k!=='thermal';}
+  for(const [mode,contract,quote,price,active] of [[saleMode,saleContract,saleQuote,salePrice,true],[chargeMode,chargeContract,chargeQuote,chargePrice,k==='battery'],[fuelMode,fuelContract,fuelQuote,fuelPrice,k==='thermal']] as const){
+   for(const control of [mode,contract,quote,price]){control.parentElement!.parentElement!.hidden=!active;control.disabled=!pricing||!active;}
+   for(const control of [quote,price]){control.parentElement!.parentElement!.hidden=!active||mode.value!=='fixed';control.disabled=!pricing||!active||mode.value!=='fixed';}
+   contract.parentElement!.parentElement!.hidden=!active||mode.value!=='selected_contract_flat_v1';contract.disabled=!pricing||!active||mode.value!=='selected_contract_flat_v1';
+  }
+  fuelBasis.parentElement!.parentElement!.hidden=k!=='thermal';fuelBasis.disabled=!pricing||k!=='thermal';
  }
  function kindChanged(values:Record<string,unknown>={}){const k=selectedKind();renderFields(parameters,controls,k?operatingParameterFields(k):[],values);renderFields(stateFields,stateControls,k?dynamic[k]:[]);
   options(minutes,(catalog?.kinds.find(x=>x.code===k)?.intervalMinutes??[]).map(n=>({code:String(n),label:`${n} minutes`})),minutes.value);
@@ -116,38 +132,39 @@ export function setupStructuredPower(host:HTMLElement,o:Options){
   terms:facilityTerms(catalog.pins,k,{facilityCode:location.value,clockCode:clock.value,intervalMinutes:Number(minutes.value),powerQuantityCode:k==='solar'?null:power.value,energyQuantityCode:energy.value,fuelQuantityCode:k==='thermal'?fuel.value:null},capture(controls,operatingParameterFields(k)))};}
  async function sendSave(){bindIdentity();const owner=pendingIdentity,outstanding=pending,command=outstanding.command;if(!command)return;const key=o.source().contextKey;const previous=outstanding.sending();requestStore.save(owner,outstanding);sync();try{const receipt=await o.api<Receipt>(command.path,{...command.body,requestId:command.operationId});outstanding.clear();requestStore.save(owner,outstanding);if(owner!==o.identity()||key!==o.source().contextKey)return;await load();apply(receipt.facility);status.textContent=receipt.changed?'Operating parameters saved.':'The same operating parameters already existed.';}catch(error){outstanding.failed((error as {code?:string}).code,previous);requestStore.save(owner,outstanding);sync();throw error;}}
  form.onsubmit=event=>{event.preventDefault();void o.act(async()=>{bindIdentity();if(!form.reportValidity())return;const source=o.source();pending.begin(prefix+'save',{snapshotId:source.snapshotId,expectedVersion:saved?.version??0,facility:bodyVersion()});await sendSave();});};
- form.oninput=()=>{dirty=true;clearResult();sync();};kind.onchange=()=>{kindChanged();dirty=true;sync();};currency.onchange=()=>{priceChoices();clearResult();};for(const control of [power,energy,fuel])control.onchange=()=>{priceChoices();dirty=true;sync();};right.onchange=()=>{priceChoices();clearResult();};priceEnabled.onchange=()=>{showPricing();clearResult();};
+ form.oninput=()=>{dirty=true;clearResult();sync();};kind.onchange=()=>{kindChanged();dirty=true;sync();};currency.onchange=()=>{priceChoices();clearResult();};for(const control of [power,energy,fuel])control.onchange=()=>{priceChoices();dirty=true;sync();};right.onchange=()=>{priceChoices();clearResult();};priceEnabled.onchange=()=>{showPricing();clearResult();};for(const mode of [saleMode,chargeMode,fuelMode])mode.onchange=()=>{showPricing();clearResult();};
+ function sidePrice(mode:HTMLSelectElement,contract:HTMLSelectElement,quote:HTMLSelectElement,price:HTMLInputElement){return operatingPrice(mode.value,quote.value,price.value,(catalog?.priceContracts??[]).find(row=>priceKey(row)===contract.value)??null);}
  function valuation(){if(priceEnabled.value==='none')return null;if(priceEnabled.value!=='fixed')throw Error('Choose feasibility only or explicit fixed-price valuation.');const k=selectedKind();return {perspective:perspective.value,measure:measure.value,currencyCode:currency.value,rightQuantityCode:right.value,discounting:discounting.value!=='undiscounted',
   paymentRule:{frequency:'monthly',rule:'days_after_period_end',days:Number(paymentDays.value),dayOfMonth:null,dayBasis:'calendar_days',shortMonth:null,adjustment:'unadjusted',calendar:null,implementation:catalog!.paymentImplementation},
-  energyPrice:{mode:'fixed',quoteCode:saleQuote.value,fixedPrice:salePrice.value,curveCode:null,contractId:null},chargingPrice:k==='battery'?{mode:'fixed',quoteCode:chargeQuote.value,fixedPrice:chargePrice.value,curveCode:null,contractId:null}:null,
-  fuelPrice:k==='thermal'?{mode:'fixed',quoteCode:fuelQuote.value,fixedPrice:fuelPrice.value,curveCode:null,contractId:null}:null,fuelQuantityBasis:k==='thermal'?fuelBasis.value:null,
+  energyPrice:sidePrice(saleMode,saleContract,saleQuote,salePrice),chargingPrice:k==='battery'?sidePrice(chargeMode,chargeContract,chargeQuote,chargePrice):null,
+  fuelPrice:k==='thermal'?sidePrice(fuelMode,fuelContract,fuelQuote,fuelPrice):null,fuelQuantityBasis:k==='thermal'?fuelBasis.value:null,
   accessQuoteCode:accessPrice.value?accessQuote.value||null:null,accessPrice:accessPrice.value||null,accessFeeBasis:accessPrice.value?accessBasis.value||null:null,
   variablePrice:variablePrice.value||null,variableQuantityBasis:variablePrice.value?variableBasis.value||null:null,startupQuoteCode:null,startupPrice:null,startupFeeBasis:null};}
- previewForm.onsubmit=event=>{event.preventDefault();void o.act(async()=>{if(!saved||dirty)throw Error('Save the operating parameters before previewing them.');if(!previewForm.reportValidity())return;const source=o.source(),token=++generation,k=saved.terms.kind;
-  const request=structuredPreviewRequest({snapshotId:source.snapshotId,facilityId:saved.id,facilityVersion:saved.version,kind:k,operatingDate:operatingDate.value,firstInterval:Number(firstInterval.value),state:capture(stateControls,dynamic[k]),plan:plan.value,valuation:valuation()});
-  const result=await o.api<Preview>(prefix+'preview',request);if(token!==generation||source.contextKey!==o.source().contextKey)return;await renderResult(result,token,source.contextKey);});};
+ function planRequest(){if(!saved||dirty)throw Error('Save the operating parameters before previewing them.');if(!previewForm.reportValidity())throw Error('Complete the supplied plan and explicit pricing choices.');return structuredPreviewRequest({snapshotId:o.source().snapshotId,facilityId:saved.id,facilityVersion:saved.version,kind:saved.terms.kind,operatingDate:operatingDate.value,firstInterval:Number(firstInterval.value),state:capture(stateControls,dynamic[saved.terms.kind]),plan:plan.value,valuation:valuation()});}
+ previewForm.onsubmit=event=>{event.preventDefault();void o.act(async()=>{const source=o.source(),token=++generation,request=planRequest();const result=await o.api<Preview>(prefix+'preview',request);if(token!==generation||source.contextKey!==o.source().contextKey)return;await renderResult(result,token,source.contextKey);});};
  previewForm.oninput=()=>{previewDirty=true;clearResult();};
  function table(parent:HTMLElement,headers:string[],rows:string[][]){const wrap=el('div');wrap.className='table-wrap';const node=el('table'),head=el('thead'),heading=el('tr');for(const title of headers)heading.append(el('th',title));head.append(heading);node.append(head);const body=el('tbody');for(const values of rows){const row=el('tr');for(const text of values)row.append(el('td',text));body.append(row);}node.append(body);wrap.append(node);parent.append(wrap);}
- async function renderResult(result:Preview,token:number,contextKey:string){const value=result.valuation;const display={presentValue:value?fraction(value.value):'',sides:value?.sides.map(side=>({presentValue:fraction(side.grossValue),contribution:fraction(side.contribution),rows:side.rows.map(row=>({quantity:fraction(row.quantity),price:fraction(row.price),cashAmount:fraction(row.amount)}))})),quantities:result.intervals.flatMap(row=>row.quantities.map(q=>({quantity:fraction(q.quantity)})))};
+ async function renderResult(result:Preview,token:number,contextKey:string){const value=result.valuation;const display={presentValue:value?fraction(value.value):'',sides:value?.sides.map(side=>({presentValue:fraction(side.grossValue),contribution:fraction(side.contribution),rows:side.rows.map(row=>({quantity:fraction(row.quantity),price:fraction(row.price),cashAmount:fraction(row.amount)}))})),quantities:[...result.intervals.flatMap(row=>row.quantities.map(q=>({quantity:fraction(q.quantity)}))),...(result.closingState?.quantities??[]).map(q=>({quantity:fraction(q.quantity)}))]};
   await prepareAmountDisplay(display,body=>o.api<string[]>('amounts/display',body));
   if(token!==generation||contextKey!==o.source().contextKey)return;
   output.replaceChildren(el('h3','Preview result'));output.hidden=false;
   if(value){output.append(el('p',`Remaining operating value: ${amountText(fraction(value.value),'money')} ${value.currency.code}`));table(output,['Side','Sign','Gross value','Signed contribution'],value.sides.map(side=>[label(side.name),side.coefficient,amountText(fraction(side.grossValue),'money'),amountText(fraction(side.contribution),'money')]));
    for(const side of value.sides){const details=el('details');details.append(el('summary',`${label(side.name)} · ${catalog?.quotes.find(q=>q.code===side.quote.code)?.label??side.quote.code} · gross side schedule`));table(details,['Interval start UTC','Interval end UTC','Payment UTC','Quantity','Native quantity','Price','Gross amount'],side.rows.map(row=>[row.interval.start,row.interval.end,row.paymentAt,amountText(fraction(row.quantity),'quantity'),row.quantity.specification.code,amountText(fraction(row.price),'price'),amountText(fraction(row.amount),'money')]));output.append(details);}}
   table(output,['Interval start UTC','Interval end UTC','Quantity','Value','Native quantity'],result.intervals.flatMap(row=>row.quantities.map(q=>[row.interval.start,row.interval.end,label(q.name),amountText(fraction(q.quantity),'quantity'),q.quantity.specification.code])));
-  if(result.closingState){const state=result.closingState;note(output,`Closing state at ${state.at}${state.commitment?` · ${state.commitment} · elapsed ${state.elapsedMinutes} minutes · starts used ${state.startsUsed}`:''}`);}
+  if(result.closingState){const state=result.closingState;note(output,`Closing state at ${state.at}${state.commitment?` · ${state.commitment} · elapsed ${state.elapsedMinutes} minutes · starts used ${state.startsUsed}`:''}`);table(output,['Closing state quantity','Value','Native quantity'],state.quantities.map(q=>[label(q.name),amountText(fraction(q.quantity),'quantity'),q.quantity.specification.code]));}
   for(const text of result.limitations)note(output,text);
  }
  versionSelect.onchange=()=>void o.act(async()=>{const selected=versions.find(x=>`${x.id}/${x.version}`===versionSelect.value);if(!selected)return;const source=o.source(),token=++generation;const value=await o.api<StructuredPowerVersion>(prefix+'get',{snapshotId:source.snapshotId,facilityId:selected.id,version:selected.version});if(token===generation&&source.contextKey===o.source().contextKey)apply(value);});
  async function load(){bindIdentity();const source=o.source();if(!source.snapshotId)return;const token=++generation;const [next,rows]=await Promise.all([o.api<Catalog>(prefix+'catalog',{snapshotId:source.snapshotId}),o.api<StructuredPowerVersion[]>(prefix+'list',{snapshotId:source.snapshotId,selectionPolicy:'all_known_versions_v1'})]);if(token!==generation||source.contextKey!==o.source().contextKey)return;
   catalog=next;versions=rows;options(versionSelect,rows.map(row=>({code:`${row.id}/${row.version}`,label:`${next.locations.find(x=>x.code===row.terms.facilityCode)?.label??row.terms.facilityCode} · ${label(row.terms.kind)} · version ${row.version}`})),saved?`${saved.id}/${saved.version}`:'');
   for(const [control,values] of [[location,next.locations],[kind,next.kinds],[clock,next.clocks],[power,next.powerQuantities],[energy,next.energyQuantities],[fuel,next.fuelQuantities],[right,next.rightQuantities],[currency,next.currencies]] as const)options(control,values,control.value);
-  kindChanged();priceChoices();if(saved){const selected=rows.find(x=>x.id===saved!.id&&x.version===saved!.version);if(selected)apply(selected);else saved=undefined;}sync();status.textContent=rows.length?'Select an exact saved operating version or add parameters to an existing location.':'No operating parameters are saved under this selected context.';
+  kindChanged();priceChoices();if(saved){const selected=rows.find(x=>x.id===saved!.id&&x.version===saved!.version);if(selected)apply(selected);else saved=undefined;}sync();status.textContent=rows.length?'Select an exact saved operating version or add parameters to an existing location.':'No operating parameters are saved under this selected context.';if(!o.trading?.available||o.trading.available())await tradeWorkspace?.load();
  }
- function contextChanged(){bindIdentity();generation++;catalog=undefined;versions=[];saved=undefined;dirty=false;previewDirty=false;newId='';clearResult();
+ function contextChanged(){tradeWorkspace?.reset();bindIdentity();generation++;catalog=undefined;versions=[];saved=undefined;dirty=false;previewDirty=false;newId='';clearResult();
   form.reset();previewForm.reset();parameters.replaceChildren();controls.clear();stateFields.replaceChildren();stateControls.clear();unsupported.replaceChildren();
-  for(const control of [versionSelect,location,kind,clock,minutes,power,energy,fuel,right,currency,saleQuote,chargeQuote,fuelQuote,accessQuote])control.replaceChildren();
+  for(const control of [versionSelect,location,kind,clock,minutes,power,energy,fuel,right,currency,saleMode,saleContract,chargeMode,chargeContract,fuelMode,fuelContract,saleQuote,chargeQuote,fuelQuote,accessQuote])control.replaceChildren();
   for(const control of host.querySelectorAll<HTMLInputElement|HTMLTextAreaElement>('input,textarea'))control.value='';
   priceEnabled.value='';showPricing();sync();status.textContent='Load operating facilities under the selected context.';}
- showPricing();sync();return {load,sync,reset:contextChanged,contextChanged,unconfirmed:()=>{bindIdentity();return !!pending.command;},unsaved:()=>{bindIdentity();return !!pending.command||dirty||previewDirty;},open:async(locationCode?:string)=>{await load();if(locationCode)location.value=locationCode;host.scrollIntoView({block:'start'});}};
+ if(o.trading){const target=card('Saved operating-right trades');tradeWorkspace=setupStructuredPowerTrades(target,{api:o.api,act:o.act,busy:o.busy,source:o.source,identity:o.identity,plan:planRequest,changed:()=>sync(),available:o.trading.available,canHedge:o.trading.canHedge,admission:()=>({available:!!saved&&!!catalog?.operatingBookingClockCodes?.includes(saved.terms.clockCode),reason:!saved?'Select an exact saved facility for operating-right booking.':'Saved operating-right booking for this clock · Coming soon.'}),committed:()=>{previewDirty=false;},openTrade:o.trading.openTrade});}
+ showPricing();sync();return {load,sync,selectedTrade:()=>tradeWorkspace?.selected(),plan:planRequest,reset:contextChanged,contextChanged,unconfirmed:()=>{bindIdentity();return !!pending.command||!!tradeWorkspace?.unconfirmed();},unsaved:()=>{bindIdentity();return !!pending.command||dirty||previewDirty||!!tradeWorkspace?.unsaved();},open:async(locationCode?:string)=>{await load();if(locationCode)location.value=locationCode;host.scrollIntoView({block:'start'});}};
 }

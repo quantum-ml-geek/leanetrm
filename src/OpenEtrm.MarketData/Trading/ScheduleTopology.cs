@@ -90,7 +90,7 @@ internal static class ScheduleTopology
     }
     internal static (string Kind,string Ports) Shape(string operation)=>operation switch
     {
-        "constant_price" or "price_lookup" or CurvePriceScheduleSource.Operation or ContractObservationScheduleSource.Operation => ("price", ""),
+        "constant_price" or OperatingContractScheduleSource.Operation or "price_lookup" or CurvePriceScheduleSource.Operation or ContractObservationScheduleSource.Operation => ("price", ""),
         "quantity_input" or "quantity_literal" or "asset_capacity" or "profile_quantity" => ("quantity", ""),
         "quantity_normalize" => ("quantity", "input,basis"),
         "quantity_add" => ("quantity", "input+"),
@@ -109,6 +109,10 @@ internal static class ScheduleTopology
     {
         switch(row.Operation)
         {
+            case OperatingContractScheduleSource.Operation:
+                if(sources.Length!=2||sources.Any(b=>b.Kind!=(b.Port switch {"market"=>"contract_price","quote"=>"quote",_=>null})))
+                    throw ScheduleDefinition.Error("An operating projection requires exactly the selected contract market and quote.");
+                break;
             case ContractObservationScheduleSource.Operation:
                 if(sources.Length!=3||sources.Any(b=>b.Kind!=(b.Port switch
                     {"market"=>"contract_price","quote"=>"quote","settlement"=>"settlement_source",_=>null})))

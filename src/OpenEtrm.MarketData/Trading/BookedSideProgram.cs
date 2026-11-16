@@ -148,10 +148,10 @@ public sealed partial class BookedSideProgram
             if(row.Operation=="output_guard")
             {
                 var lifecycle=row.Parameters["lifecycle"];
-                var dated=lifecycle is "undue_payment_v1" or ScheduleLifecycles.AccruedPayment;
+                var dated=lifecycle is "undue_payment_v1" or ScheduleLifecycles.AccruedPayment or OperatingContractScheduleSource.DeliveryLifecycle;
                 if(lifecycle==ScheduleLifecycles.WholeGasDayDelivery&&document.Family!="gas")
                     throw new MarketDataException("physical_lifecycle_unsupported","Whole gas-day delivery is supported only for the explicit gas program family.");
-                if(lifecycle is not("undue_payment_v1" or ScheduleLifecycles.AccruedPayment or "interval_payment_v1" or "interval_delivery_v1" or "certificate_holding_v1" or
+                if(lifecycle is not(OperatingContractScheduleSource.DeliveryLifecycle or "undue_payment_v1" or ScheduleLifecycles.AccruedPayment or "interval_payment_v1" or "interval_delivery_v1" or "certificate_holding_v1" or
                     "future_gas_delivery_v1" or ScheduleLifecycles.WholeGasDayDelivery or "future_crude_delivery_v1" or "future_lng_cargo_v1")||
                     row.ValueAt is not {} valueAt||!TradingInstant.IsSupported(valueAt)||row.Currency is null||
                     dated!=(row.Grid is null)||row.Parameters["measure"]!=(dated?"present_value_v1":"value_excluding_overdue_v1"))
@@ -199,6 +199,11 @@ public sealed partial class BookedSideProgram
                 if(instruction.Consumers[c-1]>=instruction.Consumers[c])
                     throw Error("Executable value-use consumers require distinct ordered addresses.");
         }
+        if(document.Family=="operating"&&(document.Grids.Length!=0||!document.Ports.IsEmpty||
+            instructions.Where(i=>i.Output.Operation=="output_guard").Any(i=>i.Output.Interval is null)))
+            throw Error("An operating program must retain explicit scalar native intervals without grid or sibling-input substitution.");
+        if(document.Family!="operating"&&instructions.Any(i=>i.Output.Operation==OperatingContractScheduleSource.Operation||i.Output.Operation=="output_guard"&&i.Output.Parameters["lifecycle"]==OperatingContractScheduleSource.DeliveryLifecycle))
+            throw Error("Operating contract prices and delivery lifecycle require the operating program family.");
         if(document.Family!="lng"&&instructions.Any(i=>i.Bindings.Any(b=>b.Kind is "lng_assignment" or "lng_product")||
             i.Output.Operation=="output_guard"&&i.Output.Parameters["lifecycle"]=="future_lng_cargo_v1"))
             throw Error("LNG source and lifecycle contracts require the explicit LNG program family.");
@@ -226,7 +231,7 @@ public sealed partial class BookedSideProgram
             throw Error("The executable schedule requires its complete named output addresses and one side PV root.");
     }
 
-    internal static bool IsInput(string operation)=>operation is "price_lookup" or CurvePriceScheduleSource.Operation or ContractObservationScheduleSource.Operation or "quantity_input" or "asset_capacity" or "discount";
+    internal static bool IsInput(string operation)=>operation is OperatingContractScheduleSource.Operation or "price_lookup" or CurvePriceScheduleSource.Operation or ContractObservationScheduleSource.Operation or "quantity_input" or "asset_capacity" or "discount";
 
     private static MarketDataException Error(string message)=>new("side_schedule_program",message);
 }
