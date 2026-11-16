@@ -404,12 +404,12 @@ composition booking, future replacement amendments and independent indexed
 consideration through the existing FloatingSide. These preserve contractual net
 MTM and do not admit started-delivery cash lifecycle operations.
 
-D405 adds [versioned operating facilities](operating-facilities.md) and bounded
+D406 adds [versioned operating facilities](operating-facilities.md) and bounded
 supplied-plan thermal toll, battery and solar calculation through independent
 Side schedules. Physical operating parameters extend exact existing locations;
 trade entitlement, guarantees, state and prices stay separate. The pure REC
 kernel distinguishes evidenced issued ownership from modeled energy. The
-current-master port is in qualification. The authorized next increment adds
+current-master port is qualified on isolated synthetic resources. The authorized next increment adds
 saved operating contracts, common-context financial hedging and durable manual
 REC ownership/transfer/retirement operations with native authorization, exact
 relationships, certified history and idempotent commands. No optimizer or external
@@ -536,6 +536,12 @@ deployment procedure. Automatic image updates use attested GitHub Release bundle
 and a pinned local pull operator; schema and infrastructure changes require a
 separate qualified baseline (D135). Hosted authentication and collection boundaries are described
 in [hosted pilot operations](hosted-pilot.md); the synthetic local preview stays isolated.
+
+D405 adds conservative [CI impact selection](ci-impact.md): shared behavior checks
+run once across the matrix, and pull requests select explicitly declared path
+consumers. Unknown/shared changes and unavailable comparison history require the
+full gate. Master publication retains the complete same-commit gate and exact-head
+release contract. Integration jobs retain independent builds and disposable state.
 
 A neutral default public page lives in `site/` (D385), separately from the authenticated
 workspace assets. The hosted gateway serves only its exact homepage, two public
