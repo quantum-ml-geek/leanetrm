@@ -1823,7 +1823,7 @@ named place. Physical cargo logistics and tanker freight need distinct explicit
 contracts. Additional fee types/amounts remain deferred to their first executable
 consumer; no unused catalog is added in this increment.
 
-## Authorized structured power continuation (D406)
+## Authorized structured power continuation (D408)
 
 The [operating-facility slice](operating-facilities.md) retains supported thermal,
 battery and solar physical parameters on exact existing locations, with supplied
