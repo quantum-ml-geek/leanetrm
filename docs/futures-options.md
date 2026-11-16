@@ -291,9 +291,14 @@ See [the lifecycle contract](exchange-futures.md#option-lifecycle) for the full 
   with open lots under their underlying future, from
   **`POST /api/options/positions`** `{context, model}`: each row's value and
   sensitivities are the stored series figures times the multiplier and the signed
-  open lots, computed in the backend; delta, gamma and vega are subtotalled
-  within one underlying future, value and theta totalled per currency, and a sum
-  with a missing member is missing. The read prices nothing. **Strategy** reads
+  open lots, computed in the backend. Delta and gamma are quantities in the unit
+  the underlying is quoted per, and each group states the selection its surface
+  was fitted under with the day its thetas run to. Delta, gamma and vega are
+  subtotalled within one underlying future, value and theta totalled per
+  currency; a sum with a missing member is missing, and thetas that run to
+  different days are not added (`theta_days_differ`). A product whose inputs
+  cannot be read at the close is a row state, not a failed read. The read prices
+  nothing. **Strategy** reads
   *Coming soon*.
 - **New trade.** The option ticket selects exchange, commodity, underlying future,
   call or put, then strike; each list comes from the backend catalog and resets

@@ -9,12 +9,12 @@ const full=(value,delta,gamma,vega,theta)=>({value:figure(value),delta:figure(de
 const none=reason=>({value:figure(null,reason),delta:figure(null,reason),gamma:figure(null,reason),vega:figure(null,reason),theta:figure(null,reason)});
 const read={model:'m',held:[],
  groups:[
-  {underlyingSeries:'ng_f27',expiryAt:'2027-01-26T19:30:00.0000000+00:00',product:'synthetic_on',productName:'Synthetic gas options',currency:'USD',quantityUnit:'MMBtu',
+  {underlyingSeries:'ng_f27',expiryAt:'2027-01-26T19:30:00.0000000+00:00',product:'synthetic_on',productName:'Synthetic gas options',definitionRevisionId:'definition-a',sensitivities:{policy:'p',dayTo:'2026-10-17T17:00:00+00:00'},currency:'USD',quantityUnit:'MMBtu',
    rows:[row('on_f27_p3','put','3','-2','analysed',full('-3000.000000000000000000','10000.000000000000000000','-30000.000000000000000000','-80.000000000000000000','30.000000000000000000')),
     row('on_f27_c3','call','3','2','analysed',{...full('4000.000000000000000000','10000.5','30000','80','-40.126'),vega:figure(null,'sensitivity_unstable')})],
    // Deliberately not the sum of the rows above: the page shows what the backend states and adds nothing itself.
    subtotal:{value:figure('1234.500000000000000000'),delta:figure('20000.000000000000000000'),gamma:figure('0.000000000000000000'),vega:figure(null,'incomplete'),theta:figure('-10.126000000000000000')}},
-  {underlyingSeries:'cl_g27',expiryAt:'2027-02-23T19:30:00.0000000+00:00',product:'synthetic_lo',productName:'Synthetic crude options',currency:'USD',quantityUnit:'bbl',
+  {underlyingSeries:'cl_g27',expiryAt:'2027-02-23T19:30:00.0000000+00:00',product:'synthetic_lo',productName:'Synthetic crude options',definitionRevisionId:'definition-b',sensitivities:null,currency:'USD',quantityUnit:'bbl',
    rows:[row('lo_g27_c70','call','70','4','notCalibrated',none('not_calibrated'),'not_calibrated')],
    subtotal:{value:figure(null,'incomplete'),delta:figure(null,'incomplete'),gamma:figure(null,'incomplete'),vega:figure(null,'incomplete'),theta:figure(null,'incomplete')}}],
  totals:[{currency:'USD',value:figure(null,'incomplete'),theta:figure(null,'incomplete')}]};

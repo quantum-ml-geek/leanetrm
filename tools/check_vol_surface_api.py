@@ -160,6 +160,12 @@ def run_checks(url, query, manifest, *, run_worker, worker_login):
     held = c.call('options/positions', {'context': {'snapshotId': frame['id'], 'convention': OPTION, 'knowledgeMode': 'current'}, 'model': MODEL}, timeout=TIMEOUT)
     rows = [(group, row) for group in held['groups'] for row in group['rows']]
     figures = ('value',) + measures
+    check('position delta and gamma are stated in the unit the underlying is quoted per, never the option contract',
+          rows and all(group['quantityUnit'] == 'MMBtu' for group, _ in rows if group['product'] == PRODUCT)
+          and all(group['quantityUnit'] not in ('contract', '') for group, _ in rows), sorted({(g['product'], g['quantityUnit']) for g, _ in rows}))
+    check('a group states the selection its surface was fitted under and the day its thetas run to',
+          all(group['sensitivities'] == {k: stated[k] for k in ('policy', 'ticks', 'priceSteps', 'volatilityBump', 'clockSource', 'clockZone', 'dayTo')}
+              for group, _ in rows if group['product'] == PRODUCT), [g['sensitivities'] for g, _ in rows][:1])
     check('booked option positions read with their series\' stored analytics, or the reason there are none',
           held['model'] == MODEL and all(row['state'] in ('analysed', 'unavailable', 'notCalibrated')
                                          and all((row[m]['amount'] is None) != (row[m]['missing'] is None) for m in figures) for _, row in rows)
@@ -358,7 +364,7 @@ def run_checks(url, query, manifest, *, run_worker, worker_login):
     def finish(token):
         try:
             query(f"SET SESSION AUTHORIZATION {worker_login};SELECT risk.finish_vol_surface_fit('{fenced['jobId']}','{token}','{{{pinned}}}',"
-                  "'{\"synthetic\":\"surface\"}','not_a_digest','{\"elapsedMs\":1,\"series\":1,\"solves\":1}');")
+                  "'{\"synthetic\":\"surface\",\"sensitivities\":{}}','not_a_digest','{\"analyticsMs\":1,\"analyticsTreePrices\":1,\"elapsedMs\":1,\"series\":1,\"solves\":1}');")
         except RuntimeError as error:
             return str(error)
         return 'completed'
@@ -452,7 +458,7 @@ def run_checks(url, query, manifest, *, run_worker, worker_login):
         located = json.dumps({'referenceCatalogId': manifest['referenceCatalogId'], 'referenceRevisionId': manifest['referenceRevisionId'], 'code': PRODUCT})
         pinned = 'ARRAY[' + ','.join(f"'{o}'" for o in inputs) + ']::uuid[]'
         return query(f"BEGIN;DO $check$ BEGIN PERFORM trading.record_vol_surface_revision('{catalog}','{trader}','{uuid4()}','{located}'::jsonb,'{DAY}','{MODEL}',"
-                     f"'{SOLVER_POLICY}','{uuid4()}','{west}','{frame['at']}',{pinned},'{{\"synthetic\":\"attribution\"}}'::jsonb,'{'0' * 64}');"
+                     f"'{SOLVER_POLICY}','{uuid4()}','{west}','{frame['at']}',{pinned},'{{\"synthetic\":\"attribution\",\"sensitivities\":{{}}}}'::jsonb,'{'0' * 64}');"
                      "RAISE EXCEPTION 'recorded';EXCEPTION WHEN SQLSTATE 'P0001' THEN PERFORM set_config('check.outcome',SQLERRM,true);END $check$;"
                      "SELECT current_setting('check.outcome');ROLLBACK;").splitlines()[-1]
     inside = query(f"SELECT observation_id FROM market_data.market_close_pins WHERE(catalog_id,close_id)=('{catalog}','{west}') ORDER BY observation_id LIMIT 1;")

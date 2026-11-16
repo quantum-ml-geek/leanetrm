@@ -172,7 +172,15 @@ or the code of why there is none. `priceBump` is the nominal futures bump used.
   (the model's own year fraction as days).
 - **Missing codes.** `option_at_intrinsic`, `sensitivity_unstable`,
   `option_sensitivity_clock`, `valuation_time_coverage`, or the code a refused
-  sample raised. A series that did not calibrate has no analytics.
+  sample raised. A series that did not calibrate has no analytics. A pinned
+  clock the worker cannot count a day on selects no day: the surface is still
+  fitted and its thetas are missing.
+- **Inputs.** The discount-curve points the one-day roll read are recorded with
+  the fit's other observations, so a revision of one flags the stored surface.
+- **Work.** A solved series costs about 17 tree prices beyond its calibration:
+  a base value, six samples on each of the price and volatility axes (half,
+  whole and double bumps), a base for each of the three sampled requests and
+  the day's sample. The expiries are valued in parallel.
 - **Identity.** A refit is compared with the latest revision of the same
   location and the same stated selection (migration
   `0338_vol_surface_sensitivities.sql`).

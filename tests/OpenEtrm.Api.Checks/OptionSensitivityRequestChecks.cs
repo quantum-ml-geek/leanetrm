@@ -44,6 +44,14 @@ internal static class OptionSensitivityRequestChecks
         if(unread.Day is not null||unread.Stated is not {ClockSource:null,ClockZone:null,DayTo:null})throw new Exception("A convention whose clock cannot be read selects no day.");
         Console.WriteLine("PASS a close whose calendar clock cannot be read selects no day");
 
+        // A pinned clock this host cannot count a day on selects no day; the fit still runs and its theta is missing.
+        var foreign=OptionSurfaceAnalytics.Pin(Request(),convention);
+        foreign["clock"]!["rule"]!["tzdbVersion"]="synthetic_other_release";
+        var uncounted=OptionSurfaceAnalytics.Plan(foreign,at);
+        if(uncounted.Day is not null||uncounted.Stated is not {ClockSource:"close_convention",DayTo:null}||uncounted.Selection!=working.Selection)
+            throw new Exception($"A clock the host cannot count on selects no day: {uncounted.Stated}.");
+        Console.WriteLine("PASS a pinned clock this host cannot count a day on selects no day");
+
         var pinned=OptionSurfaceAnalytics.Pin(Request(Utc),null);
         if(pinned.ToJsonString()!=OptionSurfaceAnalytics.Pin(Request(Utc),null).ToJsonString()||JsonNode.Parse(pinned.ToJsonString())!["policy"]!.GetValue<string>()!=FuturesOptionSensitivities.Policy)
             throw new Exception("A pinned selection is one canonical object.");

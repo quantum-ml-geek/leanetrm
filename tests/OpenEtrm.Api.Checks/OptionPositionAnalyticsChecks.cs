@@ -22,14 +22,17 @@ internal static class OptionPositionAnalyticsChecks
                 reference_catalog_id=Guid.Parse("00000000-0000-0000-0000-00000000c001"),reference_revision_id=Guid.Parse("00000000-0000-0000-0000-00000000c002"),series_code=series,
                 lots,closed_lots=closed,expired=false,trade_reference=n}),
             Row(new{id=Guid.Parse("00000000-0000-0000-0000-00000000b001"),name="Synthetic options"}),
-            Row(new{product_code=product,product_name="Synthetic gas options",option_right=right,strike,expiry_at=expiry,underlying_series_code=underlying,multiplier,unit,currency}));
+            Row(new{product_code=product,product_name="Synthetic gas options",option_right=right,strike,expiry_at=expiry,underlying_series_code=underlying,multiplier,unit="contract",quote_unit=unit,currency}));
     }
     private static OptionMeasure Stated(string? value,string? missing=null)=>new(value is null?null:ExactDecimal.Parse(value),missing);
     private static SurfaceSeriesResult Series(string code,string outcome,OptionSeriesSensitivities? analytics)=>
         new(new(code,OptionRight.Call,ExactDecimal.Parse("3"),DateTimeOffset.Parse(Jan,CultureInfo.InvariantCulture),"synthetic_ng_f27",ExactDecimal.Parse("0.2"),outcome,null),null,null,null,false,null){Analytics=analytics};
     private static OptionSeriesSensitivities Solved(string value,string delta,string gamma,string? vega,string theta)=>
         new(Guid.NewGuid(),ExactDecimal.Parse(value),ExactDecimal.Parse("0.01"),Stated(delta),Stated(gamma),vega is null?Stated(null,"sensitivity_unstable"):Stated(vega),Stated(theta));
-    private static VolSurfaceResult Surface(params SurfaceSeriesResult[] series)=>new(Model,[],[],[..series]);
+    private static SurfaceSensitivities Selection(string dayTo)=>new(FuturesOptionSensitivities.Policy,1,2,"0.000001","0.15","0.1",ExactDecimal.Parse("0.01"),"request","UTC",
+        DateTimeOffset.Parse(dayTo,CultureInfo.InvariantCulture));
+    private static OptionSurfaceLookup Surface(params SurfaceSeriesResult[] series)=>new(new(Model,[],[],[..series]){Sensitivities=Selection("2026-10-17T17:00:00Z")},null);
+    private static readonly OptionSurfaceLookup None=new(null,null);
 
     internal static void Run()
     {
@@ -43,7 +46,7 @@ internal static class OptionPositionAnalyticsChecks
             Series("on_g27_c3","solved",Solved("0.3","0.55","1.2",null,"-0.001")),
             Series("on_g27_c1","at_intrinsic",new(Guid.NewGuid(),ExactDecimal.Parse("2"),null,Stated(null,"option_at_intrinsic"),Stated(null,"option_at_intrinsic"),
                 Stated(null,"option_at_intrinsic"),Stated(null,"option_at_intrinsic"))));
-        var read=OptionPositionAnalytics.Build(Model,[call,put,unstable,intrinsic,unfitted,closed],p=>p.Series.Text("product_code")=="synthetic_on"?gas:null);
+        var read=OptionPositionAnalytics.Build(Model,[call,put,unstable,intrinsic,unfitted,closed],p=>p.Series.Text("product_code")=="synthetic_on"?gas:None);
 
         var groups=read["groups"]!.AsArray();
         JsonObject Group(string underlying)=>groups.Single(g=>g!["underlyingSeries"]!.GetValue<string>()==underlying)!.AsObject();
@@ -91,9 +94,31 @@ internal static class OptionPositionAnalyticsChecks
 
         // What a chain shows beside a series: the open lots held in it, added across the positions that hold it.
         var again=Position("on_f27_c3","call","3","2027-01-26T19:30:00+00:00","synthetic_ng_f27","-5");
-        var held=OptionPositionAnalytics.Build(Model,[call,again,put,closed],_=>null)["held"]!.AsArray().Select(h=>(h!["series"]!.GetValue<string>(),h!["openLots"]!.GetValue<string>())).ToArray();
+        var held=OptionPositionAnalytics.Build(Model,[call,again,put,closed],_=>None)["held"]!.AsArray().Select(h=>(h!["series"]!.GetValue<string>(),h!["openLots"]!.GetValue<string>())).ToArray();
         Expect(held.SequenceEqual(new[]{("on_f27_c3","-3"),("on_f27_p3","-2")}),"Held lots are the exact sum of open lots per series, without closed positions.");
         Console.WriteLine("PASS held lots per series are the exact sum of its positions' open lots");
+
+        // A product whose inputs cannot be read at this close is said so on its rows; the other products are still read.
+        var unreadable=OptionPositionAnalytics.Build(Model,[call,unfitted],p=>p.Series.Text("product_code")=="synthetic_on"?gas:new(null,"market_inputs_missing"));
+        var blocked=unreadable["groups"]!.AsArray().SelectMany(g=>g!["rows"]!.AsArray()).Single(r=>r!["series"]!.GetValue<string>()=="lo_g27_c70")!;
+        Expect(blocked["state"]!.GetValue<string>()=="unavailable"&&blocked["reason"]!.GetValue<string>()=="market_inputs_missing"&&Missing(blocked["value"]!)=="market_inputs_missing"&&
+            Amount(unreadable["groups"]!.AsArray().SelectMany(g=>g!["rows"]!.AsArray()).Single(r=>r!["series"]!.GetValue<string>()=="on_f27_c3")!["value"]!)==4000m,
+            "A product whose surface cannot be read is a row state, not a failed read.");
+        Console.WriteLine("PASS a product whose surface cannot be read at this close is a row state");
+
+        // Each group states the selection its figures were fitted under and the day its theta runs to. Thetas that run to
+        // different days are not one sum.
+        var otherDay=new OptionSurfaceLookup(gas.Surface! with{Sensitivities=Selection("2026-10-17T21:00:00Z")},null);
+        var crudeFitted=Position("lo_g27_c70b","call","70","2027-02-23T19:30:00+00:00","synthetic_cl_g27","1",product:"synthetic_lo",unit:"bbl",multiplier:"1000");
+        var crudeSurface=new OptionSurfaceLookup(new VolSurfaceResult(Model,[],[],[Series("lo_g27_c70b","solved",Solved("1.5","0.4","0.01","0.05","-0.02"))]){Sensitivities=Selection("2026-10-17T21:00:00Z")},null);
+        var mixed=OptionPositionAnalytics.Build(Model,[call,crudeFitted],p=>p.Series.Text("product_code")=="synthetic_on"?gas:crudeSurface);
+        var same=OptionPositionAnalytics.Build(Model,[call,crudeFitted],p=>p.Series.Text("product_code")=="synthetic_on"?otherDay:crudeSurface);
+        Expect(Group("synthetic_ng_f27")["sensitivities"]!["dayTo"]!.GetValue<DateTimeOffset>()==DateTimeOffset.Parse("2026-10-17T17:00:00Z",CultureInfo.InvariantCulture)&&
+            Group("synthetic_ng_f27")["sensitivities"]!["policy"]!.GetValue<string>()==FuturesOptionSensitivities.Policy&&Group("synthetic_cl_g27")["sensitivities"] is null,
+            "A group states the selection of its surface, and none where there is no surface.");
+        Expect(Amount(mixed["totals"]![0]!["value"]!)==5500m&&Missing(mixed["totals"]![0]!["theta"]!)=="theta_days_differ"&&
+            Amount(same["totals"]![0]!["theta"]!)==-60m,"Thetas for different days are not added; thetas for one day are.");
+        Console.WriteLine("PASS a theta total needs every member to run to the same day");
 
         Expect(read["model"]!.GetValue<string>()==Model&&groups.Select(g=>g!["underlyingSeries"]!.GetValue<string>()).SequenceEqual(new[]{"synthetic_ng_f27","synthetic_cl_g27","synthetic_ng_g27"}),
             "Groups are ordered by expiry, then underlying.");

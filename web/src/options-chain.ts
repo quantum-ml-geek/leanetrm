@@ -34,7 +34,9 @@ const reasons:Record<string,string>={
  option_sensitivity_clock:'No calendar clock could be read for this close',
  not_calibrated:'Not calibrated at this close',
  series_not_fitted:'This series is not in the stored surface',
- incomplete:'A position in this sum has no figure'};
+ incomplete:'A position in this sum has no figure',
+ theta_days_differ:'These thetas run to different days, so they are not one sum',
+ market_inputs_missing:'This close has no market inputs for the product’s definition'};
 /** Why a figure is missing, in words where the page knows the code. */
 export const measureReason=(code:string)=>Object.hasOwn(reasons,code)?reasons[code]:code;
 

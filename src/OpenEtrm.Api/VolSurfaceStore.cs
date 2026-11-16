@@ -203,7 +203,7 @@ internal static class VolSurfaceStore
         analysing.Stop();
         await transaction.CommitAsync(ct);
         var surface=JsonSerializer.Serialize(analysed.Surface,Json);
-        return new(fitted.ObservationIds,surface,Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(surface))),
+        return new(analysed.ObservationIds,surface,Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(surface))),
             fitted.Result.Series.Length,fitted.Result.Series.Count(s=>s.Series.Outcome==FuturesOptionPricing.SolvedMode),elapsed.ElapsedMilliseconds,
             analysed.TreePrices,analysing.ElapsedMilliseconds);
     }
@@ -220,7 +220,7 @@ internal static class VolSurfaceStore
     }
 
     // The deterministic refusals a fit job's completion can meet: each fails the job with its own code instead of being retried.
-    internal static bool Refusal(string code)=>code is "vol_surface_nondeterministic" or "vol_surface_input" or "vol_surface_product" or "vol_model_unknown" or "option_sensitivity_policy"
+    internal static bool Refusal(string code)=>code is "vol_surface_nondeterministic" or "vol_surface_input" or "vol_surface_product" or "vol_model_unknown"
         or "historical_read_only" or "risk_job_input" or "risk_result_limit";
 
     internal static bool Fits(JsonObject job)=>job["request"]?["convention"]?.GetValue<string>()==Convention;

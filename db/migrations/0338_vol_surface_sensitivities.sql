@@ -17,7 +17,7 @@ DELETE FROM trading.vol_surface_revisions;
 ALTER TABLE trading.vol_surface_revisions ENABLE TRIGGER immutable_record;
 ALTER TABLE trading.vol_surface_inputs ENABLE TRIGGER immutable_record;
 ALTER TABLE trading.vol_surface_commands ENABLE TRIGGER immutable_record;
-ALTER TABLE trading.vol_surface_revisions ADD CONSTRAINT vol_surface_states_sensitivities CHECK(jsonb_typeof(content->'sensitivities')='object');
+ALTER TABLE trading.vol_surface_revisions ADD CONSTRAINT vol_surface_states_sensitivities CHECK(jsonb_typeof(content->'sensitivities') IS NOT DISTINCT FROM 'object');
 
 -- Each patch replaces the one occurrence of the text it expects, or stops: a function that no longer reads as expected is
 -- not patched.

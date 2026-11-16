@@ -57,7 +57,9 @@ export function setupOptions(o:{api:Api;context:()=>FuturesReadRequest;zone:()=>
  root.replaceChildren(hero,error,productBar,placeholder,missing,chain,positionsHost);
 
  let products:{code:string;name:string}[]=[],moreProducts=false,definition:string|undefined,product='',expiryAt='',selected='',
-  shown:SurfaceRead|undefined,positions:OptionPositionsRead|undefined,held=new Map<string,string>(),view:'chain'|'positions'='chain',generation=0;
+  shown:SurfaceRead|undefined,positions:OptionPositionsRead|undefined,held=new Map<string,string>(),view:'chain'|'positions'='chain',generation=0,
+  // A read failed and none has succeeded since: the failure stays said whatever view is chosen.
+  broken=false;
  const instant=(at:string)=>new Intl.DateTimeFormat('en',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit',timeZone:o.zone()}).format(new Date(at));
  const expiryLabel=(e:SurfaceExpiry)=>new Intl.DateTimeFormat('en',{month:'short',day:'numeric',year:'numeric',timeZone:o.zone()}).format(new Date(e.expiryAt));
 
@@ -66,7 +68,7 @@ export function setupOptions(o:{api:Api;context:()=>FuturesReadRequest;zone:()=>
   const heading=hereHeading(here,o.frames.sessionName,o.zone());hereKind.textContent=heading.kind;hereTitle.textContent=heading.title;
  }
  function failed(cause:unknown){
-  root.dataset.state='error';error.hidden=false;
+  broken=true;root.dataset.state='error';error.hidden=false;
   error.textContent=publicText(`${messageOf(cause)}${codeOf(cause)&&!messageOf(cause).includes(codeOf(cause)!)?` (${codeOf(cause)})`:''}`);
   chain.hidden=true;missing.hidden=true;positionsHost.hidden=true;
  }
@@ -154,14 +156,14 @@ export function setupOptions(o:{api:Api;context:()=>FuturesReadRequest;zone:()=>
   for(const group of table.groups){
    const body=el('tbody');body.dataset.underlying=group.underlyingSeries;
    const title=el('tr','options-position-group'),name=el('th');name.colSpan=9;name.scope='colgroup';
-   name.append(el('span','options-position-future',group.underlyingSeries),el('span','options-position-note',`${group.productName} · expires ${instant(group.expiryAt)} · money in ${group.currency}, delta and gamma in ${group.quantityUnit}`));
+   name.append(el('span','options-position-future',group.underlyingSeries),el('span','options-position-note',`${group.productName} · expires ${instant(group.expiryAt)} · money in ${group.currency}, delta and gamma in ${group.quantityUnit}${group.sensitivities?.dayTo?` · theta for the day to ${instant(group.sensitivities.dayTo)}`:''}`));
    title.append(name);body.append(title);
    const figures=(cells:{value:Cell;delta:Cell;gamma:Cell;vega:Cell;theta:Cell})=>[figure(cells.value,group.currency),figure(cells.delta,group.quantityUnit),
     figure(cells.gamma,`${group.quantityUnit} per 1.00 of price`),figure(cells.vega,`${group.currency} per volatility point`),figure(cells.theta,`${group.currency} for one day`)];
    for(const row of group.rows){
     const tr=el('tr');tr.dataset.series=row.series;tr.dataset.state=row.state;
     const series=el('td');series.append(el('code','vol-card-code',row.series));
-    if(row.state==='notCalibrated'){const go=button('secondary options-position-calibrate','Calibrate →');go.onclick=()=>o.openSurface(group.product,definition!);series.append(' ',go);}
+    if(row.state==='notCalibrated'){const go=button('secondary options-position-calibrate','Calibrate →');go.onclick=()=>o.openSurface(group.product,group.definitionRevisionId);series.append(' ',go);}
     else if(row.state==='unavailable'&&row.reason)series.append(' ',el('span','options-position-note',measureReason(row.reason)));
     tr.append(el('td',undefined,row.tradeReference),el('td',undefined,row.book),series,el('td','numeric',row.openLots),...figures(row));body.append(tr);
    }
@@ -182,6 +184,7 @@ export function setupOptions(o:{api:Api;context:()=>FuturesReadRequest;zone:()=>
  function render(){
   const read=shown;
   chainView.setAttribute('aria-pressed',String(view==='chain'));positionsView.setAttribute('aria-pressed',String(view==='positions'));
+  if(broken)return;
   error.hidden=true;productBar.hidden=view!=='chain';positionsHost.hidden=view!=='positions'||!positions;
   if(view==='positions'){
    placeholder.hidden=true;chain.hidden=true;missing.hidden=true;root.dataset.state=positions?'positions':'loading';
@@ -201,7 +204,7 @@ export function setupOptions(o:{api:Api;context:()=>FuturesReadRequest;zone:()=>
 
  // Each read is numbered: an answer to a read that a newer one replaced is dropped.
  async function readProduct(){
-  const number=++generation;shown=undefined;render();
+  const number=++generation;shown=undefined;broken=false;render();
   if(!product)return;
   try{
    const context=o.context();
@@ -213,7 +216,7 @@ export function setupOptions(o:{api:Api;context:()=>FuturesReadRequest;zone:()=>
   }catch(cause){if(number===generation)failed(cause);}
  }
  async function refresh(){
-  const number=++generation;showHere();root.dataset.state='loading';error.hidden=true;
+  const number=++generation;broken=false;showHere();root.dataset.state='loading';error.hidden=true;
   try{
    const context=o.context(),params=new URLSearchParams({table:'futures_option_products',snapshotId:context.snapshotId,offset:'0',search:''});
    const [page,held]=await Promise.all([o.api<ProductPage>('reference/catalog?'+params),o.api<OptionPositionsRead>('options/positions',{context,model:volModel})]);
@@ -227,7 +230,7 @@ export function setupOptions(o:{api:Api;context:()=>FuturesReadRequest;zone:()=>
   await readProduct();
  }
  function holdings(read:OptionPositionsRead){held=new Map(read.held.map(h=>[h.series,h.openLots]));}
- function reset(){generation++;products=[];definition=undefined;shown=undefined;positions=undefined;held=new Map();productBar.replaceChildren();render();}
+ function reset(){generation++;broken=false;products=[];definition=undefined;shown=undefined;positions=undefined;held=new Map();productBar.replaceChildren();render();}
  chainView.onclick=()=>{view='chain';render();};positionsView.onclick=()=>{view='positions';render();};
  return {
   refresh,

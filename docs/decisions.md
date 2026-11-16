@@ -5560,8 +5560,9 @@ value they state are unchanged.
   product's chain from its stored surface and lists booked option positions
   with those figures scaled by multiplier and signed open lots in the backend.
   It prices nothing. Sensitivities are added within one underlying future only,
-  and value and theta per currency; a sum with a missing member is missing. A
-  product with no surface at the close shows that and where it is calibrated.
+  and value and theta per currency; a sum with a missing member is missing, and
+  thetas that run to different days are not one sum. A product with no surface
+  at the close shows that and where it is calibrated.
 - **Not Risk.** These are the option model's own sensitivities at the stated
   selection. They enter no Risk, VaR or P&L report, and the page says so.
 - **Still open.** The strategy viewer and its analysis read; spread, storage,
