@@ -5576,6 +5576,32 @@ pushes retain that path so they cannot strand earlier runtime changes. See
 [CI impact selection](ci-impact.md) for the executable boundaries and remaining
 qualification. No application, schema or financial contract changes are included.
 
+## D406 · Bookable Park and Loan with independent native owners
+
+**Status:** implemented with disposable local qualification; aggregate CI and release qualification remain open.
+
+**Requirement.** Book explicit Park and Loan agreements under Physical Gas from
+both commercial perspectives, retain independent instrument components and
+ownership, and perform principal and cash through the shared lifecycle boundary.
+
+**Decision.** Install the bounded `physical_gas_park_loan_v1` title-transfer
+profile. It uses one exact point, quantity basis and nominal mark, one full
+advance within its declared window, equal partial returns and an independent
+fixed fee. Before advance, ordinary opposite gas components and separate timed
+cash belong to the service. Accepted advance moves their economic ownership once
+to native stock and return liability, or identified stock dispatch and return
+claim, with independent signed fee cash. Fixed fees are not scaled by principal.
+The shared ticket, retained views, Lifecycle forms and generic portfolio
+repricing consume the same explicit contracts.
+
+**Boundaries.** No automatic title from booking or a deadline, no implicit
+repayment, no zero value for unsupported behavior and no duplication between the
+source service and independent owners. Unsupported source reconciliation and
+service economic-horizon continuation refuse. Knowledge-only admission must also
+catch a future-effective agreement already known at opening. Generated close
+activation, broader Park and Loan terms and other gas services need their own
+qualified consumers. See [Park and Loan contracts](gas-park-loan.md).
+
 ## D408 — Operating-facility versions and supplied-plan previews
 
 Status: decided 2026-11-16. The supplied-plan capability was checked in an

@@ -29,6 +29,8 @@ public sealed partial class PortfolioRiskPreview
     public async Task<object> EconomicSetup(NpgsqlConnection connection,PreviewData data,InputFrame frame,
         PortfolioRiskCatalogRequest request,CancellationToken ct)
     {
+        if(request.PricingPolicy is not null)
+            throw new MarketDataException("risk_pricing_policy","Economic setup supplies its own pricing choices. Select the complete policy in the economic source request.");
         if(frame.ContextId is not {} contextId||request.BookIds.IsDefault||request.PortfolioIds.IsDefault)
             throw new MarketDataException("risk_economic_scope","Select the shared opening source and explicit books.");
         var hasGas=await FuturesOptionPhysicalPermissionAdmission.TryCapture(connection,database,ct);
@@ -108,6 +110,7 @@ public sealed partial class PortfolioRiskPreview
     {
         if(request?.Scope?.Context is null||request.Projection is null)
             throw new MarketDataException("risk_economic_scope","Select the exact opening context, books, pricing and lifecycle projection policies.");
+        RiskPricingPolicies.RequireScopePolicy(request.Scope,request.PricingPolicy);
         request.Projection.Validate();
         var (opening,books,directory)=await PreparePortfolio(connection,data,frame,request.Scope.BookIds,request.Scope.PortfolioIds,request.PricingPolicy,
             ct,tradeIds:request.Scope.TradeIds);
@@ -119,6 +122,7 @@ public sealed partial class PortfolioRiskPreview
     {
         if(request?.Scope?.Context is null||request.Projection is null)
             throw new MarketDataException("risk_economic_scope","Select the exact opening context, books, pricing and product projection policies.");
+        RiskPricingPolicies.RequireScopePolicy(request.Scope,request.PricingPolicy);
         request.Projection.ValidateCashFundingRead();
         var (opening,_,_)=await PreparePortfolio(connection,data,frame,request.Scope.BookIds,request.Scope.PortfolioIds,request.PricingPolicy,
             ct,tradeIds:request.Scope.TradeIds);
@@ -264,6 +268,7 @@ public sealed partial class PortfolioRiskPreview
     {
         if(request is null||request.Projection is null)
             throw new MarketDataException("risk_economic_scope","Select the complete economic lifecycle risk envelope.");
+        if(request.History is {} selectedHistory)RiskPricingPolicies.RequireScopePolicy(selectedHistory.Scope,selectedHistory.PricingPolicy);
         request.Projection.Validate();LifecycleEconomicRisk.ValidatePolicy(request.Policy);
         if(outer.Detail!="holdings"||outer.Convention!=Convention||outer.NumericalPolicy!=RiskEngine.ExactNumericalPolicy||
             outer.Bumps.IsDefault||!outer.Bumps.IsEmpty||outer.Stress.IsDefault||!outer.Stress.IsEmpty||

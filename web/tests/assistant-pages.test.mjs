@@ -288,7 +288,7 @@ test('PPA bookings reports the inspected PPA or the listed book, which the assis
 });
 
 test('a new trade in the Blotter\'s panel is reported by its product, and no unsent entry is read',()=>{
-  for(const [product,id] of [[null,'blotter_new_trade'],['futures','blotter_new_future'],['swaps','blotter_new_swap'],['ppa','blotter_new_ppa'],['gas','blotter_new_gas'],['crude','blotter_new_crude'],['lng','blotter_new_lng'],['options','blotter_new_option']])
+  for(const [product,id] of [[null,'blotter_new_trade'],['futures','blotter_new_future'],['swaps','blotter_new_swap'],['ppa','blotter_new_ppa'],['gas','blotter_new_gas'],['park-loan','blotter_new_park_loan'],['crude','blotter_new_crude'],['lng','blotter_new_lng'],['options','blotter_new_option']])
     assert.deepEqual(pageReport({page:'futures',...open,risk:false,trade:null,entry:{product},view:blotter}),{page:id,selection:{},layout});
   const names={curve:String,table:String},current={mode:'current',frameId:frame,frameLabel:'18 Dec 2020'};
   for(const [id,shown] of [['blotter_new_trade','A new trade is being started: no product is chosen yet. The assistant does not read a trade being entered.'],

@@ -56,6 +56,7 @@ public sealed partial class PortfolioRiskPreview
         PortfolioHistoryRequest body,CancellationToken ct)
     {
         if(body.Scope is null||body.Policy is null)throw new MarketDataException("risk_history_policy","Choose the retained scope and explicit dated-factor history policies.");
+        RiskPricingPolicies.RequireScopePolicy(body.Scope,body.PricingPolicy);
         FactorHistory.ValidatePolicy(body.Policy);
         var from=DateWorkspace.Date(body.From);var to=DateWorkspace.Date(body.To);
         if(from>=to||to.DayNumber-from.DayNumber>FactorHistory.MaximumCalendarDays)
@@ -190,8 +191,9 @@ public sealed partial class PortfolioRiskPreview
     // The assistant's statistical setup: the catalog's history, parametric and historical capabilities for a scope.
     public async Task<object> StatisticalSetup(NpgsqlConnection connection,PreviewData data,InputFrame frame,PortfolioRiskCatalogRequest body,CancellationToken ct)
     {
-        var (portfolio,bookIds,books)=await PreparePortfolio(connection,data,frame,body.BookIds,body.PortfolioIds,PricingPolicy,ct,tradeIds:body.TradeIds);
-        return new{pricingPolicy=PricingPolicy,history=HistoryCapabilities(portfolio),parametric=ParametricCapabilities(),historical=HistoricalCapabilities(),
+        var pricing=await SelectedPricingPolicy(connection,body,ct);
+        var (portfolio,bookIds,books)=await PreparePortfolio(connection,data,frame,body.BookIds,body.PortfolioIds,pricing,ct,tradeIds:body.TradeIds);
+        return new{pricingPolicy=pricing,history=HistoryCapabilities(portfolio),parametric=ParametricCapabilities(),historical=HistoricalCapabilities(),
             books=books.Where(b=>bookIds.Contains(b.Id("id"))).Select(b=>new{id=b.Id("id"),name=b.Text("name"),
                 valuedTrades=portfolio.Positions.Where(p=>p.BookId==b.Id("id")).Select(p=>p.TradeId).Distinct().Count(),
                 excludedTrades=portfolio.Excluded.Where(p=>p.BookId==b.Id("id")).Select(p=>p.TradeId).Distinct().Count()}),

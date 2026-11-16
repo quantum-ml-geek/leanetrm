@@ -40,9 +40,9 @@ public sealed partial class PortfolioRiskPreview(PreviewDatabase database)
     internal static PortfolioValuationPolicy AccountingPricingPolicy=>PricingPolicy;
     // Whether a retained run was valued under the pricing policy the catalog states now. A page opens a retained run as a
     // scope's current report only then. A result that states no pricing policy is not.
-    internal static bool UnderStatedPricingPolicy(JsonNode? result)=>
+    internal static bool UnderStatedPricingPolicy(JsonNode? result,PortfolioValuationPolicy? selected=null)=>
         result is JsonObject&&result["inputs"] is JsonObject inputs&&inputs["pricingPolicy"] is {} policy&&
-        JsonNode.DeepEquals(policy,JsonSerializer.SerializeToNode(PricingPolicy,RiskJobs.Json));
+        JsonNode.DeepEquals(policy,JsonSerializer.SerializeToNode(selected??PricingPolicy,RiskJobs.Json));
     internal sealed record Prepared(PortfolioRiskRequest Request,RiskDetail Detail,
         ImmutableArray<Guid> BookIds,ImmutableArray<JsonElement> Books,PortfolioValuation.Prepared Portfolio,
         ImmutableArray<PortfolioCurveBump> Bumps,ImmutableArray<PortfolioCurveShift> Stress,
@@ -55,7 +55,8 @@ public sealed partial class PortfolioRiskPreview(PreviewDatabase database)
 
     public async Task<object> Catalog(NpgsqlConnection connection,PreviewData data,InputFrame frame,PortfolioRiskCatalogRequest body,CancellationToken ct)
     {
-        var (portfolio,_,_)=await PreparePortfolio(connection,data,frame,body.BookIds,body.PortfolioIds,PricingPolicy,ct,tradeIds:body.TradeIds);
+        var pricing=await SelectedPricingPolicy(connection,body,ct);
+        var (portfolio,_,_)=await PreparePortfolio(connection,data,frame,body.BookIds,body.PortfolioIds,pricing,ct,tradeIds:body.TradeIds);
         var markets=portfolio.Markets.Select(m=>m.Data).ToImmutableArray();
         var available=portfolio.Markets.SelectMany(m=>m.Data.Model.QuoteFactors(m.Snapshot)).ToImmutableArray();
         var axes=CurveRiskAxes.Catalog(portfolio,ct);
@@ -73,7 +74,7 @@ public sealed partial class PortfolioRiskPreview(PreviewDatabase database)
             books=portfolio.Positions.GroupBy(p=>p.BookId).Select(g=>new{bookId=g.Key}),excludedPositions=portfolio.Excluded,
             measures=portfolio.Positions.Select(p=>p.Measure).Distinct().Order().Select(m=>new{measure=m,measureLabel=MeasureLabel(m)}),
             bumpConvention=ConnectedRiskBump.Convention,stressConvention=CurveShift.ParentAdditive,convention=Convention,
-            numericalPolicy=RiskEngine.ExactNumericalPolicy,pricingPolicy=PricingPolicy,
+            numericalPolicy=RiskEngine.ExactNumericalPolicy,pricingPolicy=pricing,
             history=HistoryCapabilities(portfolio),limits=Limits,
             parametric=ParametricCapabilities(),historical=HistoricalCapabilities(),monteCarlo=MonteCarloCapabilities(portfolio),
             joint=new{convention=PortfolioJointRiskRequest.Version1,scenarioConvention=ConnectedRiskScenarioSet.Independent,bumpConvention=ConnectedRiskBump.Convention,shiftConvention=CurveShift.ParentAdditive,
@@ -131,6 +132,8 @@ public sealed partial class PortfolioRiskPreview(PreviewDatabase database)
     {
         if(body.Economic is {} economic)
             return await PrepareEconomic(connection,data,frame,body,economic,ct,supplemental,retained,historyPlan,historyEvidence);
+        foreach(var policyHistory in new[]{body.Parametric?.History,body.Historical?.History,body.MonteCarlo?.History})
+            if(policyHistory is not null)RiskPricingPolicies.RequireScopePolicy(policyHistory.Scope,policyHistory.PricingPolicy);
         var detail=body.Detail switch{null or "holdings"=>RiskDetail.Holdings,"books"=>RiskDetail.Books,
             _=>throw new MarketDataException("risk_detail","Choose holdings or books for the result detail.")};
         if(body.MonteCarlo is {} simulationRequest)ValidateMonteCarlo(body,simulationRequest);
@@ -304,6 +307,8 @@ public sealed partial class PortfolioRiskPreview(PreviewDatabase database)
         OperatingPositions.Measure=>"Supplied operating-right PV",
         RecPositions.Measure=>"Certificate contractual PV",
         GasPositions.Measure=>"Gas contractual PV",GasPositions.LifecycleMeasure=>"Gas "+GasPositions.LifecycleLabel.ToLowerInvariant(),
+        GasParkLoanTicket.Measure=>"Remaining scheduled plan PV",GasOwnedPortfolio.Measure=>"Independent gas holdings and cash PV",
+        GasOwnedPortfolio.ProfileMeasure=>"Independent gas holdings and saved principal cash PV",
         _=>throw new MarketDataException("valuation_measure","The report requires an explicit valuation measure label.")};
     private static string Currency(ImmutableArray<PreviewData> markets,ReferenceKey key)=>Reference(markets,"currencies",key).Text("display_code");
     private static JsonElement Reference(ImmutableArray<PreviewData> markets,string table,ReferenceKey key)=>

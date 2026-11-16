@@ -24,9 +24,11 @@ class Source extends EventTarget{
 test('permission refresh retires pending reads before temporarily clearing account context',async()=>{
  const nodes=new Map(),node=id=>{if(!nodes.has(id))nodes.set(id,{dataset:{},replaceChildren(){},closest(){return this;}});return nodes.get(id);};
  const noop=()=>{},curveController=new AbortController(),pageController=new AbortController();
+ let parkLoanResets=0;
  const context={currentProfile:'synthetic-reader',navigation:{context:{contextId:'synthetic-retained-context',knownThrough:4}},
   permissions:['ReadMarketData'],marketGeneration:0,curveRead:curveController,pageRead:{controller:pageController},
-  $:node,select:node,choose:noop,clearPrices:noop,clearReference:noop,setCurveNames:noop,renderBlotterViews:noop,scheduleWorkspace:undefined};
+  $:node,select:node,choose:noop,clearPrices:noop,clearReference:noop,setCurveNames:noop,renderBlotterViews:noop,scheduleWorkspace:undefined,
+  parkLoan:{reset(){parkLoanResets++;}}};
  for(const name of ['recInventory','structuredPower','closeConventionDefaults','lifecycle','physicalOperations','deliverySetup','referenceConsole','curveWorkspace','customCurves',
   'volSurfaces','riskJobs','riskViewsNav','facilities','jobs','dashboard','deliveryPrices','intervalSeries','intervalCurves','ppa','gas','crude',
   'lng','gasSetup','crudeSetup','referenceEditor','parties','unitConverter','futures','power','touProducts','schedules','dateEditor','priceSetup',
@@ -49,6 +51,7 @@ test('permission refresh retires pending reads before temporarily clearing accou
   await flush();stream.emit('ready',{protocol,channelId});await flush();assert.ok(submitted);
   refreshing=context.openProfile().catch(error=>error.message);await flush();
   assert.equal(accessReads,2,'a changed permission list must enter identity refresh and await fresh access');
+  assert.equal(parkLoanResets,1,'the Park and loan ticket must release the previous account draft');
   assert.equal(context.navigation,undefined,'the new account metadata is still loading');
   stream.emit('response',{protocol,channelId,requestId:submitted.requestId,operation:submitted.operation,state:'completed',snapshotId:submitted.body.snapshotId,result:{curves:[]}});
   assert.equal(await pending,'async_read_reset','an intentional refresh must not appear to be an unexpected authority change');

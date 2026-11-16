@@ -17,8 +17,9 @@ public sealed record TradePositionsPage(ImmutableArray<TradePositionFact> Positi
 
 // Retained booking facts only. The caller binds the TradingView through TradeReads;
 // this path reads no market observations, schedules, valuation graph or PV.
-internal sealed class TradePositionFacts(PreviewManifest manifest)
+internal sealed class TradePositionFacts(PreviewDatabase database)
 {
+    PreviewManifest manifest=>database.Manifest;
     private static MarketDataException Missing()=>new("position_facts","A retained position is missing its required visible booking metadata.");
     private static void RequirePage(int offset,int limit)
     {if(offset<0||limit is <1 or >64)throw new MarketDataException("position_page","Choose a nonnegative offset and a page size from 1 to 64.");}
@@ -116,6 +117,8 @@ internal sealed class TradePositionFacts(PreviewManifest manifest)
         }
         await RequireReferences(connection,references,ct);
         facts.AddRange(await PhysicalFacts(connection,bookIds,portfolioIds,ct));
+        foreach(var agreement in await GasParkLoanPositions.Read(connection,database,view.CalculationFrame,bookIds,portfolioIds,ct))
+            facts.Add((agreement.Agreement.GetProperty("tradeReference").GetInt32(),agreement.Fact()));
         foreach(var option in await FuturesOptionPositions.Read(connection,manifest,bookIds,portfolioIds,ct))
             facts.AddRange(option.Facts().Select(fact=>(Integer(option.Head,"trade_reference"),fact)));
         await RequireHeads(connection,scopeBooks,[..facts.Where(f=>f.Position.InstrumentType is OperatingPositions.Type or RecPositions.Type).Select(f=>f.Position.TradeId).Distinct()],ct);
@@ -153,7 +156,8 @@ internal sealed class TradePositionFacts(PreviewManifest manifest)
              AND NOT EXISTS(SELECT 1 FROM trading.gas_trade_revisions r WHERE(r.catalog_id,r.trade_id)=(t.catalog_id,t.id))
              AND NOT EXISTS(SELECT 1 FROM trading.lng_trade_revisions r WHERE(r.catalog_id,r.trade_id)=(t.catalog_id,t.id))
              AND NOT EXISTS(SELECT 1 FROM trading.crude_trade_revisions r WHERE(r.catalog_id,r.trade_id)=(t.catalog_id,t.id))
-             AND NOT EXISTS(SELECT 1 FROM trading.futures_option_trade_revisions r WHERE(r.catalog_id,r.trade_id)=(t.catalog_id,t.id)))
+             AND NOT EXISTS(SELECT 1 FROM trading.futures_option_trade_revisions r WHERE(r.catalog_id,r.trade_id)=(t.catalog_id,t.id))
+             AND NOT security.gas_park_loan_trade_head(t.catalog_id,t.id))
             """,manifest.CatalogId,books,nativeTrades);
         if(Equals(await query.ExecuteScalarAsync(ct),true))throw Missing();
     }

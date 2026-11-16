@@ -59,6 +59,12 @@ internal static class RiskTradeScope
             FROM security.risk_ppa_trade_heads($1,$2::uuid[],$3::uuid[]) h(value)
             LEFT JOIN trading.trade_references t ON(t.catalog_id,t.trade_id)=($1,(h.value->>'trade_id')::uuid)
             """,[catalog,books.ToArray(),(object?)ids?.ToArray()??DBNull.Value],ct);
+        var services=await PreviewDatabase.Rows(connection,"""
+            SELECT(h.value||jsonb_build_object('product','physical_gas_park_loan','trade_reference',t.reference_number))::text
+            FROM security.risk_gas_park_loan_trade_heads($1,$2::uuid[],$3::uuid[]) h(value)
+            LEFT JOIN trading.trade_references t ON(t.catalog_id,t.trade_id)=($1,(h.value->>'trade_id')::uuid)
+            """,[catalog,books.ToArray(),(object?)ids?.ToArray()??DBNull.Value],ct);
+        rows=rows.AddRange(services);
         var complete=!ppas.Any(r=>r.TryGetProperty("__unavailable_ppa_identity",out _));
         var operating=await PreviewDatabase.Rows(connection,"""
             SELECT (value||jsonb_build_object('product','operating_right'))::text FROM jsonb_array_elements(

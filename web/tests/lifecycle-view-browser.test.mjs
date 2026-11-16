@@ -16,6 +16,39 @@ const feeSetup={context,accounts:[{id:'account',label:'Synthetic account'}],poli
   {name:'effectiveAt',label:'Amendment effective time',kind:'instant',nullable:false},
   {name:'implementation',label:'Cash adjustment rule',kind:'select',nullable:false,choices:[{id:'gross_timed_fixed_fee_adjustments_v1',label:'Keep original cash; add dated fee adjustments',value:'gross_timed_fixed_fee_adjustments_v1'}]},
   {name:'evidence',label:'Amendment evidence',kind:'text',nullable:false}]}},configuration:{}};
+
+test('Park and loan advance uses exact native form choices and the shared reviewed lifecycle command',{skip:!browserAvailable,timeout:browserTestTimeout},()=>withBrowserPage('<div id="host"></div>',async evaluate=>{
+ const service={...offer,target:{handler:'gas_park_loan',scopeId:'synthetic-trade',bindingId:'synthetic-agreement'},action:'gas.park_loan.advance',label:'Accept principal advance',selection:null,requiredInputs:[]};
+ const setup={context,target:service.target,accounts:[],policies:[{id:offer.policyId,label:'Reviewed advance policy',revision:3,action:service.action,accountId:service.target.scopeId}],configuration:{},forms:{[service.action]:{label:service.label,permission:'RecordGasOwnedHoldings',fields:[
+  {name:'serviceVersion',label:'Captured agreement version',kind:'reference',nullable:false,members:['expectedVersion'],choices:[{id:'7',label:'Agreement version 7',value:{expectedVersion:7}}]},
+  {name:'agreementEvidenceId',label:'Accepted agreement evidence',kind:'select',nullable:false,choices:[{id:'synthetic-agreement-evidence',label:'Synthetic agreement · source revision 2'}]},
+  {name:'evidenceId',label:'Observed title receipt',kind:'select',nullable:false,choices:[{id:'synthetic-title-evidence',label:'Synthetic receipt · source revision 3'}]},
+  {name:'claimEvidenceId',label:'Observed return claim',kind:'select',nullable:true,choices:[]},
+  {name:'identifiedStock',label:'Identified inventory and reservation',kind:'reference',nullable:true,members:['lotId','reservationId'],choices:[]},
+  {name:'effectiveAt',label:'Observed advance time',kind:'instant',nullable:false}]}}};
+ await evaluate(`(async()=>{window.sent=[];window.previews=[];window.errors=[];const {setupLifecycle}=await import('/lifecycle-view.js');const api=async(path,body)=>{
+  if(path==='lifecycle/view')return ${JSON.stringify({...discovery,actions:[service],choices:{...discovery.choices,actions:[{code:service.action,automatic:false,configurationPermission:'ConfigureGasOwnedHoldings',executionPermission:'RecordGasOwnedHoldings'}]}})};
+  if(path==='lifecycle/gas/setup')return ${JSON.stringify(setup)};
+  if(path==='time/inspect')return{candidates:[{instant:${JSON.stringify(context.asOf)},offset:'-06:00'}]};
+  if(path==='lifecycle/preview'){previews.push(body);return{hash:'a'.repeat(64),offer:${JSON.stringify(service)},details:{effects:{stockQuantity:'720',returnQuantity:'720',outstandingPrincipal:'720',feeAmount:'12.50',currency:'USD'}}};}
+  if(path==='lifecycle/execute'){sent.push(body);return{operationId:body.operationId,changed:true};}throw Error('Unexpected '+path);};
+  window.until=async test=>{for(let i=0;i<300&&!test();i++)await new Promise(resolve=>setTimeout(resolve,10));if(!test())throw Error('Service action not ready');};
+  window.desk=setupLifecycle(document.querySelector('#host'),{api,act:async f=>{try{await f();}catch(error){errors.push(error.message);}},busy:()=>false,identity:()=> 'synthetic-operator',context:()=>({snapshotId:'header'}),historical:()=>false,zone:()=> 'America/Chicago',permission:()=>true,changed(){}});
+  await desk.load();await until(()=>!!document.querySelector('[data-lifecycle=rows] .tabulator-row'));document.querySelector('[data-lifecycle=rows] .tabulator-row').click();await until(()=>!!document.querySelector('[name=serviceVersion]'));
+ })()`);
+ assert.deepEqual(await evaluate("['policyId','serviceVersion','agreementEvidenceId','evidenceId','claimEvidenceId','identifiedStock'].map(name=>document.querySelector('[name=\"'+name+'\"]').value)"),['','','','','','']);
+ await evaluate(`(async()=>{for(const[name,value]of Object.entries({policyId:'${offer.policyId}:3',serviceVersion:'7',agreementEvidenceId:'synthetic-agreement-evidence',evidenceId:'synthetic-title-evidence',claimEvidenceId:'@null',identifiedStock:'@null',effectiveAt:'2026-11-02T09:00:00'})){
+  const field=document.querySelector('[name="'+name+'"]');field.value=value;field.dispatchEvent(new Event('change',{bubbles:true}));}
+  document.querySelector('[data-lifecycle=panel] form').requestSubmit();await until(()=>!!document.querySelector('[data-lifecycle-review]'));
+ })()`);
+ assert.deepEqual(await evaluate('errors'),[]);
+ assert.deepEqual((await evaluate('previews[0]')).selection,{expectedVersion:7,agreementEvidenceId:'synthetic-agreement-evidence',evidenceId:'synthetic-title-evidence',claimEvidenceId:null,lotId:null,reservationId:null,effectiveAt:context.asOf});
+ assert.equal(await evaluate('sent.length'),0);
+ assert.match(await evaluate("document.querySelector('[data-lifecycle-review]').textContent"),/720.*720.*12.50.*USD/);
+ assert.match(await evaluate("document.querySelector('[data-lifecycle-review]').textContent"),/Outstanding principal720/i);
+ await evaluate("(async()=>{document.querySelector('[data-lifecycle-execute]').click();await until(()=>sent.length===1);})()");
+ const sent=await evaluate('sent[0]');assert.deepEqual(sent.context,context);assert.deepEqual(sent.target,service.target);assert.equal(sent.action,service.action);assert.equal(sent.previewHash,'a'.repeat(64));
+}));
 for(const zero of [false,true])test('loan fee review retains exact source cash and bank payments with '+(zero?'explicit zero and nullable due':'exact revised amounts'),
  {skip:!browserAvailable,timeout:browserTestTimeout},()=>withBrowserPage('<div id="host"></div>',async evaluate=>{
  const amount=zero?'0':'-6.000000000000000001';

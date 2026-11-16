@@ -48,6 +48,11 @@ test('physical gas shares mixed fact pages',()=>{
  assert.deepEqual(readPositionFacts(page([fact('ppa-binding'),gas],2,null),2).positions,[fact('ppa-binding'),gas]);
 });
 
+test('Park and loan fact pages preserve the agreement principal and exact product identity',()=>{
+ const agreement={...fact('service-instrument'),tradeId:'service-trade',instrumentType:'physical_gas_park_loan',bookedQuantity:'720',bookedUnit:'MMBtu'};
+ assert.deepEqual(readPositionFacts(page([agreement],1,null),1).positions,[agreement]);
+});
+
 test('physical crude keeps its exact total-volume facts in mixed position pages',()=>{
  const crude={...fact('crude-instrument'),tradeId:'crude-trade',instrumentType:'physical_crude',bookedQuantity:'1000',bookedUnit:'bbl'};
  assert.deepEqual(readPositionFacts(page([fact('ppa-binding'),crude],2,null),2).positions,[fact('ppa-binding'),crude]);
