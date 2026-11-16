@@ -108,20 +108,7 @@ internal sealed class AsyncReads(PreviewDatabase database,CancellationToken stop
     }
     Task Authorize(Owner owner,ReadInput? input,CancellationToken ct,
         Func<Npgsql.NpgsqlConnection,CancellationToken,Task>? recheck=null,Func<CancellationToken,Task>? publish=null)=>
-        database.WithIdentity(owner.Profile,null,async(connection,t)=>
-    {
-        async Task Rights()
-        {
-            foreach(var permission in input?.Permissions??[])
-                if(!await PreviewDatabase.HasPermission(connection,permission,t))throw new PreviewDeniedException();
-            await database.RequireSignedIn(connection,t);
-        }
-        await Rights();
-        if(recheck is not null)await recheck(connection,t);
-        await Rights();
-        if(publish is not null)await publish(t);
-        return true;
-    },ct,hostedDigest:owner.HostedDigest);
+        ReadAuthority.Require(database,owner.Profile,owner.HostedDigest,input?.Permissions??[],ct,recheck,publish);
     static async Task Current(Owner owner,CancellationToken ct)
     {
         await owner.Session.Gate.WaitAsync(ct);

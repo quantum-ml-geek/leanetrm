@@ -36,41 +36,71 @@ internal static class AsyncReadContract
     internal static ReadInput Decode(AsyncReadRequest request)
     {
         if(request.Body.ValueKind!=JsonValueKind.Object)throw Invalid();
-        T Body<T>()=>request.Body.Deserialize<T>(Json)??throw Invalid();
-        ReadInput Market(object body,Guid snapshot)=>snapshot!=Guid.Empty?
-            new(request.Operation,body,snapshot,["ReadMarketData"]):throw Invalid();
-        ReadInput Trading(object body,FuturesReadRequest? context,bool risk=false)=>context is {SnapshotId:var snapshot}&&snapshot!=Guid.Empty?
-            new(request.Operation,body,snapshot,risk?["ReadTrades","ReadMarketData","RunScenario"]:["ReadTrades","ReadMarketData"],context):throw Invalid();
-        switch(request.Operation)
+        return Input(request.Operation,request.Body.Deserialize(BodyType(request.Operation),Json)??throw Invalid());
+    }
+    static Type BodyType(string operation)=>operation switch
+    {
+        "curve.evaluate.v1"=>typeof(BuildRequest),
+        "curve.history.v1"=>typeof(HistoryRequest),
+        "curve.shapes.v1"=>typeof(CurveShapesRequest),
+        "trading.directory.v1" or "trading.freshness.v1"=>typeof(FuturesReadRequest),
+        "trading.positions.v1"=>typeof(TradingPositionsRequest),
+        "trading.position.v1"=>typeof(TradePositionReadRequest),
+        "trading.workspace.v1"=>typeof(TradingWorkspaceRequest),
+        "trading.blotter.v1"=>typeof(FuturesBlotterRequest),
+        "futures.editor.v1"=>typeof(FuturesEditorRequest),
+        "swaps.editor.v1"=>typeof(SwapEditorRequest),
+        "options.strategy.analyze.v1"=>typeof(OptionStrategyAnalyzeRequest),
+        "portfolio.risk.scope.v1"=>typeof(RiskScopeRequest),
+        "portfolio.risk.catalog.v1" or "portfolio.risk.statistical.setup.v1"=>typeof(PortfolioRiskCatalogRequest),
+        "portfolio.risk.calculate.v1"=>typeof(PortfolioRiskRequest),
+        "portfolio.risk.history.v1"=>typeof(PortfolioHistoryRequest),
+        "portfolio.risk.parametric.calculate.v1" or "portfolio.risk.parametric.summary.v1"=>typeof(PortfolioParametricRequest),
+        "portfolio.risk.historical.calculate.v1" or "portfolio.risk.historical.summary.v1"=>typeof(PortfolioHistoricalRequest),
+        "portfolio.risk.historical.sample.v1"=>typeof(PortfolioHistoricalSampleRequest),
+        "portfolio.risk.monte_carlo.calculate.v1"=>typeof(PortfolioMonteCarloRequest),
+        "portfolio.risk.jobs.list.v1"=>typeof(AsyncReadEmpty),
+        "portfolio.risk.jobs.read.v1"=>typeof(AsyncReadJob),
+        "portfolio.risk.archive.v1"=>typeof(AsyncReadArchive),
+        _=>throw new AsyncReadException(422,"async_operation","This operation is not an admitted asynchronous read.")
+    };
+    // The input of an already-typed body: an ordinary route and the channel classify one read identically.
+    internal static ReadInput Input(string operation,object body)
+    {
+        if(body.GetType()!=BodyType(operation))throw Invalid();
+        ReadInput Market(Guid snapshot)=>snapshot!=Guid.Empty?new(operation,body,snapshot,["ReadMarketData"]):throw Invalid();
+        ReadInput Trading(FuturesReadRequest? context,bool risk=false)=>context is {SnapshotId:var snapshot}&&snapshot!=Guid.Empty?
+            new(operation,body,snapshot,risk?["ReadTrades","ReadMarketData","RunScenario"]:["ReadTrades","ReadMarketData"],context):throw Invalid();
+        ReadInput Status()=>new(operation,body,null,["RunScenario"]);
+        switch(body)
         {
-            case "curve.evaluate.v1":var evaluate=Body<BuildRequest>();return Market(evaluate,evaluate.SnapshotId);
-            case "curve.history.v1":var history=Body<HistoryRequest>();return Market(history,history.SnapshotId);
-            case "curve.shapes.v1":var shapes=Body<CurveShapesRequest>();return Market(shapes,shapes.SnapshotId);
-            case "trading.directory.v1":case "trading.freshness.v1":var directory=Body<FuturesReadRequest>();return Trading(directory,directory);
-            case "trading.positions.v1":var positions=Body<TradingPositionsRequest>();return Trading(positions,positions.Context);
-            case "trading.position.v1":var position=Body<TradePositionReadRequest>();return Trading(position,position.Context);
-            case "trading.workspace.v1":var workspace=Body<TradingWorkspaceRequest>();return Trading(workspace,workspace.Context);
-            case "trading.blotter.v1":var blotter=Body<FuturesBlotterRequest>();return Trading(blotter,blotter.Context);
-            case "futures.editor.v1":var future=Body<FuturesEditorRequest>();return Trading(future,future.Context);
-            case "swaps.editor.v1":var swap=Body<SwapEditorRequest>();return Trading(swap,swap.Context);
-            case "options.strategy.analyze.v1":var strategy=Body<OptionStrategyAnalyzeRequest>();return Trading(strategy,strategy.Context);
-            case "portfolio.risk.scope.v1":var scope=Body<RiskScopeRequest>();return Trading(scope,scope.Context,true);
-            case "portfolio.risk.catalog.v1":case "portfolio.risk.statistical.setup.v1":var catalog=Body<PortfolioRiskCatalogRequest>();return Trading(catalog,catalog.Context,true);
-            case "portfolio.risk.calculate.v1":var risk=Body<PortfolioRiskRequest>();return Trading(risk,risk.Context,true);
-            case "portfolio.risk.history.v1":var riskHistory=Body<PortfolioHistoryRequest>();return Trading(riskHistory,riskHistory.Scope?.Context,true);
-            case "portfolio.risk.parametric.calculate.v1":case "portfolio.risk.parametric.summary.v1":var parametric=Body<PortfolioParametricRequest>();return Trading(parametric,parametric.History?.Scope?.Context,true);
-            case "portfolio.risk.historical.calculate.v1":case "portfolio.risk.historical.summary.v1":var historical=Body<PortfolioHistoricalRequest>();return Trading(historical,historical.History?.Scope?.Context,true);
-            case "portfolio.risk.historical.sample.v1":var sample=Body<PortfolioHistoricalSampleRequest>();return Trading(sample,sample.Request?.History?.Scope?.Context,true);
-            case "portfolio.risk.monte_carlo.calculate.v1":var monteCarlo=Body<PortfolioMonteCarloRequest>();return Trading(monteCarlo,monteCarlo.History?.Scope?.Context,true);
-            case "portfolio.risk.jobs.list.v1":return new(request.Operation,Body<AsyncReadEmpty>(),null,["RunScenario"]);
-            case "portfolio.risk.jobs.read.v1":var job=Body<AsyncReadJob>();return job.Id!=Guid.Empty?new(request.Operation,job,null,["RunScenario"]):throw Invalid();
-            case "portfolio.risk.archive.v1":
-                var archive=Body<AsyncReadArchive>();
+            case BuildRequest evaluate:return Market(evaluate.SnapshotId);
+            case HistoryRequest history:return Market(history.SnapshotId);
+            case CurveShapesRequest shapes:return Market(shapes.SnapshotId);
+            case FuturesReadRequest directory:return Trading(directory);
+            case TradingPositionsRequest positions:return Trading(positions.Context);
+            case TradePositionReadRequest position:return Trading(position.Context);
+            case TradingWorkspaceRequest workspace:return Trading(workspace.Context);
+            case FuturesBlotterRequest blotter:return Trading(blotter.Context);
+            case FuturesEditorRequest future:return Trading(future.Context);
+            case SwapEditorRequest swap:return Trading(swap.Context);
+            case OptionStrategyAnalyzeRequest strategy:return Trading(strategy.Context);
+            case RiskScopeRequest scope:return Trading(scope.Context,true);
+            case PortfolioRiskCatalogRequest catalog:return Trading(catalog.Context,true);
+            case PortfolioRiskRequest risk:return Trading(risk.Context,true);
+            case PortfolioHistoryRequest riskHistory:return Trading(riskHistory.Scope?.Context,true);
+            case PortfolioParametricRequest parametric:return Trading(parametric.History?.Scope?.Context,true);
+            case PortfolioHistoricalRequest historical:return Trading(historical.History?.Scope?.Context,true);
+            case PortfolioHistoricalSampleRequest sample:return Trading(sample.Request?.History?.Scope?.Context,true);
+            case PortfolioMonteCarloRequest monteCarlo:return Trading(monteCarlo.History?.Scope?.Context,true);
+            case AsyncReadEmpty:return Status();
+            case AsyncReadJob job:return job.Id!=Guid.Empty?Status():throw Invalid();
+            case AsyncReadArchive archive:
                 if(archive.Method is not("statistical" or "parametric" or "historical" or "monte_carlo")||archive.Limit is <1 or >100||
                     (archive.Before is null)!=(archive.Id is null)||archive.Id==Guid.Empty)throw Invalid();
                 if(archive.Before is not null)_=SchedulePreview.ParseAt(archive.Before);
-                return new(request.Operation,archive,null,["RunScenario"]);
-            default:throw new AsyncReadException(422,"async_operation","This operation is not an admitted asynchronous read.");
+                return Status();
+            default:throw Invalid();
         }
     }
     internal static AsyncReadException Invalid()=>new(422,"async_request","Supply the complete typed read request and its exact selected context.");

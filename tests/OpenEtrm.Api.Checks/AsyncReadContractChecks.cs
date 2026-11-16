@@ -24,6 +24,43 @@ internal static class AsyncReadContractChecks
             catch(AsyncReadException e)when(e.Code=="async_operation"){continue;}
             throw new Exception("The async read allowlist must never accept writes or arbitrary routes.");
         }
-        Console.WriteLine("PASS async read contracts: typed allowlist, exact context, authorized status reads and mutation refusal");
+        TypedInputs(snapshot,channel);
+        Console.WriteLine("PASS async read contracts: typed allowlist, exact context, typed route inputs, authorized status reads and mutation refusal");
+    }
+    // An ordinary route supplies its already-typed body; it must be classified exactly as the same body decoded from the channel.
+    static void TypedInputs(Guid snapshot,Guid channel)
+    {
+        var context=new{snapshotId=snapshot,convention=TradingBlotter.Convention,knowledgeMode="current"};
+        var scope=new{scope=new{context}};var statistical=new{history=scope};
+        foreach(var(operation,body)in new(string,object)[]{
+            ("curve.evaluate.v1",new{snapshotId=snapshot,curve="synthetic"}),("curve.history.v1",new{snapshotId=snapshot,curve="synthetic"}),
+            ("curve.shapes.v1",new{snapshotId=snapshot,curves=new[]{"synthetic"}}),
+            ("trading.directory.v1",context),("trading.freshness.v1",context),("trading.positions.v1",new{context,bookIds=Array.Empty<Guid>(),portfolioIds=Array.Empty<Guid>(),offset=0,limit=64}),("trading.position.v1",new{context,tradeId=Guid.NewGuid(),bindingId=Guid.NewGuid(),revision=1,instrumentType="synthetic"}),
+            ("trading.workspace.v1",new{context}),("trading.blotter.v1",new{context}),("futures.editor.v1",new{context,tradeId=Guid.NewGuid()}),
+            ("swaps.editor.v1",new{context,tradeId=Guid.NewGuid()}),("options.strategy.analyze.v1",OptionStrategyRequestChecks.Request()),
+            ("portfolio.risk.scope.v1",new{context}),("portfolio.risk.catalog.v1",new{context}),("portfolio.risk.statistical.setup.v1",new{context}),
+            ("portfolio.risk.calculate.v1",new{context}),("portfolio.risk.history.v1",scope),
+            ("portfolio.risk.parametric.calculate.v1",statistical),("portfolio.risk.parametric.summary.v1",statistical),
+            ("portfolio.risk.historical.calculate.v1",statistical),("portfolio.risk.historical.summary.v1",statistical),
+            ("portfolio.risk.historical.sample.v1",new{request=statistical}),("portfolio.risk.monte_carlo.calculate.v1",statistical),
+            ("portfolio.risk.jobs.list.v1",new{}),("portfolio.risk.jobs.read.v1",new{id=Guid.NewGuid()}),
+            ("portfolio.risk.archive.v1",new{method="statistical",limit=25})})
+        {
+            var decoded=AsyncReadContract.Decode(new(channel,Guid.NewGuid(),operation,JsonSerializer.SerializeToElement(body,AsyncReadContract.Json)));var typed=AsyncReadContract.Input(operation,decoded.Body);
+            if(typed.Operation!=operation||typed.SnapshotId!=decoded.SnapshotId||!typed.Permissions.SequenceEqual(decoded.Permissions)||
+                typed.Context!=decoded.Context||!ReferenceEquals(typed.Body,decoded.Body))
+                throw new Exception($"A typed {operation} body must be classified as the same body decoded from the channel.");
+        }
+        foreach(var(operation,body,code)in new(string,object,string)[]{
+            ("curve.evaluate.v1",new HistoryRequest(snapshot,"synthetic"),"async_request"),
+            ("curve.evaluate.v1",new BuildRequest(Guid.Empty,"synthetic"),"async_request"),
+            ("portfolio.risk.jobs.read.v1",new AsyncReadJob(Guid.Empty),"async_request"),
+            ("portfolio.risk.archive.v1",new AsyncReadArchive("other",25,null,null),"async_request"),
+            ("trades.book.v1",new FuturesReadRequest(snapshot,TradingBlotter.Convention,"current"),"async_operation")})
+        {
+            try{AsyncReadContract.Input(operation,body);}
+            catch(AsyncReadException e)when(e.Code==code){continue;}
+            throw new Exception($"A typed {operation} input of the wrong shape or without its exact selection must be refused {code}.");
+        }
     }
 }
