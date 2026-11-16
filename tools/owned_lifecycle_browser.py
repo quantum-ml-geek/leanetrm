@@ -30,7 +30,8 @@ def run(query,manifest,dotnet,browser,children,fixture,script,*,worker_enabled=T
     shutil.copyfile(ROOT/'deploy/process-limits.example.json',root/'process-limits.json')
     shutil.copytree(ROOT/'web/dist',root/'web')
     shutil.copytree(ROOT/'src/OpenEtrm.Api/bin/Debug/net10.0',root/'api')
-    shutil.copytree(ROOT/'src/OpenEtrm.Worker/bin/Debug/net10.0',root/'worker')
+    if worker_enabled:
+        shutil.copytree(ROOT/'src/OpenEtrm.Worker/bin/Debug/net10.0',root/'worker')
     environment={k:v for k,v in os.environ.items() if not k.startswith(('PG','OPENETRM_','ASPNETCORE_','DOTNET_'))}
     environment.update(OPENETRM_PREVIEW_ROOT=str(root),OPENETRM_PREVIEW_WEB=str(root/'web'),OPENETRM_BROWSER_ACTION_WAIT_MS='30000')
     for variable,name in [('OPENETRM_PREVIEW_CREDENTIAL_KEY','credential.key'),('OPENETRM_PREVIEW_CREDENTIAL_RETRY_KEY','credential-retry.key')]:

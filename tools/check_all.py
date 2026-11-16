@@ -157,6 +157,11 @@ def run_checks(pg_bin, dotnet, browser, *, group='all', run=subprocess.run):
                          ('check_agent_operating_settings','assistant')):
         check(helper,[sys.executable,f'tools/{helper}.py','--pg-bin',str(pg_bin),'--dotnet',str(dotnet),
             '--browser',str(browser),'--no-build'],suite=suite)
+    for helper in ('check_storage_facility','check_storage_facility_upgrade'):
+        check(helper,[sys.executable,f'tools/{helper}.py','--pg-bin',str(pg_bin)],suite='physical')
+    check('physical facility authoring and measured activity in the application',
+        [sys.executable,'tools/check_storage_facility_browser.py','--pg-bin',str(pg_bin),'--dotnet',str(dotnet),
+         '--browser',str(browser),'--no-build'],suite='physical')
     for kind in ('physical','cash'):
         check('native '+kind+' option models in the application',[sys.executable,'tools/check_lifecycle_valuation_browser.py',
             '--pg-bin',str(pg_bin),'--dotnet',str(dotnet),'--browser',str(browser),'--kind',kind,'--no-build'],suite='lifecycle')

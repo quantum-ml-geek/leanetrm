@@ -1,0 +1,44 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import {browserAvailable,browserTestTimeout,withBrowserPage} from './browser-page.mjs';
+const markup=(await readFile(new URL('../src/index.html',import.meta.url),'utf8')).replace(/<script\b[^>]*>[\s\S]*?<\/script>/g,'');
+
+test('Facilities keeps existing quantity work and lazily opens physical definitions and activity',{skip:!browserAvailable,timeout:browserTestTimeout},()=>withBrowserPage(markup,async(evaluate,command)=>{
+ await evaluate(`(async()=>{
+  window.calls=[];window.errors=[];
+  const context={contextId:'synthetic-context',effectiveOn:'2032-03-14',knownThrough:1,knownAt:'2032-03-14T20:00:00Z'};
+  const api=async(path,body)=>{calls.push({path,body});if(path==='facilities/quantities/directory')return{ownerId:'opaque-owner',context,at:'2032-03-14T23:59:59Z',ledgers:[],choices:[],hasMore:false,choicesTruncated:false,canRecord:true,canConfigure:true};
+   if(path==='facilities/operations/directory')return{ownerId:'opaque-owner',context,at:'2032-03-14T23:59:59Z',facilities:[],forms:{},configuration:{define:{label:'Publish facility definition',permission:'ConfigureFacilityLimits',base:{kind:'define',facilityId:null},fields:[{name:'evidence',label:'Definition evidence',kind:'text',nullable:false}]}},overviewSections:[],tables:[],canRecord:true,canConfigure:true,historical:false};throw Error('Unexpected '+path);};
+  window.workspace=(await import('/facilities-workspace.js')).setupFacilities({api,act:async work=>{try{await work();}catch(error){errors.push(error.message);}},busy:()=>false,zone:()=> 'UTC',identity:()=> 'synthetic-operator',context:()=>({effectiveOn:'2032-03-14',knowledgeMode:'current',retained:null,convention:'facility_business_date_end_utc_v1'}),permission:()=>true,changed(){},tradeInspection:()=>null,openTrade:async()=>{}});
+  await workspace.load();
+ })()`);
+ assert.deepEqual(await evaluate('calls.map(call=>call.path)'),['facilities/quantities/directory']);
+ await evaluate("document.querySelector('[data-facilities-view=definitions]').click();new Promise(resolve=>setTimeout(resolve,30))");
+ assert.deepEqual(await evaluate('calls.map(call=>call.path)'),['facilities/quantities/directory','facilities/operations/directory']);
+ assert.equal(await evaluate("document.querySelector('#facility-quantities-workspace').hidden"),true);
+ await evaluate("document.querySelector('[data-facility-command=define]').click();const evidence=document.querySelector('[name=evidence]');evidence.value='Synthetic unsaved rule';evidence.dispatchEvent(new Event('input',{bubbles:true}));window.confirm=()=>false;document.querySelector('[data-facilities-view=activity]').click();new Promise(resolve=>setTimeout(resolve,30))");
+ assert.equal(await evaluate('workspace.section()'),'definitions');
+ assert.equal(await evaluate("document.querySelector('[name=evidence]').value"),'Synthetic unsaved rule');
+ assert.equal(await evaluate('calls.length'),2,'a refused move cannot read or mark the other workspace');
+ assert.deepEqual(await evaluate('errors'),[]);
+ await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
+ await evaluate("document.querySelector('#facilities-page').hidden=false;document.querySelector('#market-page').hidden=true");
+ const geometry=await evaluate("({width:document.documentElement.clientWidth,outside:[...document.querySelectorAll('[data-facilities-view]')].filter(button=>{const box=button.getBoundingClientRect();return box.left<0||box.right>document.documentElement.clientWidth+1}).map(button=>button.textContent)})");
+ assert.deepEqual(geometry.outside,[],JSON.stringify(geometry));
+}));
+
+test('reloading Facilities exposes an original native request even when its selected source cannot be read',{skip:!browserAvailable,timeout:browserTestTimeout},()=>withBrowserPage(markup,async evaluate=>{
+ await evaluate(`(async()=>{
+  const context={effectiveOn:'2032-03-14',knowledgeMode:'current',retained:null,convention:'facility_business_date_end_utc_v1'},command={path:'facilities/operations/record',operationId:'synthetic-operation',label:'Original measured activity',body:{context,ownerId:'original-owner',effectiveAt:'2032-03-14T08:00:00Z',command:{kind:'activity',facilityId:'synthetic-facility'}},uncertain:true};
+  sessionStorage.setItem('openetrm.facility.operations.request.synthetic-operator',JSON.stringify(command));window.errors=[];
+  const api=async()=>{throw Object.assign(Error('Synthetic source unavailable'),{code:'access_denied'});};
+  window.workspace=(await import('/facilities-workspace.js')).setupFacilities({api,act:async work=>{try{await work();}catch(error){errors.push(error.message);}},busy:()=>false,zone:()=> 'UTC',identity:()=> 'synthetic-operator',context:()=>context,permission:()=>true,changed(){},tradeInspection:()=>null,openTrade:async()=>{}});
+  await workspace.load().catch(error=>errors.push(error.message));workspace.sync();
+ })()`);
+ assert.equal(await evaluate('workspace.section()'),'activity');
+ assert.equal(await evaluate("document.querySelector('#facility-operations-workspace').hidden"),false);
+ assert.equal(await evaluate("document.querySelector('[data-facility-ops=pending]').hidden"),false);
+ assert.equal(await evaluate("document.querySelector('[data-facility-ops=status]').disabled"),false);
+ assert.equal(await evaluate("document.querySelector('[data-facility-ops=retry]').disabled"),false,'retry retains its own original source and native authority independently of a new read');
+}));

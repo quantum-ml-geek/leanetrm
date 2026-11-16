@@ -3,6 +3,9 @@ using System.Collections.Immutable;
 using System.Globalization;
 using OpenEtrm.Api;
 using OpenEtrm.MarketData;
+if(args is ["--storage-facility-native",var storageFixture]){await StorageFacilityNativeChecks.RunNative(storageFixture);return;}
+if(args is ["--storage-facility-adapters"]){StorageFacilityAdapterChecks.Run();return;}
+if(args is ["--storage-facility-setup"]){StorageFacilityMetadataChecks.Run();return;}
 if(args is ["--async-reads"]){AsyncReadContractChecks.Run();await AsyncReadChecks.Run();return;}
 if(args is ["--async-read-contracts"]){AsyncReadContractChecks.Run();return;}
 if(args is ["--calendar-authoring"]){CalendarAuthoringSchemaChecks.Run();return;}
@@ -200,6 +203,8 @@ if(args is ["--blotter-stream"]){await BlotterStreamChecks.Run();return;}
 
 if (args is ["--schedules"])
 {
+    StorageFacilityAdapterChecks.Run();
+    StorageFacilityMetadataChecks.Run();
     FuturesMarginSourceChecks.Run();
     CashInstrumentChecks.Run();
     CurveDisplayChecks.Run();

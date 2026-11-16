@@ -5,6 +5,11 @@ over independent native ownership and cash. The bounded title-transfer profile
 uses shared entry, lifecycle and current-clock interactive/retained price risk.
 Release qualification and broader service capabilities remain separate.
 
+D407 adds [physical storage assets and activity](storage-facility-operations.md),
+independent from commercial entitlement, title and cash. The first operating
+profile has local managed, native, upgrade and browser qualification. Integration
+and release gates remain separate from that evidence.
+
 D401 selects [shared lifecycle delivery](lifecycle-delivery.md): operation-specific
 eligibility, native lifecycle coordination, gas ownership/entitlements/borrowing
 and event-aware economic risk. Its delivery gates distinguish implementation from

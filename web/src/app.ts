@@ -7,7 +7,7 @@ import {riskReportViews,riskViewNames,riskViews,setupRiskViews} from './risk-vie
 import {setupDeliverySetupSwitch} from './delivery-setup-switch.js';
 import {consoleMenu,consoleViewName} from './console-menu.js';
 import {setupReferenceConsole} from './reference-console.js';
-import {setupFacilityQuantities} from './facility-quantities-view.js';
+import {setupFacilities} from './facilities-workspace.js';
 import {requestDeadlines} from './request-deadline.js';
 import {rememberPage,restoredPage} from './page-memory.js';
 import {sameReferenceSource} from './reference-scope.js';
@@ -185,6 +185,7 @@ function syncControls(){
   // A view that keeps its controls' states itself (data-own-controls: the deal ticket, coming-soon entries) is left as it drew them.
   document.querySelectorAll<HTMLButtonElement|HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement>('button,input,select,textarea').forEach(n=>{if(!n.closest('[data-own-controls]'))n.disabled=busy;});
   if(!busy){$('save').toggleAttribute('disabled',!canCorrect());select('snapshot').disabled=['admin','ai'].includes(page);$('follow-live').toggleAttribute('disabled',!select('snapshot').value);}
+  $('use-business-date-current').toggleAttribute('disabled',busy||!$<HTMLInputElement>('date-context-on').value);
   for(const id of ['source-contract','pricing-contract'])select(id).disabled=busy||showAllContracts||!result?.points.length;
   for(const id of ['source-all','pricing-all'])$<HTMLButtonElement>(id).disabled=busy||!result||!result.points.length||(result.points.length<2&&!showAllContracts);
   $('reference-previous').toggleAttribute('disabled',busy||!referencePage||referencePage.offset===0);$('reference-next').toggleAttribute('disabled',busy||!canAdvanceReference());
@@ -205,6 +206,7 @@ function renderWorkspaceMode(){
   $('as-of-context').dataset.contextMode=$('date-context').dataset.contextMode;
   $('context-actions').hidden=!showsContext(page)||!contextDirty&&!historical&&!expanded;
   $('apply-view-context').hidden=!contextDirty&&!expanded;
+  $('use-business-date-current').hidden=page!=='facilities';
   $('current-view-context').hidden=!contextDirty&&!historical&&!expanded;
   $('follow-live').hidden=historical||contextDirty||!['market','curve-definitions','custom-curves','futures'].includes(page);
   $('follow-live').toggleAttribute('disabled',busy||!select('snapshot').value);
@@ -1236,7 +1238,7 @@ const lifecycle=setupLifecycle($('lifecycle-page'),{api,act,busy:()=>busy,zone:(
 const physicalOperations=setupPhysicalOperations($('physical-operations-page'),{api,act,busy:()=>busy,zone:()=>prefs.timeZone,
  identity:()=>administrationScope+':'+exampleId+':'+currentProfile,permission:can,changed:()=>{syncUnloadQuestion();assistant.sync();},
  context:()=>{if(contextDirty)throw Error('Apply the changed header context before reading physical operations.');const retained=historicalContext();return {snapshotId:frame().id,convention:'trading_workspace_v1',knowledgeMode:retained?'retained':'current',...(retained?{contextId:retained.contextId}:{})};}});
-const facilities=setupFacilityQuantities({api,act,busy:()=>busy,zone:()=>prefs.timeZone,identity:()=>administrationScope+':'+exampleId+':'+currentProfile,
+const facilities=setupFacilities({api,act,busy:()=>busy,zone:()=>prefs.timeZone,identity:()=>administrationScope+':'+exampleId+':'+currentProfile,permission:can,
  context:()=>{if(contextDirty)throw Error('Apply the changed context before reading facilities.');return {effectiveOn:$<HTMLInputElement>('date-context-on').value,knowledgeMode:historicalContext()?'retained':'current',retained:historicalContext()??null,convention:'facility_business_date_end_utc_v1'};},
  changed:()=>syncUnloadQuestion(),tradeInspection:()=>select('snapshot').value?null:'Choose a market close in the Blotter before opening trades. Facility quantities do not select a price close.',openTrade:async(id,revision)=>{if(!await mayLeave())return;await act(async()=>{await setPage('futures');await futures.load();await futures.openTrade(id,'physical_gas',revision);});}});
 const administration=setupAdministration(act,api,()=>busy,()=>prefs.timeZone,()=>administrationScope+':'+currentProfile,profileChoices);
@@ -1277,6 +1279,15 @@ async function viewContext(snapshot:{context:Context;snapshotId?:string|null;fra
 }
 $('apply-view-context').onclick=()=>leaving(async()=>{await applyContext();if(page==='facilities')await facilities.load();else if(page==='dashboard')await dashboard.load();else if(page==='reference')await loadReference();else if(page==='power')await loadPowerPage({refreshProducts:false});else if(page==='custom-curves')await customCurves.load();else if(page==='interval-series')await intervalSeries.load();else if(page==='interval-curves')await intervalCurves.load();else if(page==='vol-surfaces')await volSurfaces.refresh();else await loadSelectedClose();});
 async function currentInputs(){priceSetup.reset();lifecycle.reset();physicalOperations.reset();facilities.reset();curveDefinitions.contextChanged();scheduleWorkspace?.calendar.reset();dateEditor.invalidatePreview();jobs.contextChanged();customCurves.contextChanged();intervalSeries.reset();intervalCurves.reset();ppa.reset();gas.reset();crude.reset();parties.reset();unitConverter.reset();futures.reset('inputs');power.reset();await api('market/current',{});contextDirty=false;dateEditor.clearContext();clearPrices();await reload('');$<HTMLDetailsElement>('as-of-context').open=false;text('environment-context-note','Working data uses current knowledge. These controls select a historical context when applied.');}
+async function useBusinessDateCurrent(){
+  if(page!=='facilities')throw Error('Use an operating business date in Facilities.');
+  const effectiveOn=$<HTMLInputElement>('date-context-on').value;
+  if(!effectiveOn)throw Error('Choose an explicit business date for physical facilities.');
+  await currentInputs();
+  await dateEditor.initialize(effectiveOn);
+  await facilities.load();
+}
+$('use-business-date-current').onclick=()=>leaving(useBusinessDateCurrent);
 // Returning to working data opens it on its newest close, as opening the workspace does (D217, D219), and the page that is
 // showing reads it. A latest instant with several closes opens the calendar on its date and selects nothing.
 async function returnToWorking(){
@@ -1516,7 +1527,7 @@ function pageState():PageState{
     case 'futures':return {page,...futures.report()};
     case 'lifecycle':return {page};
     case 'physical-operations':return {page,physical:physicalOperations.shown()};
-    case 'facilities':return {page,businessDate:$<HTMLInputElement>('date-context-on').value,facilityLedger:facilities.selected()};
+    case 'facilities':return {page,businessDate:$<HTMLInputElement>('date-context-on').value,facilityLedger:facilities.selected(),facilitySection:facilities.section()};
     case 'jobs':return {page,job:jobs.shown()};
     case 'crude-setup':case 'gas-setup':case 'gas':case 'crude':return {page};
     case 'ppa':return {page,...ppa.shown()};

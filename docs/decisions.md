@@ -5569,3 +5569,27 @@ service economic-horizon continuation refuse. Knowledge-only admission must also
 catch a future-effective agreement already known at opening. Generated close
 activation, broader Park and Loan terms and other gas services need their own
 qualified consumers. See [Park and Loan contracts](gas-park-loan.md).
+
+
+## D407 · Physical storage assets and independently tracked activity
+
+**Status:** implemented operating profile with local managed, native, upgrade and
+browser qualification. Integration and release checks remain separate gates.
+
+**Requirement.** Define the physical facility's operating parameters and track
+its pipeline-linked physical activity independently from commercial contracts.
+
+**Decision.** Keep exact versioned asset/port/rule relationships separate from
+commercial entitlement, title and charges. A dated opening physical fact and an
+explicit complete activity window supply total inventory. The first storage
+profile uses absolute step ratchets and native quantity per elapsed hour; shared
+gross flows consume physical limits together. Actual evidence retains breaches,
+while prospective admission requires independent native witness validation.
+Missing opening or complete coverage is unassessed. Reuse existing quantity
+allocation sources and own-trade projections through exact links; do not create
+a parallel financial ledger or infer a movement from title transfer.
+
+**Boundaries.** This is a physical operations consumer. Full Storage/Transport
+agreements, other ratchet laws, loss/conversion rules and complete optionality
+valuation require their own qualified contracts. See
+[storage facility operations](storage-facility-operations.md).

@@ -36,6 +36,7 @@ LIFECYCLE_PORTFOLIO={f'tools/{name}.py' for name in (
     'check_gas_operator_physical_value','check_gas_operator_ordinary_value','check_gas_known_cashout')}
 OPTION_VALUE_APPS={'tools/check_lifecycle_valuation_browser.py'}
 AGENT_SETTINGS_BROWSER={'tools/check_agent_operating_settings.py'}
+STORAGE_FACILITY={f'tools/{name}.py' for name in ('check_storage_facility','check_storage_facility_upgrade','check_storage_facility_browser')}
 
 
 class CheckAllTests(unittest.TestCase):
@@ -72,6 +73,24 @@ class CheckAllTests(unittest.TestCase):
                     'tools/check_gas_park_loan_browser.py', 'tools/check_gas_park_loan_worker.py'}
         observed = {part for command in commands for part in command if part in expected}
         self.assertEqual(observed, expected)
+
+    def test_storage_facility_native_upgrade_and_browser_run_once_in_physical(self):
+        expected=STORAGE_FACILITY
+        for group in GROUPS:
+            selected=[]
+            def run(command,**options):
+                helpers=expected.intersection(command)
+                if not helpers:return
+                helper=helpers.pop();selected.append(helper)
+                self.assertEqual(command[command.index('--pg-bin')+1],'/stock pg')
+                self.assertEqual(options['env']['DOTNET'],'/selected sdk')
+                if helper.endswith('_browser.py'):
+                    self.assertEqual(command[command.index('--dotnet')+1],'/selected sdk')
+                    self.assertEqual(command[command.index('--browser')+1],'/selected browser')
+                    self.assertIn('--no-build',command)
+            run_checks(Path('/stock pg'),Path('/selected sdk'),Path('/selected browser'),group=group,run=run)
+            self.assertEqual(set(selected),expected if group=='physical' else set())
+            self.assertEqual(len(selected),len(expected) if group=='physical' else 0)
 
     def test_async_workbench_checks_are_required_in_workspace_partition(self):
         for group in ALL_GROUPS:
@@ -435,7 +454,7 @@ class CheckAllTests(unittest.TestCase):
                 self.assertFalse(any('unittest' in c or 'test' in c or 'run' in c and '--project' in c for c in selected))
         margin={f'tools/check_futures_margin_{part}.py' for part in ('sources','adoption','projection_sources')}|{'tools/check_trading_business_date.py'}
         def shared(command):
-            return 'tools/run_preview.py' not in command and not (margin|LIFECYCLE_NATIVE|GAS_AMENDMENTS|LIFECYCLE_PORTFOLIO|OPTION_VALUE_APPS|AGENT_SETTINGS_BROWSER).intersection(command)
+            return 'tools/run_preview.py' not in command and not (margin|LIFECYCLE_NATIVE|GAS_AMENDMENTS|LIFECYCLE_PORTFOLIO|OPTION_VALUE_APPS|AGENT_SETTINGS_BROWSER|STORAGE_FACILITY).intersection(command)
         previews = {name: [c for c in value if 'tools/run_preview.py' in c]
                     for name, value in groups.items()}
         owned = {name: [c for c in value if not shared(c)] for name, value in groups.items()}

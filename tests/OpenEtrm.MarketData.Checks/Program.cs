@@ -50,6 +50,7 @@ if(args is ["--trading-pnl"]){TradingPnlChecks.Run();return;}
 if(args is ["--delivery-index"]){DeliveryIndexChecks.Run();return;}
 if(args is ["--power-product-averages"]){PowerProductChecks.Run();return;}
 if(args is ["--generic-schedules"]){GenericScheduleChecks.Run();return;}
+if(args is ["--storage-facility"]){StorageFacilityChecks.Run();return;}
 if(args is ["--facility-quantities"]){FacilityQuantityChecks.Run();return;}
 
 if(args is ["--crude-inventory-sales"]){CrudeInventorySalesChecks.Run();return;}
@@ -177,6 +178,7 @@ if (args.Length > 0)
 GenericScheduleChecks.Run();
 CrudeReceiptCashChecks.Run();
 FacilityQuantityChecks.Run();
+StorageFacilityChecks.Run();
 CrudeInventorySalesChecks.Run();
 PhysicalCrudeSideChecks.Run();
 LngCargoChecks.Run();

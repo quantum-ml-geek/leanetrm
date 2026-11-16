@@ -7,6 +7,13 @@ browser, native financial and populated-upgrade qualifiers passed. Aggregate CI,
 release and service economic-horizon qualification remain open. Broader service
 terms require separately qualified executable profiles.
 
+D407 adds a [storage physical operations consumer](storage-facility-operations.md):
+versioned asset rules, pipeline ports, dated opening evidence and independent
+planned/measured activity. Native persistence, explicit coverage, concurrent plan
+admission, existing allocation links and shared UI have local qualification.
+Complete commercial Storage/Transport, further operating laws and integrated
+release checks remain open.
+
 D404 is implemented for 25 selected main-workbench curve, trading and Risk reads,
 with independent view progress, bounded execution, cancellation admission fences
 and exact authorization/context checks before SSE publication. Local qualification

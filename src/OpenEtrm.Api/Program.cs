@@ -138,6 +138,12 @@ const string malformed="The request is incomplete or malformed.";
         => (422,p.MessageText,"The complete retained schedule requires compatible exact references, typed operations and an immutable validated manifest."),
     PostgresException p when p.SqlState=="P0001" && p.MessageText is "settlement_version_conflict" or "settlement_operation_conflict" => (409,p.MessageText,"Reconcile the original operation or reload the settlement version."),
     MarketDataException m when m.Code is "facility_quantity_conflict" or "facility_quantity_owner_changed" => (409,m.Code,m.Message),
+    PostgresException p when apiPath.StartsWithSegments("/api/facilities/operations")&&p.SqlState is "23503" or "23514" or "22P02" or "22003" or "22001" or "22008"
+        =>(422,"storage_facility_input","Select compatible exact physical references, native quantities, intervals and evidence within the installed profile."),
+    PostgresException p when apiPath.StartsWithSegments("/api/facilities/operations")&&p.SqlState=="23505"
+        =>(409,"storage_facility_conflict",StorageFacilityStore.Refusal("storage_facility_conflict")),
+    PostgresException p when p.MessageText.StartsWith("storage_facility_",StringComparison.Ordinal)
+        => (p.SqlState=="42501"?403:p.MessageText is "storage_facility_stale" or "storage_facility_conflict"?409:422,p.MessageText,StorageFacilityStore.Refusal(p.MessageText)),
     PostgresException p when p.MessageText.StartsWith("facility_quantity_",StringComparison.Ordinal)
         => (p.SqlState=="42501"?403:p.MessageText is "facility_quantity_conflict" or "facility_quantity_owner_changed"?409:422,p.MessageText,FacilityQuantityStore.Refusal(p.MessageText)),
     PostgresException p when p.MessageText=="crude_mapped_lifecycle" => (422,p.MessageText,"Delivery-to-cash operations for separately maintained crude delivery masters are not yet qualified. Contractual booking and pre-delivery valuation remain available."),
@@ -1679,6 +1685,18 @@ foreach(var configureGasService in new[]{true,false}){
 }
 var gasDaily=new GasDailyQuantities(database);
 var facilityQuantities=new FacilityQuantityStore(database);
+var storageFacilities=new StorageFacilityStore(database);
+api.MapPost("/facilities/operations/directory",(HttpContext c,FacilityDirectoryRequest body)=>Locked(c,session=>
+ database.WithIdentity(Profile(session),"ReadFacilityQuantities",async(connection,ct)=>Results.Ok(await storageFacilities.Directory(connection,body,session.MarketContext,ct)),c.RequestAborted)));
+api.MapPost("/facilities/operations/read",(HttpContext c,FacilityOperationsReadRequest body)=>Locked(c,session=>
+ database.WithIdentity(Profile(session),"ReadFacilityQuantities",async(connection,ct)=>Results.Ok(await storageFacilities.Read(connection,body,session.MarketContext,ct)),c.RequestAborted)));
+api.MapPost("/facilities/operations/status",(HttpContext c,FacilityStatusRequest body)=>Locked(c,session=>
+ database.WithIdentity(Profile(session),"ReadFacilityQuantities",async(connection,ct)=>Results.Ok(await storageFacilities.Status(connection,body,ct)),c.RequestAborted)));
+api.MapPost("/facilities/operations/preview",(HttpContext c,FacilityOperationsWriteRequest body)=>Locked(c,session=>
+ database.WithIdentity(Profile(session),StorageFacilityStore.Permission(body.Command),async(connection,ct)=>Results.Ok(await storageFacilities.Preview(connection,body,session.MarketContext,ct)),c.RequestAborted)));
+api.MapPost("/facilities/operations/record",(HttpContext c,FacilityOperationsWriteRequest body)=>Locked(c,session=>
+ database.WithIdentity(Profile(session),StorageFacilityStore.Permission(body.Command),async(connection,ct)=>Results.Ok(await storageFacilities.Record(connection,body,session.MarketContext,ct)),c.RequestAborted)));
+
 api.MapPost("/facilities/quantities/preview",(HttpContext c,FacilityPreviewRequest body)=>Locked(c,session=>
  database.WithIdentity(Profile(session),"RecordFacilityQuantities",async(connection,ct)=>Results.Ok(await facilityQuantities.Preview(connection,body,session.MarketContext,ct,c.Features.Get<AssistantInvocation>()?.CapturedWorkingRead==true)),c.RequestAborted)));
 api.MapPost("/facilities/quantities/directory",(HttpContext c,FacilityDirectoryRequest body)=>Locked(c,session=>
