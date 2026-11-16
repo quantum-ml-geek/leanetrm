@@ -1,5 +1,32 @@
 # Current implementation record
 
+## Park and Loan commercial profile (D405)
+
+The [first Park and Loan profile](gas-park-loan.md) books explicit title-transfer
+agreements through the shared ticket. It supports all four service and commercial
+perspective combinations, one complete advance, partial and overdue returns,
+independent fixed fee cash and bank-payment revisions. Future commitments do not
+create actual title. Source-service contributions transfer once to native stock,
+return obligations or claims and fee cash, with no duplicate ownership. The
+ordinary Risk workspace selects its explicit
+whole-book native ownership policy; authority and selected-trade restrictions
+remain enforced.
+
+Current-clock price risk uses ordinary black-box valuation and immutable shared
+scenarios. Nine actual queued jobs, including selected-trade scope, match complete
+ordinary and retained reports. Worker readers preserve exact source and scope,
+original actor authority and current worker permissions. Economic continuation
+of an unadvanced or source-known future agreement refuses until separately
+qualified. Principal and fee-determination reconciliation, upfront fees, custody
+profiles, broader return terms and other gas services remain work.
+
+Local checks include 68 real application browser assertions, 20 independent native
+whole-book PV/scenario checkpoints and a populated schema upgrade with nine
+predecessor-drift refusals. All 738 managed core checks and all 1,889 frontend
+checks passed. The required runner contains 189 commands.
+Aggregate CI, merge and deployment remain separate. No production resource was
+used for this qualification.
+
 ## Asynchronous workbench reads (D404)
 
 The main application delivers 25 selected curve, trading and Risk reads through
@@ -34,8 +61,8 @@ negotiated correction due instants and exchange expiry retain instant semantics.
 Crude consideration and fee dates stay independent through invoice aging; gas
 and LNG dates survive booking, billing and retained replay.
 
-The current integrated runner requires 185 commands, including 64 isolated
-application previews across fourteen CI partitions. The earlier D403 checkpoint
+At the D403 checkpoint the runner required 185 commands, including 64 isolated
+application previews across fourteen CI partitions. That checkpoint
 passed 737 managed core checks, 88 rate checks, 1,806 frontend checks and 121
 Python checks; these are historical checkpoint counts. Domain, native database,
 populated-upgrade, agent and browser checks are

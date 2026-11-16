@@ -23,7 +23,7 @@ export type TicketEntry={side:string;day:string;fields:TicketField[];values:Reco
 // fieldErrors and choices are keyed by the field id for a trade field and by "<side code>.<field id>" for a side field. Under the chosen
 // level every schedule row is open but those in `closed`, the rows the person closed. quantityUnit is the unit the schedule's preview resolved,
 // and instant the page's formatter for the instants the ticket shows. links are the schedule's quantity links, and entry the day entry open, if any.
-export type TicketView={state:TicketState;mode:'new'|'booked'|'amend';presentation?:'schedules';actions:TradeActions|null;schedule:ScheduleView|null;quantityUnit:string|null;instant:(at:string)=>string;zone:string;previous:ScheduleView|null;summaries:TicketSummary[];
+export type TicketView={state:TicketState;mode:'new'|'booked'|'amend';presentation?:'schedules'|'terms';actions:TradeActions|null;schedule:ScheduleView|null;quantityUnit:string|null;instant:(at:string)=>string;zone:string;previous:ScheduleView|null;summaries:TicketSummary[];
  links:TicketLink[];entry:TicketEntry|null;sideSchedule?:(host:HTMLElement,side:TicketSide)=>()=>void;facilityAllocations?:FacilityAllocationTrack[];
  // A booked started-delivery gas trade's measures, with the currency its figures are in; none for any other trade.
  measures?:GasMeasures|null;currency?:string;
@@ -77,8 +77,12 @@ function editor(f:TicketField,value:string,choices:TicketChoice[]|undefined,edit
   input.onchange=()=>{if(!input.value){edit('');return;}void payment.instant().then(edit);};return input;
  }
  if(f.type==='datetime'&&zone&&editLocal){
-  const input=el('input','ticket-control');input.type='datetime-local';input.value=value?localTimeValue(value,zone):'';input.setAttribute('aria-label',`${f.label} · ${zone}`);
-  input.onchange=()=>editLocal(input.value);return input;
+  const absent=f.allowNotApplicable===true&&value==='none';
+  const input=el('input','ticket-control');input.type='datetime-local';input.value=value&&!absent?localTimeValue(value,zone):'';input.setAttribute('aria-label',`${f.label} · ${zone}`);
+  input.onchange=()=>editLocal(input.value);
+  if(!f.allowNotApplicable)return input;
+  const wrapper=el('div','ticket-datetime'),label=el('label','ticket-date-applicability'),none=el('input');none.type='checkbox';none.checked=absent;none.dataset.role='not-applicable';none.setAttribute('aria-label',`${f.label} · Not applicable`);
+  none.onchange=()=>edit(none.checked?'none':'');input.disabled=absent;label.append(none,'Not applicable');wrapper.append(input,label);return wrapper;
  }
  let control:HTMLInputElement|HTMLSelectElement;
  if(f.type==='choice'){
@@ -110,7 +114,7 @@ function fieldRow(o:TicketView,f:TicketField,side:string|null,v:FieldValue|undef
   if(v?.offered)body.append(button('ticket-offer',`Use ${f.type==='payment_date'?displayPaymentDate(v.offered.value):v.offered.value} (${v.offered.label})`,()=>o.on.accept(side,f.id)));
  }else{
   chip();
-  const shown=f.type==='choice'?choiceText(value,unit,o.choices[key]):f.type==='datetime'&&value?o.instant(value):f.type==='payment_date'&&value?displayPaymentDate(value):value&&unit?`${value} ${unit}`:value;
+  const shown=f.allowNotApplicable&&value==='none'?'Not applicable':f.type==='choice'?choiceText(value,unit,o.choices[key]):f.type==='datetime'&&value?o.instant(value):f.type==='payment_date'&&value?displayPaymentDate(value):value&&unit?`${value} ${unit}`:value;
   if(shown||(o.mode==='booked'&&f.type==='choice'&&value)){
    const text=el('span','ticket-value',shown);text.hidden=!shown;
    if(o.mode==='booked'&&f.type==='choice'){text.dataset.choiceKey=key;text.dataset.choiceValue=value;if(unit)text.dataset.choiceUnit=unit;}
@@ -259,7 +263,9 @@ function entryForm(o:TicketView,e:TicketEntry,name:string){
  const fields=el('div','ticket-record-fields');
  for(const f of e.fields){
   const row=el('label','ticket-field ticket-editable');row.dataset.field=f.id;row.append(el('span','ticket-label',f.label));
-  const control=editor(f,e.values[f.id]??'',e.choices[f.id],value=>o.on.entryValue(f.id,value));control.disabled=e.pending||e.sending;row.append(control);
+  const control=editor(f,e.values[f.id]??'',e.choices[f.id],value=>o.on.entryValue(f.id,value));
+  if(control instanceof HTMLInputElement||control instanceof HTMLSelectElement)control.disabled=e.pending||e.sending;else control.inert=e.pending||e.sending;
+  row.append(control);
   const unit=resolvedUnit(f.unit,o.quantityUnit);if(unit)row.append(el('span','ticket-unit',unit));
   if(f.meaning)row.title=f.meaning;
   fields.append(row);
@@ -296,25 +302,32 @@ export function renderTicket(host:HTMLElement,o:TicketView){
  }
  const deck=el('div','ticket-deck');deck.style.setProperty('--band-rows',String(rows.length));deck.style.setProperty('--cards',String(sides.length));
  for(const side of sides)deck.append(card(o,side,rows));
- if(o.mode!=='booked')deck.append(addCard(o));
+ if(o.mode!=='booked'&&d.sides.some(kind=>!kind.soon))deck.append(addCard(o));
  const {panel,content}=schedulePanel(o,named);
  if(o.presentation!=='schedules'){
   const fields=d.tradeFields.filter(f=>f.state!=='soon'),ownership=o.mode==='booked'?[]:fields.filter(f=>ownershipFields.has(f.id));
-  root.append(strip(o,fields.filter(f=>!ownership.includes(f))),...o.state.notices.length?[notices]:[],chips,deck);
+  root.append(strip(o,fields.filter(f=>!ownership.includes(f))),...o.state.notices.length?[notices]:[],...sides.length?[chips]:[],...deck.children.length?[deck]:[]);
   if(ownership.length){const section=el('section','ticket-ownership');section.append(el('h3',undefined,'Ownership and parties'),tradeFields(o,ownership));root.append(section);}
  }
  if(o.presentation==='schedules'){const state=el('p','ticket-status',o.status.text);state.dataset.kind=o.status.kind;root.append(state);}
  if(o.measures){if(!o.currency)throw Error('The trade measures require their currency.');root.append(measures(o.measures,o.currency,o.instant));}
- root.append(panel);
+ if(o.presentation!=='terms')root.append(panel);
  const planned=upcoming(o);
  if(!o.presentation)root.append(...planned?[planned]:[],foot(o));
 
  host.replaceChildren(root);
  let grid:GridHandle|undefined,disposeSide:(()=>void)|undefined;
+ // Late labels for retained terms change only their text. In particular they never replace an editable daily quantity cell.
+ function updateBookedChoiceLabels(choices:Record<string,TicketChoice[]>){
+  for(const text of root.querySelectorAll<HTMLElement>('[data-choice-key]')){
+   text.textContent=choiceText(text.dataset.choiceValue!,text.dataset.choiceUnit??null,choices[text.dataset.choiceKey!]);text.hidden=!text.textContent;
+  }
+ }
  const shows=o.tab==='instrument'||sides.some(s=>s.code===o.tab);
  // A side added since the last preview has no values in its schedule yet; the grid draws the sides it holds.
  const previewed=named.filter(s=>o.schedule&&Object.keys(o.schedule.totals).some(key=>key.startsWith(`${s.code}.`)));
  const unpreviewed=named.find(s=>s.code===o.tab&&!previewed.includes(s));
+ if(o.presentation==='terms')return {destroy:()=>host.replaceChildren(),updateBookedChoiceLabels};
  if(o.mode==='booked'&&o.sideSchedule&&sides.some(s=>s.code===o.tab))disposeSide=o.sideSchedule(content,sides.find(s=>s.code===o.tab)!);
  else if(o.tab==='links')grid=linksGrid(o,content);
  else if(!shows)content.append(el('p','muted',`${d.tabs.find(t=>t.id===o.tab)?.label??o.tab} is not drawn in this ticket yet.`));
@@ -342,12 +355,7 @@ export function renderTicket(host:HTMLElement,o:TicketView){
  const open=o.entry&&o.entry.side===o.tab?o.entry:null;
  if(open)panel.append(entryForm(o,open,named.find(s=>s.code===open.side)!.name));
  return {
-  // Late labels for retained terms change only their text. In particular they never replace an editable daily quantity cell.
-  updateBookedChoiceLabels(choices:Record<string,TicketChoice[]>){
-   for(const text of root.querySelectorAll<HTMLElement>('[data-choice-key]')){
-    text.textContent=choiceText(text.dataset.choiceValue!,text.dataset.choiceUnit??null,choices[text.dataset.choiceKey!]);text.hidden=!text.textContent;
-   }
-  },
+  updateBookedChoiceLabels,
   destroy(){disposeSide?.();grid?.destroy();host.replaceChildren();}
  };
 }

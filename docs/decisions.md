@@ -5544,7 +5544,33 @@ pushes retain that path so they cannot strand earlier runtime changes. See
 [CI impact selection](ci-impact.md) for the executable boundaries and remaining
 qualification. No application, schema or financial contract changes are included.
 
-## D406 · A fitted surface stores its series' value and sensitivities, and Options reads them
+## D406 · Bookable Park and Loan with independent native owners
+
+**Status:** implemented with disposable local qualification; aggregate CI and release qualification remain open.
+
+**Requirement.** Book explicit Park and Loan agreements under Physical Gas from
+both commercial perspectives, retain independent instrument components and
+ownership, and perform principal and cash through the shared lifecycle boundary.
+
+**Decision.** Install the bounded `physical_gas_park_loan_v1` title-transfer
+profile. It uses one exact point, quantity basis and nominal mark, one full
+advance within its declared window, equal partial returns and an independent
+fixed fee. Before advance, ordinary opposite gas components and separate timed
+cash belong to the service. Accepted advance moves their economic ownership once
+to native stock and return liability, or identified stock dispatch and return
+claim, with independent signed fee cash. Fixed fees are not scaled by principal.
+The shared ticket, retained views, Lifecycle forms and generic portfolio
+repricing consume the same explicit contracts.
+
+**Boundaries.** No automatic title from booking or a deadline, no implicit
+repayment, no zero value for unsupported behavior and no duplication between the
+source service and independent owners. Unsupported source reconciliation and
+service economic-horizon continuation refuse. Knowledge-only admission must also
+catch a future-effective agreement already known at opening. Generated close
+activation, broader Park and Loan terms and other gas services need their own
+qualified consumers. See [Park and Loan contracts](gas-park-loan.md).
+
+## D407 · A fitted surface stores its series' value and sensitivities, and Options reads them
 
 2026-11-15. Decided by the owner, who left the choice of approach to the builder.
 Takes strategies' prerequisites, option sensitivities and their graphics from the
@@ -5580,7 +5606,7 @@ value they state are unchanged.
   the money, each expiry's at-the-money strike and days to expiry. The stated
   selection is part of what a refit is compared with: other content under the
   same inputs and selection stays `vol_surface_nondeterministic`, and another
-  selection is a new revision. Surfaces stored before migration 0338 state no
+  selection is a new revision. Surfaces stored before migration 0339 state no
   selection and are removed for refitting.
 - **Options.** A Trading page for readers of market data and trades draws a
   product's chain from its stored surface and lists booked option positions
@@ -5597,12 +5623,12 @@ value they state are unchanged.
   from the fitted smile; volatility in Risk; rho; scheduled fitting; assistant
   reading of the page.
 
-## D407 · A strategy of option legs on one expiry is analysed by a read, and Options draws it
+## D408 · A strategy of option legs on one expiry is analysed by a read, and Options draws it
 
 2026-11-16. Scope decided by the owner on 15 November 2026: legs on one option
 expiry and one underlying future; no futures legs, saved strategies or booking
 a strategy in one action. Takes the strategy viewer and its analysis read from
-the items D406 left open. Option valuation, the stored surface, Risk reports,
+the items D407 left open. Option valuation, the stored surface, Risk reports,
 trading P&L and every value they state are unchanged.
 
 - **One expiry.** Every leg of a strategy is a listed series of one product
@@ -5660,7 +5686,7 @@ trading P&L and every value they state are unchanged.
   beyond one is refused `strategy_limit`, not cut down. A leg is at most
   100,000 lots (`strategy_leg_lots`) and the volatility shift at most 100
   points (`strategy_volatility_shift`). The limits come from the measurement in
-  [verification](verification.md#option-strategy-viewer-d407): one tree price
+  [verification](verification.md#option-strategy-viewer-d408): one tree price
   is tens of milliseconds, and an analysis at every limit is about 500 of them
   for its curves (492 scenario prices and one base price per leg for each
   set). The curves are valued in up to four sets side by side, each over a

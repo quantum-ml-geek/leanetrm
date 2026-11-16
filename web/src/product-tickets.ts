@@ -1,7 +1,7 @@
 // Product editors share the desk's panel without duplicating their forms,
 // native requests or recovery state. Each editor owns its product rules.
-export type TicketProduct='ppa'|'gas'|'crude'|'lng'|'options';
-const products=['ppa','gas','crude','lng','options'] as const;
+export type TicketProduct='ppa'|'gas'|'park-loan'|'crude'|'lng'|'options';
+const products=['ppa','gas','park-loan','crude','lng','options'] as const;
 export type ProductSelection={bindingId:string;revision:number};
 export type ProductEditor={root:HTMLElement;begin:()=>Promise<void>;inspect:(trade:string,selection?:ProductSelection)=>Promise<void>;reset:()=>void;
  unsaved:()=>boolean;pending:()=>boolean;sync:()=>void};

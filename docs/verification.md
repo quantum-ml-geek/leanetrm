@@ -34,8 +34,12 @@ each behavior command once, and each preview queue bounded to twelve suites.
 Jobs keep their 90-minute limit; the existing aggregate check rejects failed,
 cancelled or skipped selection/jobs. Lightweight groups do not install PostgreSQL.
 
-The current integrated runner contains 185 commands: 64 shared checks,
-64 isolated application previews and 57 partition-specific native/application
+The gas partition includes the Park and Loan native, populated-upgrade, retained
+price-worker and real application browser qualifiers, alongside its existing
+amendment upgrades and application checks.
+
+The current integrated runner contains 189 commands: 64 shared checks,
+64 isolated application previews and 61 partition-specific native/application
 checks. The D404 local checkpoint passed 1,866 frontend checks and 122 Python
 checks. The earlier calendar/lifecycle checkpoint passed 737 managed core checks,
 88 rate checks, 1,806 frontend checks and 121 Python checks; those counts describe
@@ -477,7 +481,87 @@ without an assertion failure. Other verification groups retain 45 minutes. All g
 and release dependencies remain unchanged; this is CI capacity, not a pricing or
 production-runtime limit.
 
-## Option analytics and the Options page (D406)
+## Option strategy viewer (D408)
+
+Runs on 16 November 2026 at the branch head, with synthetic data, on the local
+machine (Apple M4 Pro, 14 cores, macOS 26.6, .NET 10.0.13, Node 24.22.0). It
+has no PostgreSQL, so nothing that needs a database ran here.
+
+| Run | Where | Result |
+| --- | --- | --- |
+| MarketData checks `--option-strategies` | local | 20 PASS |
+| MarketData checks `--option-sensitivities`, `--vol-surface`, `--futures-options` | local | LOCAL_OPTION_GROUPS |
+| Api checks `--schedules` (with the option request, position and strategy request checks) | local | exit 0, 425 PASS |
+| Api checks `--async-read-contracts` | local | PASS |
+| `npm test --prefix web` | local | LOCAL_WEB_TESTS |
+| `python3 -m unittest tests.test_ci_impact tests.test_check_all tests.test_migration_identity tests.test_ci_dependencies tests.test_public_routes` | local | 66 OK |
+
+What the local checks cover:
+
+- **Payoff at expiry.** Ten cases worked by hand at a multiplier of 10,000: a
+  long call, a long straddle, a short put (its loss bounded by a futures price
+  of zero), a call spread, an iron condor, a butterfly, a risk reversal for no
+  premium (a breakeven range), a ratio spread (an unbounded loss), a breakeven
+  that is not a terminating decimal, and a payoff that is zero from a price
+  upward. Each states the net premium, both extremes with their bounds and the
+  breakevens; the curve is checked at price points and at a strike between
+  them.
+- **Dated curves.** Bought calls and sold puts of the option fixture, at three
+  futures prices, two instants and a volatility shift, against direct tree
+  prices of each leg at that price, instant and volatility; the unshifted
+  curve at the valuation instant against the legs' base values; a refusal when
+  a leg is valued at intrinsic or did not calibrate, and when the valuation
+  refuses the shifted volatility; and two runs from the same inputs agreeing.
+- **Requests.** Without a database: a complete request, 30 incomplete or
+  unoffered ones each refused with its code, a request at every limit accepted
+  and one beyond each refused, the asynchronous channel admitting the same
+  typed request and nothing less, the setup's offer drawn from a stored
+  surface alone (templates, range, days on a clock, policies that an analysis
+  accepts back), and a strategy's figures as its legs' scaled and added.
+- **Web.** The view model and chart options as unit tests, and the Strategy
+  view drawn in a headless browser over stubbed reads: the setup's offers, a
+  template analysed with the offered policies sent back, a leg from the chain,
+  a stale analysis, a refusal that keeps the legs, refused dated curves, and an
+  answer to a replaced choice dropped.
+
+Measured here through the scenario layers, for the limits a request states
+(`MarketData checks --option-strategy-workload <points> <curves>`, two legs on
+two unique series of the option fixture, a volatility shift on every sample,
+one thread):
+
+| Build | Points | Curves | Scenarios | Tree prices | Elapsed | Per tree price | Allocated |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Release | 21 | 2 | 42 | 88 | 3.2 s | 36 ms | 3.9 GB |
+| Release | 41 | 3 | 123 | 252 | 9.1 s | 36 ms | 11.1 GB |
+| Debug | 21 | 2 | 42 | 88 | 5.3 s | 60 ms | 3.9 GB |
+
+A tree price is one 400-step tree in 30-digit decimal arithmetic and allocates
+about 44 MB as it runs. A request at every limit (4 legs, 41 points, 3 curves)
+is 492 tree prices for its curves and about 68 for its sensitivities, beyond
+calibration: of the order of 20 s of one thread in Release here, spread over
+the curve sets and the sensitivities, which run side by side. That is why the
+analysis is an asynchronous read and why the limits are no higher. These are
+observations on one machine, not a performance qualification; CI's runners
+have been about half as fast per thread.
+
+Not run here, because they need PostgreSQL; they run in the pull request's CI:
+
+- `tools/check_vol_surface_api.py` (in `run_preview.py --check
+  --exchange-check`): the setup and analysis over HTTP against the exchange
+  example, a straddle's exact payoff, each leg's calibrated volatility against
+  the stored surface, the dated curve, a volatility shift, eleven refusals, a
+  leg at intrinsic, and that an analysis stores no surface revision.
+- The Strategy step of `tests/browser/options.mjs`, which runs the analysis in
+  the application over the asynchronous read channel.
+- Every other database-backed group.
+
+Not covered: no check compares the analysis over the asynchronous channel with
+the same analysis over ordinary HTTP value for value, as the workbench
+qualification does for its reads; the browser step exercises the channel and
+the HTTP check the ordinary route. No check times an analysis in the
+application.
+
+## Option analytics and the Options page (D407)
 
 Runs on 15 November 2026 at the branch head, with synthetic data. The local
 machine has no PostgreSQL, so database-backed checks ran in a disposable
@@ -495,7 +579,7 @@ this change; they run in the pull request's CI.
 | `tools/check_risk_fit_authority.py` | container | exit 0, 29 PASS |
 | `tools/check_vol_surface_admission_expiry.py` | container | exit 0, 3 PASS |
 
-The exchange run applies migration 0338 and covers: a fit that states no
+The exchange run applies migration 0339 and covers: a fit that states no
 supported selection or the wrong clock is refused at submit; a fit at a working
 snapshot and one at a recorded close each complete with analytics and state
 their clock and day; every calibrated series has each measure or the code of
@@ -4609,3 +4693,29 @@ A complete `tools/check_all.py` run was not performed locally on the final code;
 continuous integration runs the complete suite.
 These are synthetic local checks. They do not qualify a Side, trade or cash
 consumer, explicit roll boundaries, or a production activation.
+
+## Park and Loan local qualification (D405)
+
+The bounded [commercial profile](gas-park-loan.md) is checked through:
+
+- `tools/check_gas_park_loan.py`: native lifecycle, all four directions, source and
+  authority fences, canonical retries, and 20 independent whole-book value and
+  price-scenario checkpoints when the pinned SDK is supplied through `DOTNET`.
+- `tools/check_gas_park_loan_upgrade.py`: populated predecessor retention and nine
+  function-contract drift refusals.
+- `tools/check_gas_park_loan_worker.py`: nine actual retained price jobs, complete
+  ordinary/report parity, native owner identities, exact source and selector
+  fences, original actor revocation and natural worker gas-grant expiry.
+- `tools/check_gas_park_loan_browser.py`: 68 checks in the real owned application,
+  including uncertain booking and advance responses, principal and fee operations,
+  retained terms, explicit fee applicability and normal Risk controls after advance
+  for all four service/perspective combinations.
+
+These are required once in the gas CI partition. Local runs passed with stock
+PostgreSQL 16, the pinned .NET 10.0.402 SDK and Chromium. An existing futures
+historical/Monte Carlo worker consumer also passed, protecting unrelated worker
+admission. Independent adversarial review found and verified fixes for policy
+changes after preview, knowledge-first payment heads, worker source authority and
+UI time-resolution races. Aggregate CI and exact-release checks remain mandatory;
+local qualification does not activate a production schema or qualify service
+horizon continuation.

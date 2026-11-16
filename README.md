@@ -34,6 +34,10 @@ for synthetic booking, graphical break-even pricing and settlement previews.
   issuance and broader physical settlement remain work. See
   [delivery operations](docs/gas-delivery-operations.md),
   [billing](docs/gas-cash-billing.md) and [owned holdings](docs/gas-owned-holdings.md)
+- **Park and Loan:** a bounded title-transfer profile with explicit customer/provider
+  terms, principal advances and partial returns, independent fixed fees, and
+  interactive/queued price risk. See [the supported profile](docs/gas-park-loan.md)
+  for its timing, same-mark and reconciliation limits
 - **Physical crude:** fixed standard-volume booking, contractual pre-delivery PV
   and interactive/queued risk, plus bounded receipts, title transfer, inventory-lot
   allocation, dispatch, invoices, payments and cash-record corrections. See

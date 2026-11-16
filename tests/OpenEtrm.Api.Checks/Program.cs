@@ -91,6 +91,7 @@ if(args is ["--pnl-factors"]){PnlFactorSelectionChecks.Run();return;}
 if(args is ["--pnl-time"]){PnlTimeSelectionChecks.Run();return;}
 if(args is ["--risk-bump-price-steps"]){RiskBumpPriceStepChecks.Run();return;}
 if(args is ["--option-policy"]){OptionPolicySelectionChecks.Run();return;}
+if(args is ["--risk-pricing-policy"]){RiskPricingPolicyChecks.Run();return;}
 if(args is ["--power-close-context",var powerContext]){await PowerCloseContextChecks.Run(powerContext);return;}
 if(args is ["--catalogue-trading",var catalogueFixture]){await CatalogueTradingChecks.Run(catalogueFixture);return;}
 if(args is ["--close-listings",var listingFixture]){await CloseListingChecks.Run(listingFixture);return;}
@@ -125,6 +126,11 @@ if(args is ["--date-lists"]){SchedulePublicationChecks.Run();return;}
 if(args is ["--schedule-preview"]){SchedulePreviewChecks.Run();return;}
 if(args is ["--ticket-description"]){TicketDescriptionChecks.Run();return;}
 if(args is ["--gas-ticket"]){GasTicketChecks.Run();return;}
+if(args is ["--gas-park-loan-ticket"]){GasParkLoanTicketChecks.Run();GasParkLoanPortfolioChecks.Run();GasParkLoanPositionChecks.Run();GasParkLoanActionChecks.Run();return;}
+if(args is ["--gas-park-loan-setup"]){GasParkLoanSetupChecks.Run();return;}
+if(args is ["--gas-park-loan-native",var parkLoanPacket]){await GasParkLoanNativeChecks.Run(parkLoanPacket);return;}
+if(args is ["--gas-park-loan-worker-submit",var parkLoanWorkerPacket]){await GasParkLoanWorkerChecks.Run(parkLoanWorkerPacket,false);return;}
+if(args is ["--gas-park-loan-worker-verify",var parkLoanWorkerReceipt]){await GasParkLoanWorkerChecks.Run(parkLoanWorkerReceipt,true);return;}
 if(args is ["--swap-payment-calendar"]){SwapPaymentCalendarChecks.Run();return;}
 if(args is ["--booked-programs",var bookedProgramsFixture]){await BookedProgramStorageChecks.Run(bookedProgramsFixture);return;}
 if(args is ["--ppa-blotter-admission"]){await PpaBlotterAdmissionChecks.Run();return;}
@@ -207,6 +213,7 @@ if (args is ["--schedules"])
     PnlTimeSelectionChecks.Run();
     RiskBumpPriceStepChecks.Run();
     OptionPolicySelectionChecks.Run();
+    RiskPricingPolicyChecks.Run();
     CashOptionPolicyChecks.Run();
     SelectedOptionInputChecks.Run();
     OptionSensitivityRequestChecks.Run();
@@ -257,6 +264,11 @@ if (args is ["--schedules"])
     SchedulePreviewChecks.Run();
     TicketDescriptionChecks.Run();
     GasTicketChecks.Run();
+    GasParkLoanTicketChecks.Run();
+    GasParkLoanPortfolioChecks.Run();
+    GasParkLoanPositionChecks.Run();
+    GasParkLoanActionChecks.Run();
+    GasParkLoanSetupChecks.Run();
     DateWorkspaceChecks.Run();
     CurveDefinitionChecks.Run();
     SchedulePublicationChecks.Run();

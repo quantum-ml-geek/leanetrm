@@ -54,12 +54,13 @@ test('a retained request holds New trade back, ahead of every other reason, beca
  assert.deepEqual(newTradeControl({catalog:{canBook:false,bookingUnavailableReason:'Historical view is read-only.'},retained:true,fallback}),{enabled:false,reason:retainedBlock});
 });
 
-test('one New trade product choice includes futures, futures options, swaps, PPAs, physical gas and crude',async()=>{
+test('one New trade product choice includes the explicit Park and loan profile beside physical gas',async()=>{
  const {newTradeProducts}=await import('../dist/new-trade.js');
- assert.deepEqual(newTradeProducts.map(([key])=>key),['futures','options','swaps','ppa','gas','crude','lng']);
+ assert.deepEqual(newTradeProducts.map(([key])=>key),['futures','options','swaps','ppa','gas','park-loan','crude','lng']);
+ assert.equal(newTradeProducts.find(([key])=>key==='park-loan')[1],'Park and loan');
 });
 
-test('Transport, Park and loan and Storage are listed as coming soon: greyed, disabled, tagged and with their hover text',async()=>{
+test('unsupported Transport and Storage remain coming soon: disabled, tagged and with their hover text',async()=>{
  const old=globalThis.document;
  class Node{constructor(tag){this.tagName=tag.toUpperCase();this.children=[];this.attributes={};this.dataset={};this.className='';this.title='';this.disabled=false;this.text='';}
   append(...c){this.children.push(...c);}setAttribute(n,v){this.attributes[n]=String(v);}getAttribute(n){return this.attributes[n]??null;}
@@ -71,7 +72,7 @@ test('Transport, Park and loan and Storage are listed as coming soon: greyed, di
   assert.equal(group.getAttribute('aria-label'),'Coming soon');
   assert.equal(group.dataset.ownControls,'','the page\'s busy sweep leaves them disabled');
   assert.deepEqual(group.children.map(b=>[b.tagName,b.textContent,b.disabled,b.getAttribute('aria-disabled'),b.className]),
-   [['BUTTON','TransportComing soon',true,'true','ticket-soon'],['BUTTON','Park and loanComing soon',true,'true','ticket-soon'],['BUTTON','StorageComing soon',true,'true','ticket-soon']]);
+   [['BUTTON','TransportComing soon',true,'true','ticket-soon'],['BUTTON','StorageComing soon',true,'true','ticket-soon']]);
   assert.match(group.children[0].title,/receipt and delivery sides.*shipper contract.*capacity.*fuel/i);
   for(const b of group.children)assert.ok(b.title.length>0&&b.onclick===undefined);
  }finally{globalThis.document=old;}
