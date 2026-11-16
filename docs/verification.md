@@ -486,7 +486,10 @@ production-runtime limit.
 Runs on 16 November 2026 at the branch head, after merging the option analytics
 branch with master in it, with synthetic data, on the local machine (macOS 26.6
 arm64 with 14 logical processors, .NET 10.0.13, Node 24.22.0), from Debug builds. It
-has no PostgreSQL, so nothing that needs a database ran here.
+has no PostgreSQL, so the database-backed exchange check ran in a disposable
+PostgreSQL 18 cluster in a container on a separate two-CPU Linux host, from a
+Debug build. The browser suites under `tests/browser` have not been run for
+this change; they run in the pull request's CI.
 
 | Run | Where | Result |
 | --- | --- | --- |
@@ -496,6 +499,7 @@ has no PostgreSQL, so nothing that needs a database ran here.
 | Api checks `--async-read-contracts`, `--assistant-workspace` | local | exit 0; 1 and 21 PASS |
 | `npm test --prefix web` | local | 1,923 pass |
 | `python3 -m unittest tests.test_ci_impact tests.test_check_all tests.test_migration_identity tests.test_ci_dependencies tests.test_public_routes` | local | 67 OK |
+| `run_preview.py --check --exchange-check` | container | exit 0, 363 PASS |
 
 What the local checks cover:
 
@@ -556,23 +560,40 @@ analysis is an asynchronous read and why the limits are no higher. These are
 observations on one machine, not a performance qualification; CI's runners
 have been about half as fast per thread.
 
-Not run here, because they need PostgreSQL; they run in the pull request's CI:
+The exchange run covers, against the exchange example with its surface fitted
+at a working snapshot: the setup offering the seven templates at the series'
+settlements, a price range, the days before the cutoff on the surface's clock
+and the policies; a straddle analysed over HTTP with its exact premium, largest
+loss, unbounded profit and two breakevens; each leg's volatility equal to the
+stored surface's and its delta within 0.02 of it; the strategy's value as its
+legs' scaled and added; the dated curve at the valuation instant never below
+the payoff at expiry; a volatility shift raising that curve and leaving the
+payoff alone; eleven requests beyond a limit or outside the offer each refused
+with its code; a leg valued at intrinsic said on its row with the dated curves
+refused and the payoff still stated; and no surface revision stored.
 
-- `tools/check_vol_surface_api.py` (in `run_preview.py --check
-  --exchange-check`): the setup and analysis over HTTP against the exchange
-  example, a straddle's exact payoff, each leg's calibrated volatility against
-  the stored surface, the dated curve, a volatility shift, eleven refusals, a
-  leg at intrinsic, and that an analysis stores no surface revision. As first
-  written it compared a count with `len()` and would have stopped there; the
-  review found that by reading, and the corrected script has still not run.
+Measured in that run for one analysis (2 legs, 11 points, 1 curve): 22
+calibration and 64 valuation tree prices in 4.5 s on the two-CPU host.
+
+The first exchange run stopped at the first analysis, exit 1 with 296 PASS: the
+read resolved the product's market source without the view's own market data,
+which a working snapshot refuses `market_inputs`. No local check could see
+that. The script's own first draft also compared a count with `len()`, which
+the independent review found by reading before any run.
+
+Not run, because the host's container cannot start the browser; it runs in the
+pull request's CI:
+
 - The Strategy step of `tests/browser/options.mjs`, which runs the analysis in
-  the application over the asynchronous read channel.
-- Every other database-backed group.
+  the application over the asynchronous read channel. Every expression of the
+  suite compiles, and the Strategy checks as the suite composes them hold
+  against the view drawn over stubbed reads; neither is a run against the
+  application.
 
 Not covered: no check compares the analysis over the asynchronous channel with
 the same analysis over ordinary HTTP value for value, as the workbench
-qualification does for its reads; the browser step exercises the channel and
-the HTTP check the ordinary route. No check runs the setup or the analysis at
+qualification does for its reads; the browser step is to exercise the channel
+and the exchange check exercised the ordinary route. No check runs the setup or the analysis at
 a recorded close or a retained context over HTTP (the example's frames are
 working snapshots; the close's clock rule is covered without a database), none
 asserts the refusal of a reader without Read trades (the endpoints are wired
