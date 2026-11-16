@@ -5517,3 +5517,56 @@ remain usable. Preserve existing financial write identities, retained Risk job
 admission/reconciliation and progressive row streams. This decision does not
 expand numerical qualification or authorize merging or deployment; qualification
 and the pull request record the implemented operations and remaining limits.
+
+## D405 · A fitted surface stores its series' value and sensitivities, and Options reads them
+
+2026-11-15. Decided by the owner, who left the choice of approach to the builder.
+Takes strategies' prerequisites, option sensitivities and their graphics from the
+items D288 left open. Option valuation, Risk reports, trading P&L and every
+value they state are unchanged.
+
+- **One route.** A listed series' delta, gamma, vega and one-day theta are
+  differences of its ordinary instrument PV under the shared price, volatility
+  and clock layers, through the common finite-difference sampler
+  ([valuation layers](valuation-context-layers.md)). Each series is a
+  one-contract holding of its own instrument. No pricer, discount formula or
+  derivative algorithm is added, and none is approximated for display.
+- **Selection.** Policy `option_sensitivities_layers_v1` is stated in full by
+  the fit that uses it: the price bump and the agreement its estimates must
+  reach, as a trading P&L report selects them (D394), and a volatility bump of
+  0.01. Delta and gamma come from the underlying future's price axis, vega from
+  the series' declared volatility input, held under the price and clock samples
+  (`option_implied_volatility_held_v1`), and theta from one calendar day of
+  model decay (D398) with the shared discount roll.
+- **Clock.** A fit at a recorded close counts its day on that close
+  convention's calendar clock and names none. A fit at a working snapshot names
+  one of the offered clocks. Either is refused otherwise with
+  `option_sensitivity_policy`. Admission pins the clock with the fit's other
+  inputs; where a convention's clock cannot be read no day is selected and
+  theta is missing.
+- **Missing is missing.** A series valued at intrinsic has its settlement as
+  its value and no sensitivities (`option_at_intrinsic`). An estimate whose
+  half, whole and double bumps do not agree is `sensitivity_unstable`. A sample
+  the valuation refuses leaves its measures missing with the refusing code, and
+  a day that reaches expiry leaves theta missing. Nothing is clamped or zero.
+- **Stored with the surface.** The fit job computes the analytics and the
+  surface states them per series with the selection, whether each series is in
+  the money, each expiry's at-the-money strike and days to expiry. The stated
+  selection is part of what a refit is compared with: other content under the
+  same inputs and selection stays `vol_surface_nondeterministic`, and another
+  selection is a new revision. Surfaces stored before migration 0338 state no
+  selection and are removed for refitting.
+- **Options.** A Trading page for readers of market data and trades draws a
+  product's chain from its stored surface and lists booked option positions
+  with those figures scaled by multiplier and signed open lots in the backend.
+  It prices nothing. Sensitivities are added within one underlying future only,
+  and value and theta per currency; a sum with a missing member is missing. A
+  product with no surface at the close shows that and where it is calibrated.
+- **Not Risk.** These are the option model's own sensitivities at the stated
+  selection. They enter no Risk, VaR or P&L report, and the page says so.
+- **Still open.** The strategy viewer and its analysis read; spread, storage,
+  tolling and transport models; strategies across expiries, which need a
+  declared relationship between futures months; futures legs; valuing options
+  from the fitted smile; volatility in Risk; rho; scheduled fitting; assistant
+  reading of the page.
+

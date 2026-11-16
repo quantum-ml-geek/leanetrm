@@ -383,6 +383,9 @@ child futures/clock inputs. Re-solving to the unchanged option mark would erase
 or mix the sensitivity being measured.
 
 For vega, shift this declared volatility input and call the same portfolio PV.
+The volatility-surface fit is the first API consumer of this axis (D405): it
+values each calibrated series as a one-contract holding and stores the result
+with the [fitted surface](vol-surfaces.md#option-analytics).
 For a supported smile, skew is a selected vector of changes across exact nodes,
 with retained weights, normalization and coordinate definition. A strike/expiry
 node set can support a stated tilt without pretending to be a continuous surface.

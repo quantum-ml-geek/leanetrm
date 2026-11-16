@@ -27,6 +27,14 @@ snapshot) and knowledge context selected in the shared header, and has:
   calibrated yet**. Products calibrated here come first. A search box narrows the
   cards through the catalog's own search, and **More products** reads the next page.
   Nothing is chosen for the person;
+- a **Term structure** card: the fitted volatility at the money by expiry, drawn
+  from each fit's stored level and broken where an expiry is not fitted, over a
+  card per expiry with its level, slope, fit points and residual, or why it is
+  not fitted. A point or a card brings that expiry's smile into view;
+- where a fit is offered at a working snapshot, a **One day counted on** choice
+  of clock with nothing chosen for the person; calibrating without one asks for it;
+- in the selected series' readout, **Open chain**, which opens the series' row
+  on [Options](futures-options.md#reads-and-entry-points);
 - for the chosen product, its calibration state with *Recalibrate* where allowed,
   and **Calibrated at**: a chip per close the product has a surface at, newest first;
 - a legend for rich/cheap.
@@ -137,6 +145,41 @@ strikes, each as a call and a put: 70 series for LO, and 71 for ON, which also k
 its existing deep in-the-money call that settles at intrinsic. None of these values
 is a market level.
 
+## Option analytics
+
+D405. The fit also values every calibrated series and stores, per unit of quote,
+its `value` and four sensitivities: `delta` per 1.00 of the underlying futures
+price, `gamma` per 1.00 squared, `vega` per volatility point and `theta` for one
+calendar day, later minus earlier. Each is `{value, missing}`: an exact decimal,
+or the code of why there is none. `priceBump` is the nominal futures bump used.
+
+- **Route.** Each expiry's solved series are one-contract holdings in one
+  prepared portfolio, valued by ordinary instrument PV under the shared layers
+  through the common finite-difference sampler. Price, volatility and clock are
+  sampled separately, so a refused sample leaves only its own measures missing.
+- **Selection.** A fit states `{policy, bump, volatilityBump, clock}`: policy
+  `option_sensitivities_layers_v1`; `bump` as a trading P&L report states its
+  factor bump (`ticks`, `priceSteps`, `absoluteTolerance`,
+  `deltaRelativeTolerance`, `gammaRelativeTolerance`); `volatilityBump` `0.01`;
+  and `clock`, null at a recorded close and one of the offered clock rules at a
+  working snapshot. The read returns `sensitivities.offered`, `clocks` and
+  `clockRequired` for the page to send back; nothing is filled in.
+- **What the surface states.** `sensitivities` on the surface echoes the
+  selection with `clockSource` (`close_convention` or `request`), `clockZone`
+  and `dayTo`, the instant theta's day runs to. Each series also has
+  `inTheMoney`, and each expiry `atTheMoneyStrike` (the listed strike nearest the
+  underlying settlement, the higher of two equally near) and `daysToExpiry`
+  (the model's own year fraction as days).
+- **Missing codes.** `option_at_intrinsic`, `sensitivity_unstable`,
+  `option_sensitivity_clock`, `valuation_time_coverage`, or the code a refused
+  sample raised. A series that did not calibrate has no analytics.
+- **Identity.** A refit is compared with the latest revision of the same
+  location and the same stated selection (migration
+  `0338_vol_surface_sensitivities.sql`).
+
+These are the option model's own figures for the [Options page](futures-options.md#reads-and-entry-points).
+They enter no Risk, VaR or P&L report.
+
 ## Stored revisions
 
 A surface is stored as an immutable, bitemporal revision (migration
@@ -204,8 +247,10 @@ queue (`risk.jobs`), next to portfolio risk, under the same lease, attempt,
 cancellation and security-generation rules (migration `0187_vol_surface_jobs.sql`).
 There is no separate queue, service or cache.
 
-- **`POST /api/vol-surfaces/fit`** takes `{requestId, snapshotId, product, model}`
-  and returns `{jobId, state}`. It is admitted only over working data, at the
+- **`POST /api/vol-surfaces/fit`** takes `{requestId, snapshotId, product, model,
+  sensitivities}` and returns `{jobId, state}`. `sensitivities` states the
+  [option analytics](#option-analytics) selection in full and is refused with
+  `option_sensitivity_policy` when it is absent or unsupported. It is admitted only over working data, at the
   context captured for the working frame; the submit operation itself refuses a
   context not captured from current knowledge with `historical_read_only`. It
   holds a share lock on the catalog's knowledge clock, so a later certification
@@ -309,7 +354,8 @@ Request-level codes:
 | `vol_surface_no_settlements` | The frame has no settlement of any live listed series of the product |
 | `option_expired` | Every listed series of the product is at or past its expiry |
 | `discount_coverage` | No live listed series' expiry is covered by the discount curve |
-| `vol_surface_input` | A malformed request, request identity reuse with other contents, or an inconsistent fit input |
+| `vol_surface_input` | A malformed request, request identity reuse with other contents, an inconsistent fit input, or a surface that states no sensitivity selection |
+| `option_sensitivity_policy` | The fit states no supported sensitivity selection, names a clock at a recorded close, or names none or an unoffered one at a working snapshot |
 | `vol_surface_nondeterministic` | A refit at the same valuation instant and pinned observations produced different content |
 | `historical_read_only` | A fit was requested from a historical context, or at a context not captured from current knowledge |
 | `discount_curve_missing` | The currency has no discount default |
@@ -331,7 +377,9 @@ observations, not a performance qualification; see
 
 - **Valuing options from the surface.** No interpolated value for an unsettled
   series, and no change to option valuation, Risk or close.
-- **Vega and volatility shocks.**
+- **Volatility in Risk.** The stored vega is the option model's own figure for
+  the Options page. Volatility shocks, vega and VaR on volatility in Risk reports
+  remain.
 - **Scheduled fitting** after each close: a fit triggered by a close being recorded,
   for an explicitly configured, versioned list of products and model per session,
   run as a named service principal. A session with nothing configured fits nothing.
