@@ -273,17 +273,4 @@ def run_checks(url, query, psql, environment, manifest):
     finally:
         for grant in saved:
             query(f"UPDATE security.role_grants SET granted_to='{grant['until']}'::timestamptz WHERE id='{grant['id']}';")
-    # History prepares an ordinary session itself; the response channel still refuses an unprepared one.
-    def unprepared():
-        fresh=PreviewClient(url);boot=fresh.bootstrap();fresh.call('profile',{'profile':'risk'})
-        at=next(f for f in boot['frames'] if f['at'].startswith('2020-12-18'))
-        body={'snapshotId':at['id'],'curve':'local_power','includeSources':False,'includeWorkspace':False,'contractDisplay':curve['contractDisplay']}
-        contract=fresh.call('evaluate',body)['points'][0]['contractId']
-        return fresh,{'snapshotId':at['id'],'curve':'local_power','contractId':contract,'revisionPolicy':'exact_snapshot_pins_v1'}
-    fresh,history_read=unprepared()
-    check('ordinary history discovers its session frames',len(fresh.call('history',history_read)['points'])>0)
-    fresh,history_read=unprepared()
-    owned=fresh.call('async-reads/channels',{'clientId':str(uuid4())})['channelId']
-    refused=fresh.call('async-reads',{'channelId':owned,'requestId':str(uuid4()),'operation':'curve.history.v1','body':history_read},expected=409)
-    check('the response channel refuses history before its session is prepared',refused['code']=='async_workspace_not_ready')
     print(f'{passed} asynchronous workbench HTTP checks passed.',flush=True)

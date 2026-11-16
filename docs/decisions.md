@@ -5853,3 +5853,42 @@ trading P&L and every value they state are unchanged.
   a strategy in one action; spread, storage, tolling and transport models;
   valuing options from the fitted smile; volatility in Risk; rho; scheduled
   fitting; assistant reading of the page.
+
+## D413 · One definition per covered read; its ordinary route releases the session gate
+
+Amends D404. Each read the response channel admits is written once, as a capture
+of the session's selection, an execution and a recheck. Its ordinary HTTP route
+and its channel operation both run that definition; the second, hand-written
+copy D404 left beside each ordinary handler is removed.
+
+An ordinary route of a covered read captures under the session gate, executes
+without it, and takes the gate again to answer. Before answering it requires the
+sign-in unexpired and the profile unchanged and, in a fresh identity
+transaction, the read's permissions, the sign-in and the read's own recheck.
+One slow read therefore no longer delays the other requests of its session. Two
+such reads run per session at once and a further one waits within its request
+deadline; the bound is a fixed contract value sized to the hosted application
+pool of eight connections, not a configuration value.
+
+The session match of an ordinary read is sign-in and profile only. Its inputs
+are an immutable capture of the snapshot the request named, so a later context
+change or live update does not make its result wrong, and the page discards a
+result it no longer wants. Sealed publication evidence stays a channel
+mechanism, where a result waits on a detached worker.
+
+A delegated assistant invocation runs the same definition inside the session
+gate, as before, and remains refused on the channel. A handler that assigns
+session state is not such a read: frame discovery stays a gated step of the
+ordinary `history` route, and the channel still refuses an unprepared session.
+The progressive `trading/workspace` request and the Blotter row stream keep
+their existing gate release and recheck.
+
+An operation is admitted to the channel only while a page requests it. One
+position's read and the separate statistical setup, summary, sample and
+calculation operations had no page consumer and are removed from the allowlist,
+leaving 18; their ordinary routes remain.
+
+- **Not decided here.** Reads outside D404's coverage, page loading, the
+  channel's encoding, compression and lifetime, and pushed job status. See
+  [the design](superpowers/specs/2026-11-16-non-blocking-page-reads-design.md).
+- **Evidence.** [Verification](verification.md#ordinary-reads-outside-the-session-gate-d413).
