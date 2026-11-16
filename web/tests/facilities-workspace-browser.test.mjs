@@ -4,6 +4,21 @@ import {readFile} from 'node:fs/promises';
 import {browserAvailable,browserTestTimeout,withBrowserPage} from './browser-page.mjs';
 const markup=(await readFile(new URL('../src/index.html',import.meta.url),'utf8')).replace(/<script\b[^>]*>[\s\S]*?<\/script>/g,'');
 
+for(const transition of ['first load','identity reset'])test('Facilities waits for hydrated permissions before choosing its initial workspace: '+transition,{skip:!browserAvailable,timeout:browserTestTimeout},()=>withBrowserPage(markup,async evaluate=>{
+ await evaluate(`(async()=>{
+  window.calls=[];window.errors=[];window.rights=[];
+  const context={contextId:'synthetic-context',effectiveOn:'2032-03-14',knownAt:'2032-03-14T20:00:00Z'};
+  const api=async(path,body)=>{calls.push({path,body});if(path==='facilities/quantities/directory')return{ownerId:'opaque-owner',context,at:'2032-03-14T23:59:59Z',ledgers:[],choices:[],hasMore:false,choicesTruncated:false,canRecord:true,canConfigure:true};throw Error('Unexpected initial consumer '+path);};
+  window.workspace=(await import('/facilities-workspace.js')).setupFacilities({api,act:async work=>{try{await work();}catch(error){errors.push(error.message);}},busy:()=>false,zone:()=> 'UTC',identity:()=> 'synthetic-operator',context:()=>({effectiveOn:'2032-03-14',knowledgeMode:'current',retained:null,convention:'facility_business_date_end_utc_v1'}),permission:name=>rights.includes(name),changed(){},tradeInspection:()=>null,openTrade:async()=>{}});
+  rights=['ReadMarketData','ReadTrades','ReadFacilityQuantities','ReadGasOperations'];
+  ${transition==='identity reset'?'workspace.reset();':''}await workspace.load().catch(error=>errors.push(error.message));
+ })()`);
+ assert.deepEqual(await evaluate('errors'),[]);
+ assert.equal(await evaluate('workspace.section()'),'quantities');
+ assert.deepEqual(await evaluate('calls.map(call=>call.path)'),['facilities/quantities/directory']);
+ assert.equal(await evaluate("document.querySelector('[data-facilities-view=quantities]').getAttribute('aria-selected')"),'true');
+}));
+
 test('Facilities keeps existing quantity work and lazily opens physical definitions and activity',{skip:!browserAvailable,timeout:browserTestTimeout},()=>withBrowserPage(markup,async(evaluate,command)=>{
  await evaluate(`(async()=>{
   window.calls=[];window.errors=[];

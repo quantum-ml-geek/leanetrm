@@ -15,7 +15,7 @@ export function setupFacilities(o:Options){
  quantitiesHost.append(...root.childNodes);content.append(quantitiesHost,operationsHost,transportHost);root.append(navigation,content);
  const physicalAllowed=()=>['ReadMarketData','ReadTrades','ReadFacilityQuantities'].every(o.permission),transportAllowed=()=>['ReadMarketData','ReadTrades','ReadGasOperations'].every(o.permission);
  const available=(next:Section)=>next==='transport'?transportAllowed():physicalAllowed();
- const initial=():Section=>physicalAllowed()?'quantities':'transport';
+ const initial=():Section=>!physicalAllowed()&&transportAllowed()?'transport':'quantities';
  let section:Section=initial(),operations:ReturnType<typeof setupFacilityOperations>|undefined,transport:ReturnType<typeof setupTransportCapacity>|undefined,quantities:ReturnType<typeof setupFacilityQuantities>|undefined;
  quantities=setupFacilityQuantities({...o,busy:()=>o.busy()||!quantities?.unconfirmed()&&(!!operations?.unconfirmed()||!!transport?.unconfirmed())});
  operations=setupFacilityOperations(operationsHost,{...o,pendingElsewhere:()=>!!quantities?.unconfirmed()||!!transport?.unconfirmed(),openAllocations:async id=>{if(!await operations!.leave())return;section='quantities';show();await quantities!.load(id,false);o.changed();}});
