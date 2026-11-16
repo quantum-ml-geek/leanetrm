@@ -5,7 +5,7 @@ import type {GasMeasures} from './lifecycle-text.js';
 // Numeric schedule values are exact decimal strings or exact "a/b" ratios, never numbers.
 // A field's or column's unit names the unit its values are in, resolved per trade: 'quantity' is the trade's quantity unit, which each preview and
 // booked read returns as quantityUnit. The description never holds a unit symbol.
-export type TicketField={id:string;label:string;meaning:string;type:string;unit:string|null;state:string;required:boolean;band:string|null;choices:string|null;dependsOn:string[];refreshOn?:string[];lookup:string|null;soon:string|null;rule:string|null;allowNotApplicable?:boolean};
+export type TicketField={id:string;label:string;meaning:string;type:string;unit:string|null;state:string;required:boolean;band:string|null;choices:string|null;dependsOn:string[];refreshOn?:string[];lookup:string|null;soon:string|null;rule:string|null;allowNotApplicable?:boolean;refreshDescription?:boolean};
 // input lists the modes in which a side column's day cells are entries, recorded by the product's own operation.
 // soon, on a field, side kind, column or tab, is the hover text of an item drawn as coming soon: it holds no value, is never sent and reads nothing.
 export type TicketColumn={id:string;label:string;unit:string|null;measure:string;input:string[];soon:string|null};
@@ -14,7 +14,7 @@ export type TicketSideKind={kind:string;pill:string;colour:string;min:number;ini
 // At most `max` sides of the named kinds together.
 export type TicketSideLimit={kinds:string[];max:number};
 export type TicketTab={id:string;label:string;soon:string|null};
-export type TicketDescription={product:string;version:number;rowShape:string;tradeFields:TicketField[];sides:TicketSideKind[];sideLimits:TicketSideLimit[];tradeColumns:TicketColumn[];levels:string[];tabs:TicketTab[];modes:string[];sideCalendars?:SideCalendarCatalogRow[]};
+export type TicketDescription={product:string;version:number;rowShape:string;tradeFields:TicketField[];sides:TicketSideKind[];sideLimits:TicketSideLimit[];tradeColumns:TicketColumn[];levels:string[];tabs:TicketTab[];modes:string[];sideCalendars?:SideCalendarCatalogRow[];selection?:Record<string,string>};
 export type TicketSideDraft={kind:string;code:string;values:Record<string,string>;calendarPolicy?:SideCalendarPolicy};
 export type TicketDraft={product:string;version:number;trade:Record<string,string>;sides:TicketSideDraft[]};
 export type TicketChoice={value:string;label:string};

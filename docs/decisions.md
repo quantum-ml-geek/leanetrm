@@ -5752,6 +5752,29 @@ value they state are unchanged.
   from the fitted smile; volatility in Risk; rho; scheduled fitting; assistant
   reading of the page.
 
+## D414 · Physical storage assets and independently tracked activity
+
+**Status:** implemented operating profile with local managed, native, upgrade and
+browser qualification. Integration and release checks remain separate gates.
+
+**Requirement.** Define the physical facility's operating parameters and track
+its pipeline-linked physical activity independently from commercial contracts.
+
+**Decision.** Keep exact versioned asset/port/rule relationships separate from
+commercial entitlement, title and charges. A dated opening physical fact and an
+explicit complete activity window supply total inventory. The first storage
+profile uses absolute step ratchets and native quantity per elapsed hour; shared
+gross flows consume physical limits together. Actual evidence retains breaches,
+while prospective admission requires independent native witness validation.
+Missing opening or complete coverage is unassessed. Reuse existing quantity
+allocation sources and own-trade projections through exact links; do not create
+a parallel financial ledger or infer a movement from title transfer.
+
+**Boundaries.** This is a physical operations consumer. Full Storage/Transport
+agreements, other ratchet laws, loss/conversion rules and complete optionality
+valuation require their own qualified contracts. See
+[storage facility operations](storage-facility-operations.md).
+
 ## D409 · A strategy of option legs on one expiry is analysed by a read, and Options draws it
 
 2026-11-16. Scope decided by the owner on 15 November 2026: legs on one option
@@ -5853,6 +5876,78 @@ trading P&L and every value they state are unchanged.
   a strategy in one action; spread, storage, tolling and transport models;
   valuing options from the fitted smile; volatility in Risk; rho; scheduled
   fitting; assistant reading of the page.
+
+## D410 · Explicit balance-time fees and cumulative independent cash
+
+**Status:** implemented bounded profile with disposable local qualification;
+the exact combined artifact and release remain separately gated.
+
+**Requirement.** Charge accepted outstanding Park and Loan principal over time,
+preserving principal, service value, fee determinations and bank payments as
+independent facts.
+
+**Decision.** Install `physical_gas_park_loan_balance_time_v1` alongside the
+fixed-fee title-transfer profile. Retain an absolute currency/native-quantity rate,
+elapsed-hour basis, accepted advance start, contractual cutoff, overdue treatment,
+cash due instant, remaining-return plan and cumulative rounding law. Integrate
+accepted partial returns exactly, round cumulative payment totals once and append
+only their signed differences. Each nonzero contribution has an independent cash
+owner; a zero delta records a checkpoint without cash. Explicit restatement after
+a newly accepted backdated return may create a refund without rewriting paid
+cash. Remaining service value subtracts all determined contributions, including
+paid ones; native outstanding cash includes only unpaid amounts.
+
+The shared ticket renders the explicitly selected profile's fields under an exact
+description-selector attestation. It does not submit inactive economic fields.
+Native persistence independently validates rational math, event membership, exact
+previous heads, operation receipts, current authority and original deadlines.
+
+**Boundaries.** An expired unaccepted advance plan is unavailable and cannot
+become zero or an invented actual advance. The cutoff never discharges principal.
+Quantity scaling, source-correction continuity and complete economic horizon
+projection remain unqualified. The economic fence includes source-known future,
+zero-rate, rounded-zero and cash-only states. See the [fee contract and actual
+qualification](gas-park-loan-balance-fee.md).
+
+## D411 · Retained-title parking with independent reservations and fee cash
+
+**Status:** bounded implementation with disposable local qualification; aggregate
+CI, release and production activation remain separate gates.
+
+**Requirement.** Represent parking that retains customer title, with auditable
+observations, explicit performance and surviving independent cash, rather than
+creating a title-transfer claim or an artificial provider commodity position.
+
+**Decision.** Install `physical_gas_park_custody_v1` as an explicit profile of
+the shared Park and Loan authoring family. Capture one exact point, native
+quantity basis, currency, acceptance window and return due. Customer acceptance
+reserves identified owned lots; provider acceptance records foreign custody with
+an explicitly absent owned account. Partial return releases an original native
+reservation and creates its exact same-lot remainder atomically. Final return
+requires release authority without requiring authority to create a nonexistent
+remainder. No custody transition changes owned quantity or physical activity.
+
+Record supported raw observations independently of financial application. Exact
+manual/review action policies, observation revisions and accepted return order
+are explicit. Changed pinned evidence requires reconciliation without rewriting
+accepted title or cash. Original request recovery precedes fresh-source lookup;
+a fresh acknowledgement of a sealed fact beyond the selected view reports no
+new effect and does not promote that view's business or knowledge cutoff.
+
+Recognize the independently directed fixed fee at acceptance as an ordinary
+`TimedCashPayment` membership. Recorded bank payments use the existing cash
+operation and its `AmendTrade` authority, with read-only actor-bound receipt
+recovery. The completed custody workbench remains available for independent
+unpaid cash and raw observation history. Contractual instants display in the
+user's zone; exact wire instants retain native microsecond precision.
+
+**Boundaries.** The installed contract prohibits use and sale of custody and
+does not implement loss application, cross-point conversion, source correction
+adapters, quantity scaling or automatic performance. An expired unaccepted plan
+is unavailable even with a zero fee. Current-clock price qualification does not
+qualify generated closes, cross-clock P&L or complete economic horizon risk;
+source-known zero, future-effective, completed and cash-only states require
+the same explicit continuation fence. See the [contract](gas-park-custody.md).
 
 ## D413 · One definition per covered read; its ordinary route releases the session gate
 

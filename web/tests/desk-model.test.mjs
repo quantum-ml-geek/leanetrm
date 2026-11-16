@@ -558,6 +558,17 @@ test('Park and loan displays managed principal and scheduled-plan PV without der
  assert.throws(()=>positionRows([{...service,quantity:null}]),/principal/);
 });
 
+test('custody service rows show backend service value without a commodity price or owned exposure',()=>{
+ const custody={...fixture.holdings[0],instrumentType:'physical_gas_park_custody',contractIdentityKind:'gas_park_custody_agreement',direction:'multi_side',
+  quantity:'720',lots:null,curve:'',projectionCurves:[],priceNavigation:false,marketLabel:'Synthetic custody point',executionPrice:null,fixedPrice:null,mark:null,markMinusPrice:null,executionPnl:null,
+  presentValue:'12.5',measure:'custody_remaining_plan_present_value_v1',unavailableReason:null};
+ const [row]=positionRows([custody]);
+ assert.deepEqual([row.measure,row.quantity,row.exposure,row.price,row.priceUnit,row.mark],['Remaining custody service PV','720',null,null,null,null]);
+ assert.deepEqual(valueFields(custody.instrumentType),['presentValue']);
+ assert.equal(row.value,'12.5');assert.equal(row.market,'Synthetic custody point');
+ assert.throws(()=>positionRows([{...custody,priceNavigation:true}]),/price navigation/);
+});
+
 test('Park and loan scheduled-plan totals stay in their own backend-supplied tile',()=>{
  const summaries=clone(fixture.summaries);
  for(const index of [0,1,2,3])for(const group of summaries[index].groups)if(group.instrumentType==='financial_swap'){
