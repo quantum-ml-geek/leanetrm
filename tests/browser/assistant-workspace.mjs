@@ -43,7 +43,8 @@ export async function run({command,evaluate,wait,click,set,submit,persona,check,
       {page:'reference',table:'units',search:''},{page:'parties',kind:'counterparty'},{page:'jobs',job:null},{page:'lifecycle'},{page:'ppa',trade:null,book:null},{page:'custom-curves',curve:null,unsaved:false},
       base,{...base,risk:true},{...base,lens:'risk'},...[null,'futures','options','swaps','ppa','gas','park-loan','crude','lng'].map(product=>({...base,entry:{product}})),
       {page:'risk',view:'risk'},...['physical-operations','facilities','dashboard','crude-setup','gas-setup','gas','crude','delivery','interval-series','interval-curves','vol-surfaces','admin','ai'].map(page=>({page})),
-      {page:'facilities',facilitySection:'definitions'},{page:'facilities',facilitySection:'activity'}];
+      {page:'facilities',facilitySection:'definitions'},{page:'facilities',facilitySection:'activity'},
+      {page:'facilities',facilitySection:'transport'},{page:'facilities',facilitySection:'route'}];
     const actual=[...new Set(states.map(state=>pageReport(state).page))].sort();return JSON.stringify(actual)===${JSON.stringify(JSON.stringify(reportPages))}&&JSON.stringify(actual)===JSON.stringify(reportedPages.filter(page=>page!=='contract_definitions').sort());});})()`);
   await check('Contract pricing and Publications refuse an assistant report until they have an admitted read contract',`import('/assistant-pages.js').then(({pageReport})=>{try{pageReport({page:'configuration'});return false;}catch(error){return error.message==='The assistant’s page is inconsistent. Reload it.';}})`);
   await check('an administrator can explicitly configure both new workspace tools',"['read_page_digest','present_walkthrough'].every(code=>[...document.querySelectorAll('#ai-agent-tools input')].some(i=>i.value===code))&&document.querySelector('#error').hidden");
