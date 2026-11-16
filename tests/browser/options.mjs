@@ -1,5 +1,6 @@
 // Options (Trading): the option chain of a product's expiry at the selected close, read from the product's stored volatility
-// surface, with each series' settlement, implied volatility and sensitivities as its fit stored them. A product with no
+// surface, with each series' settlement, implied volatility and sensitivities as its fit stored them; the booked option
+// positions; and a strategy of legs on one expiry with the payoff the backend states for it. A product with no
 // surface at the close says so and sends the person to Vol surfaces, where a close is calibrated. Runs after the HTTP
 // checks of the exchange example, which leave nymex_on calibrated at the latest working snapshot, and before the Vol
 // surfaces suite: that suite leaves a refit running, and this one fits nothing and changes nothing it reads.
@@ -15,7 +16,7 @@ export async function run({command,evaluate,wait,click,persona,check,idle,fitsWi
  const {identifier}=await command('Page.addScriptToEvaluateOnNewDocument',{source:`
   window.optionCalls=[];window.optionsUnfitted=false;const send=window.fetch;
   window.fetch=async(input,init)=>{
-   const path=String(typeof input==='string'?input:input.url),call=/[/](vol-surfaces[/]read|options[/]positions)$/.exec(path);
+   const path=String(typeof input==='string'?input:input.url),call=/[/](vol-surfaces[/]read|options[/]positions|options[/]strategy[/]setup)$/.exec(path);
    if(!call)return send(input,init);
    const record={path:call[1],body:init?.body?JSON.parse(init.body):null};window.optionCalls.push(record);
    const response=await send(input,init);record.status=response.status;record.answer=await response.clone().json().catch(()=>null);
@@ -52,9 +53,9 @@ export async function run({command,evaluate,wait,click,persona,check,idle,fitsWi
     [...document.querySelectorAll('.options-product')].map(c=>c.dataset.product).sort().join()==='nymex_lo,nymex_on'&&!document.querySelector('.options-product[aria-pressed=true]')&&
     !!document.querySelector('#options-placeholder').offsetParent&&${calls('vol-surfaces/read')}.length===0`,
    `[document.querySelector('#page-title').textContent,document.querySelector('${page} .options-hero').textContent,${state}]`);
-  await check('the page opens on the chain, offers Positions, and Strategy says Coming soon',
+  await check('the page opens on the chain and offers Positions and Strategy',
    `document.querySelector('#options-view-chain').getAttribute('aria-pressed')==='true'&&!document.querySelector('#options-view-positions').disabled&&
-    (b=>b.disabled&&/Coming soon/.test(b.textContent))(document.querySelector('#options-view-strategy'))`);
+    !document.querySelector('#options-view-strategy').disabled`);
 
   await choose('nymex_on');
   await settled(`${state}==='fitted'&&!!document.querySelector('#options-chain tbody tr')`,30000);
@@ -135,6 +136,70 @@ export async function run({command,evaluate,wait,click,persona,check,idle,fitsWi
   await check('the positions fit the page width',fitsWidth);
   await click('#options-view-chain');await settled(`${state}==='fitted'&&!!document.querySelector('#options-chain tbody tr')`,30000);
   await check('returning to the chain shows the chosen product\'s chain again',"!document.querySelector('#options-products').hidden&&document.querySelector('.options-product[aria-pressed=true]')?.dataset.product==='nymex_on'");
+
+  // Strategy: legs on the expiry in view. Its setup is read from the stored surface and its analysis is the backend's, sent
+  // over the asynchronous read channel; the page draws what comes back.
+  const strategy=`document.querySelector('#options-strategy').dataset.state`;
+  const enter=(selector,value)=>evaluate(`(n=>{n.value=${q(value)};n.dispatchEvent(new Event('change'));})(document.querySelector(${q(selector)}))`);
+  await click(`#options-chain td[data-series="${call.series.code}"]`);
+  await check('a chosen series can be bought or sold in the strategy',`!document.querySelector('#options-strategy-buy').disabled&&!document.querySelector('#options-strategy-sell').disabled`);
+  await click('#options-view-strategy');
+  await settled(`${state}==='strategy'&&document.querySelectorAll('.options-template').length===7&&${strategy}==='empty'`,30000);
+  const offer=await evaluate(`${calls('options/strategy/setup')}.at(-1)`);
+  await check('Strategy reads its setup for the product, model and expiry in view and shows the offered range and the valuation curve, with no legs',
+   `(r=>r.status===200&&r.body.product==='nymex_on'&&r.body.model==='smile_quadratic_log_moneyness_v1'&&r.body.expiryAt===${q(first.expiryAt)}&&r.answer.state==='fitted')(${calls('options/strategy/setup')}.at(-1))&&
+    document.querySelector('#options-view-strategy').getAttribute('aria-pressed')==='true'&&!document.querySelector('#options-expiries').closest('[hidden]')&&
+    Number(document.querySelector('#options-strategy-lower').value)===${Number(offer.answer.offered.prices.lower)}&&Number(document.querySelector('#options-strategy-upper').value)===${Number(offer.answer.offered.prices.upper)}&&
+    document.querySelectorAll('.options-strategy-curve').length===1&&document.querySelector('#options-strategy-analyse').disabled&&/No legs yet/.test(document.querySelector('#options-strategy-legs').textContent)`,
+   `[${strategy},document.querySelector('#options-strategy-controls').textContent,document.querySelector('#options-strategy-message').textContent]`);
+  await check('each template is offered with its legs, or is disabled and says which strike or series the expiry does not list',
+   `${q(offer.answer.templates.filter(t=>t.refusal).map(t=>t.id).sort().join())}===[...document.querySelectorAll('.options-template:disabled')].map(c=>c.dataset.template).sort().join()&&
+    [...document.querySelectorAll('.options-template:disabled')].every(c=>c.title.length>0)&&!document.querySelector('.options-template[data-template=straddle]').disabled`,
+   "[...document.querySelectorAll('.options-template')].map(c=>[c.dataset.template,c.disabled,c.title])");
+  // Fewer price points keep this analysis short; the range and the curve stay as offered.
+  await enter('#options-strategy-points','11');
+  await click('.options-template[data-template=straddle]');
+  await settled(`${strategy}==='analysed'||${strategy}==='refused'`,180000);
+  const money=offer.answer.atTheMoneyStrike;
+  await check('a straddle is analysed: two legs at the money at their settlements, the payoff drawn, and the premium, extremes and breakevens stated',
+   `${strategy}==='analysed'&&[...document.querySelectorAll('#options-strategy-legs tbody tr')].map(r=>r.dataset.side+' '+r.querySelector('.options-leg-name').textContent).join()===${q(`buy ${Number(money)} call,buy ${Number(money)} put`)}&&
+    [...document.querySelectorAll('#options-strategy-legs .options-leg-entry')].every(i=>Number(i.value)>0)&&!!document.querySelector('#options-strategy-chart canvas')&&
+    (card=>/Net premium\\s*Debit [\\d,]+[.]\\d\\d USD/.test(card)&&/Maximum profit\\s*Unbounded/.test(card)&&/Maximum loss\\s*-[\\d,]+[.]\\d\\d USD/.test(card)&&/Breakevens\\s*[\\d.]+ · [\\d.]+/.test(card))(document.querySelector('#options-strategy-analysis').innerText)&&
+    document.querySelectorAll('#options-strategy-tiles .options-tile').length===5&&/At expiry/.test(document.querySelector('#options-strategy-chart .options-strategy-plot').getAttribute('aria-label'))`,
+   `[${strategy},document.querySelector('#options-strategy-message').textContent,document.querySelector('#options-strategy-analysis').innerText,document.querySelector('#options-strategy-legs').innerText]`);
+  await check('each leg shows its implied volatility and delta, or a dash that says why, and a strategy figure that is missing says why',
+   `[...document.querySelectorAll('#options-strategy-legs .options-leg-figure')].every(td=>td.textContent==='—'?td.title.length>0:/^-?[\\d.]+%?$/.test(td.textContent))&&
+    [...document.querySelectorAll('#options-strategy-tiles .options-tile')].every(t=>t.querySelector('.options-tile-value').textContent==='—'?t.title.length>0:/^-?[\\d,.]+$/.test(t.querySelector('.options-tile-value').textContent))&&
+    /option_expiry_exercise_value_v1/.test(document.querySelector('#options-strategy-basis').textContent)&&/Risk reports keep theirs/.test(document.querySelector('#options-strategy-basis').textContent)`,
+   "[document.querySelector('#options-strategy-legs').innerText,document.querySelector('#options-strategy-tiles').innerText]");
+  await check('the dated curve at the valuation instant is drawn beside the expiry payoff, or the page says why there is none',
+   `(label=>/Valuation/.test(label)||!!document.querySelector('#options-strategy-refused'))(document.querySelector('#options-strategy-chart .options-strategy-plot').getAttribute('aria-label'))`,
+   "document.querySelector('#options-strategy-chart .options-strategy-plot').getAttribute('aria-label')");
+  await check('the strategy fits the page width',fitsWidth);
+  await enter('#options-strategy-legs .options-leg-lots','2');
+  await check('changing a leg leaves the last analysis on show, marked as no longer the choice\'s',
+   `${strategy}==='stale'&&/Analyse again/.test(document.querySelector('#options-strategy-message').textContent)&&!!document.querySelector('#options-strategy-chart canvas')`,
+   `[${strategy},document.querySelector('#options-strategy-message').textContent]`);
+  // A range whose spacing is not an exact decimal is refused by the backend and said; the legs stay.
+  await enter('#options-strategy-upper',String(Number(offer.answer.offered.prices.lower)+1));await enter('#options-strategy-points','11');
+  await enter('#options-strategy-lower','0');
+  await click('#options-strategy-analyse');
+  await settled(`${strategy}==='refused'`,60000);
+  await check('a range the backend refuses is said with its code, and the legs are kept',
+   `/strategy_price_range/.test(document.querySelector('#options-strategy-message').textContent)&&document.querySelectorAll('#options-strategy-legs tbody tr[data-series]').length===2`,
+   "document.querySelector('#options-strategy-message').textContent");
+  await click('#options-strategy-clear');
+  await check('Clear legs empties the strategy',`/No legs yet/.test(document.querySelector('#options-strategy-legs').textContent)&&document.querySelector('#options-strategy-analyse').disabled`);
+  // A leg comes from the chain: the series chosen there, at the settlement shown.
+  await click('#options-view-chain');await settled(`${state}==='fitted'&&!!document.querySelector('#options-chain tbody tr')`,30000);
+  await click(`#options-chain td[data-series="${call.series.code}"]`);await click('#options-strategy-sell');
+  await check('a series already in the strategy is not offered again',"document.querySelector('#options-strategy-sell').disabled&&document.querySelector('#options-strategy-buy').disabled");
+  await click('#options-view-strategy');await settled(`${state}==='strategy'&&document.querySelectorAll('#options-strategy-legs tbody tr[data-series]').length===1`,30000);
+  await check('a leg added from the chain is a sale of that series at its settlement',
+   `(r=>r.dataset.series===${q(call.series.code)}&&r.dataset.side==='sell'&&Number(r.querySelector('.options-leg-entry').value)===${Number(call.series.settlement)})(document.querySelector('#options-strategy-legs tbody tr'))`,
+   "document.querySelector('#options-strategy-legs').innerText");
+  await click('#options-strategy-clear');
+  await click('#options-view-chain');await settled(`${state}==='fitted'&&!!document.querySelector('#options-chain tbody tr')`,30000);
 
   // A close with no surface: the page says so and offers Vol surfaces, and draws no chain.
   await evaluate('window.optionsUnfitted=true');

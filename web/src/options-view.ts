@@ -1,16 +1,23 @@
 import {publicText} from './market-view.js';
 import {chainExpiries,chainRows,measureReason,type Cell,type ChainSide} from './options-chain.js';
 import {positionTable,type OptionPositionsRead} from './options-positions.js';
+import {analysisLines,analysisRequest,choiceProblem,legFigures,offeredChoice,sensitivityTiles,strategyChart,strategyReason,templateLegs,
+ type Side,type StrategyAnalysis,type StrategyChoice,type StrategyLeg,type StrategySetup} from './options-strategy.js';
+import {clearStrategyChart,renderStrategyChart} from './options-strategy-chart.js';
 import {decimalText,hereHeading,volModel,type FuturesReadRequest,type SurfaceExpiry,type SurfaceSeries,type VolSurfaceFrames,type VolSurfaceResult} from './vol-surface-view.js';
 
 // Options (Trading): the option chain of a product's expiry at the selected close, from the product's stored volatility
-// surface, and the booked option positions with those series' figures scaled to the lots held. Every settlement, volatility,
-// sensitivity and sum is the backend's; the page chooses what to show and formats it. A product with no surface at this
-// close shows that, never another close's figures.
+// surface, the booked option positions with those series' figures scaled to the lots held, and a strategy of legs on one
+// expiry with its payoff. Every settlement, volatility, sensitivity, sum, payoff and breakeven is the backend's; the page
+// chooses what to show and formats it. A product with no surface at this close shows that, never another close's figures.
 type Api=<T>(path:string,body?:unknown)=>Promise<T>;
 type Job={state:string}|null;
 type SurfaceRead={definitionRevisionId:string;snapshotId:string;model:string;state:'fitted'|'notFitted';job:Job;surface:VolSurfaceResult|null};
 type ProductPage={definitionRevisionId:string;rows:Record<string,string|number|null>[];hasMore:boolean};
+// One expiry's strategy: the legs a person is assembling, what its setup offered, and its last analysis with whether the
+// choice has changed since.
+// `busy` is the number of the read it waits on, or 0.
+type Strategy={choice:StrategyChoice;setup?:StrategySetup;analysis?:StrategyAnalysis;stale:boolean;busy:number;message:string};
 
 const active=(job:Job)=>!!job&&['queued','running','cancellation_requested'].includes(job.state);
 const messageOf=(error:unknown)=>error instanceof Error?error.message:String(error);
@@ -26,7 +33,8 @@ const trimmed=(value:string)=>value.includes('.')?value.replace(/0+$/,'').replac
  * The Options page. `refresh` reads the option products and booked option positions at the context and the chosen product's
  * stored surface; `open` shows a product's chain at an expiry and series, as a link from its surface does; `reset` clears
  * what an earlier context showed. `openSurface` opens the product's volatility surface, where a close is calibrated;
- * `book` opens the option ticket on a series.
+ * `book` opens the option ticket on a series. A strategy's legs are kept per product and expiry while the page is open;
+ * its analysis is read again after the context is.
  */
 export function setupOptions(o:{api:Api;context:()=>FuturesReadRequest;zone:()=>string;frames:Pick<VolSurfaceFrames,'here'|'sessionName'>;
  openSurface:(product:string,definitionRevisionId:string,series?:string)=>void;book:(series:string)=>void}){
@@ -37,7 +45,7 @@ export function setupOptions(o:{api:Api;context:()=>FuturesReadRequest;zone:()=>
  const heroText=el('div');heroText.append(hereKind,hereTitle);
  const views=el('div','options-views');views.setAttribute('role','group');views.setAttribute('aria-label','Views');
  const chainView=button('options-view','Chain','options-view-chain'),positionsView=button('options-view','Positions','options-view-positions');
- const strategyView=button('options-view','Strategy','options-view-strategy');strategyView.disabled=true;strategyView.title='Coming soon';strategyView.append(el('span','options-soon','Coming soon'));
+ const strategyView=button('options-view','Strategy','options-view-strategy');
  views.append(chainView,positionsView,strategyView);
  hero.append(heroText,views);
  const error=el('p','vol-error');error.id='options-error';error.setAttribute('role','alert');error.hidden=true;
@@ -52,12 +60,25 @@ export function setupOptions(o:{api:Api;context:()=>FuturesReadRequest;zone:()=>
  const tableHost=el('div','options-chain-host');
  const readout=el('aside','vol-card options-readout');readout.id='options-readout';readout.setAttribute('aria-live','polite');
  const basis=el('p','options-basis');basis.id='options-basis';
- const chain=el('section','options-chain-view');chain.append(expiryBar,facts,tableHost,readout,basis);
+ // The expiry in view, which the chain and the strategy share.
+ const expiryHead=el('div','options-expiry-head');expiryHead.append(expiryBar,facts);
+ const chain=el('section','options-chain-view');chain.append(tableHost,readout,basis);
  const positionsHost=el('section','options-positions');positionsHost.id='options-positions';
- root.replaceChildren(hero,error,productBar,placeholder,missing,chain,positionsHost);
+ const strategyHost=el('section','options-strategy');strategyHost.id='options-strategy';
+ const templateBar=el('nav','options-templates');templateBar.id='options-strategy-templates';templateBar.setAttribute('aria-label','Strategy templates');
+ const legHost=el('div','options-chain-host options-strategy-leg-host'),controls=el('div','options-strategy-controls');controls.id='options-strategy-controls';
+ const strategyMessage=el('p','options-strategy-message');strategyMessage.id='options-strategy-message';strategyMessage.setAttribute('role','status');
+ const chartHost=el('div','options-strategy-chart');chartHost.id='options-strategy-chart';
+ const analysisCard=el('aside','vol-card options-strategy-analysis');analysisCard.id='options-strategy-analysis';
+ const tiles=el('div','options-strategy-tiles');tiles.id='options-strategy-tiles';
+ const side=el('div','options-strategy-side');side.append(analysisCard,tiles);
+ const results=el('div','options-strategy-results');results.append(chartHost,side);
+ const strategyBasis=el('p','options-basis');strategyBasis.id='options-strategy-basis';
+ strategyHost.append(templateBar,legHost,controls,strategyMessage,results,strategyBasis);
+ root.replaceChildren(hero,error,productBar,placeholder,missing,expiryHead,chain,positionsHost,strategyHost);
 
  let products:{code:string;name:string}[]=[],moreProducts=false,definition:string|undefined,product='',expiryAt='',selected='',
-  shown:SurfaceRead|undefined,positions:OptionPositionsRead|undefined,held=new Map<string,string>(),view:'chain'|'positions'='chain',generation=0,
+  shown:SurfaceRead|undefined,positions:OptionPositionsRead|undefined,held=new Map<string,string>(),view:'chain'|'positions'|'strategy'='chain',generation=0,strategyRead=0,
   // A read failed and none has succeeded since: the failure stays said whatever view is chosen.
   broken=false;
  const instant=(at:string)=>new Intl.DateTimeFormat('en',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit',timeZone:o.zone()}).format(new Date(at));
@@ -70,7 +91,7 @@ export function setupOptions(o:{api:Api;context:()=>FuturesReadRequest;zone:()=>
  function failed(cause:unknown){
   broken=true;root.dataset.state='error';error.hidden=false;
   error.textContent=publicText(`${messageOf(cause)}${codeOf(cause)&&!messageOf(cause).includes(codeOf(cause)!)?` (${codeOf(cause)})`:''}`);
-  chain.hidden=true;missing.hidden=true;positionsHost.hidden=true;
+  chain.hidden=true;missing.hidden=true;positionsHost.hidden=true;expiryHead.hidden=true;strategyHost.hidden=true;
  }
  function renderProducts(){
   productBar.replaceChildren(...products.map(entry=>{
@@ -114,19 +135,32 @@ export function setupOptions(o:{api:Api;context:()=>FuturesReadRequest;zone:()=>
   if(analytics?.priceBump)row('Futures bump',trimmed(analytics.priceBump));
   const actions=el('div','vol-missing-actions'),book=button('','Book this series','options-book'),open=button('secondary','Open on Vol surfaces','options-open-surface');
   book.onclick=()=>o.book(series.series.code);open.onclick=()=>o.openSurface(product,definition!,series.series.code);
-  actions.append(book,open);readout.append(list,actions);
+  // A leg takes the settlement shown as its entry price, for the person to change in the strategy.
+  const leg=(side:Side)=>{
+   const add=button('secondary',side==='buy'?'Buy in strategy':'Sell in strategy','options-strategy-'+side),legs=strategy().choice.legs;
+   add.disabled=legs.some(l=>l.series===series.series.code);if(add.disabled)add.title='This series is already a leg of the strategy';
+   add.onclick=()=>{changed(s=>s.choice.legs.push({series:series.series.code,right:series.series.right,strike:series.series.strike,side,lots:'1',
+    entryPrice:series.series.settlement===null?'':trimmed(series.series.settlement)}));renderChain();};
+   return add;
+  };
+  actions.append(book,open,leg('buy'),leg('sell'));readout.append(list,actions);
  }
- function renderChain(){
-  const surface=shown!.surface!,expiries=chainExpiries(surface);
+ // The expiry chips and the chosen expiry's facts; the expiry, or none when every one has passed.
+ function renderExpiries():SurfaceExpiry|undefined{
+  const expiries=chainExpiries(shown!.surface!);
   if(!expiries.some(e=>e.expiryAt===expiryAt))expiryAt=expiries[0]?.expiryAt??'';
   expiryBar.replaceChildren(...expiries.map(expiry=>{
    const chip=button('options-expiry',expiryLabel(expiry));chip.dataset.expiry=expiry.expiryAt;
-   if(expiry.expiryAt===expiryAt)chip.setAttribute('aria-current','true');else chip.onclick=()=>{expiryAt=expiry.expiryAt;selected='';renderChain();};
+   if(expiry.expiryAt===expiryAt)chip.setAttribute('aria-current','true');else chip.onclick=()=>{expiryAt=expiry.expiryAt;selected='';render();};
    return chip;
   }));
   const expiry=expiries.find(e=>e.expiryAt===expiryAt);
-  if(!expiry){facts.replaceChildren();tableHost.replaceChildren(el('p','vol-empty-shelf','Every listed expiry of this product has passed.'));renderReadout(undefined);basis.textContent='';return;}
-  renderFacts(expiry);
+  if(expiry)renderFacts(expiry);else facts.replaceChildren();
+  return expiry;
+ }
+ function renderChain(){
+  const surface=shown!.surface!,expiry=renderExpiries();
+  if(!expiry){tableHost.replaceChildren(el('p','vol-empty-shelf','Every listed expiry of this product has passed.'));renderReadout(undefined);basis.textContent='';return;}
   const rows=chainRows(surface,expiryAt,held),table=el('table','options-chain');table.id='options-chain';
   const head=el('thead'),groups=el('tr','options-chain-groups'),names=el('tr');
   const group=(text:string,span:number)=>{const th=el('th',undefined,text);th.colSpan=span;th.scope='colgroup';return th;};
@@ -181,19 +215,161 @@ export function setupOptions(o:{api:Api;context:()=>FuturesReadRequest;zone:()=>
   positionsHost.replaceChildren(...(table.groups.length?[host,el('p','options-basis','Each figure is the series’ stored figure times its multiplier and the open lots held. Delta, gamma and vega are added within one underlying future only; value and theta are totalled per currency. A sum with a missing member is not shown.')]
    :[el('p','vol-empty-shelf','No option positions with open lots in the books you can read.')]));
  }
+ // Strategy: legs on the expiry in view, kept per product and expiry, with the payoff the backend states for them.
+ const strategies=new Map<string,Strategy>();
+ function strategy():Strategy{
+  const key=product+'|'+expiryAt;let found=strategies.get(key);
+  if(!found){found={choice:{legs:[],lower:'',upper:'',points:0,instants:[],volatilityShiftPoints:'0'},stale:false,busy:0,message:''};strategies.set(key,found);}
+  return found;
+ }
+ const waiting=(s:Strategy)=>s.busy!==0&&s.busy===strategyRead;
+ // A change to the choice leaves the last analysis on show, marked as no longer the choice's, and drops any answer still awaited.
+ function changed(edit:(s:Strategy)=>void){const s=strategy();edit(s);if(s.analysis)s.stale=true;s.message='';if(s.setup){strategyRead++;s.busy=0;}}
+ const said=(cause:unknown)=>`${messageOf(cause)}${codeOf(cause)&&!messageOf(cause).includes(codeOf(cause)!)?` (${codeOf(cause)})`:''}`;
+
+ const field=(label:string,control:HTMLElement)=>{const wrap=el('label','options-strategy-field');wrap.append(el('span',undefined,label),control);return wrap;};
+ const input=(id:string,mode:'decimal'|'numeric')=>{const node=el('input');node.id=id;node.type='text';node.inputMode=mode;node.autocomplete='off';return node;};
+ const lower=input('options-strategy-lower','decimal'),upper=input('options-strategy-upper','decimal'),shift=input('options-strategy-shift','decimal');
+ const points=el('select');points.id='options-strategy-points';
+ const curves=el('div','options-strategy-curves');curves.id='options-strategy-curves';
+ const addCurve=el('select');addCurve.id='options-strategy-add-curve';addCurve.setAttribute('aria-label','Add a dated curve');
+ const curveField=el('div','options-strategy-field');curveField.append(el('span',undefined,'Dated curves'),curves,addCurve);
+ const analyseButton=button('','Analyse','options-strategy-analyse'),clearButton=button('secondary','Clear legs','options-strategy-clear');
+ const actions=el('div','options-strategy-actions');actions.append(analyseButton,clearButton);
+ controls.append(field('Lowest futures price',lower),field('Highest futures price',upper),field('Price points',points),curveField,field('Volatility shift (points)',shift),actions);
+ lower.onchange=()=>{changed(s=>s.choice.lower=lower.value.trim());renderStatus();};upper.onchange=()=>{changed(s=>s.choice.upper=upper.value.trim());renderStatus();};
+ shift.onchange=()=>{changed(s=>s.choice.volatilityShiftPoints=shift.value.trim());renderStatus();};
+ points.onchange=()=>{changed(s=>s.choice.points=Number(points.value));renderStatus();};
+ addCurve.onchange=()=>{const at=addCurve.value;if(at){changed(s=>s.choice.instants.push(at));renderStrategy();}};
+ analyseButton.onclick=()=>void analyse();clearButton.onclick=()=>{changed(s=>s.choice.legs=[]);renderStrategy();};
+
+ // What the strategy's state is, said beside its controls; nothing is redrawn that a person may be typing in.
+ function renderStatus(){
+  const s=strategy(),busy=waiting(s);
+  strategyHost.dataset.state=busy?'busy':s.message?'refused':s.analysis?s.stale?'stale':'analysed':'empty';
+  strategyMessage.textContent=publicText(busy?(s.setup?'Analysing…':'Reading what a strategy on this expiry may be built from…'):
+   s.message||(s.analysis&&s.stale?'The legs or the scenario changed. Analyse again to update the payoff.':''));
+  analyseButton.disabled=busy||!s.choice.legs.length;clearButton.disabled=!s.choice.legs.length;
+ }
+ async function readSetup(){
+  const s=strategy(),number=++strategyRead;s.busy=number;renderStatus();
+  try{
+   const setup=await o.api<StrategySetup>('options/strategy/setup',{context:o.context(),product,model:volModel,expiryAt,definitionRevisionId:definition});
+   if(number!==strategyRead)return;
+   if(setup.product!==product||setup.model!==volModel||Date.parse(setup.expiryAt)!==Date.parse(expiryAt))
+    throw Error('The strategy setup read does not match the selected product, model and expiry. Refresh and try again.');
+   s.setup=setup;if(setup.offered)s.choice={...offeredChoice(setup.offered),legs:s.choice.legs};
+  }catch(cause){if(number===strategyRead)s.message=said(cause);}
+  finally{if(s.busy===number)s.busy=0;if(number===strategyRead&&view==='strategy'&&!broken)renderStrategy();}
+ }
+ async function analyse(){
+  const s=strategy();if(!s.setup?.offered)return;
+  const problem=choiceProblem(s.choice,s.setup.limits);
+  if(problem){s.message=problem;renderStatus();return;}
+  const number=++strategyRead;s.busy=number;s.message='';renderStatus();
+  try{
+   const body=analysisRequest(o.context(),s.setup,s.choice,definition);
+   const answer=await o.api<StrategyAnalysis>('options/strategy/analyze',body);
+   if(number!==strategyRead)return;
+   if(answer.product!==body.product||Date.parse(answer.expiryAt)!==Date.parse(body.expiryAt)||answer.legs.length!==body.legs.length||answer.legs.some((leg,n)=>leg.series!==body.legs[n].series)||
+    answer.request.prices.points!==body.prices.points||answer.request.instants.length!==body.instants.length)
+    throw Error('The strategy analysis does not match the legs and scenario that were sent. Analyse again.');
+   s.analysis=answer;s.stale=false;
+  }catch(cause){if(number===strategyRead)s.message=said(cause);}
+  finally{if(s.busy===number)s.busy=0;if(number===strategyRead&&view==='strategy'&&!broken)renderStrategy();}
+ }
+ function renderLegs(s:Strategy){
+  const table=el('table','options-strategy-legs'),head=el('tr'),top=el('thead'),body=el('tbody');table.id='options-strategy-legs';
+  for(const [name,numeric] of [['Side',false],['Lots',true],['Series',false],['Entry price',true],['IV',true],['Delta',true],['',false]] as const){
+   const th=el('th',numeric?'numeric':undefined,name);th.scope='col';head.append(th);}
+  top.append(head);
+  const figures=s.analysis?legFigures(s.analysis):new Map<string,{impliedVolatility:Cell;delta:Cell}>();
+  s.choice.legs.forEach((leg:StrategyLeg,n)=>{
+   const tr=el('tr');tr.dataset.series=leg.series;tr.dataset.side=leg.side;
+   const flip=button('options-leg-side',leg.side==='buy'?'Buy':'Sell');flip.dataset.side=leg.side;flip.title='Change between buy and sell';
+   flip.onclick=()=>{changed(()=>leg.side=leg.side==='buy'?'sell':'buy');renderStrategy();};
+   const lots=input('options-leg-lots-'+n,'numeric'),entry=input('options-leg-entry-'+n,'decimal');
+   lots.className='options-leg-lots';lots.value=leg.lots;lots.setAttribute('aria-label',`Lots of ${leg.series}`);lots.onchange=()=>{changed(()=>leg.lots=lots.value.trim());renderStatus();};
+   entry.className='options-leg-entry';entry.value=leg.entryPrice;entry.setAttribute('aria-label',`Entry price of ${leg.series}`);entry.onchange=()=>{changed(()=>leg.entryPrice=entry.value.trim());renderStatus();};
+   const name=el('td');name.append(el('span','options-leg-name',`${trimmed(leg.strike)} ${leg.right}`),' ',el('code','vol-card-code',leg.series));
+   const remove=button('secondary options-leg-remove','Remove');remove.setAttribute('aria-label',`Remove ${leg.series}`);remove.onclick=()=>{changed(c=>c.choice.legs.splice(n,1));renderStrategy();};
+   const figure=(stated:Cell|undefined)=>{
+    const td=el('td','numeric options-leg-figure',stated?.text??'—');if(stated?.missing){td.title=strategyReason(stated.missing);td.classList.add('options-missing-figure');}return td;
+   };
+   const cells=[el('td'),el('td','numeric'),name,el('td','numeric'),figure(figures.get(leg.series)?.impliedVolatility),figure(figures.get(leg.series)?.delta),el('td')];
+   cells[0].append(flip);cells[1].append(lots);cells[3].append(entry);cells[6].append(remove);tr.append(...cells);body.append(tr);
+  });
+  if(!s.choice.legs.length){const tr=el('tr'),td=el('td','options-strategy-empty','No legs yet. Choose a template, or add a call or a put from the chain.');td.colSpan=7;tr.append(td);body.append(tr);}
+  table.append(top,body);legHost.replaceChildren(table);
+ }
+ function renderResults(s:Strategy){
+  const analysis=s.analysis;
+  if(!analysis){
+   clearStrategyChart(chartHost);chartHost.append(el('p','vol-readout-empty','Choose a template or add legs, then analyse to see the payoff.'));
+   analysisCard.replaceChildren(el('h3',undefined,'At expiry'),el('p','vol-readout-empty','No analysis yet.'));tiles.replaceChildren();strategyBasis.textContent='';return;
+  }
+  const curveLabel=(at:string)=>Date.parse(at)===Date.parse(analysis.valuationAt)?`Valuation · ${instant(at)}`:instant(at);
+  renderStrategyChart(chartHost,strategyChart(analysis,curveLabel));
+  const list=el('dl');
+  for(const line of analysisLines(analysis)){
+   const dd=el('dd',line.tone==='none'?undefined:'options-tone-'+line.tone,line.value);if(line.note)dd.title=line.note;list.append(el('dt',undefined,line.term),dd);
+  }
+  analysisCard.replaceChildren(el('h3',undefined,'At expiry'),list);
+  if(analysis.dated.state==='refused'){
+   const refused=el('p','options-strategy-refused',`No dated curve: ${analysis.dated.reason?strategyReason(analysis.dated.reason):'the valuation refused it'}.`);
+   refused.id='options-strategy-refused';if(analysis.dated.message)refused.title=analysis.dated.message;analysisCard.append(refused);
+  }
+  tiles.replaceChildren(...sensitivityTiles(analysis).map(tile=>{
+   const node=el('div','options-tile');node.dataset.measure=tile.term.toLowerCase();if(tile.missing){node.title=tile.missing;node.classList.add('options-missing-figure');}
+   node.append(el('span','options-tile-term',tile.term),el('strong','options-tile-value',tile.value),el('span','options-tile-unit',tile.unit));return node;
+  }));
+  const clock=s.setup?.clock;
+  strategyBasis.textContent=publicText(`At expiry an option in the money is exercised and worth its intrinsic value (${analysis.expiry.rule}); the payoff is stated over futures prices from zero upward. `+
+   `Dated curves and sensitivities value the legs with the option model at each futures price, instant and volatility shift${analysis.strategy.dayTo?`; theta is for the day to ${instant(analysis.strategy.dayTo)}`:''}`+
+   `${clock?`, with days counted on the ${clock.zone} clock`:''}. Sensitivities are the option model’s own (${analysis.policies.sensitivities.policy}); Risk reports keep theirs. `+
+   `This analysis priced ${analysis.work.calibrationTreePrices+analysis.work.valuationTreePrices} trees. It books and stores nothing.`);
+ }
+ function renderStrategy(){
+  const expiry=renderExpiries(),s=strategy(),offer=s.setup?.offered;
+  for(const node of [templateBar,legHost,controls,results,strategyBasis])node.hidden=!expiry||!offer;
+  if(!expiry){strategyHost.dataset.state='empty';strategyMessage.textContent='Every listed expiry of this product has passed.';return;}
+  if(!s.setup){if(!waiting(s)&&!s.message)void readSetup();else renderStatus();return;}
+  if(!offer){strategyHost.dataset.state='empty';strategyMessage.textContent='This expiry has no surface at this close, so no strategy is offered.';return;}
+  templateBar.replaceChildren(el('span','options-templates-label','Templates'),...(s.setup.templates??[]).map(template=>{
+   const chip=button('options-template',template.name);chip.dataset.template=template.id;
+   if(template.refusal){chip.disabled=true;chip.title=template.refusal.message;}
+   else chip.onclick=()=>{changed(c=>c.choice.legs=templateLegs(template));renderStrategy();void analyse();};
+   return chip;
+  }));
+  renderLegs(s);
+  lower.value=s.choice.lower;upper.value=s.choice.upper;shift.value=s.choice.volatilityShiftPoints;
+  points.replaceChildren(...offer.pointCounts.map(count=>new Option(String(count),String(count))));points.value=String(s.choice.points);
+  curves.replaceChildren(...s.choice.instants.map(at=>{
+   const chip=button('options-strategy-curve',`${Date.parse(at)===Date.parse(offer.instants[0]??'')?'Valuation · ':''}${instant(at)} ✕`);chip.dataset.instant=at;
+   chip.setAttribute('aria-label',`Remove the curve at ${instant(at)}`);chip.onclick=()=>{changed(c=>c.choice.instants=c.choice.instants.filter(i=>i!==at));renderStrategy();};
+   return chip;
+  }));
+  if(!s.choice.instants.length)curves.append(el('span','options-position-note','None: the payoff at expiry only'));
+  addCurve.replaceChildren(new Option('Add a date…',''),...offer.instants.filter(at=>!s.choice.instants.includes(at)).map(at=>new Option(instant(at),at)));
+  addCurve.disabled=s.choice.instants.length>=s.setup.limits.curves;addCurve.title=addCurve.disabled?`At most ${s.setup.limits.curves} dated curves`:'';
+  renderResults(s);renderStatus();
+ }
+
  function render(){
   const read=shown;
-  chainView.setAttribute('aria-pressed',String(view==='chain'));positionsView.setAttribute('aria-pressed',String(view==='positions'));
+  for(const [chip,name] of [[chainView,'chain'],[positionsView,'positions'],[strategyView,'strategy']] as const)chip.setAttribute('aria-pressed',String(view===name));
   if(broken)return;
-  error.hidden=true;productBar.hidden=view!=='chain';positionsHost.hidden=view!=='positions'||!positions;
+  error.hidden=true;productBar.hidden=view==='positions';positionsHost.hidden=view!=='positions'||!positions;
+  const fitted=view!=='positions'&&!!product&&read?.state==='fitted';
+  expiryHead.hidden=!fitted;chain.hidden=!fitted||view!=='chain';strategyHost.hidden=!fitted||view!=='strategy';
   if(view==='positions'){
-   placeholder.hidden=true;chain.hidden=true;missing.hidden=true;root.dataset.state=positions?'positions':'loading';
+   placeholder.hidden=true;missing.hidden=true;root.dataset.state=positions?'positions':'loading';
    if(positions)renderPositions();return;
   }
   placeholder.hidden=!!product;
-  if(!product||!read){chain.hidden=true;missing.hidden=true;root.dataset.state=product?'loading':'idle';return;}
-  root.dataset.state=read.state;chain.hidden=read.state!=='fitted';missing.hidden=read.state==='fitted';
-  if(read.state==='fitted'){renderChain();return;}
+  if(!product||!read){missing.hidden=true;root.dataset.state=product?'loading':'idle';return;}
+  root.dataset.state=read.state==='fitted'&&view==='strategy'?'strategy':read.state;missing.hidden=read.state==='fitted';
+  if(read.state==='fitted'){if(view==='strategy')renderStrategy();else renderChain();return;}
   const name=products.find(p=>p.code===product)?.name??product,text=el('div','vol-missing-text');
   text.append(el('h4',undefined,active(read.job)?`${name} is being calibrated at this close`:`${name} is not calibrated at this close`),
    el('p',undefined,'A chain is read from the surface fitted to one close’s option settlements. It is not carried to another day or session.'));
@@ -217,6 +393,8 @@ export function setupOptions(o:{api:Api;context:()=>FuturesReadRequest;zone:()=>
  }
  async function refresh(){
   const number=++generation;broken=false;showHere();root.dataset.state='loading';error.hidden=true;
+  // What a strategy was offered and how it analysed belong to the context that was read; its legs are the person's.
+  strategyRead++;for(const kept of strategies.values()){kept.setup=undefined;kept.analysis=undefined;kept.stale=false;kept.busy=0;kept.message='';}
   try{
    const context=o.context(),params=new URLSearchParams({table:'futures_option_products',snapshotId:context.snapshotId,offset:'0',search:''});
    const [page,held]=await Promise.all([o.api<ProductPage>('reference/catalog?'+params),o.api<OptionPositionsRead>('options/positions',{context,model:volModel})]);
@@ -230,13 +408,15 @@ export function setupOptions(o:{api:Api;context:()=>FuturesReadRequest;zone:()=>
   await readProduct();
  }
  function holdings(read:OptionPositionsRead){held=new Map(read.held.map(h=>[h.series,h.openLots]));}
- function reset(){generation++;broken=false;products=[];definition=undefined;shown=undefined;positions=undefined;held=new Map();productBar.replaceChildren();render();}
+ function reset(){generation++;strategyRead++;strategies.clear();broken=false;products=[];definition=undefined;shown=undefined;positions=undefined;held=new Map();productBar.replaceChildren();render();}
  chainView.onclick=()=>{view='chain';render();};positionsView.onclick=()=>{view='positions';render();};
+ // Opening the strategy asks again for a setup that could not be read.
+ strategyView.onclick=()=>{view='strategy';if(product&&expiryAt&&!strategy().setup)strategy().message='';render();};
  return {
   refresh,
   /** Shows a product's chain, at an expiry and with a series selected where they are named. */
   async open(code:string,expiry?:string,series?:string){product=code;expiryAt=expiry??'';selected=series??'';await refresh();},
-  leave(){generation++;},
+  leave(){generation++;strategyRead++;},
   reset
  };
 }
