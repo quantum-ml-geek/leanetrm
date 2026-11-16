@@ -29,6 +29,7 @@ def main():
     check_standalone()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--async-workbench-check',action='store_true',help='Qualify concurrent main-workbench SSE reads')
+    parser.add_argument('--page-read-benchmark',action='store_true',help='Time covered page reads over ordinary HTTP and the response channel in the async workbench fixture and print a JSON report')
     parser.add_argument('--side-calendar-check', action='store_true', help='Qualify explicit Side calendar authoring, retention and replay')
     parser.add_argument('--parametric-risk-check',action='store_true',help='Qualify retained parametric VaR/ES with aligned dated-factor history')
     parser.add_argument('--monte-carlo-risk-check',action='store_true',help='Qualify full-PV Monte Carlo, seeded replay and retained custody')
@@ -133,6 +134,8 @@ def main():
     if args.structured_power_check:
         args.check=True
         if args.example!='standard':parser.error('--structured-power-check requires the standard fixture')
+    # The benchmark reads the fixture the asynchronous workbench check owns.
+    if args.page_read_benchmark:args.async_workbench_check=True
     if args.async_workbench_check:
         args.check=True
         if args.example!='standard':parser.error('--async-workbench-check requires the standard fixture')
@@ -882,6 +885,9 @@ def main():
                     for suite in ('--structured-power','--structured-trading'):
                         browser_process=subprocess.Popen(['node',str(ROOT/'tests/browser/run.mjs'),str(target),str(args.browser.resolve()),suite],cwd=ROOT,env=env,start_new_session=True)
                         if browser_process.wait(timeout=300):raise RuntimeError('Owned structured power browser checks failed: '+suite)
+            elif args.page_read_benchmark:
+                from benchmark_page_reads import run_benchmark as run_page_read_benchmark
+                print('PAGE_READS='+json.dumps(run_page_read_benchmark(url,query,manifest,dotnet=dotnet,api_pid=child.pid)),flush=True)
             elif args.async_workbench_check:
                 from check_async_workbench_http import run_checks
                 run_checks(url,query,psql,env,manifest)
