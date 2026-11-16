@@ -1,16 +1,16 @@
 import {publicText} from './market-view.js';
 import {chainExpiries,chainRows,measureReason,type Cell,type ChainSide} from './options-chain.js';
+import {positionTable,type OptionPositionsRead} from './options-positions.js';
 import {decimalText,hereHeading,volModel,type FuturesReadRequest,type SurfaceExpiry,type SurfaceSeries,type VolSurfaceFrames,type VolSurfaceResult} from './vol-surface-view.js';
 
 // Options (Trading): the option chain of a product's expiry at the selected close, from the product's stored volatility
-// surface. Every settlement, volatility and sensitivity is the backend's, as the surface's fit stored it; the page chooses
-// what to show and formats it. A product with no surface at this close shows that, never another close's figures.
+// surface, and the booked option positions with those series' figures scaled to the lots held. Every settlement, volatility,
+// sensitivity and sum is the backend's; the page chooses what to show and formats it. A product with no surface at this
+// close shows that, never another close's figures.
 type Api=<T>(path:string,body?:unknown)=>Promise<T>;
 type Job={state:string}|null;
 type SurfaceRead={definitionRevisionId:string;snapshotId:string;model:string;state:'fitted'|'notFitted';job:Job;surface:VolSurfaceResult|null};
 type ProductPage={definitionRevisionId:string;rows:Record<string,string|number|null>[];hasMore:boolean};
-/** The open lots held in each series, as the positions read states them. */
-type PositionsRead={model:string;held:{series:string;openLots:string}[]};
 
 const active=(job:Job)=>!!job&&['queued','running','cancellation_requested'].includes(job.state);
 const messageOf=(error:unknown)=>error instanceof Error?error.message:String(error);
@@ -23,9 +23,9 @@ const button=(className:string,text:string,id?:string)=>{const b=el('button',cla
 const trimmed=(value:string)=>value.includes('.')?value.replace(/0+$/,'').replace(/\.$/,''):value;
 
 /**
- * The Options page. `refresh` reads the option products at the context, the chosen product's stored surface and the lots
- * held; `open` shows a product's chain at an expiry and series, as a link from its surface does; `reset` clears what an
- * earlier context showed. `openSurface` opens the product's volatility surface, where a close is calibrated.
+ * The Options page. `refresh` reads the option products and booked option positions at the context and the chosen product's
+ * stored surface; `open` shows a product's chain at an expiry and series, as a link from its surface does; `reset` clears
+ * what an earlier context showed. `openSurface` opens the product's volatility surface, where a close is calibrated.
  */
 export function setupOptions(o:{api:Api;context:()=>FuturesReadRequest;zone:()=>string;frames:Pick<VolSurfaceFrames,'here'|'sessionName'>;
  openSurface:(product:string,definitionRevisionId:string,series?:string)=>void}){
@@ -35,9 +35,9 @@ export function setupOptions(o:{api:Api;context:()=>FuturesReadRequest;zone:()=>
  const hero=el('header','vol-hero'),hereKind=el('span','vol-eyebrow'),hereTitle=el('h2','vol-here');hereTitle.id='options-here';
  const heroText=el('div');heroText.append(hereKind,hereTitle);
  const views=el('div','options-views');views.setAttribute('role','group');views.setAttribute('aria-label','Views');
- const chainView=button('options-view','Chain','options-view-chain');chainView.setAttribute('aria-pressed','true');
- const soon=(text:string,id:string)=>{const b=button('options-view',text,id);b.disabled=true;b.title='Coming soon';b.append(el('span','options-soon','Coming soon'));return b;};
- views.append(chainView,soon('Positions','options-view-positions'),soon('Strategy','options-view-strategy'));
+ const chainView=button('options-view','Chain','options-view-chain'),positionsView=button('options-view','Positions','options-view-positions');
+ const strategyView=button('options-view','Strategy','options-view-strategy');strategyView.disabled=true;strategyView.title='Coming soon';strategyView.append(el('span','options-soon','Coming soon'));
+ views.append(chainView,positionsView,strategyView);
  hero.append(heroText,views);
  const error=el('p','vol-error');error.id='options-error';error.setAttribute('role','alert');error.hidden=true;
 
@@ -52,10 +52,11 @@ export function setupOptions(o:{api:Api;context:()=>FuturesReadRequest;zone:()=>
  const readout=el('aside','vol-card options-readout');readout.id='options-readout';readout.setAttribute('aria-live','polite');
  const basis=el('p','options-basis');basis.id='options-basis';
  const chain=el('section','options-chain-view');chain.append(expiryBar,facts,tableHost,readout,basis);
- root.replaceChildren(hero,error,productBar,placeholder,missing,chain);
+ const positionsHost=el('section','options-positions');positionsHost.id='options-positions';
+ root.replaceChildren(hero,error,productBar,placeholder,missing,chain,positionsHost);
 
  let products:{code:string;name:string}[]=[],moreProducts=false,definition:string|undefined,product='',expiryAt='',selected='',
-  shown:SurfaceRead|undefined,held=new Map<string,string>(),generation=0;
+  shown:SurfaceRead|undefined,positions:OptionPositionsRead|undefined,held=new Map<string,string>(),view:'chain'|'positions'='chain',generation=0;
  const instant=(at:string)=>new Intl.DateTimeFormat('en',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit',timeZone:o.zone()}).format(new Date(at));
  const expiryLabel=(e:SurfaceExpiry)=>new Intl.DateTimeFormat('en',{month:'short',day:'numeric',year:'numeric',timeZone:o.zone()}).format(new Date(e.expiryAt));
 
@@ -66,7 +67,7 @@ export function setupOptions(o:{api:Api;context:()=>FuturesReadRequest;zone:()=>
  function failed(cause:unknown){
   root.dataset.state='error';error.hidden=false;
   error.textContent=publicText(`${messageOf(cause)}${codeOf(cause)&&!messageOf(cause).includes(codeOf(cause)!)?` (${codeOf(cause)})`:''}`);
-  chain.hidden=true;missing.hidden=true;
+  chain.hidden=true;missing.hidden=true;positionsHost.hidden=true;
  }
  function renderProducts(){
   productBar.replaceChildren(...products.map(entry=>{
@@ -140,9 +141,51 @@ export function setupOptions(o:{api:Api;context:()=>FuturesReadRequest;zone:()=>
   const stated=surface.sensitivities;
   basis.textContent=stated?`Per unit of quote. Delta per 1.00 of the future’s price, gamma per 1.00 squared, vega per volatility point, theta for one day${stated.dayTo?` to ${instant(stated.dayTo)}`:''}. Held: open lots across your books. Sensitivities are the option model’s own (${stated.policy}); Risk reports keep theirs.`:'';
  }
+ // The booked positions by underlying future. A position whose product has no surface here shows its lots and where to calibrate.
+ function renderPositions(){
+  const table=positionTable(positions!),grid=el('table','options-position-table');grid.id='options-position-table';
+  const head=el('tr');
+  for(const [name,numeric] of [['Trade',false],['Book',false],['Series',false],['Open lots',true],['Value',true],['Delta',true],['Gamma',true],['Vega',true],['Theta',true]] as const){
+   const th=el('th',numeric?'numeric':undefined,name);th.scope='col';head.append(th);}
+  const top=el('thead');top.append(head);grid.append(top);
+  const figure=(cell:Cell,unit:string)=>{const td=el('td','numeric',cell.text);td.title=cell.missing?measureReason(cell.missing):unit;if(cell.missing)td.classList.add('options-missing-figure');return td;};
+  for(const group of table.groups){
+   const body=el('tbody');body.dataset.underlying=group.underlyingSeries;
+   const title=el('tr','options-position-group'),name=el('th');name.colSpan=9;name.scope='colgroup';
+   name.append(el('span','options-position-future',group.underlyingSeries),el('span','options-position-note',`${group.productName} · expires ${instant(group.expiryAt)} · money in ${group.currency}, delta and gamma in ${group.quantityUnit}`));
+   title.append(name);body.append(title);
+   const figures=(cells:{value:Cell;delta:Cell;gamma:Cell;vega:Cell;theta:Cell})=>[figure(cells.value,group.currency),figure(cells.delta,group.quantityUnit),
+    figure(cells.gamma,`${group.quantityUnit} per 1.00 of price`),figure(cells.vega,`${group.currency} per volatility point`),figure(cells.theta,`${group.currency} for one day`)];
+   for(const row of group.rows){
+    const tr=el('tr');tr.dataset.series=row.series;tr.dataset.state=row.state;
+    const series=el('td');series.append(el('code','vol-card-code',row.series));
+    if(row.state==='notCalibrated'){const go=button('secondary options-position-calibrate','Calibrate →');go.onclick=()=>o.openSurface(group.product,definition!);series.append(' ',go);}
+    else if(row.state==='unavailable'&&row.reason)series.append(' ',el('span','options-position-note',measureReason(row.reason)));
+    tr.append(el('td',undefined,row.tradeReference),el('td',undefined,row.book),series,el('td','numeric',row.openLots),...figures(row));body.append(tr);
+   }
+   const subtotal=el('tr','options-position-subtotal'),label=el('th',undefined,`Subtotal · ${group.underlyingSeries}`);label.colSpan=4;label.scope='row';
+   subtotal.append(label,...figures(group.subtotal));body.append(subtotal);grid.append(body);
+  }
+  const foot=el('tfoot');
+  for(const total of table.totals){
+   const tr=el('tr','options-position-total'),label=el('th',undefined,`Total · ${total.currency}`);label.colSpan=4;label.scope='row';
+   const blank=()=>{const td=el('td','numeric','');td.title='Sensitivities to different futures are not added together';return td;};
+   tr.append(label,figure(total.value,total.currency),blank(),blank(),blank(),figure(total.theta,`${total.currency} for one day`));foot.append(tr);
+  }
+  grid.append(foot);
+  const host=el('div','options-chain-host');host.append(grid);
+  positionsHost.replaceChildren(...(table.groups.length?[host,el('p','options-basis','Each figure is the series’ stored figure times its multiplier and the open lots held. Delta, gamma and vega are added within one underlying future only; value and theta are totalled per currency. A sum with a missing member is not shown.')]
+   :[el('p','vol-empty-shelf','No option positions with open lots in the books you can read.')]));
+ }
  function render(){
   const read=shown;
-  placeholder.hidden=!!product;error.hidden=true;
+  chainView.setAttribute('aria-pressed',String(view==='chain'));positionsView.setAttribute('aria-pressed',String(view==='positions'));
+  error.hidden=true;productBar.hidden=view!=='chain';positionsHost.hidden=view!=='positions'||!positions;
+  if(view==='positions'){
+   placeholder.hidden=true;chain.hidden=true;missing.hidden=true;root.dataset.state=positions?'positions':'loading';
+   if(positions)renderPositions();return;
+  }
+  placeholder.hidden=!!product;
   if(!product||!read){chain.hidden=true;missing.hidden=true;root.dataset.state=product?'loading':'idle';return;}
   root.dataset.state=read.state;chain.hidden=read.state!=='fitted';missing.hidden=read.state==='fitted';
   if(read.state==='fitted'){renderChain();return;}
@@ -160,28 +203,30 @@ export function setupOptions(o:{api:Api;context:()=>FuturesReadRequest;zone:()=>
   if(!product)return;
   try{
    const context=o.context();
-   const [surface,positions]=await Promise.all([
-    o.api<SurfaceRead>('vol-surfaces/read',{context,product,model:volModel,definitionRevisionId:definition}),
-    o.api<PositionsRead>('options/positions',{context,model:volModel})]);
+   const surface=await o.api<SurfaceRead>('vol-surfaces/read',{context,product,model:volModel,definitionRevisionId:definition});
    if(number!==generation)return;
-   if(surface.definitionRevisionId!==definition||surface.model!==volModel||surface.snapshotId!==context.snapshotId||(surface.state==='fitted')!==!!surface.surface||positions.model!==volModel)
+   if(surface.definitionRevisionId!==definition||surface.model!==volModel||surface.snapshotId!==context.snapshotId||(surface.state==='fitted')!==!!surface.surface)
     throw Error('The option chain read does not match the selected product, model and context. Refresh and try again.');
-   shown=surface;held=new Map(positions.held.map(h=>[h.series,h.openLots]));render();
+   shown=surface;render();
   }catch(cause){if(number===generation)failed(cause);}
  }
  async function refresh(){
   const number=++generation;showHere();root.dataset.state='loading';error.hidden=true;
   try{
-   const params=new URLSearchParams({table:'futures_option_products',snapshotId:o.context().snapshotId,offset:'0',search:''});
-   const page=await o.api<ProductPage>('reference/catalog?'+params);
+   const context=o.context(),params=new URLSearchParams({table:'futures_option_products',snapshotId:context.snapshotId,offset:'0',search:''});
+   const [page,held]=await Promise.all([o.api<ProductPage>('reference/catalog?'+params),o.api<OptionPositionsRead>('options/positions',{context,model:volModel})]);
    if(number!==generation)return;
    if(!page.definitionRevisionId)throw Error('The option directory changed. Refresh to read its published definition.');
+   if(held.model!==volModel)throw Error('The option positions read does not match the selected model. Refresh and try again.');
    definition=page.definitionRevisionId;products=page.rows.map(row=>({code:String(row.code),name:String(row.name)}));moreProducts=page.hasMore;
+   positions=held;holdings(held);
    renderProducts();
   }catch(cause){if(number===generation)failed(cause);return;}
   await readProduct();
  }
- function reset(){generation++;products=[];definition=undefined;shown=undefined;held=new Map();productBar.replaceChildren();render();}
+ function holdings(read:OptionPositionsRead){held=new Map(read.held.map(h=>[h.series,h.openLots]));}
+ function reset(){generation++;products=[];definition=undefined;shown=undefined;positions=undefined;held=new Map();productBar.replaceChildren();render();}
+ chainView.onclick=()=>{view='chain';render();};positionsView.onclick=()=>{view='positions';render();};
  return {
   refresh,
   /** Shows a product's chain, at an expiry and with a series selected where they are named. */

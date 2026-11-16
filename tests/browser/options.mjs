@@ -47,8 +47,9 @@ export async function run({command,evaluate,wait,click,persona,check,idle,fitsWi
     [...document.querySelectorAll('.options-product')].map(c=>c.dataset.product).sort().join()==='nymex_lo,nymex_on'&&!document.querySelector('.options-product[aria-pressed=true]')&&
     !!document.querySelector('#options-placeholder').offsetParent&&${calls('vol-surfaces/read')}.length===0`,
    `[document.querySelector('#page-title').textContent,document.querySelector('${page} .vol-hero').textContent,${state}]`);
-  await check('the views not built yet are disabled and say Coming soon',
-   `document.querySelector('#options-view-chain').getAttribute('aria-pressed')==='true'&&['positions','strategy'].every(view=>(b=>b.disabled&&/Coming soon/.test(b.textContent))(document.querySelector('#options-view-'+view)))`);
+  await check('the page opens on the chain, offers Positions, and Strategy says Coming soon',
+   `document.querySelector('#options-view-chain').getAttribute('aria-pressed')==='true'&&!document.querySelector('#options-view-positions').disabled&&
+    (b=>b.disabled&&/Coming soon/.test(b.textContent))(document.querySelector('#options-view-strategy'))`);
 
   await choose('nymex_on');
   await settled(`${state}==='fitted'&&!!document.querySelector('#options-chain tbody tr')`,30000);
@@ -88,6 +89,24 @@ export async function run({command,evaluate,wait,click,persona,check,idle,fitsWi
   await click('#options-open-surface');
   await settled("document.querySelector('#page-title').textContent==='Vol surfaces'&&document.querySelector('.vol-product-card[aria-pressed=true]')?.dataset.product==='nymex_on'",30000);
   await check('Open on Vol surfaces opens the product\'s surface','true');
+
+  // Positions: the booked option positions with the backend's figures, subtotals and totals. The page adds nothing up.
+  await click('#nav-options');await settled(`${state}==='fitted'`,30000);
+  await click('#options-view-positions');await settled(`${state}==='positions'`,30000);
+  const held=await evaluate(`${calls('options/positions')}.at(-1).answer`);
+  const rows=held.groups.flatMap(g=>g.rows);
+  await check('Positions lists each booked option position under its underlying future, or says there are none',
+   `document.querySelector('#options-view-positions').getAttribute('aria-pressed')==='true'&&document.querySelector('#options-products').hidden&&
+    (${rows.length}===0?/No option positions/.test(document.querySelector('#options-positions').textContent)
+     :document.querySelectorAll('#options-position-table tbody').length===${held.groups.length}&&document.querySelectorAll('#options-position-table tbody tr[data-series]').length===${rows.length}&&
+      document.querySelectorAll('#options-position-table .options-position-subtotal').length===${held.groups.length}&&
+      document.querySelectorAll('#options-position-table .options-position-total').length===${held.totals.length})`,
+   "document.querySelector('#options-positions').textContent.slice(0,400)");
+  await check('a position figure the backend could not state is a dash that says why',
+   "[...document.querySelectorAll('#options-position-table td.options-missing-figure')].every(td=>td.textContent==='—'&&td.title.length>0)");
+  await check('the positions fit the page width',fitsWidth);
+  await click('#options-view-chain');await settled(`${state}==='fitted'&&!!document.querySelector('#options-chain tbody tr')`,30000);
+  await check('returning to the chain shows the chosen product\'s chain again',"!document.querySelector('#options-products').hidden&&document.querySelector('.options-product[aria-pressed=true]')?.dataset.product==='nymex_on'");
 
   // A close with no surface: the page says so and offers Vol surfaces, and draws no chain.
   await evaluate('window.optionsUnfitted=true');
