@@ -1,7 +1,8 @@
 // Options (Trading): the option chain of a product's expiry at the selected close, read from the product's stored volatility
 // surface, with each series' settlement, implied volatility and sensitivities as its fit stored them. A product with no
-// surface at the close says so and sends the person to Vol surfaces, where a close is calibrated. Runs after the Vol
-// surfaces suite of the exchange example, which leaves nymex_on calibrated at the latest working snapshot.
+// surface at the close says so and sends the person to Vol surfaces, where a close is calibrated. Runs after the HTTP
+// checks of the exchange example, which leave nymex_on calibrated at the latest working snapshot, and before the Vol
+// surfaces suite: that suite leaves a refit running, and this one fits nothing and changes nothing it reads.
 const q=JSON.stringify;
 const page='#options-page';
 const state=`document.querySelector(${q(page)}).dataset.state`;
