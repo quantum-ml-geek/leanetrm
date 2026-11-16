@@ -26,7 +26,7 @@ public sealed record RiskJobRun(Guid Id,int Part,int Parts)
 public static class RiskJobs
 {
     internal static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
-    { Converters = { new ExactDecimalJsonConverter() } };
+    { Converters = { new ExactDecimalJsonConverter(),new TimedCashSourceEvidenceConverter(),new GasHoldingSourceEvidenceConverter() } };
     // A worker must execute the same managed implementation admitted by the API.
     // Rolling out different binaries never silently changes an already queued run.
     private static readonly Lazy<string> engine = new(() =>

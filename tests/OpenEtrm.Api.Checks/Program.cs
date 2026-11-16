@@ -3,6 +3,7 @@ using System.Collections.Immutable;
 using System.Globalization;
 using OpenEtrm.Api;
 using OpenEtrm.MarketData;
+if(args is ["--gas-source-instrument-evidence"]){GasSourceInstrumentEvidenceChecks.Run();return;}
 if(args is ["--point-trader-mark-identity"]){PointTraderMarkIdentityChecks.Run();return;}
 if(args is ["--point-trader-mark-inputs"]){PointTraderMarkInputSelectionChecks.Run();return;}
 if(args is ["--point-trader-mark-commands"]){PointTraderMarkCommandChecks.Run();return;}
@@ -249,6 +250,7 @@ if(args is ["--blotter-stream"]){await BlotterStreamChecks.Run();return;}
 
 if (args is ["--schedules"])
 {
+    GasSourceInstrumentEvidenceChecks.Run();
     StorageFacilityAdapterChecks.Run();
     GasTransportCapacityAdapterChecks.Run();
     OperationalBusinessContextChecks.Run();

@@ -107,6 +107,14 @@ contributions and named measures. Source authority, paid state and valuation
 inputs are never cached as economic-definition proof. Runtime model versions
 identify this Side execution without silently converting stored v1 definitions.
 
+Retained gas source receipts encode timed-cash and commodity-holding definitions
+through explicit versioned projections. They preserve native instrument IDs,
+exact reference versions, cash timing or holding mark/carrying terms, complete
+canonical economic definitions and the selected execution-model version. The
+enclosing source retains ownership, quantities, paid state, chronology and native
+receipts. Authorized native reads materialize the executable instruments; source
+receipts have no instrument-reconstruction operation.
+
 ## Futures contracts and execution
 
 `FuturesContract` remains a leaf Instrument identified by its exact immutable
