@@ -14,12 +14,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  impact:
+    name: Select impacted checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      groups: ${{ steps.plan.outputs.groups }}
+      full: ${{ steps.plan.outputs.full }}
+    steps:
+      - name: Check out complete comparison history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check impact selection behavior
+        run: python3 -m unittest discover -s tests -p test_ci_impact.py
+      - name: Select conservative verification groups
+        id: plan
+        run: python3 tools/ci_impact.py
+
   verification:
     name: Synthetic verification (${{ matrix.group }})
+    needs: impact
     strategy:
       fail-fast: false
       matrix:
-        group: ["workspace", "reference", "standard", "exchange", "assistant", "risk", "trading", "lifecycle", "physical", "gas", "portfolio", "settlement", "ppa", "recovery"]
+        group: ${{ fromJSON(needs.impact.outputs.groups) }}
     runs-on: ubuntu-24.04
     # Include preparation and numerical/browser workload variation on shared runners.
     timeout-minutes: 90
@@ -47,11 +67,13 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - name: Restore PostgreSQL dependency packages
+        if: matrix.group != 'repository' && matrix.group != 'frontend' && matrix.group != 'managed'
         uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: ${{ runner.temp }}/postgresql-dependencies
           key: ${{ runner.os }}-${{ runner.arch }}-postgresql-v1-${{ hashFiles('tools/ci/postgresql.lock.json') }}
       - name: Verify and install PostgreSQL 18
+        if: matrix.group != 'repository' && matrix.group != 'frontend' && matrix.group != 'managed'
         shell: bash
         env:
           POSTGRESQL_BUNDLE_URL: ${{ vars.POSTGRESQL_BUNDLE_URL }}
@@ -69,12 +91,13 @@ jobs:
           node --version
           npm --version
           python3 --version
-          /usr/lib/postgresql/18/bin/postgres --version
+          if [ -x /usr/lib/postgresql/18/bin/postgres ]; then
+            /usr/lib/postgresql/18/bin/postgres --version
+          fi
           google-chrome --version
           dpkg-query -W tzdata libicu74
-      - name: Check release admission and archive boundaries
-        run: python3 -m unittest discover -s tests -p test_release_deployment.py
       - name: Validate deployment configuration
+        if: matrix.group == 'repository'
         run: python3 tools/check_deployment.py
       - name: Run synthetic verification
         shell: bash
@@ -86,20 +109,21 @@ jobs:
 
   checks:
     name: Stock database and browser checks
-    needs: verification
+    needs: [impact, verification]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 1
     steps:
       - name: Require every verification group to complete successfully
         env:
+          IMPACT_RESULT: ${{ needs.impact.result }}
           VERIFICATION_RESULT: ${{ needs.verification.result }}
-        run: test "$VERIFICATION_RESULT" = success
+        run: test "$IMPACT_RESULT" = success && test "$VERIFICATION_RESULT" = success
 
   publish:
     name: Publish hosted release
-    needs: checks
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master' && vars.RELEASE_PUBLICATION_ENABLED == 'true'
+    needs: [impact, checks]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.impact.outputs.full == 'true' && vars.RELEASE_PUBLICATION_ENABLED == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     environment: hosted-release

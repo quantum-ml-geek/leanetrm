@@ -694,6 +694,12 @@ locked NuGet/npm caches, verified stock PostgreSQL packages and corresponding
 sources, offline installation and a GitHub cache miss/save/restore/hit check.
 These checks preserve the ordinary matrix and release gates.
 
+D405 separates shared behavior checks from integration preparation and selects
+conservative path consumers for pull requests. All existing full-gate commands
+and same-commit master publication remain required. Managed runtime feature
+selection and coverage-derived dependency analysis remain future work. See
+[CI impact selection](ci-impact.md) for implemented boundaries and qualification.
+
 The default public page and hosted gateway route contract are available
 separately from the authenticated workspace (D163). An owned nginx check exercises
 static routes, native application routing and a synthetic sign-in upstream.
@@ -1836,7 +1842,7 @@ Extend only after the baseline contracts are demonstrated:
 - Broader calendars, delivery shapes and schedule authoring.
 - Options beyond listed American futures options (D288): other exercise and
   settlement styles, volatility inputs and shocks, and nonlinear model diagnostics.
-- An option strategy viewer on the Options page (D405): legs of one expiry
+- An option strategy viewer on the Options page (D406): legs of one expiry
   combined from the chain, with profit and loss against the futures price at
   expiry and at stated earlier instants from an analysis read over the shared
   layers. Strategies across expiries need a declared relationship between

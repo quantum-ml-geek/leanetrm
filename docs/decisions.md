@@ -5518,7 +5518,33 @@ admission/reconciliation and progressive row streams. This decision does not
 expand numerical qualification or authorize merging or deployment; qualification
 and the pull request record the implemented operations and remaining limits.
 
-## D405 · A fitted surface stores its series' value and sensitivities, and Options reads them
+
+## D405 · Explicit CI consumers and shared verification groups
+
+Pull requests select the union of declared changed-path consumers. Repository
+checks always run. Documentation and isolated test edits may select narrower
+groups; managed runtime, SQL, dependencies, workflow, shared helpers and unknown
+paths require broad verification. Missing/empty comparisons and unrelated
+checkouts require the complete gate. Compare the PR common ancestor with its
+tested merge result, include both sides of renames, and retain complete Git
+history without a changed-file API limit.
+
+Separate repository, frontend, managed and database behavior checks from the
+fourteen existing integration groups. Run shared suites once across the matrix.
+Each integration checkout retains locked builds of the API checks, MarketData
+checks and worker, plus frontend assets and owned disposable resources. Preserve
+all existing native/browser consumers and the pinned dependency acquisition
+contract. Caches never count as test evidence.
+
+The stable required check rejects failed, cancelled and skipped selection/jobs.
+Every master push and manual dispatch requires the full gate. Publication requires
+that complete plan for the same master push plus existing enablement/environment
+controls. The pull operator requires an exact latest-head release; documentation
+pushes retain that path so they cannot strand earlier runtime changes. See
+[CI impact selection](ci-impact.md) for the executable boundaries and remaining
+qualification. No application, schema or financial contract changes are included.
+
+## D406 · A fitted surface stores its series' value and sensitivities, and Options reads them
 
 2026-11-15. Decided by the owner, who left the choice of approach to the builder.
 Takes strategies' prerequisites, option sensitivities and their graphics from the

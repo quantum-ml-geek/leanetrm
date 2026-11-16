@@ -147,7 +147,7 @@ is a market level.
 
 ## Option analytics
 
-D405. The fit also values every calibrated series and stores, per unit of quote,
+D406. The fit also values every calibrated series and stores, per unit of quote,
 its `value` and four sensitivities: `delta` per 1.00 of the underlying futures
 price, `gamma` per 1.00 squared, `vega` per volatility point and `theta` for one
 calendar day, later minus earlier. Each is `{value, missing}`: an exact decimal,
