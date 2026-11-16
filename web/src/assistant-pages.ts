@@ -5,6 +5,7 @@ import {grantPhrase,type Vendor} from './agent-grants.js';
 import {readPages,type Step,type Ending,type Usage,type TargetContext} from './assistant-events.js';
 import {physicalTabs,gasStages} from './physical-operations-grid.js';
 import {riskReportViews,riskViewNames,riskViews,type RiskView} from './risk-views.js';
+import type {NewProduct} from './new-trade.js';
 
 /**
  * What the Blotter shows of its panes and window, which its report states beside the selection (D271). A pane is open when it is the shown
@@ -17,9 +18,9 @@ export type PageFocus={tradeIds:string[];pivotCell:PivotCellFocus|null};
 export type PageReport={page:string;selection:Record<string,unknown>;layout?:BlotterLayoutShown;view?:BlotterDigestView;focus?:PageFocus;businessDate?:string};
 export type BlotterDigestView=BlotterSelection&{primaryMeasure:string|null};
 export type BlotterSelection={mode:'trades'|'pivot';bookIds:string[];portfolioIds:string[];groupBy:string[];measures:string[]};
-export type TradeShown={tradeId:string;instrumentType:'future'|'financial_swap'|'heat_rate'|'ppa'|'physical_gas'|'physical_crude'|'physical_lng'|'futures_option';revision:number;reference:string};
+export type TradeShown={tradeId:string;instrumentType:'future'|'financial_swap'|'heat_rate'|'ppa'|'physical_gas'|'physical_gas_park_loan'|'physical_crude'|'physical_lng'|'futures_option';revision:number;reference:string};
 /** A new trade being entered in the Blotter's panel: of its product, or of none until the person chooses one. */
-export type EntryShown={product:'futures'|'options'|'swaps'|'ppa'|'gas'|'crude'|'lng'|null};
+export type EntryShown={product:NewProduct|null};
 /** What PPA bookings shows: the inspected trade's revision, else the book whose PPA trades it lists, else neither. */
 export type PpaShown={trade:{tradeId:string;revision:number}|null;book:string|null};
 // What a web page shows, as the page's own state names it.
@@ -47,7 +48,7 @@ const unopened:readonly string[]=['ppa'];
 const noBlotter={mode:null,portfolioIds:null,groupBy:null,measures:null};
 
 // The page a trade being entered is reported as: one id per product, and one while none is chosen. The assistant reads none of them.
-const entryPages={none:'blotter_new_trade',futures:'blotter_new_future',swaps:'blotter_new_swap',ppa:'blotter_new_ppa',gas:'blotter_new_gas',crude:'blotter_new_crude',lng:'blotter_new_lng',options:'blotter_new_option'} as const;
+const entryPages={none:'blotter_new_trade',futures:'blotter_new_future',swaps:'blotter_new_swap',ppa:'blotter_new_ppa',gas:'blotter_new_gas','park-loan':'blotter_new_park_loan',crude:'blotter_new_crude',lng:'blotter_new_lng',options:'blotter_new_option'} as const;
 // The report an ask sends: a read page's selection is its read tool's input for the view the page shows; any other
 // page's is empty. Blotter trade rows name no grouping, which the Blotter keeps for when its totals are shown again. What the
 // Blotter's panel holds comes first, its risk report, a new trade or a position; then its trade rows under the Risk lens, whose
@@ -100,13 +101,14 @@ export function askKnowledge(context:PageContext){
 }
 
 const pageNames:Record<string,string>={lifecycle:'Lifecycle',physical_operations:'Physical operations',gas_setup:'Gas delivery setup',crude_setup:'Crude delivery setup',facility_quantities:'Facilities',curves:'Curves & prices',contract_definitions:'Contract definitions',schedules:'Schedules',power_tous:'Power TOUs',
-  reference_data:'Reference data',parties:'Entities & counterparties',blotter:'Blotter',blotter_risk:'Blotter',blotter_risk_lens:'Blotter',blotter_new_trade:'Blotter',blotter_new_future:'Blotter',blotter_new_swap:'Blotter',blotter_new_ppa:'Blotter',blotter_new_gas:'Blotter',blotter_new_option:'Blotter',blotter_new_crude:'Blotter',blotter_new_lng:'Blotter',delivery_prices:'Delivery prices',
+  reference_data:'Reference data',parties:'Entities & counterparties',blotter:'Blotter',blotter_risk:'Blotter',blotter_risk_lens:'Blotter',blotter_new_trade:'Blotter',blotter_new_future:'Blotter',blotter_new_swap:'Blotter',blotter_new_ppa:'Blotter',blotter_new_gas:'Blotter',blotter_new_park_loan:'Blotter',blotter_new_option:'Blotter',blotter_new_crude:'Blotter',blotter_new_lng:'Blotter',delivery_prices:'Delivery prices',
   custom_curves:'Curve builder',interval_series:'Interval data',interval_curves:'Curves & prices · Hourly / sub-hourly',jobs:'Jobs',users_access:'Users & access',
   risk_jobs:'Risk',settings_ai:'AI',dashboard:'Dashboard',physical_gas:'Physical gas bookings',physical_crude:'Physical crude bookings',ppa:'PPA bookings',vol_surfaces:'Vol surfaces'};
 // The label catalog is checked against server admission by the owned browser fixture.
 export const reportedPages:readonly string[]=Object.freeze(Object.keys(pageNames));
 const dimensions:Record<string,string>={portfolio:'portfolio',book:'book',market:'market',contract:'contract',instrumentType:'instrument type',commodity:'commodity'};
 const counted=(n:number,noun:string)=>`${n} ${noun}${n===1?'':'s'}`;
+const unreadTrade=(report:PageReport)=>report.page==='blotter'&&report.selection.view==='trade'&&report.selection.instrumentType==='physical_gas_park_loan';
 const joined=(names:string[])=>names.length>1?`${names.slice(0,-1).join(', ')} and ${names.at(-1)}`:names[0];
 export type Names={curve:(code:string)=>string;table:(code:string)=>string};
 
@@ -122,7 +124,7 @@ function shows(report:PageReport,names:Names,trade?:string){
     case 'reference_data':return s.table===''?'No table is shown yet':names.table(String(s.table))+(s.search?` · rows matching “${s.search}”`:'');
     case 'parties':return s.kind==='legal_entity'?'Legal entities':'Counterparties';
     case 'blotter':{
-      if(s.view==='trade'){if(!trade)throw inconsistent();return `Trade ${trade}, revision ${s.revision}`;}
+      if(s.view==='trade'){if(!trade)throw inconsistent();return `Trade ${trade}, revision ${s.revision}`+(unreadTrade(report)?'. The assistant does not read this trade.':'');}
       const books=(s.bookIds as string[]).length,portfolios=(s.portfolioIds as string[]).length;
       const scope=books||portfolios?[books?counted(books,'book'):'',portfolios?counted(portfolios,'portfolio'):''].filter(Boolean).join(', '):'every book you can read';
       return `${s.mode==='pivot'?`Totals by ${joined((s.groupBy as string[]).map(d=>dimensions[d]))}`:'Trade rows'} · ${scope}`;
@@ -140,6 +142,7 @@ function shows(report:PageReport,names:Names,trade?:string){
     case 'blotter_new_crude':return 'A new physical crude trade is being entered. The assistant does not read a trade being entered.';
     case 'blotter_new_option':return 'A new futures option is being entered. The assistant does not read a trade being entered.';
     case 'blotter_new_gas':return 'A new physical gas trade is being entered. The assistant does not read a trade being entered.';
+    case 'blotter_new_park_loan':return 'A new Park and loan trade is being entered. The assistant does not read a trade being entered.';
     case 'lifecycle':return 'Lifecycle actions and saved policies at the header context. Unsaved inputs are not sent.';
     case 'physical_operations':{
       if(!s.tradeId)return 'Physical instrument operations under the header context. Unsaved edits are not sent.';
@@ -174,7 +177,7 @@ export function lookingAt(report:PageReport,context:PageContext,names:Names,extr
   // A page whose report names no selection yet, Reference data before it shows a table or PPA bookings before it lists a
   // book, has nothing to be asked from.
   const named=!(report.page==='reference_data'&&report.selection.table===''||report.page==='ppa'&&report.selection.view==='ppa_book'&&!(report.selection.bookIds as string[]).length);
-  return {page:report.page==='risk_jobs'?`${pageNames.risk_jobs} · ${riskViewName(report)}`:pageNames[report.page],shows:shows(report,names,extra.trade)+(report.focus?.tradeIds.length?` · ${counted(report.focus.tradeIds.length,'selected position')}`:report.focus?.pivotCell?' · Selected pivot cell':''),...(report.layout?{layout:layoutLine(report.layout)}:{}),context:contextLine(context),supported:readPages.includes(report.page)||unopened.includes(report.page),
+  return {page:report.page==='risk_jobs'?`${pageNames.risk_jobs} · ${riskViewName(report)}`:pageNames[report.page],shows:shows(report,names,extra.trade)+(report.focus?.tradeIds.length?` · ${counted(report.focus.tradeIds.length,'selected position')}`:report.focus?.pivotCell?' · Selected pivot cell':''),...(report.layout?{layout:layoutLine(report.layout)}:{}),context:contextLine(context),supported:!unreadTrade(report)&&(readPages.includes(report.page)||unopened.includes(report.page)),
     askable:named&&askKnowledge(context)!==undefined};
 }
 

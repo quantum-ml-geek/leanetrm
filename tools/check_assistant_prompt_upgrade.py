@@ -7,11 +7,12 @@ from check_fact_anchor_upgrade import run_checks as check_helpers
 
 def run_checks(query, migration):
     number = migration.name[:4]
+    installation = migration.name.endswith('_assistant_installation_prompts.sql')
     contracts = json.loads(migration.read_text().split('$assistant_helpers$')[1])
     check_helpers(query, migration, number=number,
-                  guard='assistant_' + ('prompt' if number == '0338' else 'context') + '_upgrade',
+                  guard='assistant_' + ('prompt' if installation else 'context') + '_upgrade',
                   signatures=tuple(c['signature'] for c in contracts))
-    if number == '0338':
+    if installation:
         tenant, workspace, actor = uuid4(), uuid4(), uuid4()
         result = query(f"""BEGIN;
             INSERT INTO security.tenants VALUES('{tenant}','synthetic_prompt_upgrade');

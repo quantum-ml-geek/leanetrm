@@ -45,7 +45,7 @@ internal static class GasOwnedPortfolio
     internal static async Task<bool> RequireScope(NpgsqlConnection connection,PreviewDatabase database,InputFrame frame,
         ImmutableArray<Guid> books,bool configured,CancellationToken ct)
     {
-        DateTimeOffset until;
+        DateTimeOffset until;TradingContext.SourceAdmission? source=null;
         if(configured)
         {
             await using var capture=ScheduleStore.Command(connection,
@@ -58,13 +58,19 @@ internal static class GasOwnedPortfolio
             // A successful unconfigured probe proves an empty immutable source
             // scope. Its read authority must survive the explicit transition
             // from close preflight to publication, which clears the bound view.
-            until=await TradingContext.AdmitSource(database,connection,frame.ContextId!.Value,frame.At,frame.BusinessDate,ct);
+            source=await TradingContext.CaptureSource(database,connection,frame.ContextId!.Value,frame.At,frame.BusinessDate,ct);
+            until=source.Until;
         }
         await using var command=ScheduleStore.Command(connection,"SELECT security.require_gas_owned_valuation_scope($1,$2,$3,$4::uuid[],$5,$6)",
             database.Manifest.CatalogId,frame.ContextId.Value,frame.At,books.ToArray(),configured,until);
-        try{return(bool)(await command.ExecuteScalarAsync(ct))!;}
+        bool present;
+        try{present=(bool)(await command.ExecuteScalarAsync(ct))!;}
         catch(PostgresException error)when(error.SqlState=="P0001"&&error.MessageText=="gas_owned_policy_required")
         {throw new MarketDataException(error.MessageText,GasOwnedOperations.Refusal(error.MessageText),error);}
+        // A refused probe returns no source result. Its caller may restore the
+        // savepoint without leaving a callback to that rolled-back admission.
+        if(source is not null)database.RegisterCommitAdmission(connection,source);
+        return present;
     }
     internal static async Task<ImmutableArray<GasOwnedPortfolioInput>> Prepare(NpgsqlConnection connection,PreviewDatabase database,
         GasOwnedPortfolioRead held,GasOwnedValuationPolicy policy,CancellationToken ct)

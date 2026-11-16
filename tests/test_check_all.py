@@ -1,19 +1,20 @@
 """Behavior checks for the local/CI verification entry point."""
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 import io
-import json
 import os
 from pathlib import Path
 import subprocess
 import re
 import sys
+import tempfile
 import unittest
 from unittest.mock import patch
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'tools'))
-from check_all import GROUPS, run_checks
+from check_all import ALL_GROUPS, GROUPS, run_checks
+import check_all
 
 LIFECYCLE_NATIVE={f'tools/{name}.py' for name in (
     'check_lifecycle_actions','check_lifecycle_swaps','check_futures_physical_delivery','check_futures_delivery_settings',
@@ -24,6 +25,7 @@ LIFECYCLE_NATIVE={f'tools/{name}.py' for name in (
     'check_gas_quantity_reconciliation_batches','check_gas_mixed_quantity_reconciliation','check_gas_lifecycle_agents','check_gas_mixed_quantity_browser','check_gas_owned_quantity_choices','check_physical_option_value','check_cash_accumulation','check_gas_principal_carrying',
     'check_risk_fit_authority','check_lifecycle_browser','check_retained_swap_schedule_reads')}
 GAS_AMENDMENTS={f'tools/{name}.py' for name in (
+    'check_gas_park_loan','check_gas_park_loan_upgrade','check_gas_park_loan_worker','check_gas_park_loan_browser',
     'check_gas_fee_existing_origins','check_gas_fee_browser','check_gas_loan_quantity_browser',
     'check_gas_loan_quantity_reconciliation','check_gas_owned_fact_acknowledgements','check_gas_owned_title_acknowledgements','check_gas_read_authority','check_gas_operator_quantity_browser',
     'check_gas_operator_existing_origins','check_gas_operator_upgrade','check_gas_operator_native_upgrade')}
@@ -38,23 +40,59 @@ AGENT_SETTINGS_BROWSER={'tools/check_agent_operating_settings.py'}
 
 class CheckAllTests(unittest.TestCase):
     def test_assistant_prompt_and_demand_checks_are_required(self):
-        commands = []
-        run_checks(Path('/pg'), Path('/dotnet'), Path('/browser'), group='assistant',
-                   run=lambda command, **options: commands.append(command))
-        self.assertEqual(sum('--assistant-prompts' in command for command in commands), 1)
-        workspace = [c for c in commands if '--assistant-workspace-check' in c]
-        self.assertEqual(len(workspace), 1)
-        self.assertIn('--browser-check', workspace[0])
-        preview = (ROOT / 'tools/run_preview.py').read_text()
-        self.assertIn("migration.name[:4] in ('0338','0339')", preview)
-        self.assertIn('check_assistant_prompt_upgrade(query,migration)', preview)
-
-    def test_async_workbench_checks_are_required_in_workspace_partition(self):
-        for group in GROUPS:
+        for group in ALL_GROUPS:
             commands = []
             run_checks(Path('/pg'), Path('/dotnet'), Path('/browser'), group=group,
                        run=lambda command, **options: commands.append(command))
-            self.assertEqual(sum('--async-reads' in command for command in commands), 1)
+            self.assertEqual(sum('--assistant-prompts' in command for command in commands), int(group == 'managed'))
+            workspace = [c for c in commands if '--assistant-workspace-check' in c]
+            self.assertEqual(len(workspace), int(group == 'assistant'))
+            if workspace:
+                self.assertIn('--browser-check', workspace[0])
+        preview = (ROOT / 'tools/run_preview.py').read_text()
+        self.assertIn("migration.name in ('0339_assistant_installation_prompts.sql','0340_assistant_requested_context.sql')", preview)
+        self.assertIn('check_assistant_prompt_upgrade(query,migration)', preview)
+
+    def test_lightweight_groups_do_not_require_postgresql_installation(self):
+        with tempfile.TemporaryDirectory(prefix='openetrm-ci-tools-') as temporary:
+            root = Path(temporary)
+            dotnet, browser = root / 'dotnet', root / 'browser'
+            dotnet.touch()
+            browser.touch()
+            for group in ('repository', 'frontend', 'managed'):
+                with self.subTest(group=group), \
+                     patch.object(sys, 'argv', ['check_all.py', '--group', group, '--pg-bin', str(root / 'missing-pg'),
+                                               '--dotnet', str(dotnet), '--browser', str(browser)]), \
+                     patch.object(check_all.subprocess, 'check_output', return_value='v' + (ROOT / '.node-version').read_text().strip()), \
+                     patch.object(check_all, 'run_checks') as selected:
+                    self.assertEqual(check_all.main(), 0)
+                    self.assertEqual(selected.call_args.kwargs['group'], group)
+            for group in ('all', 'database', *GROUPS):
+                with self.subTest(group=group), redirect_stderr(io.StringIO()), \
+                     patch.object(sys, 'argv', ['check_all.py', '--group', group, '--pg-bin', str(root / 'missing-pg'),
+                                               '--dotnet', str(dotnet), '--browser', str(browser)]), \
+                     patch.object(check_all, 'run_checks') as selected:
+                    with self.assertRaises(SystemExit) as failure:
+                        check_all.main()
+                    self.assertEqual(failure.exception.code, 2)
+                    selected.assert_not_called()
+
+    def test_park_loan_qualifiers_are_required_in_gas_partition(self):
+        commands = []
+        with redirect_stdout(io.StringIO()):
+            run_checks(Path('/pg'), Path('/dotnet'), Path('/browser'), group='gas',
+                       run=lambda command, **options: commands.append(command))
+        expected = {'tools/check_gas_park_loan.py', 'tools/check_gas_park_loan_upgrade.py',
+                    'tools/check_gas_park_loan_browser.py', 'tools/check_gas_park_loan_worker.py'}
+        observed = {part for command in commands for part in command if part in expected}
+        self.assertEqual(observed, expected)
+
+    def test_async_workbench_checks_are_required_in_workspace_partition(self):
+        for group in ALL_GROUPS:
+            commands = []
+            run_checks(Path('/pg'), Path('/dotnet'), Path('/browser'), group=group,
+                       run=lambda command, **options: commands.append(command))
+            self.assertEqual(sum('--async-reads' in command for command in commands), int(group == 'managed'))
             selected = [c for c in commands if '--async-workbench-check' in c]
             self.assertEqual(len(selected), 1 if group == 'workspace' else 0)
             if selected:
@@ -139,7 +177,7 @@ class CheckAllTests(unittest.TestCase):
 
         with patch.dict(os.environ, {'CHROME_BIN': '/an unrelated browser'}):
             run_checks(Path('/stock postgres/bin'), Path('/managed sdk/dotnet'),
-                       Path('/selected browser executable'), group='standard', run=run)
+                       Path('/selected browser executable'), group='frontend', run=run)
         self.assertEqual(frontend, ['/selected browser executable'])
 
     def test_physical_gas_workflow_is_qualified_in_gas_partition(self):
@@ -168,8 +206,10 @@ class CheckAllTests(unittest.TestCase):
         self.assertEqual(len(selected),1)
         self.assertIn('--browser-check',selected[0])
         self.assertEqual(selected[0][selected[0].index('--browser')+1],'/browser executable')
+        database=[]
+        run_checks(Path('/stock postgres/bin'),Path('/managed sdk/dotnet'),Path('/browser executable'),group='database',run=lambda command,**options:database.append(command))
         for helper in ('tools/check_price_publications.py','tools/check_contract_price_terms.py'):
-            self.assertTrue(any(helper in command for command in commands),helper)
+            self.assertTrue(any(helper in command for command in database),helper)
 
     def test_lng_booking_upgrade_recovery_and_worker_checks_run_in_physical_partition(self):
         commands=[]
@@ -388,17 +428,28 @@ class CheckAllTests(unittest.TestCase):
 
         complete = commands('all')
         groups = {name: commands(name) for name in GROUPS}
-        self.assertEqual(set().union(*(set(value) for value in groups.values())), set(complete))
+        partitions = {name: commands(name) for name in ALL_GROUPS}
+        self.assertTrue(set(complete).issubset(set().union(*(set(value) for value in partitions.values()))))
+        # Shared behavior commands run once across the entire matrix, while
+        # every isolated integration job builds the API, worker and web assets.
+        for command in complete:
+            if 'restore' in command or 'build' in command or 'ci' in command:
+                continue
+            self.assertEqual(sum(value.count(command) for value in partitions.values()), 1, command)
+        for name, selected in groups.items():
+            with self.subTest(group=name):
+                self.assertIn(('npm', 'run', 'build', '--prefix', 'web'), selected)
+                for project in ('tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj',
+                                'src/OpenEtrm.Worker/OpenEtrm.Worker.csproj'):
+                    self.assertIn(('/dotnet', 'restore', project, '--locked-mode'), selected)
+                    self.assertIn(('/dotnet', 'build', project, '--no-restore'), selected)
+                self.assertIn(('/dotnet', 'restore', 'tests/OpenEtrm.MarketData.Checks/OpenEtrm.MarketData.Checks.csproj', '--locked-mode'), selected)
+                first_integration = next(i for i, c in enumerate(selected) if '--pg-bin' in c)
+                self.assertTrue(all('restore' not in c and 'build' not in c for c in selected[first_integration:]))
+                self.assertFalse(any('unittest' in c or 'test' in c or 'run' in c and '--project' in c for c in selected))
         margin={f'tools/check_futures_margin_{part}.py' for part in ('sources','adoption','projection_sources')}|{'tools/check_trading_business_date.py'}
         def shared(command):
             return 'tools/run_preview.py' not in command and not (margin|LIFECYCLE_NATIVE|GAS_AMENDMENTS|LIFECYCLE_PORTFOLIO|OPTION_VALUE_APPS|AGENT_SETTINGS_BROWSER).intersection(command)
-        for name, selected in groups.items():
-            with self.subTest(group=name):
-                # Each group starts from a clean checkout, including restores,
-                # managed/frontend builds and all shared verification contracts.
-                self.assertEqual([c for c in selected if shared(c)],
-                                 [c for c in complete if shared(c)])
-                self.assertEqual(selected, [c for c in complete if c in selected])
         previews = {name: [c for c in value if 'tools/run_preview.py' in c]
                     for name, value in groups.items()}
         owned = {name: [c for c in value if not shared(c)] for name, value in groups.items()}
@@ -461,19 +512,22 @@ class CheckAllTests(unittest.TestCase):
 
     def test_hosted_gate_requires_every_group_and_rejects_non_success(self):
         workflow = (ROOT / '.github/workflows/ci.yml').read_text()
-        matrix = re.search(r'^        group: (\[.*\])$', workflow, re.MULTILINE)
-        self.assertEqual(tuple(json.loads(matrix.group(1))), GROUPS)
+        self.assertIn('    needs: impact\n', workflow)
+        self.assertIn('        group: ${{ fromJSON(needs.impact.outputs.groups) }}\n', workflow)
         aggregate = workflow.split('  checks:\n', 1)[1].split('  publish:\n', 1)[0]
-        self.assertIn('    needs: verification\n', aggregate)
+        self.assertIn('    needs: [impact, verification]\n', aggregate)
         self.assertIn('    if: always()\n', aggregate)
+        self.assertIn('IMPACT_RESULT: ${{ needs.impact.result }}', aggregate)
         self.assertIn('VERIFICATION_RESULT: ${{ needs.verification.result }}', aggregate)
         command = re.search(r'^        run: (.*)$', aggregate, re.MULTILINE).group(1)
-        for state in ('success', 'failure', 'cancelled', 'skipped', ''):
-            result = subprocess.run(['bash', '-c', command],
-                                    env={**os.environ, 'VERIFICATION_RESULT': state})
-            self.assertEqual(result.returncode == 0, state == 'success')
-        self.assertIn('    needs: checks\n', workflow.split('  publish:\n', 1)[1])
-
+        for impact in ('success', 'failure', 'cancelled', 'skipped', ''):
+            for verification in ('success', 'failure', 'cancelled', 'skipped', ''):
+                result = subprocess.run(['bash', '-c', command], env={**os.environ,
+                    'IMPACT_RESULT': impact, 'VERIFICATION_RESULT': verification})
+                self.assertEqual(result.returncode == 0, impact == verification == 'success')
+        publish = workflow.split('  publish:\n', 1)[1]
+        self.assertIn('    needs: [impact, checks]\n', publish)
+        self.assertIn("needs.impact.outputs.full == 'true'", publish)
 
 
 if __name__ == '__main__':

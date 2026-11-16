@@ -20,26 +20,26 @@ of the workspace partition. Dated records below preserve earlier results.
 
 For the current complete command and prerequisites, start with
 [Required tools](#required-tools). `tools/check_all.py` runs all suites by
-default; `--group workspace|reference|standard|exchange|assistant|risk|trading|lifecycle|physical|gas|portfolio|settlement|ppa|recovery`
-selects one CI partition. CI requires every partition and its aggregate check
-to succeed. The implementation records below retain the results and limits of
-each dated increment; older check counts are not the current suite size.
+default. CI adds four shared groups (`repository`, `frontend`, `managed`,
+`database`) to the fourteen existing integration partitions. Pull requests select
+the union of declared path consumers; master pushes and manual dispatch retain
+the complete gate. See [impact selection](ci-impact.md) for rules and limits.
 
-The reference-data, crude/LNG, gas and statistical-risk previews have separate
-required partitions. Each job keeps locked preparation and the shared domain and
-upgrade checks; the union contains every preview exactly once. Runner-contract
-checks enforce that coverage and bound each preview queue to twelve suites.
-The standard browser and exchange-option workflows each have a dedicated partition.
-Jobs have a 90-minute limit, including preparation and shared-runner variation;
-cancellation still fails the aggregate release gate.
+Shared behavior checks run once across a full matrix. Every integration job
+retains locked preparation in its own checkout and owned disposable resources.
+The reference, exchange, assistant, risk, trading, lifecycle, physical, gas,
+portfolio, settlement, PPA, recovery, workspace and standard partitions retain
+their existing consumers. Runner-contract checks require all full-gate commands,
+each behavior command once, and each preview queue bounded to twelve suites.
+Jobs keep their 90-minute limit; the existing aggregate check rejects failed,
+cancelled or skipped selection/jobs. Lightweight groups do not install PostgreSQL.
 
-The gas partition runs the native amendment upgrade and real application checks.
-Every partition retains fresh-checkout preparation and the shared checks; the
-required aggregate waits for all fourteen partitions. The command-union checks require
-each owned consumer exactly once across the matrix.
+The gas partition includes the Park and Loan native, populated-upgrade, retained
+price-worker and real application browser qualifiers, alongside its existing
+amendment upgrades and application checks.
 
-The current integrated runner contains 186 commands: 65 shared checks,
-64 isolated application previews and 57 partition-specific native/application
+The current integrated runner contains 190 commands: 65 shared checks,
+64 isolated application previews and 61 partition-specific native/application
 checks. The D404 local checkpoint passed 1,866 frontend checks and 122 Python
 checks. The earlier calendar/lifecycle checkpoint passed 737 managed core checks,
 88 rate checks, 1,806 frontend checks and 121 Python checks; those counts describe
@@ -2352,33 +2352,20 @@ pushes to `master`, pull requests and manual dispatch. A branch push without a p
 request runs no CI; its pull request run verifies the same head. Checkout and tool-setup actions are
 pinned to exact commits. The checks job has read-only repository access, does not
 persist checkout credentials and requires no repository secrets. The full local
-`check_all.py` command remains available. CI partitions its existing stages into
-nine groups (`check_all.py` `GROUPS`): `workspace`, `standard`, `assistant`,
-`trading`, `lifecycle`, `portfolio`, `settlement`, `ppa` and `recovery`;
-each fresh checkout repeats all shared preparation and checks. The union covers
-every full-gate stage, with each owned qualification suite in exactly one group.
-Standard and trading have 60-minute job deadlines; the other groups have
-45 minutes. Individual command and owned-resource deadlines remain in force.
-The lifecycle group runs native margin, scheduling, delivery, ownership and
-authority qualification, including its two application browser suites. A November
-2026 trading run reached its 60-minute limit while still passing checks; these
-native stages had taken about 21 minutes before the trading previews. Separating
-them preserves the complete gate without increasing its existing deadlines.
-The original partitions followed measured preview durations on four October 2026 runs: shared preparation
-took about 2.5 minutes per group, while the scheduled swap settlement (10-15
-minutes), renewable close recovery (13-20), standard browser (8-13) and
-page-assistant (about 6) stages dominated. Those long stages run in `settlement`,
-`recovery`, `standard` and `assistant` so that no group queues two of them. `trading` owns swap pricing and
-observation schedules; `portfolio` owns portfolio valuation, close workers and the
-Blotter desk's valuation-status and desk-field checks; `workspace` keeps the
-remaining workspace browser checks. Every preview stage still runs once across the matrix.
-Group completion is reported separately from full-gate completion, and the final required check
-accepts only successful completion of every group. Failures, cancellation and
-skipped groups cannot qualify. It does not publish packages or
-deploy the application. A separate, gated `publish` job runs only after successful
-checks on a push to `master` when release publication is explicitly enabled. It
-uses the hosted-release environment and scoped write/attestation permissions to
-publish the reviewed release. Pull requests do not trigger that publisher.
+`check_all.py` command remains available. [Impact selection](ci-impact.md)
+chooses from the four shared groups and fourteen integration groups. Shared
+behavior suites run once; each selected integration group performs its own locked
+build and owns its disposable application, browser and database. Each group keeps
+its 90-minute deadline and existing per-command/resource deadlines. The complete
+local gate retains all 185 commands in the same order.
+
+The stable `Stock database and browser checks` aggregate requires successful
+impact selection and every selected job. Failed, cancelled and skipped jobs
+cannot qualify. A separate publisher requires the complete gate for the same
+master push, explicit publication enablement and the hosted-release environment.
+All master pushes remain full because the updater admits a release only for the
+exact current branch head; a documentation push must not strand earlier runtime
+changes. Pull requests never publish an application release.
 
 The job installs stock PostgreSQL 18.6 from the reviewed package lock and uses
 the runner's Chrome. [Dependency caches](ci-dependencies.md) cover NuGet, npm and
@@ -4586,7 +4573,33 @@ continuous integration runs the complete suite.
 These are synthetic local checks. They do not qualify a Side, trade or cash
 consumer, explicit roll boundaries, or a production activation.
 
-## Requested assistant context and private prompt configuration (D405)
+## Park and Loan local qualification (D406)
+
+The bounded [commercial profile](gas-park-loan.md) is checked through:
+
+- `tools/check_gas_park_loan.py`: native lifecycle, all four directions, source and
+  authority fences, canonical retries, and 20 independent whole-book value and
+  price-scenario checkpoints when the pinned SDK is supplied through `DOTNET`.
+- `tools/check_gas_park_loan_upgrade.py`: populated predecessor retention and nine
+  function-contract drift refusals.
+- `tools/check_gas_park_loan_worker.py`: nine actual retained price jobs, complete
+  ordinary/report parity, native owner identities, exact source and selector
+  fences, original actor revocation and natural worker gas-grant expiry.
+- `tools/check_gas_park_loan_browser.py`: 68 checks in the real owned application,
+  including uncertain booking and advance responses, principal and fee operations,
+  retained terms, explicit fee applicability and normal Risk controls after advance
+  for all four service/perspective combinations.
+
+These are required once in the gas CI partition. Local runs passed with stock
+PostgreSQL 16, the pinned .NET 10.0.402 SDK and Chromium. An existing futures
+historical/Monte Carlo worker consumer also passed, protecting unrelated worker
+admission. Independent adversarial review found and verified fixes for policy
+changes after preview, knowledge-first payment heads, worker source authority and
+UI time-resolution races. Aggregate CI and exact-release checks remain mandatory;
+local qualification does not activate a production schema or qualify service
+horizon continuation.
+
+## Requested assistant context and private prompt configuration (D407)
 
 Local verification on 2026-11-16 uses disposable PostgreSQL databases, synthetic
 prompt text and loopback model providers. The managed `--assistant-prompts`
@@ -4595,7 +4608,7 @@ guidance stays empty; all five provider mappings omit absent optional system
 instructions. An oversized synthetic close retains separate selected-frame and
 exact-close identities without copying its input matrix.
 
-`--assistant-workspace-check --browser-check` passes 64 integration and 43
+`--assistant-workspace-check --browser-check` passes 65 integration and 43
 browser checks. Coverage includes questions and administrative reads without
 financial acquisition, exact requested financial reads, recorded-close proposals,
 historical aliases, explicit human authorization, and application/page/tool
@@ -4604,21 +4617,38 @@ guidance absent at admission. Both migrations refuse helper definition or privil
 drift; populated upgrade checks preserve existing prompt rows exactly and add no
 default guidance.
 
-The provider and administration modules of `--assistant-check` pass: provider,
-model catalog, qualification, model version, configured connectivity test,
+The initial checkpoint passed the provider and administration modules of
+`--assistant-check`: provider, model catalog, qualification, model version, configured connectivity test,
 agent administration and grant checks. `--assistant-runtime-check --browser-check`
-exits successfully with 108 native turn, 22 HTTP turn, 65 HTTP tool, 20 stream,
+exited successfully with 108 native turn, 22 HTTP turn, 65 HTTP tool, 20 stream,
 44 usage and 295 owned browser checks. Permission refusal
 before the first financial read retains no context or business sources;
 source-based replay checks still protect earlier financial evidence, including
 inherited conversation sources.
 
-`--physical-assistant-check --browser-check` passes 51 business scenarios and nine
-browser checks. Facility quantities use corrections available at the first
+The initial `--physical-assistant-check --browser-check` passed 51 business
+scenarios and nine browser checks. Facility quantities use corrections available at the first
 requested read; retained reads preserve that certificate after subsequent
 corrections. Gas operations retain their selected day and native authorization.
-The complete frontend suite passes 1,867 tests with none skipped. The verification
-runner's 27 contract tests pass and require the managed prompt checks, workspace
-browser checks and migration checks. Independent adversarial review found no
+After integrating D405 and D406, the complete frontend suite passes 1,891 tests
+with none skipped. The verification runner's 29 contract tests pass and require
+the managed prompt checks, workspace browser checks and migration checks. Independent adversarial review found no
 remaining findings. These results establish local synthetic behavior; hosted
 prompt configuration, publication and deployment remain separate operations.
+
+The combined upgrade applies the published Park and Loan migration before the
+installation-prompt and requested-context migrations. Their exact predecessor
+checks, helper drift refusals and existing prompt preservation all pass. The
+populated Park and Loan upgrade preserves its original native owners, cash and
+retry outcomes. Selected Park and Loan questions are admitted with the full
+Blotter report; an explicit request for the unqualified trade reader returns
+`page_not_supported` without financial pins or context. Managed and frontend
+regressions first reproduced the rejected question and incorrect capability label.
+
+The owned `--hosted-check --browser-check` also passes. Proposal review verifies
+that admission has no acquired context and that the later persisted tool context,
+navigation target and reopened draft use the same exact certificate. Hosted
+sign-out, expiry, cross-account refusal and browser checks remain enforced.
+
+The repository verification group also passes. The complete 190-command runner
+was not executed locally; aggregate CI and release checks remain required.

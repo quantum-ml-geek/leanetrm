@@ -105,6 +105,16 @@ def run_checks(url, query, manifest, fake, trap, psql, environment):
         results = [json.loads(part['content']) for part in calls[-1]['messages'][-1]['content'] if part['type'] == 'tool_result']
         return current, results, calls
 
+    park_report = {'page': 'blotter', 'selection': {'view': 'trade', 'mode': None, 'bookIds': None, 'portfolioIds': None,
+        'groupBy': None, 'measures': None, 'tradeId': str(uuid4()), 'instrumentType': 'physical_gas_park_loan', 'revision': 1},
+        'layout': {'pane': {'details': True, 'charts': False}, 'poppedOut': False},
+        'view': {'mode': 'trades', 'bookIds': [], 'portfolioIds': [], 'groupBy': [], 'measures': [], 'primaryMeasure': None},
+        'focus': {'tradeIds': [], 'pivotCell': None}}
+    park_turn, park_results, _ = ask([('read_current_page', {})], report=park_report)
+    check('a selected Park and Loan admits questions and refuses its unqualified read without financial acquisition',
+          park_results[0]['code'] == 'page_not_supported'
+          and query(f"SELECT pins IS NULL AND context_id IS NULL AND recorded_at IS NULL FROM assistant.turns WHERE id='{park_turn['id']}';") == 't')
+
     turn, results, calls = ask([('read_current_page', {}), ('discover_page_operations', {'page': 'users_access', 'operation': 'admin.update_v1'})])
     check('an administrator page is read through its ordinary authorized directory', 'directory' in results[0] and 'data' in results[0]['directory'])
     check('operation discovery returns the actual handler request contract', results[1]['operations'][0]['input']['body']['contract'] == 'AdminUpdate')

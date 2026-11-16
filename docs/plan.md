@@ -1,5 +1,12 @@
 # Delivery plan and acceptance criteria
 
+D406 locally qualifies a bounded [Park and Loan consumer](gas-park-loan.md):
+explicit booking, native advance and partial return, independent fee cash, shared
+ticket and lifecycle forms, and ordinary/retained current-clock price risk. Real
+browser, native financial and populated-upgrade qualifiers passed. Aggregate CI,
+release and service economic-horizon qualification remain open. Broader service
+terms require separately qualified executable profiles.
+
 D404 is implemented for 25 selected main-workbench curve, trading and Risk reads,
 with independent view progress, bounded execution, cancellation admission fences
 and exact authorization/context checks before SSE publication. Local qualification
@@ -29,11 +36,12 @@ instants and exchange option expiry retain their explicit timing and rate inputs
 required purpose bindings and Side-owned rules; omission checks are mandatory
 in the verification runner.
 
-The integrated verification runner requires 186 commands, including 64 isolated
-application previews, with domain, native database, populated-upgrade, agent and
-browser coverage. Local integration checks passed 737 managed core checks,
-88 rate checks and 28 owned lifecycle browser checks at the D403 checkpoint.
-The later D404 checkpoint passed 1,866 frontend checks and 122 Python checks.
+The integrated verification runner requires 190 commands, including required
+Park and Loan native, populated-upgrade, retained-worker and browser qualifiers,
+with domain, native database, agent and browser coverage. Local checks at D406
+passed 738 managed core checks and 1,889 frontend checks. The earlier D403
+checkpoint passed 737 managed core checks, 88 rate checks and 28 owned lifecycle
+browser checks; D404 passed 1,866 frontend and 122 Python checks.
 The integrated CI matrix must pass before publication qualification is complete. Native rejection
 probes cover altered calendar and clock captures, payment dates, quantities,
 source contracts and retained program agreement.
@@ -693,6 +701,12 @@ CI dependency acquisition has its own [cache qualification](ci-dependencies.md):
 locked NuGet/npm caches, verified stock PostgreSQL packages and corresponding
 sources, offline installation and a GitHub cache miss/save/restore/hit check.
 These checks preserve the ordinary matrix and release gates.
+
+D405 separates shared behavior checks from integration preparation and selects
+conservative path consumers for pull requests. All existing full-gate commands
+and same-commit master publication remain required. Managed runtime feature
+selection and coverage-derived dependency analysis remain future work. See
+[CI impact selection](ci-impact.md) for implemented boundaries and qualification.
 
 The default public page and hosted gateway route contract are available
 separately from the authenticated workspace (D163). An owned nginx check exercises
@@ -2435,7 +2449,7 @@ operation coverage and throughput claims require
 consumer-specific qualification; a transport design alone establishes neither.
 
 
-### Assistant context and prompt configuration (D405)
+### Assistant context and prompt configuration (D407)
 
 The local implementation removes automatic market-frame capture and bundled
 assistant guidance. Settings owns versioned application, page, tool and provider-test

@@ -288,7 +288,7 @@ test('PPA bookings reports the inspected PPA or the listed book, which the assis
 });
 
 test('a new trade in the Blotter\'s panel is reported by its product, and no unsent entry is read',()=>{
-  for(const [product,id] of [[null,'blotter_new_trade'],['futures','blotter_new_future'],['swaps','blotter_new_swap'],['ppa','blotter_new_ppa'],['gas','blotter_new_gas'],['crude','blotter_new_crude'],['lng','blotter_new_lng'],['options','blotter_new_option']])
+  for(const [product,id] of [[null,'blotter_new_trade'],['futures','blotter_new_future'],['swaps','blotter_new_swap'],['ppa','blotter_new_ppa'],['gas','blotter_new_gas'],['park-loan','blotter_new_park_loan'],['crude','blotter_new_crude'],['lng','blotter_new_lng'],['options','blotter_new_option']])
     assert.deepEqual(pageReport({page:'futures',...open,risk:false,trade:null,entry:{product},view:blotter}),{page:id,selection:{},layout});
   const names={curve:String,table:String},current={mode:'current',frameId:frame,frameLabel:'18 Dec 2020'};
   for(const [id,shown] of [['blotter_new_trade','A new trade is being started: no product is chosen yet. The assistant does not read a trade being entered.'],
@@ -401,4 +401,14 @@ test('Looking at says which physical instrument revision, tab, gas day and stage
  assert.equal(shows({physical}),'Selected physical instrument, revision 2 · Delivery · Gas day 2020-12-19 · Scheduling stage. Unsaved edits are not sent.');
  assert.equal(shows({physical:{...physical,tab:'cash',day:null,obligationId:null,stage:null}}),'Selected physical instrument, revision 2 · Billing & corrections. Unsaved edits are not sent.');
  assert.equal(shows({}),'Physical instrument operations under the header context. Unsaved edits are not sent.');
+});
+
+test('a selected Park and Loan permits questions and identifies its unavailable trade read',()=>{
+  const report=pageReport({page:'futures',...open,risk:false,trade:{tradeId:trade,instrumentType:'physical_gas_park_loan',revision:1,reference:'TR-000009'},entry:null,view:blotter});
+  assert.equal(report.page,'blotter');
+  assert.equal(report.selection.instrumentType,'physical_gas_park_loan');
+  const seen=lookingAt(report,{mode:'current',frameId:frame,frameLabel:'Synthetic close'},{curve:String,table:String},{trade:'TR-000009'});
+  assert.equal(seen.askable,true);
+  assert.equal(seen.supported,false);
+  assert.equal(seen.shows,'Trade TR-000009, revision 1. The assistant does not read this trade.');
 });

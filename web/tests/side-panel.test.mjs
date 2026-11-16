@@ -42,6 +42,13 @@ test('modes are the same when they name the same thing',()=>{
  assert.ok(!sameMode({kind:'risk'},position));
 });
 
+test('the shared new-trade panel identifies Park and loan as its own selected profile',()=>{
+ const mode={kind:'new',product:'park-loan'};
+ assert.equal(modeLabel(mode),'New Park and loan');
+ assert.ok(sameMode(mode,{...mode}));
+ assert.ok(!sameMode(mode,{kind:'new',product:'gas'}));
+});
+
 // What the shell touches of its markup, as plain objects: the panel's own element and the parts index.html gives it.
 function markup(id='side-panel'){
  const part=()=>({hidden:false,onclick:null,focused:false,children:[],replaceChildren(...nodes){this.children=nodes;}});

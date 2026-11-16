@@ -153,10 +153,11 @@ class WorkflowCacheTests(unittest.TestCase):
             self.assertIn('          cache: npm\n          cache-dependency-path: web/package-lock.json', job)
         self.assertNotIn('node_modules\n', workflow)
 
-    def test_postgresql_install_is_unconditional_and_cache_uses_the_complete_lock(self):
+    def test_postgresql_consumers_verify_bytes_on_hits_and_misses(self):
         workflow = (ROOT / '.github/workflows/ci.yml').read_text()
         step = workflow.split('      - name: Verify and install PostgreSQL 18\n')[1].split('      - name: ')[0]
-        self.assertNotIn('if:', step)
+        self.assertIn("if: matrix.group != 'repository' && matrix.group != 'frontend' && matrix.group != 'managed'", step)
+        self.assertNotIn('cache-hit', step)
         self.assertIn('python3 tools/ci_dependencies.py', step)
         self.assertIn("hashFiles('tools/ci/postgresql.lock.json')", workflow)
         self.assertNotIn('restore-keys:', workflow)

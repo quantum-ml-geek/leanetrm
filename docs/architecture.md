@@ -1,5 +1,10 @@
 # Architecture and domain contracts
 
+D406 adds locally qualified [Park and Loan commercial booking](gas-park-loan.md)
+over independent native ownership and cash. The bounded title-transfer profile
+uses shared entry, lifecycle and current-clock interactive/retained price risk.
+Release qualification and broader service capabilities remain separate.
+
 D401 selects [shared lifecycle delivery](lifecycle-delivery.md): operation-specific
 eligibility, native lifecycle coordination, gas ownership/entitlements/borrowing
 and event-aware economic risk. Its delivery gates distinguish implementation from
@@ -524,6 +529,12 @@ deployment procedure. Automatic image updates use attested GitHub Release bundle
 and a pinned local pull operator; schema and infrastructure changes require a
 separate qualified baseline (D135). Hosted authentication and collection boundaries are described
 in [hosted pilot operations](hosted-pilot.md); the synthetic local preview stays isolated.
+
+D405 adds conservative [CI impact selection](ci-impact.md): shared behavior checks
+run once across the matrix, and pull requests select explicitly declared path
+consumers. Unknown/shared changes and unavailable comparison history require the
+full gate. Master publication retains the complete same-commit gate and exact-head
+release contract. Integration jobs retain independent builds and disposable state.
 
 A neutral default public page lives in `site/` (D385), separately from the authenticated
 workspace assets. The hosted gateway serves only its exact homepage, two public
@@ -3059,7 +3070,7 @@ change into fixing, forward marks and capture corrections. Monthly shaping,
 graph worker replay, cash/accounting and ISO finality integration remain separate.
 
 
-D405 makes assistant context acquisition demand-driven and prompt text private to
+D407 makes assistant context acquisition demand-driven and prompt text private to
 an installation. Admission retains selection identity and immutable configuration;
 explicit financial tools acquire one certified context. Exact recorded closes use
 foreign-key references instead of repeated source matrices. See

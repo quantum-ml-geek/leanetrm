@@ -5519,7 +5519,58 @@ expand numerical qualification or authorize merging or deployment; qualification
 and the pull request record the implemented operations and remaining limits.
 
 
-## D405 — Requested assistant context and installation-owned prompts
+## D405 · Explicit CI consumers and shared verification groups
+
+Pull requests select the union of declared changed-path consumers. Repository
+checks always run. Documentation and isolated test edits may select narrower
+groups; managed runtime, SQL, dependencies, workflow, shared helpers and unknown
+paths require broad verification. Missing/empty comparisons and unrelated
+checkouts require the complete gate. Compare the PR common ancestor with its
+tested merge result, include both sides of renames, and retain complete Git
+history without a changed-file API limit.
+
+Separate repository, frontend, managed and database behavior checks from the
+fourteen existing integration groups. Run shared suites once across the matrix.
+Each integration checkout retains locked builds of the API checks, MarketData
+checks and worker, plus frontend assets and owned disposable resources. Preserve
+all existing native/browser consumers and the pinned dependency acquisition
+contract. Caches never count as test evidence.
+
+The stable required check rejects failed, cancelled and skipped selection/jobs.
+Every master push and manual dispatch requires the full gate. Publication requires
+that complete plan for the same master push plus existing enablement/environment
+controls. The pull operator requires an exact latest-head release; documentation
+pushes retain that path so they cannot strand earlier runtime changes. See
+[CI impact selection](ci-impact.md) for the executable boundaries and remaining
+qualification. No application, schema or financial contract changes are included.
+
+## D406 · Bookable Park and Loan with independent native owners
+
+**Status:** implemented with disposable local qualification; aggregate CI and release qualification remain open.
+
+**Requirement.** Book explicit Park and Loan agreements under Physical Gas from
+both commercial perspectives, retain independent instrument components and
+ownership, and perform principal and cash through the shared lifecycle boundary.
+
+**Decision.** Install the bounded `physical_gas_park_loan_v1` title-transfer
+profile. It uses one exact point, quantity basis and nominal mark, one full
+advance within its declared window, equal partial returns and an independent
+fixed fee. Before advance, ordinary opposite gas components and separate timed
+cash belong to the service. Accepted advance moves their economic ownership once
+to native stock and return liability, or identified stock dispatch and return
+claim, with independent signed fee cash. Fixed fees are not scaled by principal.
+The shared ticket, retained views, Lifecycle forms and generic portfolio
+repricing consume the same explicit contracts.
+
+**Boundaries.** No automatic title from booking or a deadline, no implicit
+repayment, no zero value for unsupported behavior and no duplication between the
+source service and independent owners. Unsupported source reconciliation and
+service economic-horizon continuation refuse. Knowledge-only admission must also
+catch a future-effective agreement already known at opening. Generated close
+activation, broader Park and Loan terms and other gas services need their own
+qualified consumers. See [Park and Loan contracts](gas-park-loan.md).
+
+## D407 — Requested assistant context and installation-owned prompts
 
 Assistant admission retains selection identity and configured prompt versions only.
 It does not read the page, serialize a market frame or capture financial knowledge.
@@ -5542,5 +5593,9 @@ migrations. Provider connectivity tests also use configured text and retain its 
 versions. Only explicitly synthetic test configuration belongs in verification fixtures.
 Formal tool schemas, business constraints, authorization and separate human approval
 remain enforced in code and cannot be overridden by any prompt.
+
+A selected Park and Loan trade admits questions under the Blotter prompt. Its
+unqualified trade read returns `page_not_supported` without financial acquisition;
+it cannot dispatch the swap reader. The UI identifies that read limitation.
 
 Publication and deployment remain separate from local implementation and qualification.

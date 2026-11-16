@@ -113,6 +113,10 @@ const string malformed="The request is incomplete or malformed.";
     PostgresException p when p.MessageText.StartsWith("lifecycle_",StringComparison.Ordinal)
         => (p.SqlState=="42501"?403:p.MessageText.Contains("conflict",StringComparison.Ordinal)||p.MessageText.Contains("stale",StringComparison.Ordinal)?409:422,
             p.MessageText,LifecycleNative.Refusal(p.MessageText)),
+    PostgresException p when p.MessageText.StartsWith("gas_park_loan_",StringComparison.Ordinal)
+        =>(p.SqlState=="42501"?403:p.MessageText is "gas_park_loan_stale" or "gas_park_loan_context" or "gas_park_loan_conflict" or "gas_park_loan_policy"?409:422,
+            p.MessageText,GasParkLoanActions.Refusal(p.MessageText)),
+    MarketDataException m when m.Code is "gas_park_loan_context" or "gas_park_loan_reconciliation" => (409,m.Code,m.Message),
     PostgresException p when p.MessageText.StartsWith("gas_quantity_",StringComparison.Ordinal)
         => (p.SqlState=="42501"?403:p.MessageText is "gas_quantity_revision" or "gas_quantity_stale_review" or "gas_quantity_conflict"?409:422,
             p.MessageText,"Review the current physical quantity, source allocations and principal version again."),
@@ -1723,22 +1727,36 @@ async Task<IResult> BookGasComposition(HttpContext c,PreviewSession session,GasC
 
 // The deal ticket (docs/deal-ticket.md) runs the gas operations it delegates to, with their permissions and context handling.
 var gasTicket=new GasTicketStore(database);
+var parkLoanTicket=new GasParkLoanTicketStore(database);
 FuturesReadRequest TicketContext(FuturesReadRequest? context)=>context??throw new MarketDataException("ticket_input","Supply the ticket's read context.");
 GasCompositionRequest TicketRequest(TicketDraft draft,FuturesReadRequest context,Guid operation,Guid definition)=>
  GasTicket.Request(draft,context.SnapshotId,context.KnowledgeMode??throw new MarketDataException("ticket_input","Supply the ticket's knowledge mode."),operation,definition);
 api.MapPost("/tickets/description",(HttpContext c,TicketDescriptionRequest body)=>FuturesRead(c,TicketContext(body.Context),
  async (connection,data,frame,ct)=>GasTicketStore.Description(body.Product) with{SideCalendars=await SideCalendarPolicies.Catalog(connection,ct)},expectedConvention:PhysicalGasStore.Convention,gasReferenceChoices:true));
 api.MapPost("/tickets/choices",(HttpContext c,TicketFieldRequest body)=>FuturesRead(c,TicketContext(body.Context),
- (connection,data,frame,ct)=>gasTicket.Choices(connection,data,frame,body,ct),expectedConvention:PhysicalGasStore.Convention,gasReferenceChoices:true));
+ (connection,data,frame,ct)=>body.Draft.Product==GasParkLoanTicket.Product?parkLoanTicket.Choices(connection,data,frame,body,ct):gasTicket.Choices(connection,data,frame,body,ct),expectedConvention:PhysicalGasStore.Convention,gasReferenceChoices:true));
 api.MapPost("/tickets/lookup",(HttpContext c,TicketFieldRequest body)=>FuturesRead(c,TicketContext(body.Context),
- (connection,data,frame,ct)=>gasTicket.Lookup(connection,data,frame,body,ct),expectedConvention:PhysicalGasStore.Convention,
- gasReferenceChoices:GasTicket.LookupOf(body.Draft,body.Side,body.Field)!="market_price"));
+ (connection,data,frame,ct)=>body.Draft.Product==GasParkLoanTicket.Product?parkLoanTicket.Lookup(connection,data,frame,body,ct):gasTicket.Lookup(connection,data,frame,body,ct),expectedConvention:PhysicalGasStore.Convention,
+ gasReferenceChoices:body.Draft.Product==GasParkLoanTicket.Product||GasTicket.LookupOf(body.Draft,body.Side,body.Field)!="market_price"));
 api.MapPost("/tickets/preview",(HttpContext c,TicketPreviewRequest body)=>FuturesRead(c,TicketContext(body.Context),
- (connection,data,frame,ct)=>gasComposition.Preview(connection,data,frame,TicketRequest(body.Draft,body.Context,Guid.Empty,data.DefinitionRevision.RevisionId),ct),expectedConvention:PhysicalGasStore.Convention));
+ (connection,data,frame,ct)=>body.Draft.Product==GasParkLoanTicket.Product?parkLoanTicket.Preview(connection,data,frame,body,ct):gasComposition.Preview(connection,data,frame,TicketRequest(body.Draft,body.Context,Guid.Empty,data.DefinitionRevision.RevisionId),ct),expectedConvention:PhysicalGasStore.Convention));
 // A booked trade offers day entries by the record operation's own rule, on the read's working or historical selection.
 api.MapPost("/tickets/trade",(HttpContext c,TicketTradeRequest body)=>FuturesRead(c,TicketContext(body.Context),
- (connection,data,frame,ct)=>gasTicket.Trade(connection,data,frame,body,TradingReadSelection.IsWorking(Session(c),body.Context),ct),expectedConvention:PhysicalGasStore.Convention,gasTrade:body.TradeId));
-api.MapPost("/tickets/status",GasBookingStatus);
+ (connection,data,frame,ct)=>
+ {
+  _=GasTicketStore.Description(body.Product??GasTicket.Description.Product);
+  return body.Product==GasParkLoanTicket.Product?parkLoanTicket.Trade(connection,data,frame,body,ct):gasTicket.Trade(connection,data,frame,body,TradingReadSelection.IsWorking(Session(c),body.Context),ct);
+ },expectedConvention:PhysicalGasStore.Convention,gasTrade:body.Product==GasParkLoanTicket.Product?null:body.TradeId));
+api.MapPost("/tickets/status",(HttpContext c,TicketStatusRequest body)=>Locked(c,session=>database.WithIdentity(Profile(session),"ReadTrades",async(connection,ct)=>
+{
+ if(body.Product==GasParkLoanTicket.Product)
+ {
+  var status=await parkLoanTicket.Status(connection,body.OperationId,ct);
+  return Results.Ok(status.GetProperty("found").GetBoolean()?status.GetProperty("outcome"):status);
+ }
+ if(body.Product is not(null or "physical_gas"))throw new MarketDataException("ticket_input","Select a supported ticket product.");
+ return Results.Ok(await gasStore.Status(connection,body.OperationId,ct));
+},c.RequestAborted)));
 api.MapPost("/tickets/amend-preview",(HttpContext c,TicketAmendRequest body)=>FuturesRead(c,TicketContext(body.Context),
  (connection,data,frame,ct)=>gasComposition.Preview(connection,data,frame,GasAmendments.Terms(body,Guid.Empty),ct),
  expectedConvention:PhysicalGasStore.Convention,gasTrade:body.TradeId,amendmentPreview:true));
@@ -1750,8 +1768,11 @@ api.MapPost("/tickets/amend",(HttpContext c,TicketAmendRequest body)=>Locked(c,a
 // Booking maps the draft against the definition revision its booking read resolves for the selected frame.
 api.MapPost("/tickets/book",(HttpContext c,TicketBookRequest body)=>Locked(c,session=>{
  var context=TicketContext(body.Context);RequireGasBooking(session,context.KnowledgeMode,context.ContextId);RequireConvention(context,PhysicalGasStore.Convention);
- return BookGasComposition(c,session,TicketRequest(body.Draft,context,body.OperationId,body.DefinitionRevisionId));
+ return body.Draft.Product==GasParkLoanTicket.Product?BookParkLoan(c,session,body):BookGasComposition(c,session,TicketRequest(body.Draft,context,body.OperationId,body.DefinitionRevisionId));
 }));
+
+async Task<IResult> BookParkLoan(HttpContext c,PreviewSession session,TicketBookRequest body)=>
+ Results.Ok(await parkLoanTicket.Book(Profile(session),Frame(session,body.Context.SnapshotId),body,c.RequestAborted));
 
 api.MapPost("/physical/operations/directory",(HttpContext c,TradingPositionsRequest body)=>TradingRead(c,
  body.Context??throw new MarketDataException("position_facts","Supply the selected header context."),
@@ -2011,6 +2032,10 @@ Task<IResult> PortfolioRead(HttpContext c,FuturesReadRequest body,Func<NpgsqlCon
 api.MapPost("/portfolio/risk/scope",(HttpContext c,RiskScopeRequest body)=>TradingRead(c,
     body.Context??throw new MarketDataException("risk_context","Select the shared financial context."),
     (connection,view,ct)=>tradeReads.ReadBound(connection,view,()=>RiskTradeScope.Directory(connection,database.Manifest.CatalogId,view.CalculationFrame,body,ct),ct),
+    scenario:true,expectedConvention:TradingBlotter.Convention));
+api.MapPost("/portfolio/risk/setup",(HttpContext c,PortfolioRiskCatalogRequest body)=>TradingRead(c,
+    body.Context??throw new MarketDataException("risk_context","Select the shared financial context."),
+    (connection,view,ct)=>tradeReads.ReadBound(connection,view,()=>portfolioRisk.Setup(connection,view.CalculationFrame,body,ct),ct),
     scenario:true,expectedConvention:TradingBlotter.Convention));
 api.MapPost("/portfolio/risk/catalog",(HttpContext c,PortfolioRiskCatalogRequest body)=>PortfolioRead(c,
     body.Context??throw new MarketDataException("risk_context","Select the shared financial context."),

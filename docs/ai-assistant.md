@@ -1440,7 +1440,13 @@ check proves equal (§7.1); Navigate follows the read tools and refuses a handle
 not issue, or a page the delegator cannot open, as `tool_arguments_invalid`; and a call
 whose tool requests would take the turn past its steps has none of them run (§7.5).
 
-**Read tool decisions** (D184, with acquisition superseded by D405): working-data reads
+A selected Park and Loan trade accepts questions and uses the Blotter prompt.
+Its individual trade reader is not yet qualified: `read_current_page` returns
+`page_not_supported` without acquiring financial context. The direct trade tool
+does not offer this product. An explicitly requested Blotter summary retains its
+ordinary authorized read contract.
+
+**Read tool decisions** (D184, with acquisition superseded by D407): working-data reads
 share the context acquired by the first requested financial tool, and
 current-only definitions bind none (§7.2); contract definitions are read with the
 schedule library and exposed as `market_data.contract_definitions_v1`; page reports name

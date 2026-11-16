@@ -29,18 +29,20 @@ CHECK_PROJECTS = (
 
 GROUPS = ('workspace', 'reference', 'standard', 'exchange', 'assistant', 'risk', 'trading', 'lifecycle', 'physical', 'gas',
           'portfolio', 'settlement', 'ppa', 'recovery')
+SHARED_GROUPS = ('repository', 'frontend', 'managed', 'database')
+ALL_GROUPS = (*SHARED_GROUPS, *GROUPS)
 
 
 def run_checks(pg_bin, dotnet, browser, *, group='all', run=subprocess.run):
-    if group not in ('all', *GROUPS):
+    if group not in ('all', *ALL_GROUPS):
         raise ValueError(f'Unknown verification group: {group}')
     if not __debug__ or os.environ.get('PYTHONOPTIMIZE') not in (None, '', '0'):
         raise ValueError('Python assertions must remain enabled for verification.')
     environment = {**os.environ, 'DOTNET_CLI_TELEMETRY_OPTOUT': '1', 'DOTNET_NOLOGO': '1',
                    'CHROME_BIN': str(browser), 'OPENETRM_CHECK_BROWSER': str(browser), 'DOTNET': str(dotnet)}
 
-    def check(label, command, *, suite=None):
-        if group != 'all' and suite not in (None, group):
+    def check(label, command, *, suite='repository'):
+        if group != 'all' and suite != group:
             return
         print(f'CHECK {label}', flush=True)
         run(command, cwd=ROOT, env=environment, check=True)
@@ -51,35 +53,47 @@ def run_checks(pg_bin, dotnet, browser, *, group='all', run=subprocess.run):
     check('standalone dependencies', [sys.executable, 'tools/check_standalone.py'])
     check('owned process cleanup', [sys.executable, 'tools/check_owned_process.py'])
     check('owned browser readiness', ['node', '--test', 'tests/browser/owned-browser.test.mjs', 'tests/browser/gas-ticket.test.mjs'])
-    check('locked frontend install', ['npm', 'ci', '--prefix', 'web', '--ignore-scripts'])
-    check('frontend build and checks', ['npm', 'test', '--prefix', 'web'])
+    # Each integration checkout builds its own assets; shared behavior checks
+    # execute only in their named groups.
+    if group in ('database', *GROUPS):
+        check('locked frontend install', ['npm', 'ci', '--prefix', 'web', '--ignore-scripts'], suite=group)
+        check('frontend build', ['npm', 'run', 'build', '--prefix', 'web'], suite=group)
+        for project in ('tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj',
+                        'src/OpenEtrm.Worker/OpenEtrm.Worker.csproj',
+                        'tests/OpenEtrm.MarketData.Checks/OpenEtrm.MarketData.Checks.csproj'):
+            check(f'locked integration restore: {Path(project).stem}',
+                  [str(dotnet), 'restore', project, '--locked-mode'], suite=group)
+            check(f'integration build: {Path(project).stem}',
+                  [str(dotnet), 'build', project, '--no-restore'], suite=group)
+    check('locked frontend install', ['npm', 'ci', '--prefix', 'web', '--ignore-scripts'], suite='frontend')
+    check('frontend build and checks', ['npm', 'test', '--prefix', 'web'], suite='frontend')
     for project in dict.fromkeys(project for project, _ in CHECK_PROJECTS):
-        check(f'locked restore: {Path(project).stem}', [str(dotnet), 'restore', project, '--locked-mode'])
+        check(f'locked restore: {Path(project).stem}', [str(dotnet), 'restore', project, '--locked-mode'], suite='managed')
     for project, arguments in CHECK_PROJECTS:
         command = [str(dotnet), 'run', '--no-restore', '--project', project]
-        check(' '.join((Path(project).stem, *arguments)), [*command, '--', *arguments] if arguments else command)
+        check(' '.join((Path(project).stem, *arguments)), [*command, '--', *arguments] if arguments else command, suite='managed')
     for argument in ('--power-flat','--power-atc','--power-product-averages','--power-interval-quantities','--ppa-sides'):
-        check('native power '+argument,[str(dotnet),'run','--no-restore','--project','tests/OpenEtrm.MarketData.Checks/OpenEtrm.MarketData.Checks.csproj','--',argument])
-    check('power worker admission',[str(dotnet),'run','--no-restore','--project','tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj','--','--close-risk'])
-    check('independent Monte Carlo generator and quantile intervals',[sys.executable,'tools/check_monte_carlo_numerics.py','--dotnet',str(dotnet)])
+        check('native power '+argument,[str(dotnet),'run','--no-restore','--project','tests/OpenEtrm.MarketData.Checks/OpenEtrm.MarketData.Checks.csproj','--',argument], suite='managed')
+    check('power worker admission',[str(dotnet),'run','--no-restore','--project','tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj','--','--close-risk'], suite='managed')
+    check('independent Monte Carlo generator and quantile intervals',[sys.executable,'tools/check_monte_carlo_numerics.py','--dotnet',str(dotnet)], suite='managed')
     worker_project='src/OpenEtrm.Worker/OpenEtrm.Worker.csproj'
-    check('locked worker restore',[str(dotnet),'restore',worker_project,'--locked-mode'])
-    check('independent worker build',[str(dotnet),'build',worker_project,'--no-restore'])
+    check('locked worker restore',[str(dotnet),'restore',worker_project,'--locked-mode'], suite='managed')
+    check('independent worker build',[str(dotnet),'build',worker_project,'--no-restore'], suite='managed')
     check('isolated database login boundaries',[sys.executable,'tools/check_database_login_boundaries.py',
-          '--pg-bin',str(pg_bin),'--dotnet',str(dotnet),'--no-build'])
-    check('managed automation contracts',[str(dotnet),'run','--no-restore','--project','tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj','--','--automation'])
-    check('managed live context contracts',[str(dotnet),'run','--no-restore','--project','tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj','--','--live-calculation'])
-    check('managed private reference intake',[str(dotnet),'run','--no-restore','--project','tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj','--','--reference-intake'])
-    check('managed preview data',[str(dotnet),'run','--no-restore','--project','tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj','--','--preview-data'])
-    check('managed side observation compatibility',[str(dotnet),'run','--no-restore','--project','tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj','--','--side-observation-compatibility'])
-    check('owned automation database',[sys.executable,'tools/check_automation.py','--pg-bin',str(pg_bin),'--dotnet',str(dotnet)])
-    check('owned operating settings database',[sys.executable,'tools/check_operating_settings.py','--pg-bin',str(pg_bin)])
-    check('native volatility-fit admission expiry',[sys.executable,'tools/check_vol_surface_admission_expiry.py','--pg-bin',str(pg_bin)])
-    check('owned reference metadata database',[sys.executable,'tools/check_reference_editing.py','--pg-bin',str(pg_bin)])
-    check('populated payment-day program upgrade',[sys.executable,'tools/check_payment_day_upgrade.py','--pg-bin',str(pg_bin)])
-    check('calendar migration helper contracts',[sys.executable,'tools/check_calendar_upgrade.py','--pg-bin',str(pg_bin)])
-    check('native Side calendar bindings',[sys.executable,'tools/check_side_calendar_policies.py','--pg-bin',str(pg_bin)])
-    check('recorded cash upgrade over existing option bookings',[sys.executable,'tools/check_recorded_cash_upgrade.py','--pg-bin',str(pg_bin)])
+          '--pg-bin',str(pg_bin),'--dotnet',str(dotnet),'--no-build'], suite='database')
+    check('managed automation contracts',[str(dotnet),'run','--no-restore','--project','tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj','--','--automation'], suite='managed')
+    check('managed live context contracts',[str(dotnet),'run','--no-restore','--project','tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj','--','--live-calculation'], suite='managed')
+    check('managed private reference intake',[str(dotnet),'run','--no-restore','--project','tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj','--','--reference-intake'], suite='managed')
+    check('managed preview data',[str(dotnet),'run','--no-restore','--project','tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj','--','--preview-data'], suite='managed')
+    check('managed side observation compatibility',[str(dotnet),'run','--no-restore','--project','tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj','--','--side-observation-compatibility'], suite='managed')
+    check('owned automation database',[sys.executable,'tools/check_automation.py','--pg-bin',str(pg_bin),'--dotnet',str(dotnet)], suite='database')
+    check('owned operating settings database',[sys.executable,'tools/check_operating_settings.py','--pg-bin',str(pg_bin)], suite='database')
+    check('native volatility-fit admission expiry',[sys.executable,'tools/check_vol_surface_admission_expiry.py','--pg-bin',str(pg_bin)], suite='database')
+    check('owned reference metadata database',[sys.executable,'tools/check_reference_editing.py','--pg-bin',str(pg_bin)], suite='database')
+    check('populated payment-day program upgrade',[sys.executable,'tools/check_payment_day_upgrade.py','--pg-bin',str(pg_bin)], suite='database')
+    check('calendar migration helper contracts',[sys.executable,'tools/check_calendar_upgrade.py','--pg-bin',str(pg_bin)], suite='database')
+    check('native Side calendar bindings',[sys.executable,'tools/check_side_calendar_policies.py','--pg-bin',str(pg_bin)], suite='database')
+    check('recorded cash upgrade over existing option bookings',[sys.executable,'tools/check_recorded_cash_upgrade.py','--pg-bin',str(pg_bin)], suite='database')
     # The projection-source qualifier also runs the complete native journal.
     for part in ('sources','adoption','projection_sources'):
         check('owned futures margin '+part,[sys.executable,f'tools/check_futures_margin_{part}.py','--pg-bin',str(pg_bin)],suite='lifecycle')
@@ -122,6 +136,9 @@ def run_checks(pg_bin, dotnet, browser, *, group='all', run=subprocess.run):
         ('check_physical_futures_value','full native physical futures value and exact linked-source economic workers')):
         check(label,[sys.executable,f'tools/{helper}.py','--pg-bin',str(pg_bin)],suite='portfolio')
     for helper,label in (
+        ('check_gas_park_loan','booked Park and Loan, native ownership and independent whole-book price scenarios'),
+        ('check_gas_park_loan_upgrade','populated Park and Loan schema upgrade preserves existing native owners and cash'),
+        ('check_gas_park_loan_worker','retained Park and Loan price workers preserve exact scope, source and original authority'),
         ('check_gas_fee_existing_origins','fixed loan fee upgrade preserves exact existing financial origins and bank history'),
         ('check_gas_loan_quantity_reconciliation','loan withdrawal, exact source authority and cash-only maturity'),
         ('check_gas_owned_fact_acknowledgements','original gas commands acknowledge accepted financial snapshots without new effects'),
@@ -136,7 +153,7 @@ def run_checks(pg_bin, dotnet, browser, *, group='all', run=subprocess.run):
         ('check_gas_operator_ordinary_value','ordinary and zero operator corrections retain exact owners through economic workers'),
         ('check_gas_known_cashout','source-known future cashouts retain exact commodity and independent cash owners')):
         check(label,[sys.executable,f'tools/{helper}.py','--pg-bin',str(pg_bin),'--dotnet',str(dotnet),'--no-build'],suite='portfolio')
-    for helper,suite in (('check_gas_mixed_quantity_browser','lifecycle'),('check_lifecycle_browser','lifecycle'),('check_gas_fee_browser','gas'),
+    for helper,suite in (('check_gas_park_loan_browser','gas'),('check_gas_mixed_quantity_browser','lifecycle'),('check_lifecycle_browser','lifecycle'),('check_gas_fee_browser','gas'),
                          ('check_gas_loan_quantity_browser','gas'),('check_gas_operator_quantity_browser','gas'),('check_lifecycle_economic_browser','portfolio'),
                          ('check_agent_operating_settings','assistant')):
         check(helper,[sys.executable,f'tools/{helper}.py','--pg-bin',str(pg_bin),'--dotnet',str(dotnet),
@@ -147,15 +164,15 @@ def run_checks(pg_bin, dotnet, browser, *, group='all', run=subprocess.run):
     for flag in ('--lifecycle-actions','--economic-risk-contract','--lifecycle-schedule-contract','--gas-owned-setup',
         '--shared-native-markets','--derivative-methods','--gas-accepted-order','--lifecycle-residual-currencies','--gas-operator-contract'):
         check('managed lifecycle '+flag,[str(dotnet),'run','--no-restore','--project',
-            'tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj','--',flag])
+            'tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj','--',flag], suite='managed')
     check('exact temporal sources, retained close upgrade and claimed worker replay',
-          [sys.executable,'tools/check_context_resolution.py','--upgrade-existing-close','--pg-bin',str(pg_bin),'--dotnet',str(dotnet)])
-    check('owned recorded-close observation batches',[sys.executable,'tools/check_observation_batch_reads.py','--pg-bin',str(pg_bin)])
-    check('owned publication definitions and final releases',[sys.executable,'tools/check_price_publications.py','--pg-bin',str(pg_bin)])
-    check('owned contract pricing terms',[sys.executable,'tools/check_contract_price_terms.py','--pg-bin',str(pg_bin)])
-    check('owned delivery catalog integrity',[sys.executable,'tools/check_power_integrity.py','--pg-bin',str(pg_bin)])
+          [sys.executable,'tools/check_context_resolution.py','--upgrade-existing-close','--pg-bin',str(pg_bin),'--dotnet',str(dotnet)], suite='database')
+    check('owned recorded-close observation batches',[sys.executable,'tools/check_observation_batch_reads.py','--pg-bin',str(pg_bin)], suite='database')
+    check('owned publication definitions and final releases',[sys.executable,'tools/check_price_publications.py','--pg-bin',str(pg_bin)], suite='database')
+    check('owned contract pricing terms',[sys.executable,'tools/check_contract_price_terms.py','--pg-bin',str(pg_bin)], suite='database')
+    check('owned delivery catalog integrity',[sys.executable,'tools/check_power_integrity.py','--pg-bin',str(pg_bin)], suite='database')
     check('stock database schema', [sys.executable, 'tools/check_reference_schema.py',
-                                   '--pg-bin', str(pg_bin), '--market', '--security'])
+                                   '--pg-bin', str(pg_bin), '--market', '--security'], suite='database')
     preview = [sys.executable, 'tools/run_preview.py', '--pg-bin', str(pg_bin),
                '--dotnet', str(dotnet), '--no-build', '--check']
     def preview_check(label, command, *, suite='workspace'):
@@ -235,11 +252,14 @@ def main():
     parser.add_argument('--pg-bin', type=Path, required=True, help='Installed stock PostgreSQL binaries')
     parser.add_argument('--dotnet', type=Path, required=True, help='Installed SDK matching global.json')
     parser.add_argument('--browser', type=Path, required=True, help='Installed Chromium-compatible executable')
-    parser.add_argument('--group', choices=('all', *GROUPS), default='all',
-                        help='CI partition; each group repeats all shared preparation and checks')
+    parser.add_argument('--group', choices=('all', *ALL_GROUPS), default='all',
+                        help='CI partition; integration groups build assets without repeating shared checks')
     args = parser.parse_args()
     pg_bin, dotnet, browser = (p.resolve() for p in (args.pg_bin, args.dotnet, args.browser))
-    for binary in (dotnet, browser, *(pg_bin / name for name in ('initdb', 'pg_ctl', 'psql'))):
+    binaries = [dotnet, browser]
+    if args.group in ('all', 'database', *GROUPS):
+        binaries.extend(pg_bin / name for name in ('initdb', 'pg_ctl', 'psql'))
+    for binary in binaries:
         if not binary.is_file():
             parser.error(f'Missing installed binary: {binary}')
     expected_node = 'v' + (ROOT / '.node-version').read_text().strip()
