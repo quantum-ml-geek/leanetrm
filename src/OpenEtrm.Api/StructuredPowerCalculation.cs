@@ -27,6 +27,9 @@ public sealed record StructuredPowerPreviewResult(Guid PreviewId,Guid SnapshotId
     ImmutableArray<StructuredPowerIntervalResult> Intervals,StructuredPowerStateResult? ClosingState,
     StructuredPowerValuationResult? Valuation,ImmutableArray<string> Limitations);
 
+public sealed record StructuredPowerPreparedPlan(StructuredPowerPreviewResult Preview,StructuredPowerResolvedTerms Resolved,
+    OperatingRightInstrument? Instrument,OperatingQuantityInputs Quantities,ImmutableArray<DeliveryInterval> Grid,ImmutableDictionary<Guid,string> SideNames);
+
 public static partial class StructuredPowerPreview
 {
     public const string PreviewImplementation="structured_power_supplied_plan_preview_v1";
@@ -38,6 +41,10 @@ public static partial class StructuredPowerPreview
     // operation. This preview records no dispatch, facility revision or booking.
     public static StructuredPowerPreviewResult Calculate(PreviewData data,InputFrame frame,
         StructuredPowerFacilityVersion saved,DateTimeOffset knownAt,StructuredPowerPreviewRequest request)
+        =>Prepare(data,frame,saved,knownAt,request).Preview;
+
+    public static StructuredPowerPreparedPlan Prepare(PreviewData data,InputFrame frame,
+        StructuredPowerFacilityVersion saved,DateTimeOffset knownAt,StructuredPowerPreviewRequest request,Guid? contractIdentity=null)
     {
         if(request is null||frame is null||saved is null||request.SnapshotId==Guid.Empty||request.SnapshotId!=frame.Id||request.FacilityId!=saved.Id||
             saved.Id==Guid.Empty||request.FacilityVersion!=saved.Version||saved.Version<1||!Utc(knownAt)||!Utc(frame.At))
@@ -46,7 +53,7 @@ public static partial class StructuredPowerPreview
         if(request.BatteryDispatch is null||request.ThermalDispatch is null||request.SolarDispatch is null)throw PreviewUnion();
         var count=saved.Terms.Kind switch{"battery"=>request.BatteryDispatch.Length,"thermal"=>request.ThermalDispatch.Length,"solar"=>request.SolarDispatch.Length,_=>0};
         var grid=Grid(resolved,request.Grid,count);if(grid[0].Start<from||grid[^1].End>to)throw Error("structured_power_time","Every interval must belong to the saved facility version's effective period.");
-        var id=Identity(new{saved,frame.Id,frame.At,frame.ContextId,knownAt,request});var plan=new OperatingPlanReference(data.DefinitionRevision,id,1);
+        var id=contractIdentity??Identity(new{saved,frame.Id,frame.At,frame.ContextId,knownAt,request});var plan=new OperatingPlanReference(data.DefinitionRevision,id,1);
         var cells=ImmutableArray.CreateBuilder<OperatingScenarioQuantityCell>();
         var ports=new Dictionary<string,OperatingOutputPort>(StringComparer.Ordinal);
         void Port(string name,OperatingOutputKind kind,QuantitySpecification spec,IEnumerable<ExactQuantity> quantities)
@@ -99,9 +106,12 @@ public static partial class StructuredPowerPreview
                 foreach(var row in evaluation.Rows)result.Add(new(row.Input.Interval,[new("physical_energy",row.PhysicalEnergy),new("payment_energy",row.PaymentEnergy),new("delivery_obligation",row.DeliveryObligation),new("replacement_energy",row.ReplacementEnergy),new("surplus_energy",row.SurplusEnergy),new("eligible_actual_energy",row.EligibleActualEnergy)]));break;
             }
         }
-        var valuation=request.Valuation is null?null:Value(data,frame,knownAt,id,resolved,grid,ports,cells.ToImmutable(),request.Valuation);
-        return new(id,frame.Id,frame.ContextId,saved.Id,saved.Version,saved.Terms.Kind,PreviewImplementation,resolved.OperatingClock.Fingerprint,knownAt,result.MoveToImmutable(),closing,valuation,
+        var valued=request.Valuation is null?null:Value(data,frame,knownAt,id,resolved,grid,ports,cells.ToImmutable(),request.Valuation);
+        var snapshot=data.Snapshot(frame);if(frame.ContextId is {} contextId)snapshot=snapshot.WithKnowledge(contextId,knownAt);
+        var quantities=OperatingQuantityInputs.Scenario(snapshot,cells.ToImmutable(),OperatingQuantityInputs.ScenarioImplementation);
+        var preview=new StructuredPowerPreviewResult(id,frame.Id,frame.ContextId,saved.Id,saved.Version,saved.Terms.Kind,PreviewImplementation,resolved.OperatingClock.Fingerprint,knownAt,result.MoveToImmutable(),closing,valued?.Value,
             ["Hypothetical supplied-plan assumptions under the selected market; no historical publication assertion, optimization, operator instruction or booking.","Remaining operating value excludes historical operating P&L and opening inventory cost basis.","Forecast quantities create no certificates; metered/deemed evidence and registry transitions require separately admitted sources."]);
+        return new(preview,resolved,valued?.Instrument,quantities,[..grid],valued?.Names??ImmutableDictionary<Guid,string>.Empty);
     }
 
     static DeliveryInterval[] Grid(StructuredPowerResolvedTerms resolved,StructuredPowerGridInput input,int count)

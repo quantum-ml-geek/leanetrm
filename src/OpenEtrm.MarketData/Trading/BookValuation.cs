@@ -14,6 +14,7 @@ public sealed record ValuationSetup(ValuationMeasure Measure,
     // Providers belong to instruments: two instruments can share the same side
     // while selecting different retained discounting terms.
     public IntervalValuationInputs? Interval{get;init;}
+    public ImmutableDictionary<Guid,OperatingQuantityInputs> OperatingQuantities{get;init;}=ImmutableDictionary<Guid,OperatingQuantityInputs>.Empty;
     public ImmutableDictionary<Guid,ISideDiscounting> InstrumentDiscounting{get;init;}=ImmutableDictionary<Guid,ISideDiscounting>.Empty;
     public ImmutableDictionary<MeasureBinding,IBindingValuationState> BindingStates{get;init;}=ImmutableDictionary<MeasureBinding,IBindingValuationState>.Empty;
     public ImmutableDictionary<MeasureBinding,BindingAccountingFacts> AccountingFacts{get;init;}=ImmutableDictionary<MeasureBinding,BindingAccountingFacts>.Empty;
@@ -37,10 +38,11 @@ public sealed record ValuationSetup(ValuationMeasure Measure,
     }
     private ValuationSetup ForInputs(HashSet<Guid> instruments,HashSet<MeasureBinding> bindings)
     {
-        if(FuturesBindings is null||InstrumentDiscounting is null||OptionBindings is null||BindingStates is null||AccountingFacts is null||FuturesValueBindings is null||PhysicalOptionValueBindings is null||CashOptionValueBindings is null||BindingDiscounting is null)
+        if(FuturesBindings is null||InstrumentDiscounting is null||OperatingQuantities is null||OptionBindings is null||BindingStates is null||AccountingFacts is null||FuturesValueBindings is null||PhysicalOptionValueBindings is null||CashOptionValueBindings is null||BindingDiscounting is null)
             throw new MarketDataException("valuation_context","Retain complete explicit valuation inputs.");
         return this with{FuturesBindings=FuturesBindings.Where(p=>instruments.Contains(p.Key)).ToImmutableDictionary(),
             InstrumentDiscounting=InstrumentDiscounting.Where(p=>instruments.Contains(p.Key)).ToImmutableDictionary(),
+            OperatingQuantities=OperatingQuantities.Where(p=>instruments.Contains(p.Key)).ToImmutableDictionary(),
             OptionBindings=OptionBindings.Where(p=>instruments.Contains(p.Key)).ToImmutableDictionary(),
             FuturesValueBindings=FuturesValueBindings.Where(p=>bindings.Contains(p.Key)).ToImmutableDictionary(),
             PhysicalOptionValueBindings=PhysicalOptionValueBindings.Where(p=>bindings.Contains(p.Key)).ToImmutableDictionary(),
@@ -55,21 +57,22 @@ public sealed record ValuationSetup(ValuationMeasure Measure,
 // provider is intentional; equal-looking providers do not establish equal pins.
 internal sealed class SideValuationContexts
 {
-    private sealed record Key(ISideDiscounting? Provider,UnitPricingContract Declaration,IBindingValuationState? State);
+    private sealed record Key(ISideDiscounting? Provider,UnitPricingContract Declaration,IBindingValuationState? State,OperatingQuantityInputs? Operating);
     private sealed class Keys:IEqualityComparer<Key>
     {
-        public bool Equals(Key? a,Key? b)=>ReferenceEquals(a,b)||a is not null&&b is not null&&ReferenceEquals(a.Provider,b.Provider)&&ReferenceEquals(a.State,b.State)&&a.Declaration.SameInputFence(b.Declaration);
+        public bool Equals(Key? a,Key? b)=>ReferenceEquals(a,b)||a is not null&&b is not null&&ReferenceEquals(a.Provider,b.Provider)&&ReferenceEquals(a.State,b.State)&&ReferenceEquals(a.Operating,b.Operating)&&a.Declaration.SameInputFence(b.Declaration);
         public int GetHashCode(Key key)
         {
             var hash=key.Provider is null?0:System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(key.Provider);
-            return HashCode.Combine(hash,key.Declaration.InputFenceHash(),key.State is null?0:System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(key.State));
+            return HashCode.Combine(hash,key.Declaration.InputFenceHash(),key.State is null?0:System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(key.State),
+                key.Operating is null?0:System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(key.Operating));
         }
     }
     private readonly Dictionary<Key,SideValuationContext> contexts=new(new Keys());
     internal int Calculations=>contexts.Values.Sum(c=>c.EvaluatedSides);
-    internal SideValuationContext Get(ISideDiscounting? provider,UnitPricingContract declaration,IBindingValuationState? state,Func<SideValuationContext> create)
+    internal SideValuationContext Get(ISideDiscounting? provider,UnitPricingContract declaration,IBindingValuationState? state,OperatingQuantityInputs? operating,Func<SideValuationContext> create)
     {
-        var key=new Key(provider,declaration,state);
+        var key=new Key(provider,declaration,state,operating);
         if(!contexts.TryGetValue(key,out var context)){context=create();contexts.Add(key,context);}
         return context;
     }
@@ -169,7 +172,12 @@ public sealed class UnitValuationContext
         if(pricing is null||declaration is null)
             throw new MarketDataException("side_context","Supply the declared market and explicit payment discount inputs.");
         var provider=selected??Setup.Discounting??Setup.InstrumentDiscounting.GetValueOrDefault(declaration.Id);
-        return sideContexts.Get(provider,declaration,BindingState,()=>pricing.Context(provider,declaration.Dependencies,cancellation,Inputs).WithBindingState(BindingState));
+        var operating=Setup.OperatingQuantities.GetValueOrDefault(declaration.Id);
+        return sideContexts.Get(provider,declaration,BindingState,operating,()=>
+        {
+            var context=pricing.Context(provider,declaration.Dependencies,cancellation,Inputs).WithBindingState(BindingState);
+            return operating is null?context:context.WithOperatingQuantities(operating);
+        });
     }
 }
 
@@ -319,18 +327,29 @@ public sealed class ValuationPortfolio
         Instruments=instruments.OrderBy(i=>i.Id).ToImmutableArray();
         Positions=positions.OrderBy(p=>p.Owner.Kind).ThenBy(p=>p.Owner.Id).ThenBy(p=>p.BindingId).ToImmutableArray();
         indexes=Instruments.Select((i,n)=>(i.Id,n)).ToDictionary(p=>p.Id,p=>p.n);
+        if(Setup.OperatingQuantities is null||Setup.OperatingQuantities.Any(p=>!indexes.ContainsKey(p.Key)||p.Value is null))
+            throw Error("operating_context","Operating quantity inputs must belong to an exact held instrument.");
+        foreach(var(id,inputs)in Setup.OperatingQuantities)
+        {
+            if(Instruments[indexes[id]] is not OperatingRightInstrument operating||
+                inputs.Cells.Select(c=>c.Port).Concat(inputs.ScenarioCells.Select(c=>c.Port)).Any(p=>p.Resource!=operating.Resource))
+                throw Error("operating_context","An operating input set must retain the held right's exact resource.");
+        }
         if(Setup.InstrumentDiscounting is null||Setup.Discounting is not null&&!Setup.InstrumentDiscounting.IsEmpty||
             Setup.InstrumentDiscounting.Any(p=>!indexes.ContainsKey(p.Key)||p.Value is null))
             throw Error("side_context","Select one explicit shared discount provider or exact held-instrument providers.");
         if(Positions.Select(p=>(p.Owner,p.BindingId)).Distinct().Count()!=Positions.Length||
             Positions.GroupBy(p=>p.Owner).Any(g=>g.Select(p=>p.BookId).Distinct().Count()!=1))
             throw Error("risk_position","Held bindings must be distinct and one owner must have one book.");
+        if(Positions.GroupBy(p=>p.ValuationId).Any(g=>g.Count()>1&&indexes.TryGetValue(g.Key,out var index)&&
+            !Instruments[index].SupportsQuantityScaling&&Instruments[index].SupportsFixedUnitBinding))
+            throw Error("risk_fixed_unit_binding","A fixed-unit instrument has one exact held binding; independently deliverable rights require separate instrument identities.");
         foreach(var p in Positions)
         {
             if(!p.Owner.Matches(p.TradeId)||p.BindingId==Guid.Empty||p.BookId==Guid.Empty||!indexes.TryGetValue(p.ValuationId,out var index))
                 throw Error("risk_position","Each holding requires an exact owner, binding, book and unit instrument.");
             var instrument=Instruments[index];
-            if(!instrument.SupportsQuantityScaling)
+            if(!instrument.SupportsQuantityScaling&&!instrument.SupportsFixedUnitBinding)
                 throw Error("risk_quantity_scaling","This instrument has not declared linear scaling in booked quantity.");
             instrument.ValidateBinding(p.Quantity,p.Coverage);
             if(p.Quantity.Specification!=instrument.UnitQuantity.Specification||p.UnitBasis.Quantity!=p.Quantity.Specification||

@@ -41,3 +41,12 @@ test('unknown save requests stay with their original profile through resets and 
  a.clear();store.save('workspace:alpha',a);assert.equal(new StructuredPowerPendingStore(storage).select('workspace:alpha').command,undefined);
  assert.equal(new StructuredPowerPendingStore(storage).select('workspace:beta').command.operationId,'b-request');
 });
+
+test('side price transport distinguishes fixed values from explicitly selected market contracts',async()=>{
+ const {operatingPrice}=await import('../dist/structured-power-model.js');
+ assert.deepEqual(operatingPrice('fixed','native_quote','10.000000000001',null),{mode:'fixed',quoteCode:'native_quote',fixedPrice:'10.000000000001',curveCode:null,contractId:null});
+ const selected={curveCode:'selected_curve',contractId:'selected_contract',quoteCode:'selected_quote'};
+ assert.deepEqual(operatingPrice('selected_contract_flat_v1','old_fixed_quote','old_fixed_value',selected),{mode:'selected_contract_flat_v1',quoteCode:'selected_quote',fixedPrice:null,curveCode:'selected_curve',contractId:'selected_contract'});
+ assert.throws(()=>operatingPrice('selected_contract_flat_v1','','',null),/Select an exact market contract/);
+ assert.throws(()=>operatingPrice('','','',null),/explicit side price mode/);
+});

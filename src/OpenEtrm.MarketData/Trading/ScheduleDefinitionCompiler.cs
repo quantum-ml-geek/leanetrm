@@ -12,16 +12,20 @@ public enum ScheduleLifecycleSelection{FutureDelivery,StartedPhysicalDelivery}
 
 public static partial class ScheduleDefinitionCompiler
 {
-    public static ScheduleDefinition Generate(Side side,CancellationToken cancellationToken=default,ScheduleLifecycleSelection lifecycle=ScheduleLifecycleSelection.FutureDelivery)
+    public static ScheduleDefinition Generate(Side side,CancellationToken cancellationToken=default,ScheduleLifecycleSelection lifecycle=ScheduleLifecycleSelection.FutureDelivery,
+        OperatingQuantityInputs? operatingInputs=null)
     {
         ArgumentNullException.ThrowIfNull(side);
         cancellationToken.ThrowIfCancellationRequested();
+        if(operatingInputs is not null&&side is not(FixedSide{OperatingDefinition:not null} or FloatingSide{OperatingDefinition:not null}))
+            throw ScheduleDefinition.Error("Operating quantity inputs require an operating Side.");
         if(side.RetainedSchedule is {} retained)return retained;
         if(lifecycle==ScheduleLifecycleSelection.StartedPhysicalDelivery&&side is PhysicalCrudeSide or PhysicalLngCargoSide)
             throw new MarketDataException("physical_lifecycle_unsupported","Only gas compositions have a started-delivery lifecycle.");
         var builder=new Builder(side,cancellationToken,lifecycle);
         switch(side.GenerateSchedule())
         {
+            case OperatingSideSchedule operating:builder.Operating(operating,operatingInputs);break;
             case SidePaymentSchedule dated:builder.Dated(dated);break;
             case IntervalSideSchedule native:builder.Native(native);break;
             case PhysicalGasSchedule gas:builder.Gas(gas);break;
@@ -31,7 +35,7 @@ public static partial class ScheduleDefinitionCompiler
         }
         return builder.Finish();
     }
-    private sealed class Builder(Side side,CancellationToken cancellationToken,ScheduleLifecycleSelection selection)
+    private sealed partial class Builder(Side side,CancellationToken cancellationToken,ScheduleLifecycleSelection selection)
     {
         private readonly List<ScheduleDefinitionRow> rows=[];
         private readonly List<ScheduleDefinitionEdge> edges=[];
@@ -446,7 +450,7 @@ public static partial class ScheduleDefinitionCompiler
             var sum=Row("side/pv","root","sum","money",null,currency:currency);
             for(var n=0;n<contributions.Count;n++)Edge(sum,"input",contributions[n],n);
             roots.Add(new("pv",sum,"pv"));
-            return new(side.Id,side switch {PhysicalGasSide=>"gas",PhysicalCrudeSide=>"crude",PhysicalLngCargoSide=>"lng",FixedSide=>"fixed",FloatingSide=>"floating",PowerPhysicalSide=>"power",CertificateDeliverySide=>"certificate",CapacityDeliverySide=>"capacity",_=>throw ScheduleDefinition.Error("Unknown Side family.")},
+            return new(side.Id,side switch {FixedSide{OperatingDefinition:not null} or FloatingSide{OperatingDefinition:not null}=>"operating",PhysicalGasSide=>"gas",PhysicalCrudeSide=>"crude",PhysicalLngCargoSide=>"lng",FixedSide=>"fixed",FloatingSide=>"floating",PowerPhysicalSide=>"power",CertificateDeliverySide=>"certificate",CapacityDeliverySide=>"capacity",_=>throw ScheduleDefinition.Error("Unknown Side family.")},
                 DefinitionIdentity.For(side).Canonical,side.PricingBindingIdentity?.Canonical??"",ScheduleDefinition.CurrentSchema,ScheduleDefinition.CurrentGenerator,
                 rows,edges,bindings,roots,ports,grids);
         }

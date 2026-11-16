@@ -15,6 +15,7 @@ internal sealed record RetainedSchedulePreparation(DefinitionRevision Definition
     IReadOnlyList<ScheduleDefinition> Schedules,IReadOnlyList<RetainedScheduleOutput> Outputs,IReadOnlyList<RetainedScheduleInput> Inputs);
 internal sealed record RetainedScheduleTerms(DefinitionRevision Definitions,ReferenceRevision Reference,SidedInstrument Instrument)
 {
+    internal OperatingQuantityInputs? OperatingQuantities {get;init;}
     internal RetainedSchedulePreparation Generate(CancellationToken cancellation)
     {
         RetainedScheduleLimits.RequireGeometry(Instrument,cancellation);
@@ -25,10 +26,21 @@ internal sealed record RetainedScheduleTerms(DefinitionRevision Definitions,Refe
             cancellation.ThrowIfCancellationRequested();var side=membership.Side;
             var key=(DefinitionIdentity.For(side).Canonical,side.PricingBindingIdentity?.Canonical);
             if(!unique.TryGetValue(key,out var definition))
-                unique.Add(key,definition=ScheduleDefinitionCompiler.Generate(side,cancellation,Instrument is OpenEtrm.MarketData.Gas.GasCompositionInstrument?ScheduleLifecycleSelection.StartedPhysicalDelivery:ScheduleLifecycleSelection.FutureDelivery));
+                unique.Add(key,definition=ScheduleDefinitionCompiler.Generate(side,cancellation,Instrument is OpenEtrm.MarketData.Gas.GasCompositionInstrument?ScheduleLifecycleSelection.StartedPhysicalDelivery:ScheduleLifecycleSelection.FutureDelivery,OperatingQuantities));
             definitions.Add(definition.SideId==side.Id?definition:definition.WithSideId(side.Id));
         }
         RetainedScheduleLimits.Require(definitions);
+        for(var slot=0;slot<Instrument.Sides.Length;slot++)
+        {
+            var operating=Instrument.Sides[slot].Side switch
+            {
+                FixedSide{OperatingDefinition:{} terms}=>terms,
+                FloatingSide{OperatingDefinition:{} terms}=>terms,
+                _=>null
+            };
+            if(operating is not null)
+                outputs.Add(new(slot,"quantity",operating.Quote.Quantity,DefinitionIdentity.For(operating).Canonical));
+        }
         if(Instrument is OpenEtrm.MarketData.Crude.PhysicalCrudeInstrument crude)
             outputs.Add(new(0,"quantity",crude.UnitQuantity.Specification,DefinitionIdentity.For(crude.Delivery).Canonical));
         if(Instrument is OpenEtrm.MarketData.Lng.PhysicalLngInstrument lng)
