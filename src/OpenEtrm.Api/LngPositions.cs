@@ -128,6 +128,8 @@ internal static class LngPositions
   }
   await using var permission=ScheduleStore.Command(connection,"SELECT security.trading_access($1,'ReadTrades') AND security.market_access($1,'ReadMarketData')",manifest.CatalogId);
   if(!Equals(await permission.ExecuteScalarAsync(ct),true))throw new PreviewDeniedException();
+  foreach(var item in result)AsyncReadVisibility.Bundle(manifest with{RevisionId=item.Definition,
+   ReferenceCatalogId=item.Reference.CatalogId,ReferenceRevisionId=item.Reference.RevisionId});
   return result.ToImmutable();
  }
 }

@@ -183,6 +183,7 @@ public sealed partial class PortfolioRiskPreview
         {
             await using var reference=ScheduleStore.Command(connection,"SELECT security.reference_access($1,'ReadMarketData') AND security.reference_version_visible($1,$2)",data.ReferenceRevision.CatalogId,data.ReferenceRevision.RevisionId);
             if(!Equals(await reference.ExecuteScalarAsync(ct),true))throw new PreviewDeniedException();
+            AsyncReadVisibility.ReferenceVersion(data.ReferenceRevision.CatalogId,data.ReferenceRevision.RevisionId);
         }
     }
 

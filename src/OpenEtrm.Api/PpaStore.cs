@@ -49,7 +49,7 @@ internal sealed partial class PpaStore(PreviewDatabase database,TouProductStore 
         await using(var check=ScheduleStore.Command(connection,"SELECT security.trading_access($1,'ReadTrades')",Catalog))
             if(!Equals(await check.ExecuteScalarAsync(ct),true))throw new PreviewDeniedException();
         foreach(var reference in references.Distinct())
-        {await using var check=ScheduleStore.Command(connection,"SELECT security.reference_access($1,'ReadMarketData')",reference);if(!Equals(await check.ExecuteScalarAsync(ct),true))throw new PreviewDeniedException();}
+        {await using var check=ScheduleStore.Command(connection,"SELECT security.reference_access($1,'ReadMarketData')",reference);if(!Equals(await check.ExecuteScalarAsync(ct),true))throw new PreviewDeniedException();AsyncReadVisibility.ReferenceCatalog(reference);}
     }
     internal async Task<PreviewData> Definitions(NpgsqlConnection connection,InputFrame frame,bool observations,CancellationToken ct)=>
         await MarketInputSelection.Root(database,connection,frame,ct,observationIds:observations?frame.ObservationIds:[],includeCalendarDays:true);

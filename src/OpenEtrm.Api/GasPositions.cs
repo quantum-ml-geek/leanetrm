@@ -124,6 +124,8 @@ internal static class GasPositions
     throw new MarketDataException("position_facts","The gas instrument requires its exact visible physical-side metadata and common native quote.");
    result.Add(new(head,selected[head.Id("book_id")],members));
   }
+  foreach(var item in result)AsyncReadVisibility.Bundle(manifest with{RevisionId=item.Definition,
+   ReferenceCatalogId=item.Reference.CatalogId,ReferenceRevisionId=item.Reference.RevisionId});
   return result.ToImmutable();
  }
 }

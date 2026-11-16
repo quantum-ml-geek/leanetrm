@@ -23,7 +23,7 @@ import {validateParametric,type ParametricRequest,type ParametricContainer} from
 import type {JointRequest,JointCapabilities} from './joint-risk.js';
 import {reportPresentation} from './risk-results.js';
 
-type Api=<T>(path:string,body?:unknown)=>Promise<T>;
+type Api=<T>(path:string,body?:unknown,signal?:AbortSignal)=>Promise<T>;
 export type FinancialContext={contextId:string;effectiveOn:string;knownAt?:string;knownThrough:number};
 type Catalog={limits:RiskLimits;pricingPolicy:unknown;scenarioTargets:ScenarioTarget[];heldContractTargets:string[];heldCurveTargets:string[];
   heldContractsWithoutTarget:string[];heldCurvesWithoutTarget:string[];excludedPositions:ExcludedPosition[];bumpConvention:string;stressConvention:string;
@@ -111,7 +111,7 @@ function setupText(setup:RunSetup|undefined):string{
  * shows change, however it changed: an action, a part that finished on the report's own timer, or a reset.
  */
 export function setupRisk(options:{api:Api;act:(work:()=>Promise<void>)=>Promise<void>;busy:()=>boolean;zone:()=>string;canRun:()=>boolean;profile:()=>string;
-  scope:()=>Scope;onDenied:()=>void;onChange:()=>void;ranNow?:()=>void;edited?:()=>void;prefix?:string}){
+  scope:()=>Scope;onDenied:()=>void;onChange:()=>void;failed?:(error:unknown)=>void;failureCleared?:()=>void;ranNow?:()=>void;edited?:()=>void;prefix?:string}){
   const prefix=options.prefix??'';
   const get=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(prefix+id) as T;
   const root=get('risk-report'),shelf=root.parentElement!,form=get<HTMLFormElement>('risk-form');
@@ -128,6 +128,7 @@ export function setupRisk(options:{api:Api;act:(work:()=>Promise<void>)=>Promise
   // Queued runs whose submission has no known outcome for some part, by account: they are reconciled before another is queued.
   const submissions=new Map<string,Run>();
   let generation=0,pollTimer:ReturnType<typeof setTimeout>|undefined,run:Run|undefined,reviewing=false,recent:Job[]=[],runs=0;
+  let calculationController:AbortController|undefined;
   const mounted=()=>!root.hidden;
   const statisticalRun=()=>!!run?.parts.some(p=>p.request?.monteCarlo||p.report?.monteCarlo||(p.job?.kind==='monte_carlo'||p.job?.kind==='hybrid_monte_carlo')||p.request?.historical||p.report?.historical||p.job?.kind==='historical'||p.request?.parametric||p.report?.parametric||p.job?.kind==='parametric');
   const running=()=>!!run&&run.parts.some(p=>active(p.job));
@@ -146,7 +147,7 @@ export function setupRisk(options:{api:Api;act:(work:()=>Promise<void>)=>Promise
     get('risk-job-return').hidden=true;get<HTMLSelectElement>('risk-job-history').value='';get('risk-scope').textContent=currentScopeText;
   }
   /** Forgets the run on screen, its results and its jobs: the setup stays. */
-  function forgetRun(){stopPolling();run=undefined;reviewing=false;clearWork();clearJob();get('risk-progress').textContent='';}
+  function forgetRun(){calculationController?.abort();calculationController=undefined;stopPolling();run=undefined;reviewing=false;clearWork();clearJob();get('risk-progress').textContent='';}
   function reveal(id:string){if(mounted())get(id).scrollIntoView({block:'start'});}
   function resetControls(){
     jointEditor.reset();
@@ -375,12 +376,14 @@ export function setupRisk(options:{api:Api;act:(work:()=>Promise<void>)=>Promise
 
   // --- running and queueing --------------------------------------------------------------------------------------------------
   /** Runs the parts one after another. A part that fails is said to have failed, and the others still run; a single part that fails leaves no run. */
-  async function runNow(current:Run,version:number){
-    let first:unknown;const stale=()=>version!==generation;
+  async function runNow(current:Run,version:number,parentSignal?:AbortSignal){
+    const controller=calculationController=new AbortController(),signal=parentSignal?AbortSignal.any([controller.signal,parentSignal]):controller.signal;
+    let first:unknown;const stale=()=>version!==generation||signal.aborted;sync();
+    try{
     await runParts(current.parts,stale,async(part,index)=>{
-      if(current.parts.length>1)get('risk-progress').textContent=`Running part ${index+1} of ${current.parts.length}…`;
-      try{const report=await options.api<RiskReport>('portfolio/risk',part.request);projectionPolicyLabels(report.projectionPolicies);if(part.request?.monteCarlo||report.monteCarlo)validateMonteCarlo(report as MonteCarloContainer,part.request?.monteCarlo);if(part.request?.historical||report.historical)validateHistorical(report as HistoricalContainer,part.request?.historical);if(part.request?.parametric||report.parametric)validateParametric(report as ParametricContainer,part.request?.parametric);part.report=report;}
-      catch(error){if(stale())return false;denied(error);if(stale())throw error;part.failure=failure(error,'The part could not be run.');first??=error;}
+      get('risk-progress').textContent=current.parts.length>1?`Running part ${index+1} of ${current.parts.length}…`:'Calculating the selected risk report…';
+      try{const report=await options.api<RiskReport>('portfolio/risk',part.request,signal);if(stale())return false;projectionPolicyLabels(report.projectionPolicies);if(part.request?.monteCarlo||report.monteCarlo)validateMonteCarlo(report as MonteCarloContainer,part.request?.monteCarlo);if(part.request?.historical||report.historical)validateHistorical(report as HistoricalContainer,part.request?.historical);if(part.request?.parametric||report.parametric)validateParametric(report as ParametricContainer,part.request?.parametric);part.report=report;}
+      catch(error){if(error instanceof Error&&error.name==='AbortError')controller.abort();if(stale())return false;denied(error);if(stale())throw error;part.failure=failure(error,'The part could not be run.');first??=error;}
       return true;
     });
     if(stale())return;
@@ -389,6 +392,10 @@ export function setupRisk(options:{api:Api;act:(work:()=>Promise<void>)=>Promise
     get('risk-progress').textContent='';
     if(current.parts.length===1&&first!==undefined)forgetRun();else{showRun();options.ranNow?.();}
     if(first!==undefined)throw first;
+    }finally{
+      if(calculationController===controller){calculationController=undefined;if(signal.aborted&&version===generation)forgetRun();}
+      if(version===generation)sync();
+    }
   }
   /**
    * Queues each part as its own job, one after another, each kept as the request it was first sent as until its outcome is known. A part
@@ -440,10 +447,12 @@ export function setupRisk(options:{api:Api;act:(work:()=>Promise<void>)=>Promise
     // The history lists what was queued: a run queued in parts as one run. A part whose submission has no known outcome is left to Reconcile.
     if(version===generation)await readHistory(version);
   }
-  form.onsubmit=event=>{event.preventDefault();const queued=(event as SubmitEvent).submitter?.id===prefix+'risk-queue';void options.act(async()=>{
-    const plan=requests();
+  form.onsubmit=event=>{event.preventDefault();if(options.busy()||run?.making)return;const queued=(event as SubmitEvent).submitter?.id===prefix+'risk-queue';let readVersion=generation;const work=async()=>{
+    // Commit the focused control's native change event before consuming its edits.
+    const focused=document.activeElement;if(focused instanceof HTMLElement&&form.contains(focused))focused.blur();
+    readVersion=generation;const plan=requests();
     if(queued&&plan.parts.length>catalog!.limits.maxParts)throw Error(`A queued run takes at most ${catalog!.limits.maxParts} parts of ${catalog!.limits.maxHoldingsBumps} shocks. Choose fewer, or run it now.`);
-    forgetRun();const version=++generation;
+    forgetRun();const version=readVersion=++generation;
     // What was run is no longer an edit: the run answers it, and the setup it was carried over in is the run's.
     edits.clear();get('risk-carried').hidden=true;
     const current:Run={key:++runs,queued,making:!queued,parts:plan.parts.map(request=>({request})),context:catalog!.context,asOf:catalog!.asOf,setup:plan.setup,choices:choicesNow(),
@@ -454,7 +463,13 @@ export function setupRisk(options:{api:Api;act:(work:()=>Promise<void>)=>Promise
     try{if(queued){await queue(current,version);if(version===generation&&running())reveal('risk-job');}else await runNow(current,version);}
     // The sizes are prefilled next time once the backend has taken a part of a run of them.
     finally{if(plan.sizes&&current.parts.some(p=>p.report||p.job))storeSizes(plan.sizes);}
-  });};
+  };
+  if(queued)void options.act(work);
+  else{
+    const owner=options.profile();options.failureCleared?.();
+    void work().catch(error=>{if(readVersion!==generation||owner!==options.profile())return;get('risk-progress').textContent=failure(error,'The risk calculation could not be read. Retry when ready.');if(root.checkVisibility())options.failed?.(error);sync();});
+  }
+  };
 
   // --- jobs --------------------------------------------------------------------------------------------------------------------
   /** Reads the recent jobs for the history. Whether the read is still the report's. */
@@ -652,7 +667,8 @@ export function setupRisk(options:{api:Api;act:(work:()=>Promise<void>)=>Promise
 
   function sync(){
     describeStatus();
-    const retained=uncertain(run).length>0,locked=options.busy()||running()||retained||reviewing||reading||!catalog;
+    const retained=uncertain(run).length>0,locked=options.busy()||!!run?.making||running()||retained||reviewing||reading||!catalog;
+    root.setAttribute('aria-busy',String(!!calculationController));
     form.hidden=reviewing||retained||statisticalRun();get<HTMLFieldSetElement>('risk-fields').disabled=locked;
     const runnable=options.canRun(),reason=get('risk-run-note');
     reason.hidden=runnable;reason.textContent=runnable?'':riskDenied;
@@ -668,15 +684,16 @@ export function setupRisk(options:{api:Api;act:(work:()=>Promise<void>)=>Promise
     /** Opens the report for the Blotter on screen: the setup and run it holds, or a retained submission, or a new catalog read. */
     open,reset,sync,refresh,
     /** One complete statistical calculation uses the same idempotent queue/recovery path as other risk reports. */
-    async calculate(request:RiskCalculationRequest,queued:boolean,context:FinancialContext,asOf:string){
+    async calculate(request:RiskCalculationRequest,queued:boolean,context:FinancialContext,asOf:string,signal?:AbortSignal){
+      signal?.throwIfAborted();
       if(!options.canRun())throw Error(riskDenied);
-      if(running()||submissions.has(options.profile()))throw Error('Reconcile or finish the current risk job before starting another calculation.');
+      if(run?.making||running()||submissions.has(options.profile()))throw Error('Reconcile or finish the current risk job before starting another calculation.');
       const selected=options.scope();
       if((!request.parametric&&!request.historical&&!request.monteCarlo)||!sameRiskScope(selected,request)||JSON.stringify(selected.context)!==JSON.stringify(request.context))throw Error('The statistical scope changed. Prepare its history again.');
       forgetRun();const version=++generation;
       run={key:++runs,queued,making:!queued,parts:[{request:structuredClone(request)}],context,asOf,
         scope:{bookIds:[...selected.bookIds],portfolioIds:[...selected.portfolioIds],tradeIds:selected.tradeIds??null}};
-      const current=run;sync();if(queued)await queue(current,version);else await runNow(current,version);
+      const current=run;sync();if(queued)await queue(current,version);else await runNow(current,version,signal);
     },
     async reviewJob(id:string,anchor?:Job){const version=generation;if(!await readHistory(version))return;await review(id,anchor);},
     recent:()=>recent,

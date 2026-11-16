@@ -80,12 +80,14 @@ export async function run({command,evaluate,wait,click,set,submit,persona,check,
   await check('switching the arrangement keeps the drawn widgets and reads no curve again',
     "window.__shapeReads.length===window.__readsBeforeArranging&&document.querySelectorAll('.level-tile').length===2&&!!document.querySelector('.price-chart .contract-chart canvas')");
   const saved=await evaluate("(async()=>(await(await fetch('/api/dashboard/layout')).json()))()");
-  await reload();await click('#nav-jobs');await evaluate('window.__readsBeforeOpening=window.__shapeReads.length');await click('#nav-dashboard');await added(3);
+  await reload();await reveal('Latest levels');await wait("document.querySelectorAll('.level-tile').length===2");
+  await click('#nav-jobs');await evaluate('window.__readsBeforeOpening=window.__shapeReads.length');await click('#nav-dashboard');await added(3);
   await reveal('Latest levels');await wait("document.querySelectorAll('.level-tile').length===2");
   await check('after a reload the saved layout is shown: the same widgets, arrangement and version',
     `(async()=>{const now=await(await fetch('/api/dashboard/layout')).json();return now.version===${JSON.stringify(saved.version)}&&now.layout.arrangement==='board'&&JSON.stringify(now.layout.widgets)===${JSON.stringify(JSON.stringify(saved.layout.widgets))}&&${widgets}===${JSON.stringify(kinds)};})()`);
   await check('opening the Dashboard reads the curves of every Latest levels and Price chart widget in one curve-shapes read',
-    // Jobs reads no market shapes; leaving the restored Dashboard also disposes its pending widget reads before this baseline.
+    // Finish the restored widget response before counting reads from a new opening.
+    // SSE response inspection can otherwise record that older read after the baseline.
     "window.__shapeReads.slice(window.__readsBeforeOpening).filter(r=>r.curves.includes('local_power')).map(r=>[...r.curves].sort().join()).join('|')==='future,local_power'","window.__shapeReads.map(r=>r.curves)");
 
   // Run now queues the definition's run; the widget follows its parts and reads the run once the risk worker has finished them.

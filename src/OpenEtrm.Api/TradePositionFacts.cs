@@ -158,6 +158,7 @@ internal sealed class TradePositionFacts(PreviewManifest manifest)
         if(catalogs.Count==0)return;
         await using var query=ScheduleStore.Command(connection,"SELECT bool_and(security.reference_access(catalog,'ReadMarketData')) FROM unnest($1::uuid[]) catalog",catalogs.ToArray());
         if(!Equals(await query.ExecuteScalarAsync(ct),true))throw new PreviewDeniedException();
+        foreach(var catalog in catalogs)AsyncReadVisibility.ReferenceCatalog(catalog);
     }
     private async Task<ImmutableArray<JsonElement>> Futures(NpgsqlConnection connection,Guid[] books,CancellationToken ct)=>await PreviewDatabase.Rows(connection,"""
         WITH heads AS(SELECT DISTINCT ON(trade_id) * FROM trading.trade_revisions WHERE catalog_id=$1 ORDER BY trade_id,revision DESC)

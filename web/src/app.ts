@@ -37,6 +37,8 @@ import {setupPowerImports} from './power-imports-view.js';
 import {setupIntervalSeries} from './interval-series-view.js';
 import {setupIntervalCurves} from './interval-curves-view.js';
 import {setupRiskWorkspace} from './risk-workspace.js';
+import {AsyncReadError,asyncReadRequest,createAsyncReadClient} from './async-read-client.js';
+import {workspaceReadyMarker} from './workspace-ready.js';
 import {riskAddress,riskReportAddress} from './risk-results.js';
 import {setupJobs} from './jobs-view.js';
 import {setupDashboard} from './dashboard-view.js';
@@ -74,7 +76,7 @@ import {type Preferences,newPreferences,validTimeZone,zoneChoices} from './prefe
 import {preferenceSession} from './preference-session.js';
 import {setupOperatingPolicy} from './operating-policies.js';
 import {setupShortcutEditor} from './shortcut-view.js';
-import {apiRefusal} from './api-refusal.js';
+import {apiRefusal,readRefusal} from './api-refusal.js';
 import {setupTouProducts} from './tou-products.js';
 import {validateMarketNavigation,navigationGroups,navigationCategories,navigationCurveKind,curveConfigurationAction,type MarketNavigation,type FrameSummary,type CurveConfiguration} from './market-navigation.js';
 import {navigationGroups as sidebarGroups,pageGroup,pageAvailable,firstPage} from './navigation-groups.js';
@@ -128,7 +130,26 @@ let shownReference='',referenceReturn:{table:string;search:string;offset:number}
 const canAdvanceReference=()=>!!referencePage&&referencePage.hasMore&&referencePage.offset+referencePage.pageSize<=referencePage.maximumOffset;
 let hostedPilot=false;
 const deadlines=requestDeadlines();
-type ProfileChoices={requestDeadlines:unknown;mode:string;profiles:{id:string;name:string}[];customProfiles:{id:string;name:string}[]};
+type ProfileChoices={requestDeadlines:unknown;asyncReadProtocol?:string;mode:string;profiles:{id:string;name:string}[];customProfiles:{id:string;name:string}[]};
+let asyncReadsEnabled=false,asyncIdentityLost=false,curveRead:AbortController|undefined;
+let pageRead:{page:string;controller:AbortController;pending:boolean}|undefined;
+const readClient=createAsyncReadClient({root:apiRoot,getIdentity:()=>({profile:currentProfile,context:navigation?.context??null}),
+ post:(path,body,signal)=>transport(path.slice(apiRoot.length),body,apiRoot,signal),createEventSource:url=>new EventSource(url)});
+function cancelCurveRead(){curveRead?.abort();curveRead=undefined;$('market-page').dataset.readState='idle';}
+function invalidateReadIdentity(){
+ if(asyncIdentityLost)return;asyncIdentityLost=true;readClient.close();cancelCurveRead();pageRead?.controller.abort();pageRead=undefined;
+ curve='';workspace=undefined;result=undefined;historyData=undefined;boardObserver?.cancel();boardObserver=undefined;boardShapes=undefined;
+ clearPrices();futures.reset(null);riskJobs.reset();$('curves').replaceChildren();$('market-board-groups').replaceChildren();
+ text('error','The account or market context changed in another view. Reload the page to read its current authorized data.');$('error').hidden=false;syncControls();
+}
+function readPage(name:string,work:(signal:AbortSignal)=>Promise<void>){
+ pageRead?.controller.abort();const reading:{page:string;controller:AbortController;pending:boolean}={page:name,controller:new AbortController(),pending:true};pageRead=reading;
+ $(name+'-page').dataset.readState='pending';syncControls();
+ void work(reading.controller.signal).catch(error=>{
+  if(pageRead!==reading||reading.controller.signal.aborted||page!==name)return;
+  text('error',errorMessage(error));$('error').hidden=false;$(name+'-page').dataset.readState='failed';
+ }).finally(()=>{if(pageRead===reading){reading.pending=false;if($(name+'-page').dataset.readState==='pending')$(name+'-page').dataset.readState='ready';syncControls();}});
+}
 type StartupAccess={profile:string;permissions:string[]};
 const can=(permission:string)=>permissions.includes(permission);
 const historicalContext=()=>navigation?.context??undefined;
@@ -166,7 +187,7 @@ function syncControls(){
   for(const id of ['source-contract','pricing-contract'])select(id).disabled=busy||showAllContracts||!result?.points.length;
   for(const id of ['source-all','pricing-all'])$<HTMLButtonElement>(id).disabled=busy||!result||!result.points.length||(result.points.length<2&&!showAllContracts);
   $('reference-previous').toggleAttribute('disabled',busy||!referencePage||referencePage.offset===0);$('reference-next').toggleAttribute('disabled',busy||!canAdvanceReference());
-  deliverySetup.sync();referenceConsole.sync();riskViewsNav.sync();lifecycle.sync();physicalOperations.sync();curveWorkspace.sync();facilities.sync();futures.sync();futures.follow();accessPolicy.sync();assistantPolicy.sync();riskJobs.sync();parties.sync();agentGrants.sync();jobs.sync();dashboard.sync();aiSettings.sync();referenceEditor.sync();dateEditor.sync();priceSetup.sync();deliveryPrices.sync();intervalSeries.sync();intervalCurves.sync();ppa.sync();gas.sync();crude.sync();gasSetup.sync();crudeSetup.sync();marketCalendar.sync();renderCloseBadge();if(initialWorkspaceReady)customCurves.sync();assistant.sync();contractPanel.sync(busy);contractPanel.place();customCurves.place();refreshContextPanels();document.body.setAttribute('aria-busy',String(busy));
+  deliverySetup.sync();referenceConsole.sync();riskViewsNav.sync();lifecycle.sync();physicalOperations.sync();curveWorkspace.sync();facilities.sync();futures.sync();futures.follow();accessPolicy.sync();assistantPolicy.sync();riskJobs.sync();parties.sync();agentGrants.sync();jobs.sync();dashboard.sync();aiSettings.sync();referenceEditor.sync();dateEditor.sync();priceSetup.sync();deliveryPrices.sync();intervalSeries.sync();intervalCurves.sync();ppa.sync();gas.sync();crude.sync();gasSetup.sync();crudeSetup.sync();marketCalendar.sync();renderCloseBadge();if(initialWorkspaceReady)customCurves.sync();assistant.sync();contractPanel.sync(busy);contractPanel.place();customCurves.place();refreshContextPanels();document.body.setAttribute('aria-busy',String(busy||!!curveRead||!!pageRead?.pending));markWorkspaceReady();
 
 }
 function renderWorkspaceMode(){
@@ -202,28 +223,47 @@ async function responseFor(path:string,body?:unknown,root=apiRoot,signal?:AbortS
   let response:Response;
   try{response=await fetch(root+path,{method:body===undefined?'GET':'POST',credentials:'same-origin',headers:body===undefined?{}:{'Content-Type':'application/json','X-Preview-CSRF':csrf},body:body===undefined?undefined:JSON.stringify(body),signal:signal?AbortSignal.any([signal,AbortSignal.timeout(deadlines.milliseconds(path))]):AbortSignal.timeout(deadlines.milliseconds(path))});}
   catch{throw Object.assign(Error(body!==undefined?'We could not confirm the result. Refresh and check the saved changes before saving again.':'The app could not connect. Please refresh the page.'),{code:'response_unknown'});}
+  signal?.throwIfAborted();
   if(response.status===401){sessionEnded=true;futures.ended('signed_out');workspace=undefined;result=undefined;historyData=undefined;curve='';document.body.hidden=true;location.replace('/auth');throw Object.assign(Error('Sign in to continue.'),{code:'sign_in_required'});}
-  if(!response.ok)throw await apiRefusal(path,response,hostedPilot);
+  if(!response.ok){const error=await apiRefusal(path,response,hostedPilot);signal?.throwIfAborted();throw Object.assign(error,{status:response.status});}
   return response;
 }
 async function transport<T>(path:string,body?:unknown,root=apiRoot,signal?:AbortSignal):Promise<T>{
-  return (await responseFor(path,body,root,signal)).json() as Promise<T>;
+  const response=await responseFor(path,body,root,signal);signal?.throwIfAborted();
+  const value=await response.json() as T;signal?.throwIfAborted();return value;
 }
 async function api<T>(path:string,body?:unknown,signal?:AbortSignal):Promise<T>{
- const payload=await transport<T>(path,body,apiRoot,signal);
+ if(['profile','market/current','market/context','market/context/retained','market/live','market/live/pause'].includes(path)){pageRead?.controller.abort();pageRead=undefined;readClient.reset();}
+ const operation=asyncReadsEnabled?asyncReadRequest(path,body):undefined;
+ const pageSignal=operation&&pageRead?.page===page?pageRead.controller.signal:undefined;
+ const selectedSignal=signal&&pageSignal?AbortSignal.any([signal,pageSignal]):signal??pageSignal;
+ if(operation&&asyncIdentityLost)throw Error('Reload the page before requesting data for the changed account or context.');
+ let payload:T;
+ try{payload=operation?await readClient.read<T>(operation.operation,operation.body,{signal:selectedSignal}):await transport<T>(path,body,apiRoot,signal);}
+ catch(error){
+  if(operation&&error instanceof AsyncReadError){
+   if(error.source==='server')throw readRefusal(path,{code:error.code,message:error.message},hostedPilot);
+   if(error.code==='async_read_identity')invalidateReadIdentity();
+  }
+  throw error;
+ }
+ selectedSignal?.throwIfAborted();
  if(['profile','market/current','market/context'].includes(path))stopLive();
  const displayed=shownAmounts(path,payload);
- if(displayed!==undefined)await prepareAmountDisplay(displayed,request=>transport<string[]>('amounts/display',request,apiRoot,signal),path==='history'?decimalTick():undefined);
+ if(displayed!==undefined)await prepareAmountDisplay(displayed,request=>transport<string[]>('amounts/display',request,apiRoot,selectedSignal),path==='history'?decimalTick():undefined);
+ selectedSignal?.throwIfAborted();
  return payload;
 }
 function pageStatus(){return page==='lifecycle'?'Lifecycle actions and policies at the selected close.':page==='physical-operations'?'Delivery work for the instrument you choose.':page==='facilities'?'Facilities · shared quantities, allocations and operating limits.':page==='dashboard'?'Dashboard · widgets read at the selected market date and context.':page==='crude-setup'?'Crude delivery setup · exact delivery and pricing bindings.':page==='gas-setup'?'Gas delivery setup · immutable drafts and explicit publication.':page==='crude'?'Physical crude · fixed contractual standard volume.':page==='gas'?'Physical gas · reference-backed delivery points and independent delivery dates.':page==='delivery'?'Delivery prices · selected delivery dates and knowledge cutoff.':page==='ppa'?'PPA bookings · exact selected inputs and certified knowledge.':page==='interval-series'?'Interval data · working data, known at the chosen time.':page==='interval-curves'?'Hourly / sub-hourly prices · marks from the selected market date; shapes and actuals known at the chosen time.':page==='custom-curves'?'Curve builder · selected market context.':page==='vol-surfaces'?'Vol surfaces · stored fits at the selected market date and knowledge cutoff.':page==='risk'?'Risk jobs and retained reports · current authority.':page==='jobs'?'Jobs and infrastructure · current authority.':page==='futures'?'Trading blotter · saved market inputs.':page==='admin'?'Workspace identity and access administration.':page==='ai'?'Page-assistant settings · current authority.':page==='schedules'?'Schedules and symbolic date mappings.':page==='configuration'?'Configure contract pricing and exact publication sources.':result?`Prices for ${instant(result.at)}`:select('snapshot').value?'Choose a curve to get started.':'Choose a curve and a market date to get started.';}
 const errorMessage=(error:unknown)=>error instanceof Error?error.message:'Something went wrong. Please refresh the page.';
+function showFailure(error:unknown){text('error',errorMessage(error));$('error').hidden=false;text('status','Please check the message above.');}
+function clearFailure(){$('error').hidden=true;if(!busy)text('status',pageStatus());}
 // `keepNotice` is for work that completes a change the person has already made, as reading a changed effective date's end-of-day
 // knowledge does: what that change said, such as that it cleared a risk run, stays on screen.
 async function act(work:()=>Promise<void>,{keepNotice=false}={}){
   // Context changes, writes and reads are serialized. Never retry a mutation.
   // Errors and notices describe the previous action; the next one starts clean.
-  if(busy)return;busy=true;
+  if(busy)return;cancelCurveRead();busy=true;
   try{syncControls();$('error').hidden=true;if(!keepNotice)$('notice').hidden=true;text('status','Loading…');await work();text('status',pageStatus());}
   catch(error){text('error',errorMessage(error));$('error').hidden=false;text('status','Please check the message above.');if(page==='custom-curves')await customCurves.recover().catch(()=>undefined);}
   finally{busy=false;syncControls();if(closeCheckDue){closeCheckDue=false;void recheckNewestClose();}}
@@ -298,6 +338,8 @@ const showsDate=(next:string)=>next==='jobs'?can('ReadMarketData'):!['gas-setup'
 const usesBusinessDate=(next:string)=>['facilities','reference','schedules','jobs'].includes(next);
 const showsContext=(next:string)=>showsDate(next)&&next!=='interval-curves';
 async function setPage(next:string){
+  if(pageRead&&pageRead.page!==next){pageRead.controller.abort();pageRead=undefined;}
+  if(next!=='market')cancelCurveRead();
   if(navigation?.live){
     if(['market','curve-definitions','custom-curves','futures','reference'].includes(next)){
       connectLive(navigation.live);
@@ -464,16 +506,23 @@ const boardScope=()=>JSON.stringify([administrationScope,currentProfile,select('
 function readShapes():ReadonlyMap<string,CurveShape|string>{const kept=boardShapes;return kept&&kept.owner===navigation&&kept.scope===boardScope()?kept.shapes:new Map();}
 const board=()=>marketBoard(directory(),{by:prefs.browseBy,commodity:prefs.market,type:prefs.marketType},readShapes());
 // Choosing a curve, from the library or from its card on the board, or no curve, which shows the board again.
-async function selectCurve(code:string){
+async function selectCurve(code:string,signal?:AbortSignal){
+  signal?.throwIfAborted();
   const previous=curve?listedCurve().source:null;
   curve=code;
   const selected=curve?listedCurve().source:null;
   if(JSON.stringify(previous)!==JSON.stringify(selected))workspace=undefined;
   invalidateMarketDates();clearPrices();void renderCurveCloses();
   if(!curve){renderContext();await loadBoard();}
-  else if(select('snapshot').value)await build();else{await loadWorkspace();renderContext();}
+  else if(select('snapshot').value)await build(signal);else{await loadWorkspace(signal);signal?.throwIfAborted();renderContext();}
 }
-function chooseCurve(code:string){void act(()=>selectCurve(code));}
+function chooseCurve(code:string){
+ if(busy)return;
+ if(pageRead?.page==='market'){pageRead.controller.abort();pageRead=undefined;}
+ cancelCurveRead();const reading=curveRead=new AbortController();$('market-page').dataset.readState='pending';$('error').hidden=true;syncControls();
+ void selectCurve(code,reading.signal).catch(error=>{if(curveRead===reading&&!reading.signal.aborted){text('error',errorMessage(error));$('error').hidden=false;}})
+  .finally(()=>{if(curveRead===reading){curveRead=undefined;$('market-page').dataset.readState='ready';syncControls();}});
+}
 // The market board, while no curve is shown: every listed curve at the selected close, or what to choose before there is one.
 function renderMarketBoard(){
   const shown=!curve||!workspace,close=navigation&&!contextDirty?navigation.frames.find(f=>f.id===select('snapshot').value):undefined;
@@ -650,11 +699,12 @@ function renderPrices(){
   $('contracts').querySelector('table')?.setAttribute('aria-describedby','contracts-help');
   renderContract();renderDependencies();renderInputs();
 }
-async function build(){
+async function build(signal?:AbortSignal){
   if(contextDirty)throw Error('Apply the changed context before viewing prices.');
   const owner=directory(),previousWorkspace=workspace,includeWorkspace=!workspace,started=marketGeneration,scope=marketSelection();
   const f=frame();if(!curve)throw Error('Choose a curve first.');
-  const {workspace:includedWorkspace,...next}=await api<CurveResult & {workspace?:Workspace}>('evaluate',{snapshotId:f.id,curve,contractDisplay:prefs.contractDisplay,includeSources:true,...(includeWorkspace?{includeWorkspace:true}:{})});
+  const {workspace:includedWorkspace,...next}=await api<CurveResult & {workspace?:Workspace}>('evaluate',{snapshotId:f.id,curve,contractDisplay:prefs.contractDisplay,includeSources:true,...(includeWorkspace?{includeWorkspace:true}:{})},signal);
+  signal?.throwIfAborted();
   if(navigation!==owner||workspace!==previousWorkspace||started!==marketGeneration||scope!==marketSelection())throw Error('The account or market selection changed. Reload before continuing.');
   if(next.snapshotId!==f.id||next.curve!==curve||next.observationScope!=='selected_frame'||!Array.isArray(next.observations))throw Error('The selected price sources are missing or inconsistent. Refresh and try again.');
   if(includeWorkspace!==!!includedWorkspace)throw Error('The requested market catalog is missing or inconsistent. Refresh and try again.');
@@ -949,11 +999,11 @@ function validateWorkspace(next:Workspace,owner:MarketNavigation,started:number,
     throw Error('The account or market selection changed, or the market catalog is inconsistent. Reload before continuing.');
   return next;
 }
-async function loadWorkspace(){
+async function loadWorkspace(signal?:AbortSignal){
   if(workspace)return;
   const owner=directory(),started=marketGeneration,scope=marketSelection();
   const parameters=new URLSearchParams();if(curve)parameters.set('curve',curve);if(select('snapshot').value)parameters.set('snapshotId',select('snapshot').value);
-  const next=await api<Workspace>(`workspace/catalog${parameters.size?'?'+parameters.toString():''}`);workspace=validateWorkspace(next,owner,started,scope);
+  const next=await api<Workspace>(`workspace/catalog${parameters.size?'?'+parameters.toString():''}`,undefined,signal);signal?.throwIfAborted();workspace=validateWorkspace(next,owner,started,scope);
 }
 // Only an explicitly saved, still-published default initializes a new view.
 async function loadCloseSessions(){
@@ -986,6 +1036,7 @@ async function showCloseHistory(){
 }
 let navigationSnapshot='';
 async function loadNavigation(snapshot=''){
+  cancelCurveRead();pageRead?.controller.abort();pageRead=undefined;readClient.reset();
   riskJobs.contextChanged();
   if(!nativeCurveInspector.element.hidden){nativeCurveInspector.element.hidden=true;curveDefinitions.element.hidden=false;}
   const started=++marketGeneration,profile=currentProfile,scope=administrationScope;
@@ -1079,6 +1130,7 @@ $('sign-out').onclick=()=>void (async()=>{if(!await mayLeaveForDialog('You were 
 // A sign-out or account change that failed after it ended the popped-out Blotter shows the Blotter here again, read afresh, rather than an empty page.
 async function blotterBack(){if(page==='futures'&&select('snapshot').value){futures.reset('read');await futures.load();}}
 async function loadIdentity(initialAccess?:unknown){
+  cancelCurveRead();pageRead?.controller.abort();pageRead=undefined;readClient.reset();
   closeConventionDefaults.invalidate();
   lifecycle.reset();$('lifecycle-page').hidden=true;physicalOperations.reset();$('physical-operations-page').hidden=true;deliverySetup.reset();referenceConsole.reset();curveWorkspace.reset();customCurves.reset();$('custom-curves-page').hidden=true;volSurfaces.reset(true);$('vol-surfaces-page').hidden=true;riskJobs.reset();riskViewsNav.reset();$('risk-page').hidden=true;facilities.reset();$('facilities-page').hidden=true;jobs.reset();$('jobs-page').hidden=true;dashboard.reset();$('dashboard-page').hidden=true;
 
@@ -1135,6 +1187,7 @@ select('close-session').onchange=()=>{
 $('open').onclick=()=>void (async()=>{if(!await mayLeaveForDialog('The user was not switched'))return;await profileAction($('open'),async()=>{text('environment-context-note','Current workspace · exact selected inputs');const next=select('profile').value;futures.ended('account_changed');savedPreferences.invalidate();try{await api('profile',{profile:next});}catch(error){await blotterBack();throw error;}currentProfile=next;await loadIdentity();await profileChoices();$<HTMLDialogElement>('profile-dialog').close();});})();
 // A newly selected As of close replaces what the previous one showed, and the badge takes its basis afresh.
 function closeChanged(){
+  cancelCurveRead();pageRead?.controller.abort();pageRead=undefined;
   void renderCurveCloses();
   if(select('snapshot').value!==linkedFrameId)$('close-window-note').hidden=true;
   shownClose=select('snapshot').value;closeBasis=undefined;void showCloseHistory();
@@ -1172,7 +1225,7 @@ document.querySelectorAll<HTMLButtonElement>('[data-type]').forEach(b=>b.onclick
 document.querySelectorAll<HTMLButtonElement>('.tab').forEach(b=>b.onclick=()=>{if(busy)return;prefs.tab=b.dataset.view as Preferences['tab'];persist();showView(prefs.tab);assistant.sync();});
 let scheduleWorkspace:ReturnType<typeof setupScheduleWorkspace>|undefined;
 const schedules=setupShortcutEditor(act,{time:api,load:()=>api('schedules'),preview:draft=>api('schedules/preview',draft),keep:draft=>api('schedules/keep',draft),resolve:body=>api('schedules/resolve',body)},()=>busy,()=>prefs.timeZone);
-function dirtyContext(){priceSetup.reset();lifecycle.reset();physicalOperations.reset();facilities.reset();curveDefinitions.contextChanged();riskJobs.contextChanged();volSurfaces.reset();scheduleWorkspace?.calendar.reset();dateEditor.contextChanged();touProducts.reset();gasSetup.reset();crudeSetup.reset();stopLive();marketGeneration++;jobs.contextChanged();customCurves.contextChanged();deliveryPrices.reset();intervalSeries.reset();intervalCurves.reset();ppa.reset();gas.reset();crude.reset();parties.reset();clearReference();referenceNavigation.clear();futures.reset('inputs');power.reset();contextDirty=true;clearPrices();if(page==='dashboard')dashboard.closeChanged();if(navigation)renderBrowse();renderMarketBoard();text('environment-context-note','Context changed · choose Apply to use it.');renderWorkspaceMode();}
+function dirtyContext(){cancelCurveRead();pageRead?.controller.abort();pageRead=undefined;priceSetup.reset();lifecycle.reset();physicalOperations.reset();facilities.reset();curveDefinitions.contextChanged();riskJobs.contextChanged();volSurfaces.reset();scheduleWorkspace?.calendar.reset();dateEditor.contextChanged();touProducts.reset();gasSetup.reset();crudeSetup.reset();stopLive();marketGeneration++;jobs.contextChanged();customCurves.contextChanged();deliveryPrices.reset();intervalSeries.reset();intervalCurves.reset();ppa.reset();gas.reset();crude.reset();parties.reset();clearReference();referenceNavigation.clear();futures.reset('inputs');power.reset();contextDirty=true;clearPrices();if(page==='dashboard')dashboard.closeChanged();if(navigation)renderBrowse();renderMarketBoard();text('environment-context-note','Context changed · choose Apply to use it.');renderWorkspaceMode();}
 const parties=setupPartyEditors({api,act,busy:()=>busy,zone:()=>prefs.timeZone,profile:()=>administrationScope+':'+currentProfile,source:()=>{if(contextDirty)throw Error('Apply the changed context first.');return frame().id;}});
 
 const lifecycle=setupLifecycle($('lifecycle-page'),{api,act,busy:()=>busy,zone:()=>prefs.timeZone,
@@ -1292,7 +1345,7 @@ function dashboardMarket():DashboardMarket{
  return {navigation:directory(),snapshotId:close.id,zone:prefs.timeZone,historical:!!historicalContext(),close:{at:close.at,label:close.name||null,badge:currentCloseBadge()}};
 }
 const dashboard=setupDashboard({api,act,busy:()=>busy,historical:()=>contextDirty||!!historicalContext(),market:dashboardMarket});
-const riskJobs=setupRiskWorkspace({api,act,instant,busy:()=>busy,zone:()=>prefs.timeZone,identity:()=>exampleId+':'+administrationScope+':'+currentProfile,canRun:()=>can('RunScenario'),
+const riskJobs=setupRiskWorkspace({api,act,instant,failed:showFailure,failureCleared:clearFailure,busy:()=>busy,zone:()=>prefs.timeZone,identity:()=>exampleId+':'+administrationScope+':'+currentProfile,canRun:()=>can('RunScenario'),
   // What P&L explain compares: the header's close convention, named once, and its dates. They are read with the header, not with
   // the market catalog, which Risk does not load.
   convention:closeSessionName,frames:()=>comparableDates(navigation?.frames??[],closeSession,displayDate,instant),
@@ -1316,7 +1369,7 @@ const tickets=productTickets({
  options:optionTicket,
 });
 async function ticketBooked(tradeId:string):Promise<void>{if(tickets.active())await futures.bookedExternal(tradeId);}
-const futures=setupFutures({lifecycle:()=>leaving(async()=>{if(contextDirty)await applyContext();await setPage('lifecycle');await lifecycle.load();},contextDirty?'discards':'page'),volSurface:openVolSurface,riskReportUrl:id=>riskReportAddress(id,{hosted:hostedPilot,example:exampleId}),narrow:()=>main.clientWidth<dockedGroupsFrom,assistant:{available:()=>can('UseAgents'),inPlace:kind=>assistant.draft(kind==='pivot'?askPivotText:askSelectionText),about:({reference})=>assistant.draft(askAboutText(reference))},window:{kind:'main',example:exampleId as 'baseline'|'exchange',open:(url,target,features)=>window.open(url,target,features)},failed:error=>{text('error',errorMessage(error));$('error').hidden=false;text('status','Please check the message above.');},failureCleared:()=>{$('error').hidden=true;if(!busy)text('status',pageStatus());},onViews:(listed,shown)=>{blotterViews={listed,shown};renderBlotterViews();},tickets,api,stream:(body,handlers,signal)=>streamBlotter((path,payload,abort)=>responseFor(path,payload,apiRoot,abort),body,handlers,signal),act,busy:()=>busy,updatesBlocked:()=>assistant.working(),canRunRisk:()=>permissions.includes('RunScenario'),bookingUnavailableReason:()=>bookingFallback({contextDirty,view:knowledgeView(),canBook:permissions.includes('BookTrade')}),knowledge:knowledgeView,contextDirty:()=>contextDirty,zone:()=>prefs.timeZone,profile:()=>administrationScope+':'+currentProfile,onReadContext:(at,known)=>text('header-calculation-time',`As of ${instant(at)} · knowledge cutoff ${instant(known)}`),notice,curveListed:code=>!!navigation?.curves.some(c=>c.code===code),openCurve:(code,contractId)=>openCurve(code,contractId),reported:()=>assistant.sync(),unsavedChanged:()=>syncUnloadQuestion(),source:()=>{if(contextDirty)throw Error('Apply the changed market context first.');return {snapshotId:frame().id,convention:directory().futuresConvention,context:historicalContext()};}});
+const futures=setupFutures({lifecycle:()=>leaving(async()=>{if(contextDirty)await applyContext();await setPage('lifecycle');await lifecycle.load();},contextDirty?'discards':'page'),volSurface:openVolSurface,riskReportUrl:id=>riskReportAddress(id,{hosted:hostedPilot,example:exampleId}),narrow:()=>main.clientWidth<dockedGroupsFrom,assistant:{available:()=>can('UseAgents'),inPlace:kind=>assistant.draft(kind==='pivot'?askPivotText:askSelectionText),about:({reference})=>assistant.draft(askAboutText(reference))},window:{kind:'main',example:exampleId as 'baseline'|'exchange',open:(url,target,features)=>window.open(url,target,features)},failed:showFailure,failureCleared:clearFailure,onViews:(listed,shown)=>{blotterViews={listed,shown};renderBlotterViews();},tickets,api,stream:(body,handlers,signal)=>streamBlotter((path,payload,abort)=>responseFor(path,payload,apiRoot,abort),body,handlers,signal),act,busy:()=>busy,updatesBlocked:()=>assistant.working(),canRunRisk:()=>permissions.includes('RunScenario'),bookingUnavailableReason:()=>bookingFallback({contextDirty,view:knowledgeView(),canBook:permissions.includes('BookTrade')}),knowledge:knowledgeView,contextDirty:()=>contextDirty,zone:()=>prefs.timeZone,profile:()=>administrationScope+':'+currentProfile,onReadContext:(at,known)=>text('header-calculation-time',`As of ${instant(at)} · knowledge cutoff ${instant(known)}`),notice,curveListed:code=>!!navigation?.curves.some(c=>c.code===code),openCurve:(code,contractId)=>openCurve(code,contractId),reported:()=>assistant.sync(),unsavedChanged:()=>syncUnloadQuestion(),source:()=>{if(contextDirty)throw Error('Apply the changed market context first.');return {snapshotId:frame().id,convention:directory().futuresConvention,context:historicalContext()};}});
 // The contract panel beside the curve's chart and table: docked when the main area has the room and the assistant is closed, an overlay
 // otherwise, and on a phone a sheet over the page. Closing it returns focus to the contract's row, or else to what opened it.
 const contractPanel=setupContractPanel($('contract-panel'),{
@@ -1395,7 +1448,7 @@ async function loadPowerPage({refreshProducts}:{refreshProducts:boolean}){
 // Opens a page as its navigation does. The assistant's moves and Back open pages the same way.
 async function showPage(next:string){
   switch(next){
-    case 'market':await setPage('market');if(curve&&!result&&select('snapshot').value)await build();await loadBoard();return;
+    case 'market':await setPage('market');readPage('market',async signal=>{if(curve&&!result&&select('snapshot').value)await build(signal);await loadBoard();});return;
     case 'custom-curves':await setPage('custom-curves');await customCurves.load();return;
     case 'vol-surfaces':await setPage('vol-surfaces');await volSurfaces.refresh();return;
     case 'delivery':await setPage('delivery');await deliveryPrices.load();return;
@@ -1410,7 +1463,7 @@ async function showPage(next:string){
     case 'lifecycle':await setPage('lifecycle');await lifecycle.load();return;
     case 'physical-operations':await setPage('physical-operations');await physicalOperations.load();return;
     case 'facilities':await setPage('facilities');await facilities.load();return;
-    case 'risk':await setPage('risk');await riskJobs.load();return;
+    case 'risk':await setPage('risk');readPage('risk',()=>riskJobs.load());return;
     case 'jobs':await setPage('jobs');await jobs.load();return;
     case 'power':await setPage('power');await loadPowerPage({refreshProducts:true});return;
     case 'reference':await setPage('reference');$<HTMLInputElement>('reference-search').value='';await loadReference();return;
@@ -1421,7 +1474,7 @@ async function showPage(next:string){
     case 'admin':await setPage('admin');await accessPolicy.load();if(can('ManageIdentities'))await administration.load();return;
     case 'ai':await setPage('ai');await assistantPolicy.load();await aiSettings.load();return;
     // A Blotter in a window of its own is brought to the front, and drawn nowhere else.
-    case 'futures':await setPage('futures');if(futures.poppedOut()){futures.front();return;}if(select('snapshot').value)await futures.open();return;
+    case 'futures':await setPage('futures');if(futures.poppedOut()){futures.front();return;}if(select('snapshot').value)readPage('futures',()=>futures.open());return;
     default:throw Error('This page could not load. Please refresh.');
   }
 }
@@ -1660,7 +1713,7 @@ const assistant=setupAssistant({launcherHidden:()=>prefs.assistantHidden,launche
 // Coming back to the window asks whether a newer close arrived while it was away.
 window.addEventListener('focus',()=>void recheckNewestClose());
 // A main window that closes or goes elsewhere tells the Blotter it popped out, which then shows why it stops.
-window.addEventListener('pagehide',()=>futures.ended('main_closed'));
+window.addEventListener('pagehide',()=>{cancelCurveRead();pageRead?.controller.abort();readClient.close();futures.ended('main_closed');});
 // A reload, closing the tab and going back leave the page without the panel's own question, so the browser asks while the panel holds an
 // amendment with edits, or a custom curve holds unsaved ones: the listener is on while it does, and off once the edits are saved or given up. A session that has ended cannot
 // send what the form holds, and is not asked about.
@@ -1673,6 +1726,8 @@ function syncUnloadQuestion(){
   if(holds)window.addEventListener('beforeunload',askBeforeUnload);else window.removeEventListener('beforeunload',askBeforeUnload);
 }
 let initialWorkspaceReady=false;
+const markWorkspaceReady=workspaceReadyMarker(()=>initialWorkspaceReady&&!busy&&!curveRead&&!pageRead?.pending&&Boolean($('error').hidden),
+ callback=>requestAnimationFrame(callback),()=>performance.mark('leanetrm:workspace-ready'));
 void act(async()=>{
 const [examples,boot]=await Promise.all([transport<{id:string;name:string;url:string}[]>('examples',undefined,'/api/'),api<ProfileChoices & {csrfToken:string;profile:string|null;runId:string;tenantId:string;workspaceId:string;access?:StartupAccess|null}>(startupBootstrapPath)]);
 deadlines.read(boot.requestDeadlines);
@@ -1683,13 +1738,9 @@ const chooser=select('example-dataset');chooser.replaceChildren(...examples.map(
   if(holdsEdits()&&(busy||!await mayLeave())){chooser.value=exampleId;return;}
   location.assign(selected.url);
 })();
-csrf=boot.csrfToken;administrationScope=[boot.runId,boot.tenantId,boot.workspaceId].join(':');setHostMode(boot.mode);
+csrf=boot.csrfToken;asyncReadsEnabled=boot.asyncReadProtocol==='async_reads_v1';administrationScope=[boot.runId,boot.tenantId,boot.workspaceId].join(':');setHostMode(boot.mode);
   // Synthetic sign-in is an explicit loopback preview facility only.
   $('example').hidden=hostedPilot;if(hostedPilot&&!boot.profile)throw Error('The signed-in account could not be verified.');
   if(boot.profile===null?boot.access!==null:typeof boot.profile!=='string'||!boot.profile||boot.access===undefined||boot.access===null)throw Error('The workspace access metadata is missing or inconsistent. Refresh and try again.');
   currentProfile=boot.profile??'viewer';if(boot.profile===null)await api('profile',{profile:currentProfile});await loadIdentity(boot.profile===null?undefined:boot.access);await profileChoices(boot);initialWorkspaceReady=true;
-}).then(async()=>{
-  if(!initialWorkspaceReady)return;
-  await new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve())));
-  if(!busy&&$('error').hidden)performance.mark('leanetrm:workspace-ready');
 });

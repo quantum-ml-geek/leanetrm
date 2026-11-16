@@ -9,7 +9,7 @@ export type LiveStatus={state:'updating'|'live'|'stale';updatedAt?:Date};
 // The browser receives context summaries, never the backend dependency graph.
 export class LiveUpdates<T extends {generation:number}> {
  private pending?:T;
- private running=false;
+ private running?:number;
  private stopped=false;
  private connected=true;
  private applied=0;
@@ -21,24 +21,25 @@ export class LiveUpdates<T extends {generation:number}> {
   schedule:(work:()=>void)=>()=>void}){}
  offer(value:T,force=false){
   if(this.stopped||!Number.isSafeInteger(value.generation)||value.generation<1||value.generation<this.newest)return;
+  if(value.generation===this.running&&!force){this.status();return;}
   if(value.generation===this.applied&&!this.failed&&!force){this.status();return;}
   this.newest=value.generation;this.pending=value;this.status();this.schedule();
  }
  disconnected(){if(this.stopped)return;this.connected=false;this.status();}
  reconnected(){if(this.stopped)return;this.connected=true;this.status();}
  stop(){this.stopped=true;this.pending=undefined;this.cancel?.();}
- private status(){if(!this.stopped)this.options.status({state:!this.connected||this.failed?'stale':this.running||this.pending?'updating':'live',updatedAt:this.updatedAt});}
+ private status(){if(!this.stopped)this.options.status({state:!this.connected||this.failed?'stale':this.running!==undefined||this.pending?'updating':'live',updatedAt:this.updatedAt});}
  private schedule(){
-  if(this.stopped||this.running||this.cancel)return;
+  if(this.stopped||this.running!==undefined||this.cancel)return;
   this.cancel=this.options.schedule(()=>{this.cancel=undefined;void this.run();});
  }
  private async run(){
   if(this.stopped||!this.pending)return;
   if(this.options.busy()){this.schedule();return;}
-  const value=this.pending;this.pending=undefined;this.running=true;this.failed=false;this.status();
+  const value=this.pending;this.pending=undefined;this.running=value.generation;this.failed=false;this.status();
   try{await this.options.apply(value);if(!this.stopped){this.applied=value.generation;this.updatedAt=new Date();}}
   catch{this.failed=true;}
-  finally{this.running=false;this.status();if(this.pending)this.schedule();}
+  finally{this.running=undefined;this.status();if(this.pending)this.schedule();}
  }
 }
 

@@ -5,7 +5,7 @@ import {valuationReason} from './valuation-status.js';
 import {renderHistoryGrid,historyGridState,historyPriceLabels} from './risk-history-grid.js';
 import {validateFactorHistory,factorHistoryChart,type HistoryCapabilities,type HistoryScope,type HistoryRequest,type HistoryReport} from './factor-history.js';
 
-type Options={api:<T>(path:string,body?:unknown)=>Promise<T>;act:(work:()=>Promise<void>)=>Promise<void>;busy:()=>boolean;identity:()=>string;scope:()=>HistoryScope;instant:(at:string)=>string;unconfirmed:()=>boolean;calculate:(request:StatisticalRequest,metadata:{pricingPolicy:unknown;convention:string;numericalPolicy:string;context:HistoryReport['context'];asOf:string},queued:boolean)=>Promise<void>};
+type Options={api:<T>(path:string,body?:unknown,signal?:AbortSignal)=>Promise<T>;act:(work:()=>Promise<void>)=>Promise<void>;busy:()=>boolean;identity:()=>string;scope:()=>HistoryScope;instant:(at:string)=>string;unconfirmed:()=>boolean;calculate:(request:StatisticalRequest,metadata:{pricingPolicy:unknown;convention:string;numericalPolicy:string;context:HistoryReport['context'];asOf:string},queued:boolean,signal?:AbortSignal)=>Promise<void>};
 type Configuration=StatisticalCapabilities&{scope:HistoryScope;history:HistoryCapabilities;pricingPolicy:unknown;convention:string;numericalPolicy:string};
 
 /** Guided inputs materialize the visible server preset; calculation APIs still require every policy explicitly. */
@@ -42,13 +42,15 @@ export function setupFactorHistory(o:Options){
  const actions=node('div');actions.className='actions';
  for(const [id,label] of [['risk-parametric-run','Run VaR'],['risk-parametric-queue','Queue VaR job'],['risk-history-run','Preview price coverage'],['risk-history-export','Export aligned history']]){const button=node('button',label);button.id=id;button.type=id==='risk-history-export'?'button':'submit';if(id!=='risk-parametric-run')button.className='secondary';actions.append(button);}fields.append(actions);
  let generation=0,allowed=false,owner='',configuration:Configuration|undefined,result:HistoryReport|undefined,cacheKey='',selectedColumn:string|undefined,priceTypes:string[]=[],plots:HTMLElement[]=[];
+ let setupController:AbortController|undefined,calculationController:AbortController|undefined;
  const gridState=historyGridState();
  const current=(version:number)=>version===generation&&owner===o.identity();
  const sameScope=()=>!!configuration&&JSON.stringify(o.scope())===JSON.stringify(configuration.scope);
  function clear(text:string){for(const plot of plots)clearChart(plot);plots=[];result=undefined;cacheKey='';results.replaceChildren();message.textContent=text;sync();}
- function invalidate(){generation++;clear('Settings changed. Run VaR to prepare the matching price history automatically.');describe();}
- function sync(available?:boolean){if(available!==undefined)allowed=available;open.disabled=o.busy()||!allowed;fields.disabled=o.busy()||!allowed||!configuration;get<HTMLButtonElement>('risk-history-export').disabled=o.busy()||!result;}
- function reset(){generation++;configuration=undefined;owner='';selectedColumn=undefined;priceTypes=[];panel.open=false;form.reset();calendar.replaceChildren(new Option('Choose a calendar…',''));method.replaceChildren();drift.replaceChildren();priceList.replaceChildren();summary.textContent='';clear('Select the books or trades, then open VaR setup.');}
+ function cancelCalculation(){calculationController?.abort();calculationController=undefined;}
+ function invalidate(){generation++;cancelCalculation();clear('Settings changed. Run VaR to prepare the matching price history automatically.');describe();}
+ function sync(available?:boolean){if(available!==undefined)allowed=available;const pending=!!setupController||!!calculationController;open.disabled=o.busy()||!allowed||pending;fields.disabled=o.busy()||!allowed||!configuration||pending;panel.dataset.readState=pending?'pending':configuration?'ready':'empty';panel.setAttribute('aria-busy',String(pending));get<HTMLButtonElement>('risk-history-export').disabled=o.busy()||!result;}
+ function reset(){generation++;cancelCalculation();setupController?.abort();setupController=undefined;configuration=undefined;owner='';selectedColumn=undefined;priceTypes=[];panel.open=false;form.reset();calendar.replaceChildren(new Option('Choose a calendar…',''));method.replaceChildren();drift.replaceChildren();priceList.replaceChildren();summary.textContent='';clear('Select the books or trades, then open VaR setup.');}
  function describe(){
   const c=configuration?.history.calendars.find(c=>JSON.stringify(c.reference)===calendar.value);
   dates.hidden=lookback.value!=='custom';from.disabled=to.disabled=dates.hidden;
@@ -87,11 +89,11 @@ export function setupFactorHistory(o:Options){
   addType.replaceChildren(new Option('Choose an alternative…',''),...(configuration?.history.priceTypes??[]).filter(t=>!priceTypes.includes(t.code)).map(t=>new Option(t.label,t.code)));addType.required=false;if(addType.options.length===2)addType.selectedIndex=1;add.disabled=!addType.options[1];
  }
  async function configure(){
-  panel.open=true;if(configuration)return;
-  owner=o.identity();const scope=structuredClone(o.scope()),version=++generation;clear('Reading the held factors and available calendars…');
+  panel.open=true;if(configuration||setupController)return;
+  owner=o.identity();const scope=structuredClone(o.scope()),version=++generation,controller=setupController=new AbortController();clear('Reading the held factors and available calendars…');
   try{
-   const catalog=await o.api<Configuration&{context:{contextId:string}}>('portfolio/risk/catalog',scope);
-   if(!current(version))return;
+   const catalog=await o.api<Configuration&{context:{contextId:string}}>('portfolio/risk/catalog',scope,controller.signal);
+   if(!current(version)||controller.signal.aborted)return;
    if(!catalog.history?.guided||!catalog.parametric?.defaults||!catalog.historical?.defaults||catalog.context.contextId!==scope.context.contextId)throw Error('Refresh Risk to load the supported VaR setup for this scope.');
    configuration={...catalog,scope};const d=catalog.parametric.defaults,h=catalog.history;
    method.replaceChildren(new Option('Parametric VaR / expected shortfall',catalog.parametric.profile.convention),new Option('Historical simulation VaR / expected shortfall',catalog.historical.profile.convention));if(catalog.monteCarlo){method.append(new Option('Monte Carlo VaR / expected shortfall',catalog.monteCarlo.profile.convention));paths.value=String(catalog.monteCarlo.defaults.paths);paths.max=String(catalog.monteCarlo.limits.scopeMaxPaths??catalog.monteCarlo.limits.maxPaths);seed.value=catalog.monteCarlo.defaults.seed;}if(catalog.monteCarlo?.hybrid){const option=new Option('Hybrid Monte Carlo VaR / expected shortfall · approximate',catalog.monteCarlo.hybrid.profile.convention);option.disabled=!catalog.monteCarlo.hybrid.capacities.some(c=>!c.fallback&&c.scopeMaxPaths>=c.validationPaths);method.append(option);}
@@ -108,7 +110,8 @@ export function setupFactorHistory(o:Options){
    calendar.replaceChildren(new Option('Choose a calendar…',''),...h.calendars.map(c=>new Option(c.label+' · '+(c.clockRule.ianaZone??(c.clockRule.fixedOffsetSeconds===0?'UTC':c.clock)),JSON.stringify(c.reference))));
    if(h.calendars.length===1)calendar.selectedIndex=1;
    drawPriceTypes();windowDates();message.textContent='Choose your scope, history window and confidence, then Run VaR. Price history is aligned automatically; Preview price coverage is optional.';
-  }catch(error){if(current(version))clear(error instanceof Error?error.message:'VaR setup is unavailable.');throw error;}finally{sync();}
+  }catch(error){if(current(version)&&!controller.signal.aborted)clear(error instanceof Error?error.message:'VaR setup is unavailable.');}
+  finally{if(setupController===controller){setupController=undefined;sync();}}
  }
  function request():HistoryRequest{
   if(!configuration||owner!==o.identity()||!sameScope())throw Error('The scope or market context changed. Refresh Risk and open VaR setup again.');
@@ -134,12 +137,12 @@ export function setupFactorHistory(o:Options){
   if(r.manifest.rejected.length)details.append(table(['Interval','Factor','Endpoint','Reason'],r.manifest.rejected.flatMap(s=>s.issues.map(i=>[s.id,r.columns.find(c=>c.id===i.factorId)!.factor.label,i.endpoint,i.reason.replaceAll('_',' ')]))));
   results.append(details);
  }
- async function prepare():Promise<HistoryReport|undefined>{
+ async function prepare(signal?:AbortSignal):Promise<HistoryReport|undefined>{
   const body=request(),key=JSON.stringify(body);if(result&&key===cacheKey)return result;
   const version=++generation;clear('Step 1 of 2 · aligning end-of-day factor prices and checking coverage…');
-  try{const value=await o.api<HistoryReport>('portfolio/risk/history',body);if(!current(version)||!sameScope())return;
+  try{const value=await o.api<HistoryReport>('portfolio/risk/history',body,signal);if(signal?.aborted||!current(version)||!sameScope())return;
    validateFactorHistory(value,body);result=value;cacheKey=key;message.textContent='History aligned. The grid shows official closes, approved alternatives and missing prices. Run VaR computes the selected risk method automatically.';draw();return value;
-  }catch(error){if(current(version))clear(error instanceof Error?error.message:'History preparation failed.');throw error;}finally{sync();}
+  }catch(error){if(current(version)&&!signal?.aborted)clear(error instanceof Error?error.message:'History preparation failed.');throw error;}finally{sync();}
  }
  async function exportManifest(){
   if(!result)throw Error('Run VaR or preview coverage first.');const captured=result,version=generation;
@@ -147,7 +150,9 @@ export function setupFactorHistory(o:Options){
   validateFactorHistory(value,captured.request);if(value.manifest.id!==captured.manifest.id)throw Error('The authorized inputs changed. Run a new calculation before export.');
   const blob=new Blob([JSON.stringify(value,null,2)+'\n'],{type:'application/json'}),url=URL.createObjectURL(blob),link=node('a');link.href=url;link.download='leanetrm-factor-history.json';link.click();URL.revokeObjectURL(url);
  }
- form.onsubmit=event=>{event.preventDefault();if(!form.reportValidity())return;const action=(event as SubmitEvent).submitter?.id;void o.act(async()=>{
+ form.onsubmit=event=>{event.preventDefault();if(o.busy()||calculationController||!form.reportValidity())return;const action=(event as SubmitEvent).submitter?.id,queued=action==='risk-parametric-queue';
+  const controller=queued?undefined:calculationController=new AbortController(),signal=controller?.signal;sync();
+  const work=async()=>{
   if(action!=='risk-history-run'&&o.unconfirmed())throw Error('Reconcile the unconfirmed risk submission before running another VaR.');
   const config=configuration;if(!config)throw Error('Open VaR setup first.');
   const historical=method.value===config.historical.profile.convention,hybridExecution=method.value===config.monteCarlo?.hybrid?.profile.convention,simulation=hybridExecution||method.value===config.monteCarlo?.profile.convention;
@@ -156,18 +161,21 @@ export function setupFactorHistory(o:Options){
   const count=Number(ticks.value);if(!simulation&&(!historical||comparison.checked)&&(!Number.isSafeInteger(count)||count<1||count>1000))throw Error('The trading-tick step must be a whole number from 1 to 1000.');
   const policy={...config.parametric.profile,drift:historical?config.historical.defaults.comparisonDrift:drift.value,confidence:confidence.value==='custom'?customConfidence.value.trim():confidence.value},finiteDifference={convention:config.parametric.finiteDifference,tradingTicks:count,deltaTolerance:{absolute:absolute.value.trim(),relative:relative.value.trim()}};
   const requestedKey=JSON.stringify(request());
-  const captured=await prepare(),version=generation;if(!captured||!current(version)||!sameScope()||configuration!==config||captured!==result||cacheKey!==requestedKey||JSON.stringify(request())!==requestedKey)return;
+  const captured=await prepare(signal),version=generation;if(signal?.aborted||!captured||!current(version)||!sameScope()||configuration!==config||captured!==result||cacheKey!==requestedKey||JSON.stringify(request())!==requestedKey)return;
   if(action==='risk-history-run')return;
   message.textContent=hybridExecution?'Step 2 of 2 · fitting the hybrid valuation and pricing its recorded validation sample…':simulation?'Step 2 of 2 · generating correlated factor moves and repricing every simulation path…':historical?'Step 2 of 2 · repricing every joint historical change and calculating VaR and expected shortfall…':'Step 2 of 2 · calculating covariance, sensitivities, VaR and expected shortfall…';
   const body:StatisticalRequest=simulation?{monteCarlo:{history:structuredClone(captured.request),policy:{...(hybridExecution?config.monteCarlo!.hybrid!.profile:config.monteCarlo!.profile),confidence:policy.confidence,drift:drift.value,paths:pathCount,seed:seed.value},...((hybridExecution||analysis.checked)&&config.monteCarlo!.analysis?{analysis:{...config.monteCarlo!.analysis.profile,valuationPolicy:hybridExecution?(fallback.checked?config.monteCarlo!.hybrid!.fittingPolicies.fullPvFallback:config.monteCarlo!.hybrid!.fittingPolicies.strict):(fallback.checked?config.monteCarlo!.analysis.fallbackValuationPolicy:config.monteCarlo!.analysis.profile.valuationPolicy),retainedComponents:Number(components.value),tradingTicks:Number(ticks.value),stabilityRelative:stability.value,lossAbsolute:lossAbsolute.value,lossRelative:lossRelative.value}}:{}),...(hybridExecution?{hybrid:{...config.monteCarlo!.hybrid!.executionProfile,validationPaths:Number(validation.value),validationSeed:validationSeed.value}}:{})}}:historical?{historical:{history:structuredClone(captured.request),policy:{...config.historical.profile,confidence:policy.confidence},...(comparison.checked?{comparison:{policy,finiteDifference}}:{})}}:{parametric:{history:structuredClone(captured.request),policy,finiteDifference}};
-  await o.calculate(body,{pricingPolicy:config.pricingPolicy,convention:config.convention,numericalPolicy:config.numericalPolicy,context:captured.context,asOf:captured.asOf},action==='risk-parametric-queue');
-  if(current(version))message.textContent='Calculation submitted. Its report retains the history, price-type choices and numerical settings.';
- });};
- panel.ontoggle=()=>{if(panel.open&&allowed&&!configuration&&!o.busy())void o.act(configure);};
- open.onclick=()=>void o.act(configure);get('risk-history-export').onclick=()=>void o.act(exportManifest);
+  await o.calculate(body,{pricingPolicy:config.pricingPolicy,convention:config.convention,numericalPolicy:config.numericalPolicy,context:captured.context,asOf:captured.asOf},queued,signal);
+  if(!signal?.aborted&&current(version))message.textContent='Calculation submitted. Its report retains the history, price-type choices and numerical settings.';
+  };
+  if(queued)void o.act(work);
+  else void work().catch(error=>{if(calculationController===controller&&!signal?.aborted)message.textContent=error instanceof Error?error.message:'The calculation could not be read. Retry when ready.';}).finally(()=>{if(calculationController===controller){calculationController=undefined;sync();}});
+ };
+ panel.ontoggle=()=>{if(panel.open&&allowed&&!configuration&&!o.busy())void configure();};
+ open.onclick=()=>void configure();get('risk-history-export').onclick=()=>void o.act(exportManifest);
  lookback.onchange=()=>{windowDates();invalidate();};calendar.onchange=()=>{windowDates();invalidate();};confidence.onchange=describe;method.onchange=()=>{const c=configuration?.monteCarlo?.hybrid;if(c&&method.value===c.profile.convention){components.value=String(c.defaults.retainedComponents);validation.value=String(c.defaults.validationPaths);validationSeed.value=c.defaults.validationSeed;paths.value=String(c.defaults.paths);}fallback.checked=false;describe();};comparison.onchange=describe;analysis.onchange=describe;fallback.onchange=describe;components.onchange=describe;validation.onchange=describe;
  for(const control of [from,to,minimum])control.oninput=invalidate;
  for(const control of [drift,ticks,absolute,relative,customConfidence,validationSeed])control.oninput=describe;
  add.onclick=()=>{if(addType.value){priceTypes.push(addType.value);drawPriceTypes();invalidate();}};
- reset();return {prepare(){if(!panel.open)panel.open=true;else if(allowed&&!configuration&&!o.busy())void o.act(configure);},reset,sync};
+ reset();return {prepare(){if(!panel.open)panel.open=true;else if(allowed&&!configuration&&!o.busy())void configure();},reset,sync};
 }

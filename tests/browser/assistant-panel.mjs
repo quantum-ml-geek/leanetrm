@@ -13,13 +13,13 @@ export async function run({command,evaluate,wait,click,set,submit,persona,check,
   const script=async(...answers)=>{if(!(await fetch(new URL('/respond',control),{method:'POST',body:JSON.stringify(answers)})).ok)throw Error('The fake provider refused a scripted answer.');};
   const release=async name=>{await fetch(new URL('/release/'+name,control),{method:'POST'});};
   // Each tab records its requests and how many agents each agents read listed, can lose its next ask or price read before it
-  // is sent or hold its next ask or workspace response until released, and keeps every stream it opens, across reloads.
+  // is sent or hold its next ask or workspace response until released, and keeps its assistant streams, across reloads.
   const recorder='window.__requests=[];window.__streams=[];{const send=window.fetch;window.__fetch=send;window.fetch=async(...args)=>{const path=String(args[0]),'
     +"entry={path,body:args[1]?.body?JSON.parse(args[1].body):null};window.__requests.push(entry);if(path.endsWith('/assistant/turns/ask')){if(window.__drop){window.__drop=false;"
     +"throw TypeError('Synthetic lost connection');}if(window.__held)await window.__held;}if(window.__failEvaluate&&path.endsWith('/evaluate')){window.__failEvaluate=false;"
     +"throw TypeError('Synthetic lost connection');}const response=await send(...args);if(path.endsWith('/assistant/agents')&&response.ok)entry.agents=(await response.clone().json()).agents.length;"
     +"if(window.__holdWorkspace&&(path.endsWith('/trading/workspace')||path.endsWith('/trading/workspace/stream'))){window.__holdWorkspace=false;window.__heldWorkspaceRequest=entry.body;await new Promise(resolve=>{window.__releaseWorkspace=resolve;});}"
-    +'return response;};const Native=window.EventSource;window.EventSource=class extends Native{constructor(...args){super(...args);window.__streams.push(this);}};}';
+    +'return response;};const Native=window.EventSource;window.EventSource=class extends Native{constructor(...args){super(...args);const path=new URL(String(args[0]),location.href).pathname;if(path.startsWith("/api/assistant/conversations/")&&path.endsWith("/events"))window.__streams.push(this);}};}';
 
   // This run's agents: a guide that reads market data and navigates, and a second that reads only the page.
   const stamp=Date.now(),guide='Browser panel guide '+stamp,second='Browser panel second '+stamp,administrator='browser_panel_admin_'+stamp;

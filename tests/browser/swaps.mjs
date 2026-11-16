@@ -350,7 +350,14 @@ export async function run({command,evaluate,wait,click,set:setValue,submit,perso
  await check('UI booking retains the published projection instead of copying its preview price',"JSON.stringify(window.__swaps.filter(r=>r.path==='/api/swaps/book').at(-1).body.floating.customProjection)===JSON.stringify(window.__customProjection)");
  await check('the current Blotter includes the newly booked custom projection',"window.__tradingReports(window.__swaps).at(-1).data.holdings.some(h=>h.tradeId===window.__customTrade.tradeId)");
  const customReference=await evaluate("window.__tradingReports(window.__swaps).at(-1).data.holdings.find(h=>h.tradeId===window.__customTrade.tradeId).tradeReference");
- await set('#blotter-filters .table-search',customReference);await click('#desk-positions .tabulator-row:not(.tabulator-group)');await click('#side-panel-amend');await wait("!document.querySelector('#swap-editing').hidden");
+ async function amendCustom(){
+  await set('#blotter-filters .table-search',customReference);
+  await wait(`(()=>{const rows=[...document.querySelectorAll('#desk-positions .tabulator-row:not(.tabulator-group)')].filter(row=>row.getClientRects().length);return rows.length===1&&rows[0].textContent.includes(${JSON.stringify(customReference)});})()`);
+  await click('#desk-positions .tabulator-row:not(.tabulator-group)');
+  await wait("(()=>{const button=document.querySelector('#side-panel-amend');return button&&!button.hidden&&!button.disabled&&button.getClientRects().length>0;})()");
+  await click('#side-panel-amend');await wait("!document.querySelector('#swap-editing').hidden");
+ }
+ await amendCustom();
  await set('#swap-quantity','20');await click('#swaps-draft-price');
  await check('custom quantity edits preserve the exact published projection in draft Price',"JSON.stringify(window.__swaps.filter(r=>r.path==='/api/swaps/price').at(-1).body.floating.customProjection)===JSON.stringify(window.__customProjection)");
  await check('the saved custom projection is explicitly selected from compatible published outputs',"document.querySelector('#swap-price-source').value===JSON.stringify(window.__customProjection)&&document.querySelector('#swap-projection-note').textContent.includes('exact published output')&&document.querySelector('label[for=swap-projection]').textContent==='Contractual index curve'");
@@ -360,7 +367,7 @@ export async function run({command,evaluate,wait,click,set:setValue,submit,perso
  await check('amendment preview retains custom projection without copying legacy fixing fields',"(()=>{const f=window.__swaps.filter(r=>r.path==='/api/swaps/preview').at(-1).body.floating;return JSON.stringify(f.customProjection)===JSON.stringify(window.__customProjection)&&!('firstFixingAt' in f);})()");
  await click('#swap-confirm');await click('#swap-submit');
  await check('the submitted quantity amendment keeps the exact custom projection',"JSON.stringify(window.__swaps.filter(r=>r.path==='/api/swaps/amend').at(-1).body.floating.customProjection)===JSON.stringify(window.__customProjection)");
- await set('#blotter-filters .table-search',customReference);await click('#desk-positions .tabulator-row:not(.tabulator-group)');await click('#side-panel-amend');await wait("!document.querySelector('#swap-editing').hidden");
+ await amendCustom();
  await check('the retained amended trade still names its custom projection',"(()=>{const s=window.__swaps.filter(r=>r.path==='/api/swaps/editor').at(-1).data.state;return s.revision===2&&s.quantity==='20'&&JSON.stringify(s.terms.floating.customProjection)===JSON.stringify(window.__customProjection);})()");
  await closeNewTrade({click,evaluate,wait});await start('daily_gas');await fill('3');await click('#swaps-draft-price');
  await check('opening a new ordinary swap clears the retained custom descriptor',"!('customProjection' in window.__swaps.filter(r=>r.path==='/api/swaps/price').at(-1).body.floating)&&document.querySelector('#swap-price-source').value==='ordinary'&&!document.querySelector('#swap-projection-note').textContent.includes('exact published output')");

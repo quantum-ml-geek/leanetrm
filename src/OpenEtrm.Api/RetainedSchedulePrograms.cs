@@ -50,5 +50,6 @@ internal sealed partial class RetainedScheduleStore
             (object?)context??DBNull.Value,(object?)asOf??DBNull.Value);
         if((long)(await authority.ExecuteScalarAsync(cancellation))! !=count)
             throw Error("The executable membership set changed during its authorized read.");
+        AsyncReadVisibility.Instrument(Catalog,instrument,context,asOf,count);
     }
 }

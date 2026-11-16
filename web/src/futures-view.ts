@@ -267,7 +267,7 @@ export function setupFutures(options:{tickets:ProductTickets;api:Api;stream:(bod
   if(options.window.kind==='main')get('blotter-bring-back').onclick=()=>void perform({kind:'bringBack'});
   // The risk report of the panel's Risk report mode, for the books and context of the read on screen. What it holds outlives the panel's
   // other modes, so its results stay while a position is looked at; a new read of the Blotter clears it.
-  const risk=setupRisk({api,act,busy,zone:options.zone,profile:options.profile,canRun:()=>options.canRunRisk()&&!!holdings,onDenied:clear,onChange:riskChanged,edited:options.unsavedChanged,scope:()=>{
+  const risk=setupRisk({api,act,busy,failed:options.failed,failureCleared:options.failureCleared,zone:options.zone,profile:options.profile,canRun:()=>options.canRunRisk()&&!!holdings,onDenied:clear,onChange:riskChanged,edited:options.unsavedChanged,scope:()=>{
     if(!lastReadRequest)throw Error('Load the blotter before running risk.');
     return {context:{...(lastReadRequest as {context:Record<string,unknown>}).context},bookIds:[...view.bookIds],portfolioIds:[...view.portfolioIds]};
   }});
@@ -864,13 +864,15 @@ export function setupFutures(options:{tickets:ProductTickets;api:Api;stream:(bod
     const run=risk.current(),key=resultsKey(run);
     if(key===''){if(inline!==undefined||preparing!==undefined){inline=undefined;preparing=undefined;showInline();}else renderRisk();return;}
     if(key===inline?.key||key===preparing){renderRisk();return;}
+    const started=generation,scope=whereAmI();
+    const current=()=>preparing===key&&started===generation&&scope!==undefined&&scope===whereAmI()&&!get('futures-page').hidden;
     preparing=key;renderRisk();
     inlineResults(run!,key).then(next=>{
-      if(preparing!==key)return;
+      if(!current())return;
       preparing=undefined;inline=next;
       if(next.state==='shown'&&lensFor!==next.run){lensFor=next.run;lens='risk';}
       showInline();
-    },()=>{if(preparing===key){preparing=undefined;clear();}});
+    },()=>{if(current()){preparing=undefined;clear();}});
   }
   // Draws the desk again for the results it shows inline: the lens, the change chart, the tile, the run bar and the panel's Risk tab.
   function showInline(){

@@ -28,6 +28,7 @@ def main():
     from check_standalone import main as check_standalone
     check_standalone()
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--async-workbench-check',action='store_true',help='Qualify concurrent main-workbench SSE reads')
     parser.add_argument('--side-calendar-check', action='store_true', help='Qualify explicit Side calendar authoring, retention and replay')
     parser.add_argument('--parametric-risk-check',action='store_true',help='Qualify retained parametric VaR/ES with aligned dated-factor history')
     parser.add_argument('--monte-carlo-risk-check',action='store_true',help='Qualify full-PV Monte Carlo, seeded replay and retained custody')
@@ -128,6 +129,9 @@ def main():
     parser.add_argument('--authoring-browser-suite',choices=['curve-objects','contract-pricing-controls','publication-controls','price-authoring-recovery'],help='Run one focused authoring control suite in the owned authoring fixture')
     parser.add_argument('--example', choices=['standard','mixed-gas'], default='standard', help='Explicit synthetic dataset')
     args = parser.parse_args()
+    if args.async_workbench_check:
+        args.check=True
+        if args.example!='standard':parser.error('--async-workbench-check requires the standard fixture')
     if args.assistant_browser_check:args.browser_check=True
     if args.physical_assistant_check or args.assistant_workspace_check or args.assistant_runtime_check or args.assistant_browser_check:
         args.check=True
@@ -191,7 +195,7 @@ def main():
     if args.context_read_check:
         args.check=True
         if args.example!='standard':parser.error('--context-read-check requires the standard fixture')
-    if args.side_calendar_check or args.lifecycle_swap_browser_check or args.factor_swap_check or args.scheduled_swap_check or args.side_observation_check or args.ppa_bookings_check or args.ppa_check or args.live_calculation_check or args.connected_portfolio_check or args.risk_jobs_check or args.factor_history_check or args.parametric_risk_check or args.historical_risk_check or args.monte_carlo_risk_check or args.power_actual_check or args.interval_series_check or args.interval_curves_check or args.index_fixing_check or args.swap_risk_holdings_check or args.close_out_drafts_check or args.pilot_close_check or args.regional_closes_check or args.contract_dates_check or args.identity_check or args.unit_check or args.party_check or args.exchange_check or args.cash_pnl_check or args.booking_check or args.draft_check or args.hosted_check or args.jobs_check or args.reference_check or args.execution_check or args.assistant_check or args.provider_adapters_check or args.custom_curves_check or args.contract_observation_curve_check or args.market_dates_check or args.market_read_check or args.reference_demo_check or args.valuation_status_check or args.desk_fields_check:
+    if args.side_calendar_check or args.lifecycle_swap_browser_check or args.factor_swap_check or args.scheduled_swap_check or args.side_observation_check or args.ppa_bookings_check or args.ppa_check or args.live_calculation_check or args.connected_portfolio_check or args.risk_jobs_check or args.async_workbench_check or args.factor_history_check or args.parametric_risk_check or args.historical_risk_check or args.monte_carlo_risk_check or args.power_actual_check or args.interval_series_check or args.interval_curves_check or args.index_fixing_check or args.swap_risk_holdings_check or args.close_out_drafts_check or args.pilot_close_check or args.regional_closes_check or args.contract_dates_check or args.identity_check or args.unit_check or args.party_check or args.exchange_check or args.cash_pnl_check or args.booking_check or args.draft_check or args.hosted_check or args.jobs_check or args.reference_check or args.execution_check or args.assistant_check or args.provider_adapters_check or args.custom_curves_check or args.contract_observation_curve_check or args.market_dates_check or args.market_read_check or args.reference_demo_check or args.valuation_status_check or args.desk_fields_check:
         args.check = True
         if args.example != 'standard' or args.identity_check and args.browser_check:
             parser.error('--identity-check requires the standard fixture without --browser-check')
@@ -553,7 +557,7 @@ def main():
             query(combined)
 
             print('PASS fresh hosted seed validates on an empty stock database without synthetic users, observations or trades, and grants its owner the human roles',flush=True)
-        if args.example=='standard' and (gas_demo or not args.check or args.factor_history_check or args.parametric_risk_check or args.historical_risk_check or args.monte_carlo_risk_check):
+        if args.example=='standard' and (gas_demo or not args.check or args.async_workbench_check or args.factor_history_check or args.parametric_risk_check or args.historical_risk_check or args.monte_carlo_risk_check):
             from factor_history_fixture import calendar as history_calendar
             reference=history_calendar(reference,manifest)
         query(reference)
@@ -618,7 +622,7 @@ def main():
                 prepare_factor(manifest)
         if not args.contract_dates_check:query(security)
         query(f"SELECT security.initialize_operating_policies('{manifest["tenantId"]}','{manifest["workspaceId"]}');")
-        if args.example=='standard' and (gas_demo or not args.check or args.factor_history_check or args.parametric_risk_check or args.historical_risk_check or args.monte_carlo_risk_check):
+        if args.example=='standard' and (gas_demo or not args.check or args.async_workbench_check or args.factor_history_check or args.parametric_risk_check or args.historical_risk_check or args.monte_carlo_risk_check):
             from factor_history_fixture import seed as seed_history
             seed_history(query,manifest)
             if gas_demo and not args.physical_assistant_check:
@@ -805,7 +809,7 @@ def main():
                 if process.returncode:raise subprocess.CalledProcessError(process.returncode,command)
                 return peak
             return run
-        if (not gas_demo and not args.check or args.live_calculation_check or args.unit_check or args.risk_jobs_check or args.factor_history_check or args.parametric_risk_check or args.historical_risk_check or args.monte_carlo_risk_check or args.valuation_status_check or args.desk_fields_check) and args.example=='standard':
+        if (not gas_demo and not args.check or args.live_calculation_check or args.unit_check or args.risk_jobs_check or args.async_workbench_check or args.factor_history_check or args.parametric_risk_check or args.historical_risk_check or args.monte_carlo_risk_check or args.valuation_status_check or args.desk_fields_check) and args.example=='standard':
             if not args.check and date_plan is not None:
                 from demo_date_plan import verify_instrument_dates
                 count=verify_instrument_dates(query,date_plan,manifest['catalogId'],manifest['revisionId'],manifest['contractsOutsideDatePlan'] if args.with_custom_curves else ())
@@ -850,7 +854,15 @@ def main():
         print(f'PREVIEW_URL={url}',flush=True)
         print('Private synthetic database. Ctrl+C stops the app and removes its owned database.',flush=True)
         if args.check:
-            if args.side_calendar_check:
+            if args.async_workbench_check:
+                from check_async_workbench_http import run_checks
+                run_checks(url,query,psql,env,manifest)
+                if args.browser_check:
+                    target=temporary/'browser-target.json'
+                    target.write_text(json.dumps({'suite':'business_browser_v1','url':url,'runId':run_id}))
+                    browser_process=subprocess.Popen(['node',str(ROOT/'tests/browser/run.mjs'),str(target),str(args.browser.resolve()),'--async-workbench'],cwd=ROOT,env=env,start_new_session=True)
+                    if browser_process.wait(timeout=300):raise RuntimeError('Owned asynchronous workbench browser checks failed')
+            elif args.side_calendar_check:
                 from check_side_calendar_http import run_checks as check_side_calendars
                 check_side_calendars(url,query,manifest)
             elif args.context_read_check:

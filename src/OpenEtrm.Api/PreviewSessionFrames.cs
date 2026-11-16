@@ -20,7 +20,13 @@ public sealed partial class PreviewSession
     public ImmutableArray<InputFrame> VisibleFrames=>[..Frames.Values.Where(frame=>frame.PpaBundle is null && frame.ContextId==MarketContext?.ContextId && frame.Close?.ReplacedBy is null).OrderBy(frame=>frame.At).ThenBy(frame=>frame.Id)];
     public ImmutableArray<InputFrame> ContextAliases(ScheduleContext? context)=>Live?.Frame is {} live&&live.ContextId==context?.ContextId?[live]:context is null?[]:
         [..Frames.Values.Where(frame=>discoveredFrames.Contains(frame.Id)&&frame.OriginCloseId is null&&frame.ContextId==context.ContextId).OrderBy(frame=>frame.At).ThenBy(frame=>frame.Id)];
-    public ImmutableArray<InputFrame> SelectContextAliases(PreviewData data,ScheduleContext context)
+    public ImmutableArray<InputFrame> SelectContextAliases(PreviewData data,ScheduleContext context)=>CaptureContextAliases(context)(data);
+    internal Func<PreviewData,ImmutableArray<InputFrame>> CaptureContextAliases(ScheduleContext context)
+    {
+        var seeds=InitialFrames.Select(id=>Frames[id]).ToImmutableArray();var capturedNamespace=aliasNamespace;
+        return data=>SelectContextAliases(data,context,seeds,capturedNamespace);
+    }
+    private static ImmutableArray<InputFrame> SelectContextAliases(PreviewData data,ScheduleContext context,ImmutableArray<InputFrame> seeds,Guid capturedNamespace)
     {
         var end=DateWorkspace.Date(context.EffectiveOn).AddDays(1).ToDateTime(TimeOnly.MinValue,DateTimeKind.Utc);
         var visible=data.Observations.Select(row=>row.Id("id")).ToHashSet();
@@ -34,10 +40,10 @@ public sealed partial class PreviewSession
                 throw new MarketDataException("snapshot_inputs","A saved frame requires distinct exact pins, frozen markers within those pins and declared retained curve membership.");
             return pins.All(visible.Contains);
         }
-        return [..InitialFrames.Select(id=>Frames[id]).Where(frame=>frame.ContextId is null&&frame.PpaBundle is null&&frame.At.UtcDateTime<end&&Eligible(frame)).Select(seed=>
+        return [..seeds.Where(frame=>frame.ContextId is null&&frame.PpaBundle is null&&frame.At.UtcDateTime<end&&Eligible(frame)).Select(seed=>
         {
             var selected=MarketContextStore.Select(seed,data,context);
-            return selected with{Id=AliasId("initial",seed.Id,selected),OriginInputId=seed.Id};
+            return selected with{Id=AliasId(capturedNamespace,"initial",seed.Id,selected),OriginInputId=seed.Id};
         })];
     }
     public Guid? ContextFrame(InputFrame? previous,SessionFramePlan plan,ScheduleContext context)
@@ -60,7 +66,8 @@ public sealed partial class PreviewSession
     public static DateOnly BusinessDay(InputFrame frame)=>frame.Time.Date;
     // Session-scoped identity only: no financial values, authority or read
     // results are cached, and different resolved selections get different IDs.
-    private Guid AliasId(string sourceKind,Guid source,InputFrame frame)
+    private Guid AliasId(string sourceKind,Guid source,InputFrame frame)=>AliasId(aliasNamespace,sourceKind,source,frame);
+    private static Guid AliasId(Guid aliasNamespace,string sourceKind,Guid source,InputFrame frame)
     {
         var identity=JsonSerializer.SerializeToUtf8Bytes(new{kind="session_frame_alias_v1",scope=aliasNamespace,sourceKind,source,frame.ContextId,frame.At,
             observations=frame.ObservationIds.Order().ToArray(),
