@@ -2830,7 +2830,6 @@ header>div:first-child{flex:1 1 160px}
 .options-view{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:999px;border:0;background:transparent;color:var(--text-2);font-weight:500}
 .options-view[aria-pressed=true]{background:var(--accent);color:var(--on-accent)}
 .options-view:disabled{color:var(--text-disabled);cursor:default}
-.options-soon{font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;padding:2px 6px;border-radius:999px;background:var(--surface-3);color:var(--text-3)}
 .options-products,.options-expiries{display:flex;flex-wrap:wrap;align-items:center;gap:8px;min-width:0}
 .options-product{display:inline-flex;align-items:baseline;gap:8px;padding:8px 14px;border-radius:10px;font-weight:400;background:var(--surface-2);color:var(--text);border:1px solid var(--border)}
 .options-product:hover{border-color:var(--border-strong);background:var(--surface)}
@@ -2862,6 +2861,49 @@ header>div:first-child{flex:1 1 160px}
 .options-position-subtotal td{font-weight:600}.options-position-total td,.options-position-total th{border-top:2px solid var(--border-strong);font-weight:650}
 .options-position-table td.options-missing-figure{color:var(--text-3)}
 .options-position-calibrate{padding:2px 10px;font-size:12px}
+/* Strategy (options-view.ts): legs on the expiry in view, their scenario, and the payoff the backend states. The last
+   analysis stays on show, dimmed, while the legs or scenario differ from it. */
+.options-expiry-head{display:flex;flex-direction:column;gap:12px;min-width:0}
+.options-strategy{display:flex;flex-direction:column;gap:12px;min-width:0}
+.options-templates{display:flex;flex-wrap:wrap;align-items:center;gap:8px;min-width:0}
+.options-templates-label{font-size:11px;font-weight:650;letter-spacing:.08em;text-transform:uppercase;color:var(--text-3);margin-right:4px}
+.options-template,.options-strategy-curve{padding:6px 12px;border-radius:999px;font-weight:500;background:var(--surface);color:var(--text-2);border:1px solid var(--border)}
+.options-template:hover:not([aria-disabled=true]),.options-strategy-curve:hover{background:var(--surface);border-color:var(--accent);color:var(--text)}
+.options-template[aria-disabled=true]{color:var(--text-disabled);cursor:default}
+.options-strategy-legs td{vertical-align:middle}
+.options-strategy-leg-host{max-width:780px}
+.options-strategy-legs input{width:9ch;text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
+.options-leg-side{min-width:6ch;padding:4px 10px;border-radius:var(--radius-sm);font-weight:650;background:var(--surface-2);border:1px solid var(--border-strong)}
+.options-leg-side[data-side=buy]{color:var(--gain-ink)}.options-leg-side[data-side=sell]{color:var(--loss-ink)}
+.options-leg-name{font-weight:600;color:var(--text)}
+.options-leg-remove{padding:2px 10px;font-size:12px}
+.options-strategy-empty{color:var(--text-3);text-align:left}
+.options-strategy-controls{display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px 20px;padding:12px 16px;border-radius:var(--radius-lg);background:var(--surface);border:1px solid var(--border)}
+.options-strategy-field{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--text-3);min-width:0}
+.options-strategy-field input{width:11ch;font-family:var(--mono);font-variant-numeric:tabular-nums}
+.options-strategy-curves{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.options-strategy-actions{display:flex;gap:8px;margin-left:auto}
+.options-strategy-message{margin:0;min-height:1.5em;font-size:13px;color:var(--text-2)}
+.options-strategy[data-state=refused] .options-strategy-message{color:var(--loss-ink)}
+.options-strategy-results{display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,320px);gap:12px;align-items:start;min-width:0}
+.options-strategy-chart{min-width:0;padding:12px 16px;border-radius:var(--radius-lg);background:var(--surface);border:1px solid var(--border);box-shadow:var(--shadow)}
+.options-strategy-caption{margin:0 0 8px;font-size:13px;font-weight:600;color:var(--text-2)}
+.options-strategy-plot{height:400px}
+.options-strategy-side{display:flex;flex-direction:column;gap:12px;min-width:0}
+.options-strategy-analysis dl{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:8px 16px;margin:12px 0 0;font-size:13px}
+.options-strategy-analysis dt{color:var(--text-3)}
+.options-strategy-analysis dd{margin:0;text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;font-weight:600;color:var(--text);overflow-wrap:anywhere}
+.options-strategy-analysis dd.options-tone-gain{color:var(--gain-ink)}.options-strategy-analysis dd.options-tone-loss{color:var(--loss-ink)}
+.options-strategy-refused{margin:12px 0 0;font-size:12px;color:var(--text-2)}
+.options-strategy-tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.options-tile{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-radius:var(--radius);background:var(--surface);border:1px solid var(--border);min-width:0}
+.options-tile-term{font-size:11px;font-weight:650;letter-spacing:.06em;text-transform:uppercase;color:var(--text-3)}
+.options-tile-value{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:16px;color:var(--text);overflow-wrap:anywhere}
+.options-tile-unit{font-size:11px;color:var(--text-3)}
+.options-tile.options-missing-figure .options-tile-value{color:var(--text-3)}
+.options-strategy[data-state=stale] .options-strategy-results,.options-strategy[data-state=stale] .options-leg-figure,
+.options-strategy[data-state=busy] .options-strategy-results{opacity:.45}
+@media (max-width:980px){.options-strategy-results{grid-template-columns:minmax(0,1fr)}.options-strategy-actions{margin-left:0}}
 /* The term structure (vol-surface-view.ts): the fitted level at the money by expiry, over a card per expiry. */
 .vol-term{grid-column:1/-1}
 .vol-term .vol-chart{height:200px}

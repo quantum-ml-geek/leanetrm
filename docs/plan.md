@@ -1886,12 +1886,10 @@ Extend only after the baseline contracts are demonstrated:
 - Broader calendars, delivery shapes and schedule authoring.
 - Options beyond listed American futures options (D288): other exercise and
   settlement styles, volatility inputs and shocks, and nonlinear model diagnostics.
-- An option strategy viewer on the Options page (D408): legs of one expiry
-  combined from the chain, with profit and loss against the futures price at
-  expiry and at stated earlier instants from an analysis read over the shared
-  layers. Strategies across expiries need a declared relationship between
-  futures months first; futures legs, saved strategies and booking a strategy
-  in one action follow it.
+- Option strategies beyond one expiry (D409 analyses and draws legs of one
+  expiry on one underlying future). Strategies across expiries need a declared
+  relationship between futures months first; futures legs, saved strategies and
+  booking a strategy in one action follow it.
 - Spread-option valuation for storage, tolling and transport, once one of those
   product lines names it as a consumer.
 - Option-side sibling dependencies, shared exercise groups and an explicit
