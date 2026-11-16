@@ -10,17 +10,12 @@ namespace OpenEtrm.Api;
 // whose jobs they are, so another person's job reads like an unknown one, a job manager's included.
 public sealed partial class AgentTools
 {
-    static AgentTool JobTool=>Tool("read_jobs","Reads the user's own jobs on Jobs as they are now: never another person's, and "+
-        "never under a historical view. View jobs lists them newest first, 25 to a page, with their terms, state, version, whether they can be "+
-        "edited and their latest run. View history returns one of them with its latest 25 runs, its audit actions newest first, which "+
-        "record finished runs' outcomes, 100 before an audit sequence or the newest when before is null, and the terms its latest 25 create, "+
-        "update or control requests carried. The database holds no container output: explain a run only from its states, error code and explanation, and say so. Send every member: those the other "+
-        "view takes are null.",
+    static AgentTool JobTool=>Tool("read_jobs",
         $$$"""
         {"type":"object","properties":{"view":{"type":"string","enum":["jobs","history"]},
-         "job":{"type":["string","null"],"pattern":"{{{Uuid}}}","description":"History: the job to read. Null for jobs."},
-         "page":{"type":["integer","null"],"minimum":0,"maximum":10000,"description":"Jobs: the page of 25, from 0. Null for history."},
-         "before":{"type":["integer","null"],"minimum":1,"description":"History: return audit actions before this sequence, or null for the newest. Null for jobs."}},
+         "job":{"type":["string","null"],"pattern":"{{{Uuid}}}"},
+         "page":{"type":["integer","null"],"minimum":0,"maximum":10000},
+         "before":{"type":["integer","null"],"minimum":1}},
          "required":["view","job","page","before"],"additionalProperties":false}
         """,["ReadJobs"]);
 

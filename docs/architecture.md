@@ -5,12 +5,12 @@ over independent native ownership and cash. The bounded title-transfer profile
 uses shared entry, lifecycle and current-clock interactive/retained price risk.
 Release qualification and broader service capabilities remain separate.
 
-D407 adds [physical storage assets and activity](storage-facility-operations.md),
+D409 adds [physical storage assets and activity](storage-facility-operations.md),
 independent from commercial entitlement, title and cash. The first operating
 profile has local managed, native, upgrade and browser qualification. Integration
 and release gates remain separate from that evidence.
 
-D408 adds an explicitly selected [outstanding-balance elapsed-hour fee
+D410 adds an explicitly selected [outstanding-balance elapsed-hour fee
 profile](gas-park-loan-balance-fee.md). Accepted principal events, cumulative fee
 determinations, independent cash and remaining service value retain distinct
 owners. Current-clock price qualification does not establish complete economic
@@ -3079,3 +3079,10 @@ actual-only prefixes and daily price shapes preserve certified correction histor
 [Booked close comparisons](power-booked-roll.md) decompose native contractual PV
 change into fixing, forward marks and capture corrections. Monthly shaping,
 graph worker replay, cash/accounting and ISO finality integration remain separate.
+
+
+D407 makes assistant context acquisition demand-driven and prompt text private to
+an installation. Admission retains selection identity and immutable configuration;
+explicit financial tools acquire one certified context. Exact recorded closes use
+foreign-key references instead of repeated source matrices. See
+[assistant context and prompts](ai-assistant.md#72-pinned-context).

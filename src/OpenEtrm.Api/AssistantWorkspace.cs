@@ -151,11 +151,24 @@ internal sealed class AssistantWorkspace(PreviewDatabase database,string scope,s
     }
     async Task<ScheduleContext?> Certificate(TurnReads turn,CancellationToken ct)
     {
-        if(turn.Pin.Operational)return null;
+        if(turn.Pin.Operational||!turn.Pin.Resolved)return null;
         var owner=await Reader(turn,ct);
         return await AsOwner(owner,()=>database.WithIdentity(owner.Profile,"ReadMarketData",async(connection,t)=>
             turn.Pin.Exact((await new KnowledgeStore(database.Manifest.CatalogId).Read(connection,turn.Pin.ContextId,t)).Context),ct),
             new AssistantInvocation(owner.Session){ReadLimit=turn.ReadLimit});
+    }
+
+    internal async Task<TurnPin> ResolveContext(TurnReads turn,TurnWrites writes,CancellationToken ct)
+    {
+        if(!owners.TryGetValue(turn.TurnId,out var owner)||owner.Profile!=owner.Session.Profile||owner.Session.Ends<=DateTimeOffset.UtcNow)
+            throw new PreviewSessionEnded();
+        if(turn.Pin.Operational||turn.Pin.Working&&turn.Pin.Frame is null&&turn.Pin.BusinessDate is null)throw new ToolRefusal("context_required");
+        return await AsOwner(owner,()=>database.WithIdentity(owner.Profile,"ReadMarketData",async(connection,t)=>
+        {
+            var saved=await writes.Resolve(connection,turn.Selection,t);
+            using var pins=JsonDocument.Parse(turn.Selection.Frame is {} frame?TurnPin.StoredFrame(frame):"null");
+            return TurnPin.From(saved.GetProperty("turn").GetProperty("context"),pins.RootElement,database.Manifest.CatalogId,database.Manifest,turn.PageReport,turn.Selection.Frame);
+        },ct),new AssistantInvocation(owner.Session){ReadLimit=turn.ReadLimit});
     }
 
     async Task<Owner> Reader(TurnReads turn,CancellationToken ct)
@@ -214,8 +227,9 @@ internal sealed class AssistantWorkspace(PreviewDatabase database,string scope,s
     {
         var owner=await Reader(turn,ct);var permissions=await Permissions(owner,turn.ReadLimit,ct);
         var operations=DiscoverOperations(page,id,permissions,ct);
-        return new(){["operations"]=operations,["context"]=JsonSerializer.SerializeToNode(await Certificate(turn,ct),JsonSerializerOptions.Web),["frameId"]=turn.Pin.Frame?.Id.ToString(),
-            ["inputFormat"]="inputJson is an object with body (the exact request, or null) and parameters (string query/route values). Read operations use this turn's retained context. Proposals must state current working knowledge. Request schemas and ordinary business validation are authoritative. All commands require a separate user approval."};
+        if(id is not null&&operations.Count>0&&AssistantOperations.Find(id)!.NeedsFinancialContext)await turn.EnsureContext(ct);
+        return new(){["operations"]=operations,["context"]=JsonSerializer.SerializeToNode(id is not null&&operations.Count>0&&AssistantOperations.Find(id)!.NeedsFinancialContext?await Certificate(turn,ct):null,JsonSerializerOptions.Web),["frameId"]=turn.Pin.Frame?.Id.ToString(),
+            ["inputFormat"]=new JsonObject{["body"]="object|null",["parameters"]="object<string,string>"}};
     }
 
     public async Task<JsonArray> PresentationPages(TurnReads turn,CancellationToken ct)
@@ -263,7 +277,8 @@ internal sealed class AssistantWorkspace(PreviewDatabase database,string scope,s
         var permissions=await Permissions(owner,turn.ReadLimit,ct);
         if(!operation.Permissions.All(permissions.Contains))throw new PreviewDeniedException();
         var request=Input(input);
-        var certificate=await Certificate(turn,ct);
+        if(operation.NeedsFinancialContext)await turn.EnsureContext(ct);
+        var certificate=operation.NeedsFinancialContext?await Certificate(turn,ct):null;
         Validate(operation,request,certificate);
         RequireFacilityContext(operation,request,certificate,false);
         RequireLifecycleContext(operation,request,turn.Pin);
@@ -285,7 +300,7 @@ internal sealed class AssistantWorkspace(PreviewDatabase database,string scope,s
         var invocation=new AssistantInvocation(session){ReadLimit=turn.ReadLimit,CapturedWorkingRead=turn.Pin.Working};
         var value=await Invoke(owner,invocation,operation,request,ct);
         return(new(){["operation"]=id,["data"]=value,["knowledge"]=operation.CurrentOnly?"current_operations_or_definitions":"pinned",
-            ["cutoff"]=turn.Pin.Cutoff.ToString("O",CultureInfo.InvariantCulture),["selectedObservationCutoff"]=selectedCutoff?.ToString("O",CultureInfo.InvariantCulture)},[..invocation.Access]);
+            ["cutoff"]=turn.Pin.Resolved?turn.Pin.Cutoff.ToString("O",CultureInfo.InvariantCulture):null,["selectedObservationCutoff"]=selectedCutoff?.ToString("O",CultureInfo.InvariantCulture)},[..invocation.Access]);
     }
 
     internal static void RequireFacilityContext(AssistantOperation operation,AssistantOperationInput request,ScheduleContext? certificate,bool command)
@@ -332,7 +347,9 @@ internal sealed class AssistantWorkspace(PreviewDatabase database,string scope,s
         if(!turn.Pin.Working)throw new ToolRefusal("historical_read_only");
         var owner=await Reader(turn,ct);var permissions=await Permissions(owner,turn.ReadLimit,ct);
         if(!operation.Permissions.All(permissions.Contains))throw new PreviewDeniedException();
-        var request=Input(input);var certificate=await Certificate(turn,ct);Validate(operation,request,certificate);
+        var request=Input(input);
+        if(operation.NeedsFinancialContext)await turn.EnsureContext(ct);
+        var certificate=operation.NeedsFinancialContext?await Certificate(turn,ct):null;Validate(operation,request,certificate);
         RequireFacilityContext(operation,request,certificate,true);
         RequireLifecycleContext(operation,request,turn.Pin);
         RequirePin(request.Body,turn.Pin,true);RequirePin(request.Parameters,turn.Pin,true);
@@ -352,6 +369,7 @@ internal sealed class AssistantWorkspace(PreviewDatabase database,string scope,s
         if(operation.CurrentOnly&&!turn.Pin.Working)throw new ToolRefusal("historical_read_only");
         var held=await Permissions(owner,turn.ReadLimit,ct);
         if(!operation.Permissions.All(held.Contains))throw new PreviewDeniedException();
+        if(operation.NeedsFinancialContext)await turn.EnsureContext(ct);
         var invocation=new AssistantInvocation(owner.Session){ReadLimit=turn.ReadLimit};
         var value=await AsOwner(owner,()=>database.WithIdentity(owner.Profile,AssistantOperations.Permission,read,ct),invocation);
         return(value,[..invocation.Access]);
@@ -381,8 +399,9 @@ internal sealed class AssistantWorkspace(PreviewDatabase database,string scope,s
         if(context.GetProperty("mode").GetString() is not ("current" or "operational")||session.MarketContext is not null)throw new ToolRefusal("historical_read_only");
         var reviewed=Review(recorded,turn,step);
         var operation=AssistantOperations.Find(reviewed["operation"]!.GetValue<string>())!;
-        if(context.GetProperty("frameId") is {ValueKind:JsonValueKind.String} frame&&
-            (!session.Frames.TryGetValue(frame.GetGuid(),out var selected)||!JsonElement.DeepEquals(JsonDocument.Parse(TurnPin.Record(selected)).RootElement,recorded.GetProperty("pins"))))
+        if(operation.NeedsFinancialContext&&context.GetProperty("frameId") is {ValueKind:JsonValueKind.String} frame&&
+            (!session.Frames.TryGetValue(frame.GetGuid(),out var selected)||!JsonElement.DeepEquals(JsonDocument.Parse(
+                recorded.GetProperty("pins").TryGetProperty("closeId",out _)?TurnPin.StoredFrame(selected):TurnPin.Record(selected)).RootElement,recorded.GetProperty("pins"))))
             throw new ToolRefusal("operation_context_mismatch");
         var owner=new Owner(session,session.Profile??throw new PreviewDeniedException(),human.User);
         var executing=new PreviewSession(database.Manifest,new(session.Digest,session.Ends)){Profile=owner.Profile};

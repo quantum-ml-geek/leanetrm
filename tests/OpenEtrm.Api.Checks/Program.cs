@@ -6,6 +6,7 @@ using OpenEtrm.MarketData;
 if(args is ["--storage-facility-native",var storageFixture]){await StorageFacilityNativeChecks.RunNative(storageFixture);return;}
 if(args is ["--storage-facility-adapters"]){StorageFacilityAdapterChecks.Run();return;}
 if(args is ["--storage-facility-setup"]){StorageFacilityMetadataChecks.Run();return;}
+if(args is ["--assistant-prompts"]){TurnWorkerChecks.Run();AgentToolChecks.Run();await ModelProviderChecks.Run();return;}
 if(args is ["--async-reads"]){AsyncReadContractChecks.Run();await AsyncReadChecks.Run();return;}
 if(args is ["--async-read-contracts"]){AsyncReadContractChecks.Run();return;}
 if(args is ["--calendar-authoring"]){CalendarAuthoringSchemaChecks.Run();return;}
@@ -15,6 +16,8 @@ if(args is ["--gas-operator-physical-value",var operatorPhysicalPath]){await Gas
 if(args is ["--gas-operator-ordinary-value",var operatorOrdinaryPath]){await GasOperatorPhysicalValueChecks.Run(operatorOrdinaryPath,true);return;}
 if(args is ["--cash-option-value-policy"]){CashOptionPolicyChecks.Run();return;}
 if(args is ["--selected-option-inputs"]){SelectedOptionInputChecks.Run();return;}
+if(args is ["--option-sensitivity-request"]){OptionSensitivityRequestChecks.Run();return;}
+if(args is ["--option-position-analytics"]){OptionPositionAnalyticsChecks.Run();return;}
 if(args is ["--cash-option-value",var cashOptionPath]){await CashOptionValueChecks.Run(cashOptionPath);return;}
 if(args is ["--physical-option-economic",var physicalEconomicPath]){await PhysicalOptionValueChecks.Run(physicalEconomicPath,true);return;}
 if(args is ["--gas-physical-completion-fixture",var completionPath]){await GasPhysicalCompletionFixture.Run(completionPath);return;}
@@ -219,6 +222,8 @@ if (args is ["--schedules"])
     RiskPricingPolicyChecks.Run();
     CashOptionPolicyChecks.Run();
     SelectedOptionInputChecks.Run();
+    OptionSensitivityRequestChecks.Run();
+    OptionPositionAnalyticsChecks.Run();
     ReferencePresentationChecks.Run();
     CurveActivationInputChecks.Run();
     ConnectedSampleChecks.Run();

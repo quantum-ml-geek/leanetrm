@@ -16,23 +16,21 @@ namespace OpenEtrm.Api;
 public sealed partial class AgentTools
 {
     static ImmutableArray<AgentTool> CurveTools=>[
-        Tool("read_custom_curves","Reads the custom-curve operators, templates, native source directory and exact published versions at the turn's pinned knowledge. Use these explicit backend contracts to prepare a curve; never infer missing weights, units, alignment or dates. Native contract identities are available from read_market_data.",
+        Tool("read_custom_curves",
             """{"type":"object","properties":{},"additionalProperties":false}""",["ReadMarketData"]),
-        Tool("prepare_custom_curve","Validates and prices a proposed custom curve through the same managed operation as the curve editor, at this turn's pinned dates and exact inputs. Read read_custom_curves first. Supply the backend formula and exact engine, code and name; ask the user about missing financial choices. Returned dependencies identify inputs, not PV exposure. Does not save or publish. Its target opens an explicitly reviewed draft in the editor; it is not a retained result or permission to execute portfolio risk.",
+        Tool("prepare_custom_curve",
             """
             {"type":"object","properties":{"code":{"type":"string","minLength":1,"maxLength":32,"pattern":"^[a-z][a-z0-9_]{0,31}$"},
              "name":{"type":"string","minLength":1,"maxLength":80},"engine":{"type":"string","enum":["custom_curve_recipe_v2"]},
              "formula":{"type":"string","minLength":1,"maxLength":6144}},"required":["code","name","engine","formula"],"additionalProperties":false}
             """,["ReadMarketData"]),
         // Retain the legacy definition for stored versions; its execution path is closed by D284.
-        Tool("save_custom_curve_draft","This legacy direct-save tool is disabled and returns approval_required. It never publishes or saves. "+
-            "Use prepare_custom_curve for a preview, then discover_page_operations and propose_page_action for the ordinary custom-curves/save "+
-            "command. Only the user's separate authorization can save the reviewed proposal.",
+        Tool("save_custom_curve_draft",
             $$$"""
             {"type":"object","properties":{"code":{"type":"string","minLength":1,"maxLength":32,"pattern":"^[a-z][a-z0-9_]{0,31}$"},
              "name":{"type":"string","minLength":1,"maxLength":80},"engine":{"type":"string","enum":["custom_curve_recipe_v2"]},
              "formula":{"type":"string","minLength":1,"maxLength":6144},
-             "curveId":{"type":["string","null"],"pattern":"{{{Uuid}}}","description":"The draft to revise, as an earlier save returned it, or null for a new curve."}},
+             "curveId":{"type":["string","null"],"pattern":"{{{Uuid}}}"}},
              "required":["code","name","engine","formula","curveId"],"additionalProperties":false}
             """,["ReadMarketData","WriteMarketDefinitions"])
     ];
