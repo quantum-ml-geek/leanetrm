@@ -16,8 +16,8 @@ def run():
             "'kind',prokind,'language',prolang,'arguments',proargnames,'return',prorettype,'settings',proconfig,'acl',proacl,'variadic',provariadic,'modes',proargmodes) "
             "FROM pg_proc WHERE oid='trading.verify_gas_transport_capacity_plan(uuid,uuid)'::regprocedure;")
     def before(query,migration):
-        if migration.name!='0343_gas_transport_route.sql':return
-        guard_checks(query,migration,number='0343',guard='gas_transport_route_upgrade',signatures=(
+        if migration.name!='0346_gas_transport_route.sql':return
+        guard_checks(query,migration,number='0346',guard='gas_transport_route_upgrade',signatures=(
             'assistant.is_prompt_page(text)','trading.verify_gas_transport_capacity_plan(uuid,uuid)'))
         reference,market,access,manifest=fixture(root)
         for sql in [reference,market,access]:query(sql)
@@ -36,7 +36,7 @@ def run():
         assert prepared['digest']()==prepared['before'],'Route installation changed retained capacity, title, custody, cash or physical facts.'
         assert wrapper_contract(query)==prepared['wrapper'],'Capacity extraction changed the predecessor wrapper authority or execution metadata.'
         assert query('SELECT count(*) FROM trading.gas_transport_routes;')=='0'
-        assert query("SELECT assistant.is_prompt_page('transport_route_plans') AND NOT assistant.is_prompt_page('synthetic_uninstalled_routes');")=='t'
+        assert query("SELECT assistant.is_prompt_page('transport_route_plans') AND assistant.is_prompt_page('transport_capacity') AND assistant.is_prompt_page('options') AND NOT assistant.is_prompt_page('synthetic_uninstalled_routes');")=='t'
         for old in prepared['sources']:
             assert f.read(old['entitlement']['id'],context=prepared['context'])==old
             first=old['plans'][0]

@@ -33,7 +33,7 @@ internal sealed class TradingPnlReport(PreviewDatabase database)
     // and agreement within 0.000001 plus 15% of a delta or 10% of a gamma. One bump serves both Greeks: a delta's double
     // step errs about three times as far as its nominal, and an option bumped by another option's larger step has its
     // half step between its own bends. It is offered, never filled in: a request names its selection in full.
-    private static readonly PnlBumpSelection Offered=new(1,2,"0.000001","0.15","0.1");
+    internal static readonly PnlBumpSelection Offered=new(1,2,"0.000001","0.15","0.1");
     private const string Covered="Opening price delta and gamma for each held factor, and mixed gamma for factors one holding prices together.",
         Remaining="Unavailable estimates and time, volatility, discount, fixing, position and other effects remain in the explicit residual.";
     private static readonly (string Formula,string Label)[] Greeks=
@@ -41,7 +41,7 @@ internal sealed class TradingPnlReport(PreviewDatabase database)
     internal const string OneDay="one_calendar_day_model_decay_v1",Roll="opening_to_closing_clock_v1";
     private static readonly object[] TimeModes=[new{id=OneDay,label="One-day model decay"},new{id=Roll,label="Opening-to-closing time roll"}];
     // The clocks a request may name for one calendar day from a working snapshot, which has no close convention.
-    private static ClockRule[] Clocks()=>[new("UTC","fixed_offset",0,null,null),new("New York","iana",null,"America/New_York",TimeZoneDatabase.Installed().Version())];
+    internal static ClockRule[] Clocks()=>[new("UTC","fixed_offset",0,null,null),new("New York","iana",null,"America/New_York",TimeZoneDatabase.Installed().Version())];
     // What a request may select, with the bump the page offers and its bounds.
     internal static object Policies=>new{accounting=TradingPnlAccounting.Version1,attribution=TradingPnlAttribution.OpeningGreeks,factors=SelectedBump,
         factorBump=new{offered=Offered,ticks=new{min=1,max=PnlFactorBump.MaximumTicks},priceSteps=PnlFactorBump.SelectablePriceSteps},
@@ -51,7 +51,12 @@ internal sealed class TradingPnlReport(PreviewDatabase database)
     internal static FactorSelection Select(TradingPnlRequest request)
     {
         if(request.FactorPolicy!=SelectedBump)throw Error("pnl_context","Select increasing closes, nondecreasing knowledge cutoffs and the explicit supported P&L policies.");
-        if(request.FactorBump is not {} selected)throw Error("pnl_factor_bump","Select the price bump and the agreement of estimates explicitly.");
+        return Select(request.FactorBump);
+    }
+    // A stated bump and agreement, as any consumer of the shared sampler selects them.
+    internal static FactorSelection Select(PnlBumpSelection? selected)
+    {
+        if(selected is null)throw Error("pnl_factor_bump","Select the price bump and the agreement of estimates explicitly.");
         var bump=new PnlFactorBump(selected.Ticks,selected.PriceSteps);bump.Require();
         return new(bump,Agreement(selected.AbsoluteTolerance,selected.DeltaRelativeTolerance),Agreement(selected.AbsoluteTolerance,selected.GammaRelativeTolerance));
     }
@@ -74,9 +79,6 @@ internal sealed class TradingPnlReport(PreviewDatabase database)
             $"Each factor is bumped by {ticks}.";
         return $"{Covered} {bumped} An estimate is used when its half, nominal and double steps agree within {selection.Delta.Absolute} plus {selection.Delta.Relative} of the nominal estimate for a delta and {selection.Gamma.Relative} for a gamma. {Remaining}";
     }
-    // A recorded close's convention, as the exact session version the close names states it. Its clock is the clock of the
-    // calendar that version pins, and is absent when that calendar cannot be read at the endpoint.
-    internal sealed record CloseConvention(string Session,int SessionVersion,string Name,string Calendar,ClockRule? Clock);
     // The calendar clock one calendar day was counted on, and whose it is: the prior date's close convention's, or the one
     // the request named for a working snapshot. Its zone is its IANA zone, or its fixed offset from UTC.
     internal sealed record CalendarClock(string Source,string? Session,int? SessionVersion,string? Name,string? Calendar,ClockRule Rule,string Zone);
@@ -298,7 +300,7 @@ internal sealed class TradingPnlReport(PreviewDatabase database)
             if(chosen.IsEmpty)throw Error("pnl_position","Select readable books before running P&L.");
             var available=await RiskTradeScope.Read(connection,database.Manifest.CatalogId,chosen,ct,request.TradeIds);
             if(!available.AllAvailable)throw new PreviewDeniedException();
-            var convention=view.Frame.Close is {} close?await Convention(connection,close,ct):null;
+            var convention=view.Frame.Close is {} close?await CloseConventions.Read(connection,database.Manifest.CatalogId,close,ct):null;
             var frame=view.CalculationFrame;var data=await MarketInputSelection.Root(database,connection,frame,ct,referenceScope:ReferenceReadScope.TradeValuation);
             PortfolioValuation.Prepared? prepared=null;
             PnlAccountingPoint? point=null;
@@ -318,19 +320,6 @@ internal sealed class TradingPnlReport(PreviewDatabase database)
             await using(var rollback=ScheduleStore.Command(connection,"ROLLBACK TO SAVEPOINT pnl_endpoint"))await rollback.ExecuteNonQueryAsync(ct);
             await using var release=ScheduleStore.Command(connection,"RELEASE SAVEPOINT pnl_endpoint");await release.ExecuteNonQueryAsync(ct);
         }
-    }
-    // The convention of a recorded close. The exact session version the close names is immutable configuration and gives
-    // the name and the calendar; the calendar's clock rule is reference data, read under the endpoint's bound context.
-    private async Task<CloseConvention> Convention(NpgsqlConnection connection,FrameClose close,CancellationToken ct)
-    {
-        var rows=await PreviewDatabase.Rows(connection,"SELECT row_to_json(t)::text FROM(SELECT s.name,v.calendar_code,CASE WHEN r.code IS NOT NULL THEN to_jsonb(r) END clock "+
-            "FROM market_data.close_session_versions v JOIN market_data.close_sessions s USING(catalog_id,code) "+
-            "LEFT JOIN ref_data.calendars c ON(c.catalog_id,c.revision_id,c.code)=(v.reference_catalog_id,v.reference_revision_id,v.calendar_code) "+
-            "LEFT JOIN ref_data.clock_rules r ON(r.catalog_id,r.revision_id,r.code)=(c.catalog_id,c.revision_id,c.clock_code) "+
-            "WHERE(v.catalog_id,v.code,v.version)=($1,$2,$3))t",[database.Manifest.CatalogId,close.Session,close.SessionVersion],ct);
-        if(rows.Length!=1)throw new PreviewDeniedException();
-        var clock=rows[0].GetProperty("clock");
-        return new(close.Session,close.SessionVersion,rows[0].Text("name"),rows[0].Text("calendar_code"),clock.ValueKind==JsonValueKind.Null?null:ReferenceClockJson.Read(clock));
     }
     // An exact amount as the shared amount display reads it; the page asks the backend for its display text.
     private static object Money(ExactMoney m)=>new{amount=m.ToExactString(),currency=m.Currency};

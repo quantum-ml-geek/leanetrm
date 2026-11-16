@@ -1,7 +1,6 @@
 using System.Collections.Immutable;
 using System.Text;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using OpenEtrm.Api;
 
 static class AssistantWalkthroughChecks
@@ -55,14 +54,9 @@ static class AssistantWalkthroughChecks
         if(!capabilities.Select(p=>p.Key).ToHashSet(StringComparer.Ordinal).SetEquals(new[]{"steps","panes","columns","fields","narration","fillEvidence"})||
             Encoding.UTF8.GetByteCount(capabilities.ToJsonString())>4096)
             throw new Exception("Fill guidance changed the presentation shape or exceeded its bounded metadata budget.");
-        var guide=capabilities["fillEvidence"]!.GetValue<string>();
-        if(Encoding.UTF8.GetByteCount(guide)>2048)throw new Exception("The fill guide exceeds its bounded text budget.");
-        string AdvertisedValue(string field,string label)
-        {
-            var mapping=Regex.Match(guide,Regex.Escape(field+": "+label+" => ")+"(\"[^\"]*\")");
-            if(!mapping.Success)throw new Exception($"The fill guide does not advertise the plan value for {field}: {label}.");
-            return JsonSerializer.Deserialize<string>(mapping.Groups[1].Value)!;
-        }
+        var guide=capabilities["fillEvidence"]!.AsObject();
+        if(guide["contract"]!.GetValue<string>()!="explicit_ticket_terms_v1")throw new Exception("Missing explicit term contract.");
+        string AdvertisedValue(string field,string label)=>guide["values"]![field]![label]!.GetValue<string>();
         string GuidedPlan(params (string Field,string Label)[] choices)=>JsonSerializer.Serialize(new object[]{new{kind="go",target="n1"}}
             .Concat(choices.Select(c=>(object)new{kind="fill",page="blotter_new_swap",field=c.Field,value=AdvertisedValue(c.Field,c.Label)})));
         foreach(var (ask,choices) in new (string,(string Field,string Label)[])[]{

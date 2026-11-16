@@ -9,7 +9,7 @@ SELECT pg_advisory_xact_lock(730849102);
 -- Page identity admits prompts only, not assistant operations on entitlements.
 DO $pages$ DECLARE definition text;marker text:='''facility_activity''';BEGIN
  SELECT pg_get_functiondef(p.oid) INTO STRICT definition FROM pg_proc p WHERE p.oid='assistant.is_prompt_page(text)'::regprocedure
-  AND md5(p.prosrc)='1e62589cb79aa43ce420dc33880690d0' AND pg_get_userbyid(p.proowner)='openetrm_security_owner'
+  AND md5(p.prosrc)='c2550291ab59332f5307de4bc348923a' AND pg_get_userbyid(p.proowner)='openetrm_security_owner'
   AND NOT p.prosecdef AND p.provolatile='i' AND p.prokind='f' AND p.proparallel='u' AND NOT p.proisstrict AND NOT p.proleakproof
   AND p.provariadic=0 AND p.proargmodes IS NULL AND p.proargnames=ARRAY['page'] AND p.prorettype='boolean'::regtype
   AND p.prolang=(SELECT oid FROM pg_language WHERE lanname='sql') AND p.proconfig=ARRAY['search_path=pg_catalog']

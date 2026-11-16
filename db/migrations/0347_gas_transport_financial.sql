@@ -9,7 +9,7 @@ SELECT pg_advisory_xact_lock(730849102);
 -- Prompt identity only; no assistant financial operation is installed.
 DO $pages$DECLARE definition text;marker text:='''blotter_new_park_loan''';BEGIN
  SELECT pg_get_functiondef(p.oid) INTO STRICT definition FROM pg_proc p WHERE p.oid='assistant.is_prompt_page(text)'::regprocedure
-  AND md5(p.prosrc)='f383b2095582b061f462660cefc581f7' AND pg_get_userbyid(p.proowner)='openetrm_security_owner'
+  AND md5(p.prosrc)='f12588e5aedbea5dbf4590d0fec883ec' AND pg_get_userbyid(p.proowner)='openetrm_security_owner'
   AND NOT p.prosecdef AND p.provolatile='i' AND p.prokind='f' AND p.proparallel='u' AND NOT p.proisstrict AND NOT p.proleakproof
   AND p.provariadic=0 AND p.proargmodes IS NULL AND p.proargnames=ARRAY['page'] AND p.prorettype='boolean'::regtype
   AND p.prolang=(SELECT oid FROM pg_language WHERE lanname='sql') AND p.proconfig=ARRAY['search_path=pg_catalog']

@@ -14,9 +14,9 @@ def run():
     root = Path(__file__).resolve().parents[1]
 
     def before(query, migration):
-        if migration.name != '0344_gas_transport_financial.sql':
+        if migration.name != '0347_gas_transport_financial.sql':
             return
-        guard_checks(query, migration, number='0344', guard='gas_transport_financial_upgrade',
+        guard_checks(query, migration, number='0347', guard='gas_transport_financial_upgrade',
             signatures=('assistant.is_prompt_page(text)',))
         reference, market, access, manifest = fixture(root)
         for sql in [reference, market, access]:
@@ -50,7 +50,7 @@ def run():
         assert prepared['digest']() == prepared['before'], 'Financial installation changed retained operating, title or cash facts.'
         assert f.route_read(prepared['definition']['routeId'], context=prepared['context']) == prepared['retained']
         assert query('SELECT count(*) FROM trading.gas_transport_financial_trades;') == '0'
-        assert query("SELECT assistant.is_prompt_page('blotter_new_transport') AND NOT assistant.is_prompt_page('synthetic_uninstalled_financial_page');") == 't'
+        assert query("SELECT assistant.is_prompt_page('blotter_new_transport') AND assistant.is_prompt_page('transport_route_plans') AND assistant.is_prompt_page('transport_capacity') AND assistant.is_prompt_page('options') AND NOT assistant.is_prompt_page('synthetic_uninstalled_financial_page');") == 't'
         financial = FinancialTransportFixture.from_capacity(f)
         request = financial.booking()
         booked = financial.book_financial(request)
