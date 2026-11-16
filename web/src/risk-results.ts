@@ -107,7 +107,8 @@ export function recentCompletedRuns(jobs:readonly RiskJob[],scope:Scope,asOf:str
  * A retained run opens as a scope's current report only when it was valued at the selected close and under the pricing policy the risk
  * catalog states, which the backend says of each job it reads in full. A job that does not say so is not assumed to have been.
  */
-export const opensAsCurrent=(job:RiskJob,snapshotId:string):boolean=>job.result?.snapshotId===snapshotId&&job.underStatedPricingPolicy===true;
+export const opensAsCurrent=(job:RiskJob,snapshotId:string,pricingPolicyId?:string):boolean=>job.result?.snapshotId===snapshotId&&
+ (pricingPolicyId===undefined?job.underStatedPricingPolicy===true:job.statedPricingPolicyId===pricingPolicyId);
 export function riskAddress(hash:string):string|undefined{
  return /^#risk\/job\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.exec(hash)?.[1];
 }

@@ -34,8 +34,12 @@ each behavior command once, and each preview queue bounded to twelve suites.
 Jobs keep their 90-minute limit; the existing aggregate check rejects failed,
 cancelled or skipped selection/jobs. Lightweight groups do not install PostgreSQL.
 
-The current integrated runner contains 185 commands: 64 shared checks,
-64 isolated application previews and 57 partition-specific native/application
+The gas partition includes the Park and Loan native, populated-upgrade, retained
+price-worker and real application browser qualifiers, alongside its existing
+amendment upgrades and application checks.
+
+The current integrated runner contains 189 commands: 64 shared checks,
+64 isolated application previews and 61 partition-specific native/application
 checks. The D404 local checkpoint passed 1,866 frontend checks and 122 Python
 checks. The earlier calendar/lifecycle checkpoint passed 737 managed core checks,
 88 rate checks, 1,806 frontend checks and 121 Python checks; those counts describe
@@ -4568,3 +4572,29 @@ A complete `tools/check_all.py` run was not performed locally on the final code;
 continuous integration runs the complete suite.
 These are synthetic local checks. They do not qualify a Side, trade or cash
 consumer, explicit roll boundaries, or a production activation.
+
+## Park and Loan local qualification (D405)
+
+The bounded [commercial profile](gas-park-loan.md) is checked through:
+
+- `tools/check_gas_park_loan.py`: native lifecycle, all four directions, source and
+  authority fences, canonical retries, and 20 independent whole-book value and
+  price-scenario checkpoints when the pinned SDK is supplied through `DOTNET`.
+- `tools/check_gas_park_loan_upgrade.py`: populated predecessor retention and nine
+  function-contract drift refusals.
+- `tools/check_gas_park_loan_worker.py`: nine actual retained price jobs, complete
+  ordinary/report parity, native owner identities, exact source and selector
+  fences, original actor revocation and natural worker gas-grant expiry.
+- `tools/check_gas_park_loan_browser.py`: 68 checks in the real owned application,
+  including uncertain booking and advance responses, principal and fee operations,
+  retained terms, explicit fee applicability and normal Risk controls after advance
+  for all four service/perspective combinations.
+
+These are required once in the gas CI partition. Local runs passed with stock
+PostgreSQL 16, the pinned .NET 10.0.402 SDK and Chromium. An existing futures
+historical/Monte Carlo worker consumer also passed, protecting unrelated worker
+admission. Independent adversarial review found and verified fixes for policy
+changes after preview, knowledge-first payment heads, worker source authority and
+UI time-resolution races. Aggregate CI and exact-release checks remain mandatory;
+local qualification does not activate a production schema or qualify service
+horizon continuation.

@@ -70,6 +70,13 @@ test('every page state shape is accepted exactly',()=>{
   assert.deepEqual(readBlotterMessage(msg('pageReport',{state}),S).state,state,state.page);
 });
 
+test('a popped-out Blotter reports the selected Park and loan ticket and its exact agreement position',()=>{
+ const entry={...futures,entry:{product:'park-loan'}};
+ assert.deepEqual(readBlotterMessage(msg('pageReport',{state:entry}),S).state,entry);
+ const agreement={...futures,trade:{tradeId:'synthetic-trade',instrumentType:'physical_gas_park_loan',revision:1,reference:'Synthetic agreement'}};
+ assert.deepEqual(readBlotterMessage(msg('pageReport',{state:agreement}),S).state,agreement);
+});
+
 // A BroadcastChannel in one realm: posts reach every other open channel of the same name.
 const open=new Set();
 class FakeChannel{

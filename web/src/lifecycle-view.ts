@@ -15,7 +15,7 @@ type Api=<T>(path:string,body?:unknown)=>Promise<T>;
 type Review={hash:string;offer:LifecycleOffer;details:Record<string,unknown>};
 const words=(value:string)=>value.replaceAll('_',' ').replaceAll('.',' · ').replace(/([a-z])([A-Z])/g,'$1 $2');
 const title=(value:string)=>{const text=words(value);return text.charAt(0).toUpperCase()+text.slice(1);};
-const gasHandler=(handler:string)=>['gas_owned','gas_futures_delivery','gas_futures_reconciliation','gas_futures_reconciliation_batch','gas_owned_quantity_reconciliation','gas_quantity_bundle','gas_loan_fee_amendment','gas_loan_quantity_reconciliation','gas_operator_quantity_reconciliation'].includes(handler);
+const gasHandler=(handler:string)=>['gas_owned','gas_park_loan','gas_futures_delivery','gas_futures_reconciliation','gas_futures_reconciliation_batch','gas_owned_quantity_reconciliation','gas_quantity_bundle','gas_loan_fee_amendment','gas_loan_quantity_reconciliation','gas_operator_quantity_reconciliation'].includes(handler);
 const knownRejection=(code:string|undefined)=>!!code&&/^(lifecycle_|option_|futures_|swap_|gas_|settlement_|historical_|job_|access_denied$|request_denied$)/.test(code);
 const element=<K extends keyof HTMLElementTagNameMap>(tag:K,text?:string)=>{const node=document.createElement(tag);if(text!==undefined)node.textContent=text;return node;};
 
@@ -93,7 +93,7 @@ export function setupLifecycle(root:HTMLElement,o:{api:Api;act:(work:()=>Promise
    const effect=d.effects as Record<string,unknown>|undefined;add('Effect',d.willChange===false?'Existing fact acknowledged · no new effect':'Record observed facts');
    const correction=request.target.handler==='gas_futures_reconciliation';
    if(correction){add('Acknowledged financial revision',d.acknowledgedRevision);add('Current financial revision',d.currentRevision);}
-   if(effect){for(const key of ['performedQuantity','quantitySpecification','stockQuantity','returnQuantity','feeAmount','cashAmount','currency'])add(title(key),effect[key]);
+   if(effect){for(const key of ['performedQuantity','quantitySpecification','stockQuantity','returnQuantity','outstandingPrincipal','feeAmount','cashAmount','currency'])add(title(key),effect[key]);
     for(const key of ['effectiveAt','returnAt','feeDueAt','cashDueAt'])if(typeof effect[key]==='string')add(title(key),instant(effect[key]));}
    for(const key of ['quantity','amount','businessReference','businessKey','evidence'])add(correction&&d.willChange===false&&key==='quantity'?'Acknowledged quantity':title(key),request.selection[key]);
    for(const key of ['titleAt','availableAt','performedAt','paidAt','effectiveAt'])if(typeof request.selection[key]==='string')add(title(key),instant(request.selection[key] as string));

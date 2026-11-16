@@ -88,6 +88,13 @@ test('a one-month ticket selects a level its returned schedule actually contains
  },['term','month','day']);
 });
 
+test('a retained ticket explicitly selects its product on the shared read operation',{skip:!browserAvailable,timeout:browserTestTimeout},async()=>{
+ await fixture(async evaluate=>{
+  await evaluate('(async()=>{await open(true);})()');
+  assert.equal(await evaluate("calls.find(c=>c.path==='tickets/trade').body.product"),'synthetic_identity');
+ });
+});
+
 test('a late gas booking receipt leaves its original request recoverable without changing the new actor or navigating',{skip:!browserAvailable,timeout:browserTestTimeout},async()=>{
  await fixture(async evaluate=>{
   await evaluate(`(async()=>{

@@ -25,6 +25,7 @@ LIFECYCLE_NATIVE={f'tools/{name}.py' for name in (
     'check_gas_quantity_reconciliation_batches','check_gas_mixed_quantity_reconciliation','check_gas_lifecycle_agents','check_gas_mixed_quantity_browser','check_gas_owned_quantity_choices','check_physical_option_value','check_cash_accumulation','check_gas_principal_carrying',
     'check_risk_fit_authority','check_lifecycle_browser','check_retained_swap_schedule_reads')}
 GAS_AMENDMENTS={f'tools/{name}.py' for name in (
+    'check_gas_park_loan','check_gas_park_loan_upgrade','check_gas_park_loan_worker','check_gas_park_loan_browser',
     'check_gas_fee_existing_origins','check_gas_fee_browser','check_gas_loan_quantity_browser',
     'check_gas_loan_quantity_reconciliation','check_gas_owned_fact_acknowledgements','check_gas_owned_title_acknowledgements','check_gas_read_authority','check_gas_operator_quantity_browser',
     'check_gas_operator_existing_origins','check_gas_operator_upgrade','check_gas_operator_native_upgrade')}
@@ -61,6 +62,16 @@ class CheckAllTests(unittest.TestCase):
                         check_all.main()
                     self.assertEqual(failure.exception.code, 2)
                     selected.assert_not_called()
+
+    def test_park_loan_qualifiers_are_required_in_gas_partition(self):
+        commands = []
+        with redirect_stdout(io.StringIO()):
+            run_checks(Path('/pg'), Path('/dotnet'), Path('/browser'), group='gas',
+                       run=lambda command, **options: commands.append(command))
+        expected = {'tools/check_gas_park_loan.py', 'tools/check_gas_park_loan_upgrade.py',
+                    'tools/check_gas_park_loan_browser.py', 'tools/check_gas_park_loan_worker.py'}
+        observed = {part for command in commands for part in command if part in expected}
+        self.assertEqual(observed, expected)
 
     def test_async_workbench_checks_are_required_in_workspace_partition(self):
         for group in ALL_GROUPS:

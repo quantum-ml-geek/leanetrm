@@ -15,7 +15,7 @@ type Api=<T>(path:string,body?:unknown,signal?:AbortSignal)=>Promise<T>;
 type Opened={tradeId:string;bindingId:string;revision:number};
 type NewEntry={booked:(receipt:{tradeId:string})=>void;amending?:Opened};
 // instant is the page's formatter for the instants the ticket shows.
-export type TicketOptions={api:Api;context:()=>Record<string,unknown>;product:string;instant:(at:string)=>string;zone:()=>string;actor:()=>string;readOnly?:boolean;presentation?:'schedules';onAmend?:()=>void;sideSchedule?:(host:HTMLElement,side:TicketSide,slot:number,view:TicketView,context:Record<string,unknown>)=>()=>void}&({opened:Opened}|({opened?:undefined}&NewEntry));
+export type TicketOptions={api:Api;context:()=>Record<string,unknown>;product:string;instant:(at:string)=>string;zone:()=>string;actor:()=>string;readOnly?:boolean;presentation?:'schedules'|'terms';onAmend?:()=>void;sideSchedule?:(host:HTMLElement,side:TicketSide,slot:number,view:TicketView,context:Record<string,unknown>)=>()=>void}&({opened:Opened}|({opened?:undefined}&NewEntry));
 
 export type TicketHandle={unsaved():boolean;pending():boolean;destroy():void};
 
@@ -45,6 +45,7 @@ type Focus={side:string|null;field:string;value:string};
 function focusIn(root:HTMLElement):Focus|undefined{
  const active=document.activeElement;
  if(!(active instanceof HTMLInputElement||active instanceof HTMLSelectElement)||!root.contains(active))return;
+ if(active instanceof HTMLInputElement&&active.type==='checkbox')return;
  const field=active.closest<HTMLElement>('[data-field]')?.dataset.field;
  return field?{side:active.closest<HTMLElement>('[data-side]')?.dataset.side??null,field,value:active.value}:undefined;
 }
@@ -264,6 +265,7 @@ export function setupTicket(host:HTMLElement,o:TicketOptions):TicketHandle{
   amend:o.onAmend,
   edit:(side,field,value)=>{
    const key=keyOf(side,field);choiceEdits.set(key,(choiceEdits.get(key)??0)+1);retainedChoices.delete(key);
+   entered.set(key,(entered.get(key)??0)+1);unresolved.delete(key);delete lookupErrors[key];
    if(value)clearedChoices.delete(key);else clearedChoices.add(key);
    if(state)for(const [at,f] of dependents(side,field)){const prior=valuesOf(at)[f.id];if(prior?.value)retainedChoices.set(keyOf(at,f.id),prior);}
    change(s=>setValue(s,side,field,value),side===null?'all':[...dependents(side,field),...retry()]);
@@ -273,7 +275,11 @@ export function setupTicket(host:HTMLElement,o:TicketOptions):TicketHandle{
    const key=keyOf(side,field),zone=o.zone(),n=(entered.get(key)??0)+1;entered.set(key,n);delete lookupErrors[key];
    if(!local){unresolved.delete(key);on.edit(side,field,'');return;}
    unresolved.add(key);draw();
-   const latest=()=>current()&&zone===o.zone()&&entered.get(key)===n;
+   const latest=()=>{
+    if(!current()||entered.get(key)!==n)return false;
+    if(zone===o.zone())return true;
+    lookupErrors[key]='The display time zone changed. Re-enter this time in the current zone.';draw();return false;
+   };
    void o.api<{candidates:{instant:string}[]}>('time/inspect',{localTime:local,timeZone:zone}).then(result=>{
     if(!latest())return;
     if(result.candidates.length===1){unresolved.delete(key);on.edit(side,field,result.candidates[0].instant);return;}
@@ -351,18 +357,20 @@ export function setupTicket(host:HTMLElement,o:TicketOptions):TicketHandle{
   try{await readTrade();}catch(error){fail(error);}
  }
  async function readTrade(){
-  const r=await o.api<TicketTrade>('tickets/trade',{context:o.context(),...(o.opened??amendment)!},lifetime.signal);
+  const r=await o.api<TicketTrade>('tickets/trade',{context:o.context(),product:o.product,...(o.opened??amendment)!},lifetime.signal);
   if(!current())return;
   if(amendment&&!r.actions.amend.allowed)throw Error(r.actions.amend.reason);
   if(amendment){if(typeof r.definitionRevisionId!=='string'||!r.definitionRevisionId)throw Error('The amendment requires its exact retained gas definition revision.');definitionRevisionId=r.definitionRevisionId;}
   // A trade that records day quantities names the selection its schedule shows, whether or not this reader may record one here.
   if(r.actions.record.allowed&&!(typeof r.quantityPolicy==='string'&&r.quantityPolicy))throw Error('A booked read that offers day entries must name the quantity selection its schedule shows.');
   state=ticketOf(d!,r.draft);actions=o.readOnly?{...r.actions,record:{allowed:false,reason:'This trade window is read only.'}}:r.actions;quantityPolicy=r.quantityPolicy??undefined;
-  if(mode==='booked'&&o.sideSchedule){
+  if(mode==='booked'&&(o.sideSchedule||o.presentation==='terms')){
    const requested=o.context();
    if(r.snapshotId!==requested.snapshotId||!r.context?.contextId||!r.context.effectiveOn||!r.context.knownAt||requested.knowledgeMode==='retained'&&r.context.contextId!==requested.contextId)
     throw Error('The booked schedule response does not match its certified snapshot and context.');
    scheduleContext={...requested,snapshotId:r.snapshotId,knowledgeMode:'retained',contextId:r.context.contextId};
+  }
+  if(mode==='booked'&&o.sideSchedule){
    sideSlots=r.sideSlots;
    if(!sideSlots||Object.keys(sideSlots).length!==state.sides.length||state.sides.some(s=>!Number.isInteger(sideSlots![s.code])||sideSlots![s.code]<0)||new Set(Object.values(sideSlots)).size!==state.sides.length)
     throw Error('The booked Side schedules require their exact native membership slots.');
@@ -395,7 +403,7 @@ export function setupTicket(host:HTMLElement,o:TicketOptions):TicketHandle{
  async function check(){
   const command=pending.command;if(!current()||!command||sending)return;
   try{
-   const r=await o.api<TicketReceipt|{found:false}>('tickets/status',{operationId:command.operationId});
+   const r=await o.api<TicketReceipt|{found:false}>('tickets/status',{operationId:command.operationId,product:o.product});
    if('tradeId' in r)receipt(command,r);else say('No completed booking was found. Retry the original booking.');
   }catch(error){say(`The booking status could not be read: ${reasonOf(error)}`);}
  }

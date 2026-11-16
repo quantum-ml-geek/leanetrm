@@ -22,7 +22,8 @@ public sealed record CurveBumpRequest(CurveRiskAxisRequest Factor,string Size,st
 public sealed record CurveShiftRequest(CurveRiskAxisRequest Factor,string Size,string Convention);
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record PortfolioRiskCatalogRequest(FuturesReadRequest Context,ImmutableArray<Guid> BookIds,ImmutableArray<Guid> PortfolioIds,
-    ImmutableArray<Guid>? TradeIds=null);
+    ImmutableArray<Guid>? TradeIds=null,
+    [property:JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)]PortfolioValuationPolicy? PricingPolicy=null);
 
 public sealed record PortfolioRiskAxis(string Id,DefinitionRevision Market,CurveRiskAxisRequest Request,
     CurveShockCoordinate Coordinate,CurveShockTarget Target,PriceUnit Unit,string Label,

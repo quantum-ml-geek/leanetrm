@@ -57,3 +57,10 @@ test('only valuation measures leave unvalued positions out; booked facts count e
 test('an undelivered gas day whose contract expired without its final settlement says so',()=>{
  assert.equal(valuationReason('delivery_mark_final_settlement','physical_gas'),'Missing final settlement of its expired delivery contract');
 });
+
+test('Park and loan unavailable values name the native reconciliation or selected market problem',()=>{
+ assert.match(valuationReason('gas_park_loan_reconciliation','physical_gas_park_loan'),/Reconciliation required/);
+ assert.match(valuationReason('discount_curve','physical_gas_park_loan'),/fee discount/);
+ assert.match(valuationReason('missing_observation','physical_gas_park_loan'),/Missing principal mark/);
+ assert.throws(()=>valuationReason('gas_park_loan_reconciliation','physical_gas'),/unknown valuation status/);
+});

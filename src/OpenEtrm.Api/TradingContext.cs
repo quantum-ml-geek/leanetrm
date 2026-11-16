@@ -6,7 +6,7 @@ namespace OpenEtrm.Api;
 
 internal static class TradingContext
 {
-    private sealed record SourceAdmission(Guid Catalog,Guid Context,DateTimeOffset At,DateOnly BusinessDate,DateTimeOffset Until):ICommitAdmission
+    internal sealed record SourceAdmission(Guid Catalog,Guid Context,DateTimeOffset At,DateOnly BusinessDate,DateTimeOffset Until):ICommitAdmission
     {
         public async Task RequireCommit(NpgsqlConnection connection,CancellationToken ct)
         {
@@ -21,12 +21,17 @@ internal static class TradingContext
     }
     internal static async Task<DateTimeOffset> AdmitSource(PreviewDatabase database,NpgsqlConnection connection,Guid context,DateTimeOffset at,DateOnly date,CancellationToken ct)
     {
+        var admission=await CaptureSource(database,connection,context,at,date,ct);
+        database.RegisterCommitAdmission(connection,admission);
+        return admission.Until;
+    }
+    internal static async Task<SourceAdmission> CaptureSource(PreviewDatabase database,NpgsqlConnection connection,Guid context,DateTimeOffset at,DateOnly date,CancellationToken ct)
+    {
         RequireInstant(at);
         var catalog=database.Manifest.CatalogId;
         await using var command=ScheduleStore.Command(connection,"SELECT security.admit_trading_business_source($1,$2,$3,$4)",catalog,context,at,date);
         var until=new DateTimeOffset((DateTime)(await command.ExecuteScalarAsync(ct))!);
-        database.RegisterCommitAdmission(connection,new SourceAdmission(catalog,context,at,date,until));
-        return until;
+        return new SourceAdmission(catalog,context,at,date,until);
     }
     internal static Task Bind(NpgsqlConnection connection,Guid catalog,InputFrame frame,ScheduleContext context,CancellationToken ct)
     {
