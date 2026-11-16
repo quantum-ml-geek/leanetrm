@@ -15,6 +15,40 @@ from synthetic_side_calendars import side_calendar_policy
 ROLE_KIND={'physical':'physical','consideration':'cash','fee':'fee'}
 
 
+def independent_choice_reads(c,query,context,draft):
+    """Static, draft and party discovery do not acquire unrelated pricing assignments."""
+    retained={**context,'knowledgeMode':'retained','contextId':c.call('gas/catalog',context)['context']['contextId']}
+    cases=[('physical','direction'),('physical','quantity_basis'),('cash','cash_source'),('cash','cash_stage'),
+           (None,'book'),(None,'legal_entity'),(None,'counterparty')]
+    request=lambda at,side,field:{'context':at,'draft':draft,'side':side,'field':field}
+    answer=lambda response:{key:response.get(key) for key in ['choices','startingValue']}
+    expected={(side,field):answer(c.call('tickets/choices',request(context,side,field))) for side,field in cases}
+    indexed={**draft,'sides':[*draft['sides'],{'kind':'floating','code':'index','values':{
+        'floating_direction':'pay','floating_source':'physical','floating_stage':'delivery'}}]}
+    index_request={**request(retained,'index','floating_index'),'draft':indexed}
+    c.call('tickets/choices',index_request)
+    assert [x['value'] for x in expected['cash','cash_source']['choices']]==['physical']
+    assert all(expected[None,field]['choices'] for field in ['book','legal_entity','counterparty'])
+    assert query("SELECT has_table_privilege('openetrm_runtime','market_data.gas_valuation_assignments','SELECT');")=='t'
+    query('REVOKE SELECT ON market_data.gas_valuation_assignments FROM openetrm_runtime;')
+    try:
+        assert query("SELECT has_table_privilege('openetrm_runtime','market_data.gas_valuation_assignments','SELECT');")=='f'
+        for at in [context,retained]:
+            for side,field in cases:
+                assert answer(c.call('tickets/choices',request(at,side,field)))==expected[side,field],(side,field)
+            for side,field in [('physical','book'),('unknown','direction'),('physical','invented')]:
+                assert c.call('tickets/choices',request(at,side,field),expected=422)['code']=='ticket_input'
+        # These branches still consume the selected setup's genuine valuation metadata.
+        c.call('tickets/lookup',request(retained,'physical','gas_day_start'),expected=403)
+        c.call('tickets/choices',request(retained,'physical','forecast_curve'),expected=403)
+        c.call('tickets/choices',request(retained,'fee','fee_tariff'),expected=403)
+        c.call('tickets/choices',index_request,expected=403)
+    finally:
+        query('GRANT SELECT ON market_data.gas_valuation_assignments TO openetrm_runtime;')
+        assert query("SELECT has_table_privilege('openetrm_runtime','market_data.gas_valuation_assignments','SELECT');")=='t'
+    print('PASS gas ticket source demand: exact working/retained local and party choices survive denied unrelated assignments; clock, index, forecast and tariff still require their source',flush=True)
+
+
 def assert_declared(view,body,description):
     """Every cell key is a column the served description declares for its side's kind, or a trade column, on every row and the totals;
     a coming-soon column reads nothing."""
@@ -172,6 +206,8 @@ def check_ticket_operations(c,context,cat,description,body,view,query,manifest):
         return {f'{kind}_direction':direction,f'{kind}_source':'physical',f'{kind}_stage':'delivery',f'{kind}_price':price,f'{kind}_payment_at':'2021-02-05T00:00:00Z'}
     draft={'product':'physical_gas','version':1,'trade':trade,'sides':[{'kind':'physical','code':'physical','values':physical,'calendarPolicy':body['physicalSides'][0]['calendarPolicy']},
            {'kind':'cash','code':'cash','values':charge('cash','receive','3.412'),'calendarPolicy':body['cashSides'][0]['calendarPolicy']},{'kind':'fee','code':'fee','values':charge('fee','pay','0.045'),'calendarPolicy':body['cashSides'][1]['calendarPolicy']}]}
+
+    independent_choice_reads(c,query,context,draft)
 
     # Physical choices follow only the exact selected reference relationships, including unpriced points.
     paths=cat['physicalReferences']

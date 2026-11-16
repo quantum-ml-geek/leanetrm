@@ -40,6 +40,21 @@ internal static class GasTicketChecks
         }
         void Equal(object? expected, object? actual, string what) { if (!Equals(expected, actual)) throw new Exception($"{what}: expected '{expected}', got '{actual}'."); }
         var full = Draft(Receipt, Linked, Cash, Fee);
+        Check("fixed and draft-owned choice lists need no pricing catalog",()=>
+        {
+            Equal("receive,deliver",string.Join(",",GasTicket.LocalChoices(full,"RCT","direction")?.Select(c=>c.Value)??[]),"physical directions");
+            Equal("RCT,DLV",string.Join(",",GasTicket.LocalChoices(full,"PAY","cash_source")?.Select(c=>c.Value)??[]),"exact draft source sides");
+            Equal("RCT",string.Join(",",GasTicket.LocalChoices(full,"DLV","link_source")?.Select(c=>c.Value)??[]),"a link excludes its own side");
+            Equal(null,GasTicket.LocalChoices(full,"FEE","fee_tariff"),"tariffs retain a real source demand");
+        });
+        Check("local choice demand validates the exact product side and field",()=>
+        {
+            foreach(var (side,field) in new[]{("RCT","book"),("unknown","direction"),("RCT","invented")})
+            {
+                try{GasTicket.LocalChoices(full,side,field);}catch(MarketDataException error)when(error.Code=="ticket_input"){continue;}
+                throw new Exception("An invalid choice target cannot acquire a local answer.");
+            }
+        });
         Check("ticket mapping preserves missing calendar bytes for completed-command lookup",()=>
         {
             var mapped=Map(Draft(Receipt with{CalendarPolicy=null},Cash with{CalendarPolicy=null}));

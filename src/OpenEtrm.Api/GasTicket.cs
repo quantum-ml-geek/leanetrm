@@ -285,18 +285,31 @@ public static class GasTicket
  }
 
  // Physical choices use reference relationships, independently of valuation coverage.
+ internal static ImmutableArray<TicketChoice>? LocalChoices(TicketDraft draft,string? side,string field)
+ {
+  var(target,f)=Field(draft,side,field);
+  if(Fixed.TryGetValue(f.Choices??throw Bad($"Field '{field}' has no choice list."),out var fixedChoices))return fixedChoices;
+  return f.Choices=="physical_sides"?[..draft.Sides.Where(s=>s.Kind==Physical&&!(f.Id=="link_source"&&s==target)).Select(s=>new TicketChoice(s.Code,s.Code))]:null;
+ }
+ internal static ImmutableArray<TicketChoice> BookChoices(IEnumerable<JsonElement> rows)=>
+  [..rows.Select(b=>new TicketChoice(b.Text("id"),b.Text("name")))];
+ internal static ImmutableArray<TicketChoice> PartyChoices(IEnumerable<JsonElement> rows)=>
+  [..rows.Select(p=>PartyChoice(p.Id("id"),int.Parse(p.Text("revision"),CultureInfo.InvariantCulture),p.Text("name")))];
+ internal static ImmutableArray<TicketChoice> PartyChoices(IEnumerable<TradeParties.Choice> rows)=>
+  [..rows.Select(p=>PartyChoice(p.Id,p.Revision,p.Name))];
+ static TicketChoice PartyChoice(Guid id,int revision,string name)=>new($"{id}@{revision.ToString(CultureInfo.InvariantCulture)}",name);
+
  public static ImmutableArray<TicketChoice> Choices(TicketDraft draft,string? side,string field,JsonElement catalog)
  {
+  if(LocalChoices(draft,side,field) is {} local)return local;
   var (target,f)=Field(draft,side,field);
-  if(Fixed.TryGetValue(f.Choices??throw Bad($"Field '{field}' has no choice list."),out var fixedChoices))return fixedChoices;
-  if(f.Choices=="physical_sides")return[..draft.Sides.Where(s=>s.Kind==Physical&&!(f.Id=="link_source"&&s==target)).Select(s=>new TicketChoice(s.Code,s.Code))];
   var physical=PhysicalReferenceField(draft,side,field);
   if(target is not null&&!physical)RequireSetup(draft,catalog);
   var paths=physical?catalog.GetProperty("physicalReferences").EnumerateArray().ToArray():[];
   IEnumerable<TicketChoice> Distinct(IEnumerable<JsonElement> rows,string code,string name)=>rows.Select(r=>new TicketChoice(r.Text(code),r.Text(name))).Distinct();
-  IEnumerable<TicketChoice> Parties(string list)=>catalog.GetProperty(list).EnumerateArray().Select(p=>new TicketChoice($"{p.Text("id")}@{p.Text("revision")}",p.Text("name")));
+  IEnumerable<TicketChoice> Parties(string list)=>PartyChoices(catalog.GetProperty(list).EnumerateArray());
   return[..f.Choices switch{
-   "books"=>catalog.GetProperty("books").EnumerateArray().Select(b=>new TicketChoice(b.Text("id"),b.Text("name"))),
+   "books"=>BookChoices(catalog.GetProperty("books").EnumerateArray()),
    "legal_entities"=>Parties("legalEntities"),"counterparties"=>Parties("counterparties"),
    "gas_setups"=>catalog.OptionalText("gasSetupId") is {} setup?[new TicketChoice(setup,$"Published setup {catalog.Text("gasSetupPublication")}")]:[],
    "pricing_indices"=>IndexChoices(draft,target!,catalog),

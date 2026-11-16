@@ -49,6 +49,7 @@ public sealed class GasTicketStore(PreviewDatabase database)
 
  public async Task<object> Choices(NpgsqlConnection c,PreviewData data,InputFrame frame,TicketFieldRequest body,CancellationToken ct)
  {
+  // The fixed assigned-curve fallback still requires this exact source admission.
   if(body.Field is "forecast_curve" or "floating_forecast_curve")
   {
    var probe=GasTicket.PriceProbe(body.Draft,body.Side!,await Catalog(c,data,frame,ct),frame.Id,data.DefinitionRevision.RevisionId);
@@ -65,6 +66,14 @@ public sealed class GasTicketStore(PreviewDatabase database)
    }
    return GasTicket.ChoiceSet(body.Draft,body.Side,body.Field,[GasTicket.AssignedForecastChoice,..eligible.Select(choice=>new TicketChoice(GasTicket.ForecastValue(choice.Reference),choice.Label))]);
   }
+  ImmutableArray<TicketChoice>? independent=GasTicket.LocalChoices(body.Draft,body.Side,body.Field);
+  if(independent is null&&body.Side is null)
+   independent=body.Field switch{
+    "book"=>GasTicket.BookChoices(await gas.Books(c,ct)),
+    "legal_entity"=>GasTicket.PartyChoices(await TradeParties.Catalog(c,database.Manifest.CatalogId,true,ct)),
+    "counterparty"=>GasTicket.PartyChoices(await TradeParties.Catalog(c,database.Manifest.CatalogId,false,ct)),
+    _=>null};
+  if(independent is {} localChoices)return GasTicket.ChoiceSet(body.Draft,body.Side,body.Field,localChoices);
   return GasTicket.ChoiceSet(body.Draft,body.Side,body.Field,GasTicket.Choices(body.Draft,body.Side,body.Field,
    GasTicket.PhysicalReferenceField(body.Draft,body.Side,body.Field)?JsonSerializer.SerializeToElement(await gas.PhysicalReferences(c,data,ct),Json):await Catalog(c,data,frame,ct)));
  }
