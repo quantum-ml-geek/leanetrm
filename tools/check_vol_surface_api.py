@@ -148,6 +148,21 @@ def run_checks(url, query, manifest, *, run_worker, worker_login):
     check('a call and a put of one strike agree in their sensitivities', both and len(both) * 2 >= len(pairs) and not parity, (len(both), len(pairs), parity[:5]))
     check('most solved series have every sensitivity', sum(absent.values()) * 10 <= len(solved) * 4, absent)
 
+    # Booked option positions are scaled from these stored analytics; the read prices nothing.
+    held = c.call('options/positions', {'context': {'snapshotId': frame['id'], 'convention': OPTION, 'knowledgeMode': 'current'}, 'model': MODEL}, timeout=TIMEOUT)
+    rows = [(group, row) for group in held['groups'] for row in group['rows']]
+    figures = ('value',) + measures
+    check('booked option positions read with their series\' stored analytics, or the reason there are none',
+          held['model'] == MODEL and all(row['state'] in ('analysed', 'unavailable', 'notCalibrated')
+                                         and all((row[m]['amount'] is None) != (row[m]['missing'] is None) for m in figures) for _, row in rows)
+          and all(row['state'] != 'notCalibrated' for group, row in rows if group['product'] == PRODUCT)
+          and all(row[m]['missing'] == 'not_calibrated' for group, row in rows if group['product'] != PRODUCT for m in figures)
+          and all(set(total) == {'currency', 'value', 'theta'} for total in held['totals']), held)
+    print(f"WORKLOAD option positions: {len(rows)} positions in {len(held['groups'])} underlying futures", flush=True)
+    check('an unknown model is refused for positions',
+          c.call('options/positions', {'context': {'snapshotId': frame['id'], 'convention': OPTION, 'knowledgeMode': 'current'}, 'model': 'smile_unknown_v1'},
+                 expected=422)['code'] == 'vol_model_unknown')
+
     refit = fit()
     run_worker()
     again = job(refit['jobId'])

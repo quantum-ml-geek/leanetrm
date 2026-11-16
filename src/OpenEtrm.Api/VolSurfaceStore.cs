@@ -66,18 +66,9 @@ internal static class VolSurfaceStore
     // context, whether its inputs were revised since, the caller's newest fit job for the key there and whether the caller may fit.
     internal static async Task<object> Read(NpgsqlConnection connection,PreviewDatabase database,TradingView view,VolSurfaceReadRequest body,CancellationToken ct)
     {
-        VolModels.Require(body.Model);
-        var selected=await SelectedInputs(connection,database,view.CalculationFrame,ct,body.DefinitionRevisionId);
-        var manifest=selected.Source.Apply(database.Manifest);
-        var product=Product(manifest,body.Product).ToJsonString();var date=DateOnly.ParseExact(BusinessDate(view),"yyyy-MM-dd",CultureInfo.InvariantCulture);
-        async Task<JsonNode?> Value(string sql,params object[] arguments)
-        {
-            await using var command=ScheduleStore.Command(connection,sql,arguments);
-            return await command.ExecuteScalarAsync(ct) is string text?JsonNode.Parse(text):null;
-        }
-        var (close,at,pins)=Location(selected.Frame);
-        var stored=await Value("SELECT security.read_vol_surface($1,$2,$3::jsonb,$4,$5,$6::uuid,$7,$8)::text",manifest.CatalogId,manifest.RevisionId,product,date,body.Model,close,at,pins);
-        var job=await Value("SELECT risk.vol_surface_fit_job($1,$2,$3::jsonb,$4,$5,$6::uuid,$7,$8)::text",manifest.CatalogId,manifest.RevisionId,product,date,body.Model,close,at,pins);
+        var (manifest,key)=await Locate(connection,database,view,body.Product,body.Model,body.DefinitionRevisionId,ct);
+        var stored=await Value(connection,StoredSurface,key,ct);
+        var job=await Value(connection,"SELECT risk.vol_surface_fit_job($1,$2,$3::jsonb,$4,$5,$6::uuid,$7,$8)::text",key,ct);
         JsonObject? revision=null;
         if(stored is not null)
         {
@@ -93,6 +84,30 @@ internal static class VolSurfaceStore
             // What a fit may select: offered for the page to send back, with the clocks a working snapshot may name.
             ["sensitivities"]=new JsonObject{["offered"]=JsonSerializer.SerializeToNode(OptionSurfaceAnalytics.Offered,RiskJobs.Json),
                 ["clocks"]=JsonSerializer.SerializeToNode(TradingPnlReport.Clocks(),RiskJobs.Json),["clockRequired"]=view.Frame.Close is null}};
+    }
+
+    // The stored surface itself for a product at the view's location, or none: what another read scales or draws from.
+    internal static async Task<VolSurfaceResult?> Surface(NpgsqlConnection connection,PreviewDatabase database,TradingView view,string product,string model,
+        Guid? definitionRevisionId,CancellationToken ct)=>
+        (await Value(connection,StoredSurface,(await Locate(connection,database,view,product,model,definitionRevisionId,ct)).Key,ct))?["content"].Deserialize<VolSurfaceResult>(Json);
+
+    private const string StoredSurface="SELECT security.read_vol_surface($1,$2,$3::jsonb,$4,$5,$6::uuid,$7,$8)::text";
+    // The key a product's surface and its fit job are read by at a view: the exact product version, the business date and the
+    // model, at the close the frame is (or none), its valuation instant and its pins.
+    private static async Task<(PreviewManifest Manifest,object[] Key)> Locate(NpgsqlConnection connection,PreviewDatabase database,TradingView view,string product,string model,
+        Guid? definitionRevisionId,CancellationToken ct)
+    {
+        VolModels.Require(model);
+        var selected=await SelectedInputs(connection,database,view.CalculationFrame,ct,definitionRevisionId);
+        var manifest=selected.Source.Apply(database.Manifest);
+        var (close,at,pins)=Location(selected.Frame);
+        return(manifest,[manifest.CatalogId,manifest.RevisionId,Product(manifest,product).ToJsonString(),
+            DateOnly.ParseExact(BusinessDate(view),"yyyy-MM-dd",CultureInfo.InvariantCulture),model,close,at,pins]);
+    }
+    private static async Task<JsonNode?> Value(NpgsqlConnection connection,string sql,object[] arguments,CancellationToken ct)
+    {
+        await using var command=ScheduleStore.Command(connection,sql,arguments);
+        return await command.ExecuteScalarAsync(ct) is string text?JsonNode.Parse(text):null;
     }
 
     // The surfaces stored at or before the view's bound context, the view's own first and then newest business date first, each

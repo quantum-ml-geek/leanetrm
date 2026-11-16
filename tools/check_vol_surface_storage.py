@@ -208,10 +208,12 @@ def run_checks(query, manifest):
     settled = counts()
     other_surface = {'synthetic': 'first fit', 'sensitivities': {'policy': 'synthetic_other_selection'}}
     reselected = json.loads(query(record(uuid4(), first_inputs, other_surface) + ';'))
-    check('the same inputs under another sensitivity selection record a new revision, which the read returns',
+    newest = capture()
+    check('the same inputs under another sensitivity selection record a new revision, which a later cutoff reads and an earlier one does not',
           reselected['created'] and reselected['revision'] != first['revision'] and reselected['publicationOrder'] > first['publicationOrder']
           and counts() == f"{int(settled.split('|')[0]) + 1}|{int(settled.split('|')[1]) + 1}"
-          and json.loads(read(later, pins=first_inputs))['revision'] == reselected['revision'], (reselected, counts()))
+          and json.loads(read(newest, pins=first_inputs))['revision'] == reselected['revision']
+          and json.loads(read(later, pins=first_inputs))['revision'] == first['revision'], (reselected, counts(), read(newest, pins=first_inputs)))
     settled = counts()
     unchanged = json.loads(query(record(uuid4(), first_inputs, first_surface) + ';'))
     check('each selection keeps its own latest revision: a refit under either records nothing new, and other content under either is nondeterministic',

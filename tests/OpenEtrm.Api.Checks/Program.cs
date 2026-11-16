@@ -13,6 +13,7 @@ if(args is ["--gas-operator-ordinary-value",var operatorOrdinaryPath]){await Gas
 if(args is ["--cash-option-value-policy"]){CashOptionPolicyChecks.Run();return;}
 if(args is ["--selected-option-inputs"]){SelectedOptionInputChecks.Run();return;}
 if(args is ["--option-sensitivity-request"]){OptionSensitivityRequestChecks.Run();return;}
+if(args is ["--option-position-analytics"]){OptionPositionAnalyticsChecks.Run();return;}
 if(args is ["--cash-option-value",var cashOptionPath]){await CashOptionValueChecks.Run(cashOptionPath);return;}
 if(args is ["--physical-option-economic",var physicalEconomicPath]){await PhysicalOptionValueChecks.Run(physicalEconomicPath,true);return;}
 if(args is ["--gas-physical-completion-fixture",var completionPath]){await GasPhysicalCompletionFixture.Run(completionPath);return;}
