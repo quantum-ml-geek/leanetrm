@@ -47,11 +47,12 @@ sealed class GenerateContentAdapter(HttpMessageHandler handler,ModelTransportLim
         }
         var body=new JsonObject
         {
-            ["contents"]=contents,["systemInstruction"]=new JsonObject{["parts"]=new JsonArray(new JsonObject{["text"]=request.System})},
+            ["contents"]=contents,
             ["generationConfig"]=new JsonObject{["candidateCount"]=1,["maxOutputTokens"]=request.Parameters.MaxOutputTokens,["responseModalities"]=new JsonArray("TEXT"),
                 ["thinkingConfig"]=new JsonObject{["thinkingLevel"]=request.Parameters.Reasoning!.ToUpperInvariant(),["includeThoughts"]=false}},
             ["serviceTier"]="standard",["store"]=false
         };
+        if(request.System.Length>0)body["systemInstruction"]=new JsonObject{["parts"]=new JsonArray(new JsonObject{["text"]=request.System})};
         if(!request.Tools.IsEmpty)
         {
             body["tools"]=new JsonArray(new JsonObject{["functionDeclarations"]=new JsonArray(request.Tools.Select(t=>(JsonNode?)new JsonObject

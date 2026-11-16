@@ -78,6 +78,14 @@ export function pickOption(catalog:OptionCatalog,pick:OptionPick,level:OptionLev
  return next;
 }
 
+/** The selection that names one listed series, each level picked as the lists offer it. A series the catalog does not list selects nothing. */
+export function pickSeries(catalog:OptionCatalog,series:string):OptionPick{
+ const listed=catalog.options.filter(s=>s.series===series);
+ if(listed.length>1)throw Error(`The option catalog lists ${series} more than once.`);
+ if(!listed.length)throw Error(`${series} is not listed at this close.`);
+ return optionLevels.reduce((pick,level)=>pickOption(catalog,pick,level,valueOf[level](listed[0])),{...noOptionPick});
+}
+
 /** A selection after the catalog was read again: each level it still offers is kept, and from the first it does not, every level is cleared. */
 export function keepOffered(catalog:OptionCatalog,pick:OptionPick):OptionPick{
  let kept={...noOptionPick};

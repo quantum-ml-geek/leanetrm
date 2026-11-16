@@ -1,6 +1,6 @@
 # Park and Loan outstanding-balance fees
 
-D408 adds the explicitly selected `physical_gas_park_loan_balance_time_v1`
+D410 adds the explicitly selected `physical_gas_park_loan_balance_time_v1`
 profile beside the [fixed-fee title-transfer profile](gas-park-loan.md). It
 retains the same bounded principal contract: one full accepted advance, one exact
 point and quantity basis, and equal partial returns. Customer/provider and

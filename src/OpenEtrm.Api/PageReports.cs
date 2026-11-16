@@ -5,7 +5,7 @@ using OpenEtrm.MarketData;
 namespace OpenEtrm.Api;
 
 // A page report's page, the read its selection names, once it parses, and the Blotter's layout where it states one.
-sealed record PageRead(string Page,ToolCall? Call,BlotterLayout? Layout);
+sealed record PageRead(string Page,ToolCall? Call,BlotterLayout? Layout,bool SupportsRead=true);
 
 // What the Blotter showed of its panes and window when the question was asked (D271): whether its details and charts were
 // open, each the shown tab of its group in the panes as drawn and not put away, and whether it was in a window of its own.
@@ -35,7 +35,7 @@ static class PageReports
         // The inspected PPA is the Blotter's trade view of it; its target opens it in the Blotter.
         ["ppa"]=new("read_trades",["trades.trade_v1","trades.ppa_book_v1"],"PPA bookings",false),
         ["blotter_risk"]=Workspace("Blotter risk"),["blotter_risk_lens"]=Workspace("Blotter risk lens"),["blotter_new_trade"]=Workspace("New trade"),["blotter_new_future"]=Workspace("New futures trade"),["blotter_new_swap"]=Workspace("New swap"),["blotter_new_ppa"]=Unsupported("New PPA"),["blotter_new_gas"]=Unsupported("New physical gas trade"),["blotter_new_park_loan"]=Unsupported("New Park and Loan agreement"),["blotter_new_crude"]=Unsupported("New physical crude trade"),["blotter_new_lng"]=Unsupported("New physical LNG cargo"),["blotter_new_option"]=Unsupported("New futures option trade"),
-        ["dashboard"]=Unsupported("Dashboard"),["vol_surfaces"]=Unsupported("Vol surfaces"),
+        ["dashboard"]=Unsupported("Dashboard"),["vol_surfaces"]=Unsupported("Vol surfaces"),["options"]=Unsupported("Options"),
         ["facility_definitions"]=Unsupported("Facility definitions"),["facility_activity"]=Unsupported("Physical facility activity"),["transport_capacity"]=Unsupported("Transport capacity"),
         ["lifecycle"]=Workspace("Lifecycle"),["physical_operations"]=Workspace("Physical operations"),["facility_quantities"]=new("read_workspace_page",["workspace.page_v1"],"Facilities",false),["gas_setup"]=Workspace("Gas delivery setup"),["crude_setup"]=Workspace("Crude delivery setup"),["physical_gas"]=Unsupported("Physical gas bookings"),["physical_crude"]=Unsupported("Physical crude bookings"),["risk_jobs"]=Workspace("Risk"),["delivery_prices"]=Workspace("Delivery prices"),["interval_series"]=Workspace("Interval data"),
         ["interval_curves"]=Workspace("Hourly / sub-hourly curves"),["users_access"]=Workspace("Users & access"),["settings_ai"]=Workspace("AI settings")
@@ -70,13 +70,13 @@ static class PageReports
     // A report ask accepts, or page_report_invalid.
     public static void Require(JsonElement report)
     {
-        if(Read(report) is not {} read||read.Call is null&&Pages[read.Page].Tool is not null)
+        if(Read(report) is not {} read||read.SupportsRead&&read.Call is null&&Pages[read.Page].Tool is not null)
             throw new MarketDataException("page_report_invalid","Name the page you asked from, from the supported set, with its selection in the documented form.");
     }
 
     // The stored report's page and read: none for a page the assistant does not read, and no read for a selection that
     // does not parse, which ask never stores.
-    public static PageRead? Dispatch(JsonElement report)=>Read(report) is {} read&&Pages[read.Page].Tool is not null?read:null;
+    public static PageRead? Dispatch(JsonElement report)=>Read(report) is {SupportsRead:true} read&&Pages[read.Page].Tool is not null?read:null;
 
     internal static BlotterDigestView? DigestView(JsonElement report)
     {
@@ -126,6 +126,18 @@ static class PageReports
         if(page.Tool is null)return selection.ValueKind==JsonValueKind.Object&&!selection.EnumerateObject().Any()?new(id,null,layout):null;
         try
         {
+            // A retained Park and Loan can host a question before its trade reader is qualified.
+            // Validate its identity without offering or dispatching another product's reader.
+            if(id=="blotter"&&selection.ValueKind==JsonValueKind.Object&&selection.TryGetProperty("instrumentType",out var instrument)
+                &&instrument.ValueKind==JsonValueKind.String&&instrument.GetString()=="physical_gas_park_loan")
+            {
+                var trade=new ToolInput(selection);
+                trade.Exactly("view","mode","bookIds","portfolioIds","groupBy","measures","tradeId","instrumentType","revision");
+                _=trade.Choice("view","trade");
+                trade.Null("mode","bookIds","portfolioIds","groupBy","measures");
+                _=trade.Id("tradeId");_=trade.Revision("revision");
+                return new(id,null,layout,SupportsRead:false);
+            }
             if(page.Tool=="read_workspace_page")
             {
                 _=new ToolInput(selection);

@@ -12,7 +12,15 @@ namespace OpenEtrm.Api;
 // A read and a proposed command use the same handler and request type as their page. New endpoints are closed
 // to the assistant until their effect, permissions and temporal contract are explicitly classified here.
 internal sealed record AssistantOperation(string Id,string Page,string Method,string Path,bool RequiresApproval,
-    ImmutableArray<string> Permissions,bool CurrentOnly);
+    ImmutableArray<string> Permissions,bool CurrentOnly)
+{
+    // Current-only is an execution restriction, not a declaration that financial inputs are unnecessary.
+    public bool NeedsFinancialContext=>!CurrentOnly||Page is "lifecycle" or "facility_quantities" or "gas_setup" or "crude_setup" or "blotter" or "blotter_new_future" or "blotter_new_swap"||
+        Page=="interval_curves"||Path=="portfolio/risk/jobs"&&RequiresApproval||
+        Path is "market/closes/register" or "power/catalog" or "power/preview" or "power/settlement"||
+        Page=="ppa"&&Path is not ("ppa/frames" or "ppa/status")||
+        Path is "custom-curves/save" or "custom-curves/publish" or "custom-curves/activation";
+}
 
 internal static class AssistantOperations
 {

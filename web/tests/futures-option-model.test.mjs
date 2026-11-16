@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {noOptionPick,optionChoices,pickOption,keepOffered,lifecycleWrites,optionTicketStatus} from '../dist/futures-option-model.js';
+import {noOptionPick,optionChoices,pickOption,pickSeries,keepOffered,lifecycleWrites,optionTicketStatus} from '../dist/futures-option-model.js';
 
 // A synthetic catalog: two exchanges, two commodities on the first, the series in the backend's order.
 const named=(code,name)=>({code,name});
@@ -107,4 +107,13 @@ test('options sharing an underlying series code use the terms from their own exa
  assert.equal(selected.underlying.length,1);
  assert.equal(selected.series.definitionRevisionId,'definition-b');
  assert.throws(()=>optionChoices({...joined,underlyings:[underlying]},selection),/does not describe/);
+});
+
+test('a listed series named from elsewhere is selected through every level, and one the catalog does not list selects nothing',()=>{
+ const picked=pickSeries(catalog,'a_gas_feb_c9.5');
+ assert.deepEqual(picked,{exchange:'exchange_a',commodity:'gas',underlying:'gas_feb',right:'call',strike:'9.5'});
+ assert.equal(optionChoices(catalog,picked).series.series,'a_gas_feb_c9.5');
+ assert.equal(optionChoices(catalog,pickSeries(catalog,'b_gas_feb_c10')).series.series,'b_gas_feb_c10');
+ assert.throws(()=>pickSeries(catalog,'a_gas_apr_c10'),/a_gas_apr_c10 is not listed at this close/);
+ assert.throws(()=>pickSeries({...catalog,options:[...catalog.options,catalog.options[0]]},'a_gas_feb_c10'),/more than once/);
 });

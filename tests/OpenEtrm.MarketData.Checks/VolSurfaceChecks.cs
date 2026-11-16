@@ -24,6 +24,8 @@ internal static class VolSurfaceChecks
         Check("grid ends on the highest fitted strike off the lattice", GridEndsOnHighestStrike);
         Check("strike axis is the union across expiries", AxisIsUnion);
         Check("an expiry whose series all expired is option_expired and off the axis", ExpiredExpiryIsOffTheAxis);
+        Check("a series is in the money by its strike against the underlying settlement", InTheMoneyFollowsSettlement);
+        Check("the at-the-money strike is the listed strike nearest the settlement, the higher on a tie", AtTheMoneyIsNearestStrike);
     }
 
     private static readonly string[] Moneyness = ["-0.3", "-0.2", "-0.1", "0", "0.1", "0.2", "0.3"];
@@ -147,6 +149,31 @@ internal static class VolSurfaceChecks
         surface.Series.Single(r => r.Series.Right == right && r.Series.Strike == ExactDecimal.Parse(strike) && r.Series.ExpiryAt == (expiry ?? Expiry1));
 
     private static void Expect(bool condition, string message) { if (!condition) throw new Exception(message); }
+
+    private static void InTheMoneyFollowsSettlement()
+    {
+        var surface = Build(BothRights(Expiry1, Strikes).AddRange(BothRights(Expiry2, Strikes, "97")), null, "97");
+        foreach (var strike in Strikes)
+        {
+            var below = decimal.Parse(strike, CultureInfo.InvariantCulture) < 97;
+            Expect(Result(surface, OptionRight.Call, strike, Expiry2).InTheMoney == below, $"Call {strike} against 97.");
+            Expect(Result(surface, OptionRight.Put, strike, Expiry2).InTheMoney == !below, $"Put {strike} against 97.");
+        }
+        var level = Build(BothRights(Expiry1, Strikes));
+        Expect(Result(level, OptionRight.Call, "100").InTheMoney == false && Result(level, OptionRight.Put, "100").InTheMoney == false,
+            "A strike at the settlement is not in the money.");
+        Expect(surface.Series.Where(r => r.Series.ExpiryAt == Expiry1).All(r => r.InTheMoney is null), "Without an underlying settlement nothing is stated.");
+    }
+
+    private static void AtTheMoneyIsNearestStrike()
+    {
+        ExactDecimal? Nearest(string? futures) => Build(BothRights(Expiry1, Strikes, futures ?? "100"), futures).Expiries.Single().AtTheMoneyStrike;
+        Expect(Nearest("97") == ExactDecimal.Parse("95"), "97 is nearest 95.");
+        Expect(Nearest("98") == ExactDecimal.Parse("100"), "98 is nearest 100.");
+        Expect(Nearest("97.5") == ExactDecimal.Parse("100"), "A tie takes the higher strike.");
+        Expect(Nearest("300") == ExactDecimal.Parse("110"), "Beyond the listed strikes the nearest is the last.");
+        Expect(Nearest(null) is null, "Without an underlying settlement there is none.");
+    }
 
     private static void OtmIsFitPoint()
     {

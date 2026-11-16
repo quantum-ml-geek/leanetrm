@@ -35,10 +35,11 @@ sealed class ResponsesAdapter(string vendor,HttpMessageHandler handler,ModelTran
         }
         var body=new JsonObject
         {
-            ["model"]=request.Model.Identifier,["instructions"]=request.System,["input"]=input,["stream"]=true,["store"]=false,
+            ["model"]=request.Model.Identifier,["input"]=input,["stream"]=true,["store"]=false,
             ["background"]=false,["truncation"]="disabled",["max_output_tokens"]=request.Parameters.MaxOutputTokens,["reasoning"]=new JsonObject{["effort"]=request.Parameters.Reasoning},
             ["service_tier"]="default",["include"]=new JsonArray("reasoning.encrypted_content")
         };
+        if(request.System.Length>0)body["instructions"]=request.System;
         // The OpenAI mapping fixes the billed cache lifetime to the shortest supported TTL. The
         // agent's explicit breakpoint switch applies only to Messages; implicit caching is automatic.
         if(vendor=="openai")body["prompt_cache_options"]=new JsonObject{["mode"]="implicit",["ttl"]="30m"};

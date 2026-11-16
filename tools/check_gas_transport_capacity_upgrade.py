@@ -14,9 +14,9 @@ def run():
     prepared = {}
     root = Path(__file__).resolve().parents[1]
     def before(query, migration):
-        if migration.name != '0342_gas_transport_capacity.sql':
+        if migration.name != '0345_gas_transport_capacity.sql':
             return
-        guard_checks(query,migration,number='0342',guard='gas_transport_capacity_upgrade',signatures=('assistant.is_prompt_page(text)',))
+        guard_checks(query,migration,number='0345',guard='gas_transport_capacity_upgrade',signatures=('assistant.is_prompt_page(text)',))
         reference, market, access, manifest = fixture(root)
         for sql in [reference,market,access]: query(sql)
         f = CustodyFixture(query,manifest)
@@ -91,7 +91,7 @@ def run():
         f=prepared['f'];timed=prepared['timed']
         assert prepared['digest']()==prepared['before'],'Capacity installation changed retained title, reservations, cash or original outcomes.'
         assert query('SELECT count(*) FROM trading.gas_transport_capacity_entitlements;')=='0'
-        assert query("SELECT assistant.is_prompt_page('transport_capacity') AND NOT assistant.is_prompt_page('synthetic_uninstalled_transport');")=='t'
+        assert query("SELECT assistant.is_prompt_page('transport_capacity') AND assistant.is_prompt_page('options') AND NOT assistant.is_prompt_page('synthetic_uninstalled_transport');")=='t'
         assert f.record(prepared['booked']['tradeId'],'accept',prepared['acceptance'],prepared['accept_policy'],operation=prepared['acceptance_operation'],context=prepared['acceptance_context'])==prepared['accepted']
         assert f.read(prepared['booked']['tradeId'],context=prepared['custody_old'])['balances']['inCustody']=='720'
         assert f.read(prepared['booked']['tradeId'])['balances']['inCustody']=='450'
