@@ -215,9 +215,12 @@ def run_checks(query, manifest):
           and json.loads(read(newest, pins=first_inputs))['revision'] == reselected['revision']
           and json.loads(read(later, pins=first_inputs))['revision'] == first['revision'], (reselected, counts(), read(newest, pins=first_inputs)))
     settled = counts()
-    unchanged = json.loads(query(record(uuid4(), first_inputs, first_surface) + ';'))
+    # Each selection's latest revision at this instant is what its refit is compared with: the first selection's is the second fit.
+    unchanged = json.loads(query(record(uuid4(), second_inputs, second_surface) + ';'))
     check('each selection keeps its own latest revision: a refit under either records nothing new, and other content under either is nondeterministic',
-          unchanged == {**first, 'created': False} and json.loads(query(record(uuid4(), first_inputs, other_surface) + ';')) == {**reselected, 'created': False}
-          and refused(record(uuid4(), first_inputs, {**other_surface, 'synthetic': 'changed'}), 'vol_surface_nondeterministic') and counts() == settled,
+          unchanged == {**second, 'created': False, 'knownFrom': unchanged['knownFrom']}
+          and json.loads(query(record(uuid4(), first_inputs, other_surface) + ';'))['revision'] == reselected['revision'] and counts() == settled
+          and refused(record(uuid4(), first_inputs, {**other_surface, 'synthetic': 'changed'}), 'vol_surface_nondeterministic')
+          and refused(record(uuid4(), second_inputs, {**second_surface, 'synthetic': 'changed'}), 'vol_surface_nondeterministic') and counts() == settled,
           (unchanged, counts()))
     check('the Options page is a page whose guidance can be configured', query("SELECT assistant.is_prompt_page('options') AND NOT assistant.is_prompt_page('option');") == 't')
