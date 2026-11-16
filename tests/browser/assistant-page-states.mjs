@@ -1,0 +1,24 @@
+// Explicit UI representatives, independent of the frontend labels and server admission catalog.
+export function assistantPageCases(){
+  const blotter={page:'futures',risk:false,trade:null,entry:null,lens:'values',view:{mode:'trades',bookIds:[],portfolioIds:[],groupBy:[],measures:[]},pane:{details:false,charts:false},poppedOut:false};
+  return [
+    ['curves',{page:'market',curve:null,tab:'prices'}],
+    ['power_tous',{page:'power',frame:true}],
+    ['schedules',{page:'schedules'}],
+    ['reference_data',{page:'reference',table:'units',search:''}],
+    ['parties',{page:'parties',kind:'counterparty'}],
+    ['jobs',{page:'jobs',job:null}],
+    ['lifecycle',{page:'lifecycle'}],
+    ['ppa',{page:'ppa',trade:null,book:null}],
+    ['custom_curves',{page:'custom-curves',curve:null,unsaved:false}],
+    ['blotter',blotter],
+    ['blotter_risk',{...blotter,risk:true}],
+    ['blotter_risk_lens',{...blotter,lens:'risk'}],
+    ...[[null,'blotter_new_trade'],['futures','blotter_new_future'],['options','blotter_new_option'],['swaps','blotter_new_swap'],['ppa','blotter_new_ppa'],['gas','blotter_new_gas'],['park-loan','blotter_new_park_loan'],['crude','blotter_new_crude'],['lng','blotter_new_lng']]
+      .map(([product,page])=>[page,{...blotter,entry:{product}}]),
+    ['risk_jobs',{page:'risk',view:'risk'}],
+    ['physical_power',{page:'physical-power'}],
+    ...[['physical-operations','physical_operations'],['facilities','facility_quantities'],['dashboard','dashboard'],['crude-setup','crude_setup'],['gas-setup','gas_setup'],['gas','physical_gas'],['crude','physical_crude'],['delivery','delivery_prices'],['interval-series','interval_series'],['interval-curves','interval_curves'],['vol-surfaces','vol_surfaces'],['admin','users_access'],['ai','settings_ai']]
+      .map(([page,report])=>[report,{page}])
+  ];
+}
