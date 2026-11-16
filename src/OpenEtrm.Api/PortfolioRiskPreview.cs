@@ -67,7 +67,7 @@ public sealed partial class PortfolioRiskPreview(PreviewDatabase database)
                 coordinate=CurveRiskAxes.Coordinate(a.Coordinate),kind="delivery_bucket",unit=Unit(markets,a.Unit),priceUnit=PriceUnitReference(a.Unit),
                 factor=new CurveRiskAxisRequest(CurveRiskAxes.Coordinate(a.Coordinate),new("delivery_bucket",a.Target.Curve,
                     Convention:DeliveryBucketCurveTarget.WholeDelivery))})).ToArray();
-        return new{factors=portfolio.Factors.Select(f=>Factor(markets,CurveRiskAxes.Quote(portfolio,f,ct))),
+        return new{context=portfolio.Context,snapshotId=frame.Id,factors=portfolio.Factors.Select(f=>Factor(markets,CurveRiskAxes.Quote(portfolio,f,ct))),
             availableFactors=available.Select(f=>Factor(markets,CurveRiskAxes.Quote(portfolio,f,ct))),scenarioTargets=targets,
             heldContractTargets=held.Contracts,heldCurveTargets=held.Curves,
             heldContractsWithoutTarget=held.ContractsWithoutTarget,heldCurvesWithoutTarget=held.CurvesWithoutTarget,
@@ -304,6 +304,8 @@ public sealed partial class PortfolioRiskPreview(PreviewDatabase database)
         PortfolioValuation.FuturesMeasure=>"Futures execution P&L",PortfolioValuation.SwapMeasure=>"Present value",PortfolioValuation.PpaMeasure=>"Value excluding overdue cash",
         FuturesMarginPortfolio.Measure=>"Futures remaining value",
         CrudePositions.Measure=>"Crude contractual PV",LngPositions.Measure=>"LNG contractual PV",FuturesOptionPositions.Measure=>FuturesOptionPositions.MeasureLabel,
+        OperatingPositions.Measure=>"Supplied operating-right PV",
+        RecPositions.Measure=>"Certificate contractual PV",
         GasPositions.Measure=>"Gas contractual PV",GasPositions.LifecycleMeasure=>"Gas "+GasPositions.LifecycleLabel.ToLowerInvariant(),
         GasParkLoanTicket.Measure=>"Remaining scheduled plan PV",GasOwnedPortfolio.Measure=>"Independent gas holdings and cash PV",
         GasParkCustodyTicket.Measure=>GasParkCustodyTicketStore.MeasureLabel,
