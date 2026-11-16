@@ -865,6 +865,11 @@ def main():
             if args.structured_power_check:
                 from check_structured_power import run_checks as check_structured_power
                 check_structured_power(url,query,manifest)
+                if args.browser_check:
+                    target=temporary/'browser-target.json'
+                    target.write_text(json.dumps({'suite':'business_browser_v1','url':url,'runId':run_id}))
+                    browser_process=subprocess.Popen(['node',str(ROOT/'tests/browser/run.mjs'),str(target),str(args.browser.resolve()),'--structured-power'],cwd=ROOT,env=env,start_new_session=True)
+                    if browser_process.wait(timeout=240):raise RuntimeError('Owned structured power browser checks failed')
             elif args.async_workbench_check:
                 from check_async_workbench_http import run_checks
                 run_checks(url,query,psql,env,manifest)

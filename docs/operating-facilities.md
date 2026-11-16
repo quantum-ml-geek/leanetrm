@@ -1,10 +1,10 @@
 # Operating facilities and supplied-plan valuation
 
 Status: bounded local implementation (D405). Managed checks, 43 disposable
-database cases and owned HTTP qualification pass on the current base. Browser
-component tests qualify form transport, recovery and desktop/phone layout;
-live-server browser qualification and the saved-trading/inventory continuation
-remain separate work.
+database cases and owned HTTP qualification pass on the current base. Browser component tests qualify form transport, recovery and desktop/phone
+layout. Thirteen owned live-server browser checks also pass native save/reopen,
+pricing, lost-response recovery, leave guards and account isolation. The
+saved-trading/inventory continuation remains separate work.
 
 Scheduling → Operating facilities attaches supported operating parameters to
 an existing reference location. A facility specification, a contractual operating
@@ -168,5 +168,5 @@ python3 tools/run_preview.py \
   --structured-power-check
 ```
 
-Live-server browser workflow qualification, portfolio hedge reporting, production
+Portfolio hedge reporting, production
 performance, operational dispatch, booking and settlement remain separate gates.
