@@ -32,6 +32,7 @@ internal static class TradingReadSelectionChecks
         try{retained.CaptureKnowledge(null!,store,CancellationToken.None).GetAwaiter().GetResult();throw new Exception("A historical read must not capture current knowledge.");}
         catch(InvalidOperationException){}
         Denied(()=>_=(selected with {Ends=DateTimeOffset.UtcNow.AddSeconds(-1)}).Captured(null!,store,historical,CancellationToken.None));
+        Denied(()=>(selected with {Ends=DateTimeOffset.UtcNow.AddSeconds(-1)}).CaptureKnowledge(null!,store,CancellationToken.None).GetAwaiter().GetResult());
         Console.WriteLine("PASS concurrent trading read: immutable selection, historical mode, changed actor, ended UI session and separately captured knowledge");
     }
     private static void Denied(Action action)

@@ -23,6 +23,7 @@ internal sealed record TradingReadSelection(string Profile,InputFrame Frame,bool
     internal async Task<ScheduleContext> CaptureKnowledge(NpgsqlConnection connection,KnowledgeStore store,CancellationToken ct)
     {
         if(!Working)throw new InvalidOperationException("Only a working read captures current knowledge.");
+        if(DateTimeOffset.UtcNow>=Ends)throw new PreviewDeniedException();
         return (await TradingView.Capture(connection,store,Frame,ct)).Context;
     }
     // The working view of a read whose knowledge was captured by CaptureKnowledge.
