@@ -1,6 +1,6 @@
 # Delivery plan and acceptance criteria
 
-D420 implements the bounded [delivery workbench](delivery-workbench.md) over
+D422 implements the bounded [delivery workbench](delivery-workbench.md) over
 existing gas and crude native behavior. Its qualification gates cover common
 interval/event presentation, conserved route-to-obligation allocations, reviewed
 atomic manual nominations, source corrections, history, authority and recovery.

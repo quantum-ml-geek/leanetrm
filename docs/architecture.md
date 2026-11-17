@@ -1,6 +1,6 @@
 # Architecture and domain contracts
 
-D420 adds the [reusable delivery workbench](delivery-workbench.md): small typed
+D422 adds the [reusable delivery workbench](delivery-workbench.md): small typed
 managed behaviors for gas intervals and crude transfer events, shared operating
 presentation, and exact chosen-route allocation links to booked gas occurrences.
 Native ledgers, economic Sides, title, custody and cash retain their owners.
