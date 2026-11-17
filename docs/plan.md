@@ -58,10 +58,12 @@ operating consumer, not the remaining financial or physical Transport products.
 ## Mandatory Side composition (D417)
 
 Status: the combined power/REC assembly and universal Side implementation pass
-bounded local qualification. The final source/SQL packet passes native admission,
-populated upgrades, exact retained workers and 151 actual physical/operating/REC
-browser assertions. Earlier service and standard-workflow checkpoints retain
-their own artifact identities. See [the qualification record](verification.md#instrument-and-side-alignment-qualification-d417).
+bounded local qualification. The combined scoped-presence source/SQL checkpoint
+passes native admission, populated upgrades, exact retained workers and 151 actual
+physical/operating/REC browser assertions. A subsequent physical-obligation
+admission checkpoint qualifies independent reconstruction and exact definition
+refusal through the actual native and retained-worker consumers. Earlier browser,
+service and standard-workflow checkpoints retain their own artifact identities. See [the qualification record](verification.md#instrument-and-side-alignment-qualification-d417).
 The complete CI matrix is a merge gate; release activation remains separate.
 
 All financial instruments derive from `Instrument`. Only `FuturesContract` and

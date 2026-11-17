@@ -5086,9 +5086,11 @@ The combined managed checkpoint passes 785 core checks, 88 rates, API default
 (98), schedules (491), gas-ticket (118) and focused Side/structured/reuse groups.
 API and Worker builds have zero warnings/errors. The full frontend checkpoint
 passes 2,164 checks with zero skipped; 163 repository Python checks pass. Later
-SQL and qualification-helper changes preserve every compiled source and all 389
-built output files byte for byte. This equality permits the final native and
-actual-browser gates to use the completed combined outputs without a rebuild.
+SQL and qualification-helper changes through the scoped-presence checkpoint
+preserve every compiled source and all 389 built output files byte for byte.
+That checkpoint uses the completed combined outputs without a rebuild. The later
+physical-obligation admission checkpoint below uses rebuilt API/checks/Worker
+outputs and retains its separate artifact identity.
 
 Earlier reviewed application checkpoints include standard/futures (327), dedicated
 swaps (189), assistant workspace (43) and point publication (21). An earlier
@@ -5097,8 +5099,8 @@ custody (126), financial Transport (43) and structured operating/REC (31) actual
 browser assertions. These remain evidence for their reviewed packets; they are
 not represented as one later all-product application run.
 
-The final combined local packet, including migrations 0355 point publication,
-0356 operating assembly and 0357 scoped financial presence, passes:
+The combined local scoped-presence checkpoint, including migrations 0355 point
+publication, 0356 operating assembly and 0357 scoped financial presence, passes:
 
 - 64 native operating PASS records, including 39 operating assertions and exact
   predecessor definition/owner/ACL/settings refusal. Migration 0356 retains its
@@ -5128,9 +5130,23 @@ The final combined local packet, including migrations 0355 point publication,
   cancellation/ownership, complete ordinary-report equality and unchanged native
   financial publications remain enforced.
 
-All final lanes verify unchanged source and artifact hashes before and after
-execution and remove their owned disposable resources. Independent adversarial
-reviews cover numerical, temporal, authorization, occurrence-state, scenario-reuse
+The subsequent physical-obligation admission checkpoint accepts independently
+reconstructed genuine Sides only under the same native Instrument ID, complete
+economic/pricing/schedule definitions and ordered Side types, IDs and bindings.
+It rejects changed native IDs, contractual cash timing and accepted finals. Both
+quantity mapping and source composition share this exact comparison; owner,
+account, quantity, source and historical admission remain unchanged. Focused
+regressions and actual physical-known, active projection and independent-market
+projection consumers pass, including their real retained economic workers.
+Immutable-source assertions use the production retained-evidence serializer and
+its complete cash/holding definition contracts. API/checks and Worker builds have
+zero warnings/errors, with byte-identical embedded API assemblies across all
+three output trees. The earlier 151 browser assertions retain their original
+scoped-presence packet identity.
+
+Both combined qualification checkpoints verify unchanged source and artifact
+hashes before and after execution and remove their owned disposable resources.
+Independent adversarial reviews cover numerical, temporal, authorization, occurrence-state, scenario-reuse
 and migration/release boundaries. The complete CI matrix remains a merge gate.
 
 Local fixtures use synthetic owned resources, stock PostgreSQL 16.14, .NET

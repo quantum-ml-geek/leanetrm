@@ -6010,7 +6010,8 @@ broader assignment rights. See the [route contract](gas-transport-routes.md).
 ## D416 · Direct Transport rights values with independent fixed-fee cash
 
 **Status:** bounded implementation with local native, managed and actual browser
-qualification; first-value market publication and integrated release remain open.
+qualification. D418 qualifies first-value market publication and D417 records
+combined Side qualification. Complete CI and integrated release remain gates.
 
 **Requirement.** Book and value a complete Transport service-rights package using
 an explicitly selected direct market value, without inferring gas exposure or
@@ -6111,9 +6112,12 @@ shared-resource pooling, started-delivery valuation or cash settlement.
 **Qualification.** The production inventory covers 27 concrete Instrument types
 and the two exact exceptions. Independent delegation, retained identities and
 occurrence state, native financial/lifecycle consumers, shared price risk and
-actual entry/review/detail/inspection flows pass bounded local checks. The final
-combined SQL/application packet passes 151 physical/operating/REC browser
-assertions and exact retained-worker controls; earlier service and standard
+actual entry/review/detail/inspection flows pass bounded local checks. The
+combined scoped-presence SQL/application checkpoint passes 151 physical/operating/REC
+browser assertions and exact retained-worker controls. Subsequent native
+physical-obligation reconstruction retains exact native IDs, economic, pricing
+and schedule definitions and ordered Side identities, with separate focused, native
+and retained-worker qualification. Earlier browser, service and standard
 checkpoints retain separate artifact identities. See [the verified results](verification.md#instrument-and-side-alignment-qualification-d417).
 A class hierarchy or UI label alone does not establish capability; the complete
 CI matrix must pass before merge.
@@ -6121,7 +6125,8 @@ CI matrix must pass before merge.
 ## D418 · Ordinary point publication before financial adoption
 
 **Status:** bounded implementation qualified on the combined facility, certificate
-and financial Transport baseline. Subsequent Side alignment and release remain open.
+and financial Transport baseline. D417 records combined Side qualification;
+complete CI and release remain separate gates.
 
 **Requirement.** A market editor can record the first real signed service-right
 market value, or another supported direct outright point, without needing a
