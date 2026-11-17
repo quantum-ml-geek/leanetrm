@@ -15,6 +15,12 @@ from owned_process import stop_owned_groups
 ROOT=Path(__file__).resolve().parents[1]
 
 
+def api_artifact(path):
+    source=Path(path).resolve()
+    for name in ['OpenEtrm.Api.dll','OpenEtrm.Api.deps.json','OpenEtrm.Api.runtimeconfig.json']:
+        if not (source/name).is_file():raise ValueError('A coherent current-tree API artifact is required: '+str(source/name))
+    return source
+
 
 def build_assets(dotnet):
     for project in ['tests/OpenEtrm.Api.Checks','src/OpenEtrm.Worker']:
@@ -24,9 +30,7 @@ def build_assets(dotnet):
 
 
 def run(query,manifest,dotnet,browser,children,fixture,script,*,worker_enabled=True,timeout=240,artifacts=(),api_bin=None):
-    api_source=ROOT/'src/OpenEtrm.Api/bin/Debug/net10.0' if api_bin is None else Path(api_bin).resolve()
-    for name in ['OpenEtrm.Api.dll','OpenEtrm.Api.deps.json','OpenEtrm.Api.runtimeconfig.json']:
-        if not (api_source/name).is_file():raise ValueError('A coherent current-tree API artifact is required: '+str(api_source/name))
+    api_source=api_artifact(ROOT/'src/OpenEtrm.Api/bin/Debug/net10.0' if api_bin is None else api_bin)
     root=Path(query('SHOW unix_socket_directories;')).resolve()
     run_id=str(uuid4());(root/'.openetrm-preview').write_text(run_id)
     (root/'manifest.json').write_text(json.dumps(manifest));(root/'manifest.json').chmod(0o600)

@@ -170,3 +170,6 @@ Complete economic horizon risk, generated closes, cross-clock P&L, quantity
 scaling, loss application and correction adapters remain explicitly unqualified.
 Transport, commercial Storage and broader quantity rights have their own delivery
 work; these checks do not establish production activation.
+
+Saved custody tickets admit identity-only assistant questions. A financial
+assistant trade read remains unqualified and refuses explicitly.

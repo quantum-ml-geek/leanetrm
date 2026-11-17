@@ -5948,3 +5948,100 @@ is unavailable even with a zero fee. Current-clock price qualification does not
 qualify generated closes, cross-clock P&L or complete economic horizon risk;
 source-known zero, future-effective, completed and cash-only states require
 the same explicit continuation fence. See the [contract](gas-park-custody.md).
+
+## D415 · Explicit gross transport capacity across shared paths
+
+**Status:** locally qualified capacity operating consumer; financial Transport
+booking and deployment qualification remain open.
+
+**Requirement.** Validate shared commercial entitlement, eligible points and
+routes throughout explicit operating intervals, independently of physical
+evidence, title, custody and cash.
+
+**Decision.** The first capacity law uses complete versioned dated rate limits,
+gross receipt quantity for agreement/receipt/route claims and gross delivery
+quantity for delivery-point claims. Each explicit stage interval has a uniform
+rate per actual elapsed hour. Evaluate every rate and limit boundary exactly;
+alternate paths cannot multiply their parent capacity. Report actual breaches,
+while a prospective replacement requires feasibility. A separately selected
+empty release can remove only its own claims while retaining other breaches.
+Missing coverage refuses rather than selecting a financial or operational fallback.
+
+The current consumer is a manually declared entitlement with exact book, party,
+reference and direct-path relationships. Independent chosen plans share every
+parent/point/path limit. Revising limits retains earlier claims and exposes
+breaches; replacing one plan releases only that plan's earlier claims. Complete
+source generations, immutable typed facts and exact retry receipts govern
+admission. Any latest-known future-effective head freezes new changes at the
+earlier business context. Earlier facts can be acknowledged without reinstating
+their heads. See the [operating contract](gas-transport-capacity-operations.md)
+and [wire boundary](gas-transport-capacity-api.md).
+
+**Boundaries.** This component does not establish route conservation, fuel,
+loss, transit, asset linepack, financial booking or any valuation. Those
+consumers require their own explicit qualified policies and complete current
+authority. See [Transport implementation status](gas-transport.md).
+
+## D413 · Retained routes over exclusive exact capacity-plan sources
+
+**Status:** locally qualified operating consumer; integrated release remains open.
+
+**Requirement.** Compose a complete chosen route from exact admitted capacity
+claims, conserve its declared fuel/loss/timing and split/merge quantities, and
+prevent source corrections from duplicating logical route membership.
+
+**Decision.** Use immutable exact graph/law definitions and append route-plan or
+own-membership-release facts. Each selected complete capacity-plan stream is
+exclusively linked through its first and current exact headers; every current
+claim is mapped once. Source changes make current assessment unavailable until
+explicit re-adoption. New assertions retain complete capacity version/generation
+as source value. Numerical policy, source authority, original deadlines and D238
+apply at managed and native boundaries.
+
+**Boundaries.** The first profile has exact same-pipeline-point handoffs, one
+uniform claim per segment, no node storage and no inferred interconnects. It does
+not establish physical performance, title, cash, financial Transport value or
+broader assignment rights. See the [route contract](gas-transport-routes.md).
+
+## D416 · Direct Transport rights values with independent fixed-fee cash
+
+**Status:** bounded implementation with local native, managed and actual browser
+qualification; first-value market publication and integrated release remain open.
+
+**Requirement.** Book and value a complete Transport service-rights package using
+an explicitly selected direct market value, without inferring gas exposure or
+conflating operating plans, physical performance, title and cash.
+
+**Decision.** Install `physical_gas_transport_direct_rights_v1` over one exact
+commercial entitlement/version. Require the company-signed current PV of the
+whole remaining rights package, excluding independent fees and owned gas. Pin
+the selected direct outright valuation definition, exact package/currency
+references, explicit price/fee/expiry laws and company perspective. Perspective
+supplies neither mark sign nor payment direction. Missing marks remain unpriced;
+zero is an explicit observation. Publish market data through its ordinary
+authorized operation, then adopt the exact observation for one financial state
+and valuation instant. Do not copy monetary values into an editable ledger.
+
+An explicit capacity-version adoption changes financial state and requires a
+new mark application. Operating plan changes do not amend financial rights.
+Valuation identity follows the accepted state while the retained agreement and
+binding preserve their native identities. Shared holding admission accepts
+exactly positive one complete package; quantity scaling and duplicate whole
+positions refuse. The ordinary black-box PV and immutable factor-scenario
+contracts retain their dependency semantics.
+
+The first fee is an independently directed, unconditional one-off obligation at
+booking. Nonzero fees own an ordinary `TimedCashPayment`; explicit zero has no
+cash owner. Existing recorded payments preserve complete correction histories
+and the selected same-sign capacity. The rights mark is already PV and receives
+no second discount factor. Exact manual/review lifecycle policy closes the
+rights at the fixed contractual end. Closed rights have known zero value;
+independent unpaid cash survives.
+
+**Boundaries.** One exclusive financial owner per entitlement is supported.
+Automatic service valuation, assignment, partition, source/fee/party amendment,
+residual rights and complete economic horizon continuation require separately
+qualified contracts. Current-clock price risk does not establish cross-clock
+P&L or generated-close support. Exact operating and valuation reference versions
+remain independent; equal currency labels do not authorize netting. See the
+[financial contract and qualification gates](gas-transport-financial.md).

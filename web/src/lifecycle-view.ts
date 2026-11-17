@@ -5,9 +5,11 @@ import {askInPanel} from './side-panel.js';
 import {zonedInput} from './user-time.js';
 import {mountLifecycleSchedule} from './lifecycle-scheduling.js';
 import {mountLifecycleSettings} from './lifecycle-settings.js';
-import {mountGasOwnedAction,mountGasOwnedSettings,type GasOwnedSetup,type GasOwnedUiOptions} from './gas-owned-lifecycle.js';
+import {mountGasOwnedAction,mountGasOwnedSettings,gasSetupPath,type GasOwnedSetup,type GasOwnedUiOptions} from './gas-owned-lifecycle.js';
+import {mountTransportFinancialCommands,requireTransportFinancialReceipt} from './gas-transport-financial-lifecycle.js';
+import {overviewTermSections,renderPhysicalSections,type PhysicalOverviewSection} from './physical-instrument.js';
 import {custodyReview} from './gas-custody-review.js';
-import {mountCustodyObservation,mountCustodyPayment} from './gas-custody-lifecycle.js';
+import {mountCustodyObservation,mountCustodyPayment,mountTransportPayment} from './gas-custody-lifecycle.js';
 import {loanFeeReview} from './gas-loan-fee-review.js';
 import {loanQuantityReview} from './gas-loan-quantity-review.js';
 import {operatorQuantityReview} from './gas-operator-quantity-review.js';
@@ -17,7 +19,7 @@ type Api=<T>(path:string,body?:unknown)=>Promise<T>;
 type Review={hash:string;offer:LifecycleOffer;details:Record<string,unknown>};
 const words=(value:string)=>value.replaceAll('_',' ').replaceAll('.',' · ').replace(/([a-z])([A-Z])/g,'$1 $2');
 const title=(value:string)=>{const text=words(value);return text.charAt(0).toUpperCase()+text.slice(1);};
-const gasHandler=(handler:string)=>['gas_owned','gas_park_loan','gas_park_custody','gas_futures_delivery','gas_futures_reconciliation','gas_futures_reconciliation_batch','gas_owned_quantity_reconciliation','gas_quantity_bundle','gas_loan_fee_amendment','gas_loan_quantity_reconciliation','gas_operator_quantity_reconciliation'].includes(handler);
+const gasHandler=(handler:string)=>['gas_owned','gas_park_loan','gas_park_custody','gas_transport_financial','gas_futures_delivery','gas_futures_reconciliation','gas_futures_reconciliation_batch','gas_owned_quantity_reconciliation','gas_quantity_bundle','gas_loan_fee_amendment','gas_loan_quantity_reconciliation','gas_operator_quantity_reconciliation'].includes(handler);
 const knownRejection=(code:string|undefined)=>!!code&&/^(lifecycle_|option_|futures_|swap_|gas_|cash_|settlement_|historical_|job_|access_denied$|request_denied$)/.test(code);
 const element=<K extends keyof HTMLElementTagNameMap>(tag:K,text?:string)=>{const node=document.createElement(tag);if(text!==undefined)node.textContent=text;return node;};
 
@@ -69,9 +71,10 @@ export function setupLifecycle(root:HTMLElement,o:{api:Api;act:(work:()=>Promise
    if(shown[index].eligible)return null;const text=element('span',rows[index][column]);text.className='lifecycle-inactive';text.title=lifecycleReason(shown[index].reason);return text;
   }});
  }
- function receiptStatusPath(command:RequestCommand|undefined){return command?.path==='gas/park-custody/evidence'?'gas/park-custody/evidence/status':command?.path==='cash-payments/record'?'cash-payments/status':undefined;}
+ function receiptStatusPath(command:RequestCommand|undefined){return command?.path==='gas/transport/financial/record'?'gas/transport/financial/status':command?.path==='gas/park-custody/evidence'?'gas/park-custody/evidence/status':command?.path==='cash-payments/record'?'cash-payments/status':undefined;}
  function requireReceipt(command:RequestCommand,outcome:Record<string,unknown>){
   if(outcome.operationId!==command.operationId)throw Error('The reply did not identify the retained request. Retry the original request.');
+  if(command.path==='gas/transport/financial/record')requireTransportFinancialReceipt(command,outcome);
   if(command.path==='cash-payments/record'&&(outcome.tradeId!==command.body.tradeId||outcome.bindingId!==command.body.bindingId||outcome.allocationId!==command.body.allocationId||typeof outcome.revision!=='number'||!Number.isSafeInteger(outcome.revision)||outcome.revision<1))
    throw Error('The reply did not identify this retained cash owner and payment allocation. Retry the original request.');
   if(command.path==='gas/park-custody/evidence'){
@@ -81,14 +84,14 @@ export function setupLifecycle(root:HTMLElement,o:{api:Api;act:(work:()=>Promise
  }
  async function checkStatus(){
   const command=pending.command,path=receiptStatusPath(command);if(!command||!path)return;
-  const label=command.path==='cash-payments/record'?'Recorded cash payment':'Custody observation';
+  const financial=command.path==='gas/transport/financial/record',label=financial?'Transport financial operation':command.path==='cash-payments/record'?'Recorded cash payment':'Custody observation';
   const actor=o.identity(),epoch=generation;saving=true;sync();let confirmed=false;
   try{
-   const reply=await o.api<{found:boolean;outcome?:Record<string,unknown>}>(path,structuredClone(command.body));
+   const reply=await o.api<{found:boolean;outcome?:Record<string,unknown>}>(path,financial?{operationId:command.operationId,ownerId:command.body.ownerId}:structuredClone(command.body));
    if(!current(epoch,actor)||pending.command!==command)return;
    if(reply.found===false){message.textContent='No recorded outcome was found. The original request remains retained for an authorized retry.';return;}
    if(reply.found!==true||!reply.outcome)throw Error('Check the exact retained request outcome again.');
-   requireReceipt(command,reply.outcome);confirmed=true;pending.clear();store();clearPanel();await o.committed?.();
+   requireReceipt(command,financial?reply:reply.outcome);confirmed=true;pending.clear();store();clearPanel();await o.committed?.();
    if(!current(epoch,actor))return;
    message.textContent=label+' confirmed from its recorded outcome.';saving=false;await load(false);
   }catch(error){if(current(epoch,actor))message.textContent=confirmed?label+' recorded. Its updated views could not be read. '+String(error):String(error);throw error;}
@@ -101,7 +104,7 @@ export function setupLifecycle(root:HTMLElement,o:{api:Api;act:(work:()=>Promise
    if(lifecycleChangesFinancialSource(command))await o.committed?.();
    if(!current(epoch,actor))return;
    const accepted=outcome.acknowledgedRevision??outcome.acknowledgedVersion,head=outcome.currentRevision??outcome.currentVersion;
-   message.textContent=outcome.semanticAcknowledgement===true||outcome.changed===false?
+   message.textContent=command.path==='gas/transport/financial/record'?'Transport financial operation confirmed from its recorded outcome.':outcome.semanticAcknowledgement===true||outcome.changed===false?
     `Existing fact acknowledged${accepted!==undefined?' · revision '+accepted:''}${head!==undefined?' · current revision '+head+' retained':''}.`:command.path==='jobs/lifecycle/create'?'Lifecycle task retained. Its outcome is available in Jobs.':command.path==='cash-payments/record'?'Observed payment recorded.':'Lifecycle change recorded.';
    saving=false;await load(false);
   }catch(error){if(current(epoch,actor)){if(!confirmed){pending.failed((error as {code?:string}).code,wasUncertain);store();if(!pending.command)invalidate();message.textContent=String(error);}else message.textContent='Lifecycle change recorded. Its updated views could not be read. '+String(error);}throw error;}finally{if(o.identity()===actor){saving=false;sync();}}
@@ -118,7 +121,7 @@ export function setupLifecycle(root:HTMLElement,o:{api:Api;act:(work:()=>Promise
    request.target.handler==='gas_loan_quantity_reconciliation'?loanQuantityReview(d,request.selection,instant):
     request.target.handler==='gas_operator_quantity_reconciliation'?operatorQuantityReview(d,request.selection,instant):undefined;
   if(financialReview)for(const[label,value]of financialReview.facts)add(label,value);
-  if(gasHandler(request.target.handler)&&!financialReview){
+  if(gasHandler(request.target.handler)&&request.target.handler!=='gas_transport_financial'&&!financialReview){
    const effect=d.effects as Record<string,unknown>|undefined;add('Effect',d.willChange===false?'Existing fact acknowledged · no new effect':'Record observed facts');
    const correction=request.target.handler==='gas_futures_reconciliation';
    if(correction){add('Acknowledged financial revision',d.acknowledgedRevision);add('Current financial revision',d.currentRevision);}
@@ -146,6 +149,10 @@ export function setupLifecycle(root:HTMLElement,o:{api:Api;act:(work:()=>Promise
   const net=request.action==='swap.net'?d.settlement as Record<string,unknown>|undefined:undefined;
   if(net){if(net.existingFact===true)add('Effect','Already recorded · no new cash or allocation');add('Net cash',net.amount);add('Gross paid',net.grossPaid);add('Gross received',net.grossReceived);add('Reverses payment',net.reversesId);}
   section.append(list);
+  if(request.target.handler==='gas_transport_financial'){
+   if(!Array.isArray(d.overviewSections)||!d.overviewSections.length)throw Error('Reread the complete reviewed Transport financial effect.');
+   renderPhysicalSections(section,overviewTermSections(d.overviewSections as PhysicalOverviewSection[],o.zone()));
+  }
   if(financialReview)for(const part of financialReview.tables){
    section.append(element('h4',part.label));
    if(!part.rows.length){section.append(element('p','None'));continue;}
@@ -290,7 +297,7 @@ export function setupLifecycle(root:HTMLElement,o:{api:Api;act:(work:()=>Promise
   queue:async(path,body,label)=>{if(current(epoch,actor)&&view===panelVersion)await queue(path,body,label);}};}
  async function gasSetup(target:LifecycleOffer['target']|null,actor:string,epoch:number,view:number){
   if(!discovery)throw Error('Refresh the gas source.');const source=structuredClone(discovery.context);
-  const value=await o.api<GasOwnedSetup>(target?.handler==='gas_park_custody'?'gas/park-custody/setup':'lifecycle/gas/setup',{context:source,target});
+  const value=await o.api<GasOwnedSetup>(gasSetupPath(target?.handler),{context:source,target});
   if(!current(epoch,actor)||view!==panelVersion)return;
   if(!value.context||value.context.contextId!==source.contextId||value.context.asOf!==source.asOf||value.context.businessDate!==source.businessDate||value.context.snapshotId!==source.snapshotId||
    (target?value.target?.handler!==target.handler||value.target.scopeId!==target.scopeId||value.target.bindingId!==target.bindingId:value.target!=null))
@@ -300,7 +307,8 @@ export function setupLifecycle(root:HTMLElement,o:{api:Api;act:(work:()=>Promise
   const actor=o.identity(),epoch=generation,view=panelVersion,setup=await gasSetup(offer.target,actor,epoch,view);if(!setup||selected!==offer)return;
   const completed=offer.target.handler==='gas_park_custody'&&offer.eligible===false&&offer.reason==='gas_custody_complete';
   let actionEditor:ReturnType<typeof mountGasOwnedAction>|undefined;
-  if(!completed){
+  const financial=offer.target.handler==='gas_transport_financial';
+  if(!completed&&(!financial||offer.eligible&&setup.forms[offer.action])){
    const form=element('form');form.className='lifecycle-form';form.dataset.lifecyclePermission=setup.forms[offer.action]?.permission??'';panel.append(form);
    const fields=element('div');fields.className='schedule-fields';form.append(fields);const editor=actionEditor=mountGasOwnedAction(fields,offer,setup,gasOptions(actor,epoch,view));
    const preview=element('button','Review action');preview.type='submit';form.append(preview);
@@ -314,8 +322,9 @@ export function setupLifecycle(root:HTMLElement,o:{api:Api;act:(work:()=>Promise
    });};
   }
   const observation=offer.target.handler==='gas_park_custody'&&setup.configuration.evidence?mountCustodyObservation(panel,setup,gasOptions(actor,epoch,view)):undefined;
-  const payment=offer.target.handler==='gas_park_custody'&&setup.configuration.payment?mountCustodyPayment(panel,setup,gasOptions(actor,epoch,view)):undefined;
-  productSettings={edited:()=>!!actionEditor?.dirty()||!!observation?.edited()||!!payment?.edited(),refresh:()=>{actionEditor?.refresh();observation?.refresh();payment?.refresh();}};sync();
+  const payment=offer.target.handler==='gas_park_custody'&&setup.configuration.payment?mountCustodyPayment(panel,setup,gasOptions(actor,epoch,view)):financial&&setup.configuration.payment?mountTransportPayment(panel,setup,gasOptions(actor,epoch,view)):undefined;
+  const commands=financial?mountTransportFinancialCommands(panel,setup,gasOptions(actor,epoch,view)):undefined;
+  productSettings={edited:()=>!!actionEditor?.dirty()||!!observation?.edited()||!!payment?.edited()||!!commands?.edited(),refresh:()=>{actionEditor?.refresh();observation?.refresh();payment?.refresh();commands?.refresh();}};sync();
  }
  async function showGasSettings(){
   clearPanel();const actor=o.identity(),epoch=generation,view=panelVersion,setup=await gasSetup(null,actor,epoch,view);if(!setup)return;

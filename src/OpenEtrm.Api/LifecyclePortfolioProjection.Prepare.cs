@@ -36,6 +36,11 @@ internal static partial class LifecyclePortfolioProjection
             throw Error("projection_service_transition","Complete economic horizon projection requires a separately qualified custody continuation, including reservation releases and independent cash. Remaining custody service PV qualifies the current clock only.");
         var horizon=await ReadHorizon(connection,database,opening,request,ct);
         var scope=opening.OpeningScope??throw Error("projection_scope","Retain the original opening market and exact book/holding scope.");
+        await using(var transportFence=ScheduleStore.Command(connection,
+            "SELECT security.gas_transport_financial_projection_fence($1,$2,$3,$4,$5::uuid[],$6::uuid[])",database.Manifest.CatalogId,
+            scope.Frame.ContextId!.Value,scope.Frame.At,horizon.Horizon.Closes.Max(close=>close.Instant),scope.Books.ToArray(),(object?)scope.SelectedTrades?.ToArray()??DBNull.Value))
+            if(Equals(await transportFence.ExecuteScalarAsync(ct),true))
+                throw Error("projection_service_transition","Complete economic horizon projection requires qualified Transport mark, expiry and independent cash continuation. Current-clock valuation and price stress remain available.");
         await using(var serviceFence=ScheduleStore.Command(connection,
             "SELECT security.gas_park_loan_projection_fence($1,$2,$3,$4,$5::uuid[],$6::uuid[])",database.Manifest.CatalogId,
             scope.Frame.ContextId!.Value,scope.Frame.At,horizon.Horizon.Closes.Max(close=>close.Instant),scope.Books.ToArray(),scope.SelectedTrades?.ToArray()??Array.Empty<Guid>()))
