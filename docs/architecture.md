@@ -7,21 +7,24 @@ Booking, review and saved-trade views must show those same memberships and their
 roles and terms. Cash, gas holdings, retained programs and service rights have
 managed Side implementations. Explicit operating assembly admits one to eight
 independently signed delivery/payment Sides, with separate quantity sources,
-prices and payment rules. The combined implementation is undergoing integration
-qualification; see [the decision](decisions.md#d417--explicit-sides-for-every-non-exchange-instrument).
+prices and payment rules. The combined implementation passes bounded local
+managed, native, populated-upgrade, retained-worker and actual-browser
+qualification. The complete CI matrix is a merge gate; see [the decision](decisions.md#d417--explicit-sides-for-every-non-exchange-instrument).
 
 D418 adds [ordinary direct point market-value publication](point-trader-marks.md)
 with exact source/temporal selection, final observations and independent reviewed
 trade adoption. First publication needs no successful evaluation or input frame.
 The combined facility, certificate and financial Transport baseline passes native,
-managed, populated-upgrade and actual browser qualification. Subsequent Side
-alignment and release gates remain open.
+managed, populated-upgrade and actual browser qualification. Combined Side
+alignment has local qualification; release and production activation remain
+separate gates.
 
 D416 implements the selected first [financial Transport rights and fixed-fee
 contract](gas-transport-financial.md). Direct signed whole-package values,
 independent ordinary cash and explicit expiry retain separate owners. Native, managed and actual browser consumers have local qualification, including
-explicit expiry recovery and independent cash. First-value market publication,
-integrated upstream qualification and release remain separate gates.
+explicit expiry recovery and independent cash. D418 supplies first-value market
+publication, and the combined Side baseline has local qualification. Release and
+production activation remain separate gates.
 
 D413 adds locally qualified [retained chosen routes](gas-transport-routes.md)
 over exact native capacity claims and exclusive logical source-plan memberships.

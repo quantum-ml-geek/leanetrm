@@ -6,20 +6,24 @@ futures options remain the only exceptions. Acceptance requires independent Side
 valuation and honest schedule inspection, complete production-type coverage,
 unchanged native ownership and retained-program identities, and cash, lifecycle
 and shared-scenario regression checks. Actual browser checks must verify the
-integrated booking and inspection flows before release. This work is in
-implementation; it does not qualify the affected financial PRs for merge.
+integrated booking and inspection flows before release. Combined local
+qualification is complete, including exact retained workers and actual desktop/phone
+flows. The complete CI matrix must pass before merge; deployment and production
+schema activation remain separate.
 
 D418 implements [ordinary direct point market-value publication](point-trader-marks.md),
 independent of financial adoption. Native and focused managed/UI checks cover a
 first value on a genuine empty point, exact correction/acknowledgement, retained
 actor-bound status and complete optional input provenance. The combined facility,
 certificate and financial Transport baseline passes actual HTTP/browser and
-upgrade checks. Subsequent Side alignment, merge and deployment remain separate gates.
+upgrade checks. Combined Side alignment has local qualification; merge CI and
+deployment remain separate gates.
 
 D416 implements the selected [financial Transport rights and fixed-fee
 contract](gas-transport-financial.md). Native and managed value/upgrade controls
-and actual shared browser checks provide local evidence. First-value market
-publication, integrated upstream qualification and release remain delivery gates.
+and actual shared browser checks provide local evidence. D418 supplies first-value
+market publication and combined Side qualification is complete locally. Release
+and production activation remain separate gates.
 Physical performance and commercial Storage retain separate planned contracts.
 
 D413 locally qualifies [retained chosen routes](gas-transport-routes.md) with
@@ -53,10 +57,12 @@ operating consumer, not the remaining financial or physical Transport products.
 
 ## Mandatory Side composition (D417)
 
-Status: the power/REC assembly and universal Side implementations have separate
-local qualification checkpoints. Their combined implementation is undergoing
-integration qualification. Earlier results are not qualification of this merged
-artifact; release activation remains separate.
+Status: the combined power/REC assembly and universal Side implementation pass
+bounded local qualification. The final source/SQL packet passes native admission,
+populated upgrades, exact retained workers and 151 actual physical/operating/REC
+browser assertions. Earlier service and standard-workflow checkpoints retain
+their own artifact identities. See [the qualification record](verification.md#instrument-and-side-alignment-qualification-d417).
+The complete CI matrix is a merge gate; release activation remains separate.
 
 All financial instruments derive from `Instrument`. Only `FuturesContract` and
 exchange-traded `FuturesOptionInstrument` may have no Sides. The current increment

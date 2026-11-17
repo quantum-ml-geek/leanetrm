@@ -6046,15 +6046,22 @@ independent unpaid cash survives.
 Automatic service valuation, assignment, partition, source/fee/party amendment,
 residual rights and complete economic horizon continuation require separately
 qualified contracts. Current-clock price risk does not establish cross-clock
-P&L or generated-close support. Exact operating and valuation reference versions
-remain independent; equal currency labels do not authorize netting. See the
+P&L or generated-close support. Exact source-visible absence within the selected
+books/trades retains every source, day, history, worker-scope and original-authority
+fence without imposing this product's current-clock pricing law on unrelated
+positions. A visible agreement, including closed rights with independent cash,
+remains subject to that law. Guarded migration 0357 preserves the published 0354
+predecessor and the independent source-known future-birth horizon scan.
+Exact operating and valuation reference versions remain independent; equal
+currency labels do not authorize netting. See the
 [financial contract and qualification gates](gas-transport-financial.md).
 
 
 ## D417 · Explicit Sides for every non-exchange Instrument
 
-**Status:** managed and UI implementations have local qualification checkpoints;
-combined integration qualification is in progress, 2026-11-16.
+**Status:** combined managed, native, populated-upgrade, retained-worker and
+actual-browser local qualification completed on 2026-11-16. The complete CI
+matrix is required before merge; production activation remains separate.
 
 **Requirement.** Every Instrument has one or more independent reusable Sides,
 except exchange-traded futures and futures options. The user must be able to
@@ -6101,12 +6108,15 @@ exclusion across old/new profiles and versions. Existing legacy JSON, identities
 and first-outcome receipts remain unchanged. This does not add optimization,
 shared-resource pooling, started-delivery valuation or cash settlement.
 
-**Qualification.** Inventory all concrete production Instrument types, enforce
-the two explicit exceptions, and test independent Side delegation and retained
-identity/state behavior. Native financial and lifecycle consumers, shared price
-risk and actual integrated browser entry/review/detail/inspection flows must pass
-before the affected financial work is ready to merge. A class hierarchy or UI
-label alone is not evidence that this requirement is complete.
+**Qualification.** The production inventory covers 27 concrete Instrument types
+and the two exact exceptions. Independent delegation, retained identities and
+occurrence state, native financial/lifecycle consumers, shared price risk and
+actual entry/review/detail/inspection flows pass bounded local checks. The final
+combined SQL/application packet passes 151 physical/operating/REC browser
+assertions and exact retained-worker controls; earlier service and standard
+checkpoints retain separate artifact identities. See [the verified results](verification.md#instrument-and-side-alignment-qualification-d417).
+A class hierarchy or UI label alone does not establish capability; the complete
+CI matrix must pass before merge.
 
 ## D418 · Ordinary point publication before financial adoption
 

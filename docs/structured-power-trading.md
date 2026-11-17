@@ -7,9 +7,10 @@ managed calculation contracts. A saved facility alone creates no trade.
 
 ## Explicit Side assembly (D417)
 
-Status: the operating assembly has a local power/REC qualification checkpoint.
-Integration with the universal gas, cash and service Side implementation requires
-fresh combined verification. The checkpoint below does not qualify that merge.
+Status: the operating assembly and universal gas, cash and service Side
+implementation pass bounded combined local qualification. The earlier power/REC
+checkpoint below retains its own artifact identity; the final combined results
+are recorded in [verification](verification.md#instrument-and-side-alignment-qualification-d417).
 
 The optional preview `composition` selects `operating_side_composition_v2` while
 legacy `valuation` is null. It explicitly states perspective, measure, currency,
@@ -85,10 +86,14 @@ or production capacity:
 | Live API-backed browser | 27 checks pass: 15 facility/plan checks and 12 saved trading/REC checks. The run removes its owned disposable resources. |
 | Repository | 142 Python checks pass. |
 
-These results do not authorize deployment, schema activation or operations on an
-existing database. Installation-specific populated upgrade and release checks
-remain separate gates; no optimizer, pooled resource operation or new physical/
-cash lifecycle is qualified by Side assembly.
+The subsequent combined Side packet also passes 16 operating and 19 saved
+trading/REC actual browser checks, exact five/six-Side values of `550.7`/`532.6`,
+30-set populated legacy preservation, both original ReadPhysical timers and native
+semantic-receipt expiry refusal. Its compiled outputs are unchanged by the later
+scoped-presence SQL correction. These results do not authorize deployment, schema
+activation or operations on an existing database. Installation-specific populated
+upgrade and release checks remain separate gates; no optimizer, pooled resource
+operation or new physical/cash lifecycle is qualified by Side assembly.
 
 ### Populated operating upgrade compatibility
 

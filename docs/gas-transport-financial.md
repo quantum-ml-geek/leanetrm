@@ -158,7 +158,13 @@ discovery retains its originally captured absence/deadline.
 Scope presence retains the selected books, trades and certified knowledge cutoff.
 An empty Transport scope does not impose its valuation-time restriction on other
 products. A scope containing a visible Transport agreement still refuses a
-valuation instant later than its knowledge cutoff.
+valuation instant later than its knowledge cutoff. Guarded migration 0357 applies
+this correction without changing the published 0354 migration. Selectors, exact
+source/day, trading history, worker scope, current authority and the original
+read deadline remain mandatory. The source-known future-birth projection scan
+is unchanged. Native qualification includes excluded and pre-booking scopes,
+closed rights with unpaid cash, a real source wait across an original grant expiry,
+27 predecessor drift mutations and populated-state/receipt preservation.
 
 Original authority is captured before waiting source/owner reads and rechecked
 through native and managed commit boundaries. Exact request recovery and
@@ -201,10 +207,11 @@ restricted producer access remain enforced. Later market corrections leave the
 retained reports unchanged. These use the same API and SQL as the native and
 browser consumers.
 
-First-value market-data authoring still needs its ordinary publication consumer:
-correcting an existing observation does not establish entry of a missing first
-value. Integrated upstream qualification, staged publication and release are
-separate gates.
+Ordinary first-value market publication is qualified under
+[D418](point-trader-marks.md). The combined universal-Side packet also passes the
+real retained financial PRICE worker, with exact ordinary-report equality and
+source/scope/current-authority controls. Complete CI, release and production
+activation remain separate gates.
 Automated valuation, source/party/fee amendment, residual service rights,
 assignment and complete economic continuation remain separate capabilities.
 No production activation is implied.

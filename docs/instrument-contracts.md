@@ -32,8 +32,10 @@ typed quantity/state outputs consumed by those Sides; it adds no separate PV.
 D417 applies this boundary to cash, holdings, rights and retained physical and
 operating contracts. Retained Sides own exact saved schedule execution and
 inspection, with ordinary signed aggregation and context-bound reuse. The
-power/REC assembly and universal Side implementations have separate local
-qualification checkpoints; their combined integration is being qualified.
+power/REC assembly and universal Side implementations pass bounded combined local
+qualification, including native upgrades, retained workers and actual desktop/phone
+flows. The [qualification record](verification.md#instrument-and-side-alignment-qualification-d417)
+keeps earlier artifact checkpoints separate.
 Existing booking versions and retained identities remain readable under their
 original financial and authorization contracts. The rule alone establishes no
 new lifecycle, quantity-scaling or financial-model capability.
@@ -74,7 +76,8 @@ its own schedule and PV behavior on a genuine Side; its Instrument delegates
 and composes the contributions. A Side must not call back into Instrument PV.
 The managed contract rejects non-exchange held models without complete Side
 memberships before declaration or PV, including direct risk-position input.
-Adapter and UI integration are being qualified separately.
+Adapter and UI integration pass bounded local qualification; the complete CI
+matrix remains required before merge.
 
 The unit-to-Side context carries the declared market inputs, exact calculation
 clock, measure and held state. It introduces no dummy discount provider. Cash

@@ -5064,13 +5064,13 @@ does not qualify that later increment or authorize production activation.
 
 ## Instrument and Side alignment qualification (D417)
 
-The universal managed inventory checkpoint covers 27 concrete production
-Instrument types and the two exact exchange exceptions. Independent checks cover
-Side-owned cash, holding, rights, physical-exchange and retained-program PV;
-source/scenario/held-state fences; exact whole-position and fixed-unit admission;
-and separate fee ownership. Five retained-family compatibility oracles preserve
-v1 ordered member bytes, program digests, captured calendar policies and native
-occurrence IDs. Altered or reordered copies refuse before identity reuse.
+The managed inventory covers 27 concrete production Instrument types and the two
+exact exchange exceptions. Independent checks cover Side-owned cash, holding,
+rights, physical-exchange and retained-program PV; source/scenario/held-state
+fences; exact whole-position and fixed-unit admission; and separate fee ownership.
+Five retained-family compatibility oracles preserve v1 ordered member bytes,
+program digests, captured calendar policies and native occurrence IDs. Altered or
+reordered copies refuse before identity reuse.
 
 Native gas source evidence retains exact definitions through
 `timed_cash_source_definition_v1` and `gas_holding_source_definition_v1`. Complete
@@ -5082,30 +5082,58 @@ Unpriced structural Sides and zero-fee financial absence are distinct states.
 Selected operating reads retain their certified source, original authority and
 touched-program visibility through publication.
 
-Completed checkpoints include 784 managed core, 88 rates, API build/default and
-schedule checks, 2,157 frontend and 160 Python checks. Native service, gas ownership,
-physical economic projection and futures consumers, including retained workers,
-pass. Actual application checkpoints include the complete standard suite, dedicated
-189-check swaps and 43-check assistant-workspace suites, and 21 point-publication
-checks. The standard suite includes 327 futures and 189 swap checks. Product
-chooser and correction-retry identity regressions pass.
+The combined managed checkpoint passes 785 core checks, 88 rates, API default
+(98), schedules (491), gas-ticket (118) and focused Side/structured/reuse groups.
+API and Worker builds have zero warnings/errors. The full frontend checkpoint
+passes 2,164 checks with zero skipped; 163 repository Python checks pass. Later
+SQL and qualification-helper changes preserve every compiled source and all 389
+built output files byte for byte. This equality permits the final native and
+actual-browser gates to use the completed combined outputs without a rebuild.
 
-On the reviewed final universal-Side API and web packet, fixed-fee Park/Loan (90),
-balance-fee Park/Loan (214), custody (126), financial Transport (43) and structured
-operating/REC (31) actual browser checks pass. Phone captures show real Side roles
-and exact terms. Native postconditions, exact-cut/hidden-book controls and both
-original operating-authority timers pass. Full physical-gas/deal-ticket,
-strong-phone crude and LNG qualification remain open. These are checkpoints
-across reviewed artifacts, not one claim about a later combined application.
+Earlier reviewed application checkpoints include standard/futures (327), dedicated
+swaps (189), assistant workspace (43) and point publication (21). An earlier
+universal-Side packet passed fixed-fee Park/Loan (90), balance-fee Park/Loan (214),
+custody (126), financial Transport (43) and structured operating/REC (31) actual
+browser assertions. These remain evidence for their reviewed packets; they are
+not represented as one later all-product application run.
 
-Explicit operating assembly also has its independently recorded power/REC
-checkpoint. Its SQL migration is renumbered to 0356 after the gas/point sequence;
-its bytes are unchanged. The populated upgrade preserves the original legacy
-bookings, retained programs and first outcomes. Combining that assembly with the
-universal Side implementation requires fresh managed, native, upgrade and browser
-qualification. Earlier successful fixtures do not qualify this combined artifact.
+The final combined local packet, including migrations 0355 point publication,
+0356 operating assembly and 0357 scoped financial presence, passes:
+
+- 64 native operating PASS records, including 39 operating assertions and exact
+  predecessor definition/owner/ACL/settings refusal. Migration 0356 retains its
+  original bytes after renumbering.
+- Populated operating upgrade preservation of 30 complete native history,
+  identity, program and relationship sets. Original battery/thermal/solar values
+  remain exactly `610`/`760`/`500`; original commands reopen and replay unchanged.
+- Five independent Sides at `550.7` and a sixth repeated-source Side at `532.6`,
+  with exact retained member identities, independent payment rules, delivery
+  rows, source-cut/hidden-book controls, both original ReadPhysical timers and
+  native semantic-receipt expiry refusal.
+- 16 operating and 19 saved-trading/REC actual browser assertions, including
+  visible genuine Side cards and terms on phones.
+- 116 physical actual browser assertions: gas/deal-ticket 46, crude 50 and LNG
+  20. Strong phone visibility, hit-test and width checks pass after waiting for
+  the responsive layout to settle before scrolling. The assertion and timeout
+  contracts are unchanged.
+- 81 financial Transport native PASS records. Scoped-presence qualification adds
+  seven control groups, 27 predecessor drift mutations, a search-path control,
+  exact excluded/pre-birth scopes, strict live/closed rights, source-known future
+  births and a real original-authority wait with an active successor grant.
+  Populated upgrade retains native table digests, original booking/mark outcomes,
+  all helper metadata and the independent scope/projection helper bodies.
+- In-term gas and paid-state/PRICE replay, operator physical and ordinary-use/zero
+  native PV with real historical and 32-path Monte Carlo workers, and the real
+  financial Transport PRICE worker. Exact source/scope/actor authority,
+  cancellation/ownership, complete ordinary-report equality and unchanged native
+  financial publications remain enforced.
+
+All final lanes verify unchanged source and artifact hashes before and after
+execution and remove their owned disposable resources. Independent adversarial
+reviews cover numerical, temporal, authorization, occurrence-state, scenario-reuse
+and migration/release boundaries. The complete CI matrix remains a merge gate.
 
 Local fixtures use synthetic owned resources, stock PostgreSQL 16.14, .NET
-10.0.402, Node 24.22.0, Python 3.13 and Chrome on macOS arm64. Completed fixtures
-are cleaned. Production activation, performance/capacity qualification and
-commercial Storage valuation remain separate work.
+10.0.402, Node 24.22.0, Python 3.13 and Chrome on macOS arm64. Production activation,
+performance/capacity qualification and commercial Storage valuation remain
+separate work.
