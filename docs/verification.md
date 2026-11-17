@@ -83,7 +83,8 @@ reads to reach their own work with nothing waiting on the publication gate.
 Before the change the second read waited on the gate and never reached its own
 work. With the capture split but the trade head still read in the valuing
 transaction, the ticket case still failed that way. With the head read before
-the capture, both cases pass with the other 32 checks.
+the capture, both cases pass with the other 32 checks. Merged with D419's
+ordinary-read checks, the same check passed all 36 on the same machine.
 
 In owned disposable previews on one two-processor Linux machine with PostgreSQL
 18.7 and .NET 10.0.402, the live-calculation check and the latest-risk-run check
