@@ -1,6 +1,8 @@
 import {newTrade,closeNewTrade} from './new-trade.mjs';
+import {captureSideTerms,retainedSideTerms,sideCards,sidePhone} from './instrument-side-qualification.mjs';
 export async function run(a){
  const {command,evaluate,wait,click,set,submit,persona,check,shot,idle,url,fitsWidth}=a;
+ await captureSideTerms(a);
  await command('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false});
  await command('Page.navigate',{url});await wait("document.querySelectorAll('.curve-button').length>0&&"+idle);await persona('trader');
  async function chooseFrame(){const frame=await evaluate("(async()=>{const w=await(await fetch('/api/workspace')).json();return w.frames.find(f=>w.initialFrameIds.includes(f.id)&&f.at.startsWith('2020-12-18')).id;})()");await set('#snapshot',frame);await wait(idle);}
@@ -39,5 +41,8 @@ export async function run(a){
  await check('the common workflow requires reconciliation before another trade',"document.querySelector('#futures-new').disabled&&[...document.querySelectorAll('#product-trade-pending button')].some(b=>b.textContent==='Reconcile physical LNG request')");
  await command('Page.navigate',{url});await wait("document.querySelector('#nav-futures')&&"+idle);await evaluate(`{const send=window.fetch;window.lngBlockedReferences=0;window.fetch=(path,init)=>{if(String(path).endsWith('/lng/references')){window.lngBlockedReferences++;return Promise.resolve(new Response(JSON.stringify({code:'access_denied',message:'Synthetic unavailable reference source'}),{status:403,headers:{'Content-Type':'application/json'}}));}return send(path,init);};}`);await chooseFrame();await click('#nav-futures');await wait(idle);await evaluate("[...document.querySelectorAll('#product-trade-pending button')].find(b=>b.textContent==='Reconcile physical LNG request').click()");await wait("!document.querySelector('#lng-pending').hidden&&"+idle);await check('pending reconciliation opens without reading fresh reference choices',"window.lngBlockedReferences===0&&!document.querySelector('#lng-check').disabled");await click('#lng-check');await wait("document.querySelector('#position-details').textContent.includes('Physical LNG cargo')&&"+idle);
  await check('status recovery opens one retained cargo with saved Incoterms in the common Blotter',"document.querySelector('#lng-pending').hidden&&document.querySelector('#position-details').textContent.includes('Gross discharge energy')&&document.querySelector('#position-details').textContent.includes('Incoterms')&&document.querySelector('#position-details').textContent.includes('Free On Board')","({error:document.querySelector('#error').textContent,details:document.querySelector('#position-details').textContent})");
+ const sideTerms=await retainedSideTerms(a,'lng');
+ await sideCards(a,'#position-details',sideTerms,{label:'saved native LNG Terms retain exact cargo and independent consideration Side identities',retained:true,bindings:[sideTerms.head.instrument_id],roles:['Contractual cargo delivery','Contractual cash consideration']});
+ await sidePhone(a,'#position-details','physical-lng-sides-mobile');
  await check('native LNG entry and retained inspection fit the viewport',fitsWidth);await shot('physical-lng-cargo');
 }

@@ -20,7 +20,9 @@ internal static class GasPhysicalQuantitySourceChecks
         var delivery=Owner();var stock=Owner();var evidence=Guid.NewGuid();
         var terms=new GasPhysicalDeliveryTerms(Guid.NewGuid(),new(reference,"synthetic_0"),unit,currency,account.Location,
             at.AddDays(-1),at.AddDays(2),at.AddDays(3),mark,GasHoldingCarrying.Nominal,GasPhysicalDeliveryTerms.Version);
-        var obligation=(GasPhysicalDeliveryObligationInstrument)terms.CreateObligation(ExactUnitPrice.Parse("10",new(currency,unit,ExactDecimal.Parse("1"))));
+        var final=ExactUnitPrice.Parse("10",new(currency,unit,ExactDecimal.Parse("1")));
+        var obligation=(GasPhysicalDeliveryObligationInstrument)terms.CreateObligation(final);
+        var reconstructed=(GasPhysicalDeliveryObligationInstrument)terms.CreateObligation(ExactUnitPrice.Parse("10.000",final.Unit));
         var held=new GasProjectionHolding(delivery,account,GasProjectionHoldingKind.PhysicalDelivery,obligation,quantity,null,ImmutableDictionary<Guid,ExactDecimal>.Empty,null);
         var received=new GasProjectionHolding(stock,account,GasProjectionHoldingKind.OwnedStock,
             new GasCommodityHoldingInstrument(Guid.NewGuid(),mark,unit,currency,null,GasHoldingCarrying.Nominal),quantity,at.AddDays(1),ImmutableDictionary<Guid,ExactDecimal>.Empty,null);
@@ -34,12 +36,23 @@ internal static class GasPhysicalQuantitySourceChecks
             new(heads,ImmutableDictionary<Guid,GasOwnedQuantityHead>.Empty),new(ImmutableDictionary<Guid,Guid>.Empty,ImmutableDictionary<Guid,Guid>.Empty,
                 ImmutableDictionary<Guid,int>.Empty.Add(delivery.Owner.Id,10).Add(stock.Owner.Id,20),ImmutableDictionary<Guid,int>.Empty,ImmutableDictionary<Guid,int>.Empty));
         var opening=new GasOwnedPortfolioRead(source.Knowledge!.ContextId,at,source.Knowledge.KnownAt,
-            [new(delivery,account.Id,account.LegalOwner,"delivery_obligation","physical_delivery_v1",1,10,at.AddDays(-1),evidence,obligation,quantity){DefinitionRevisionId=definition.RevisionId}],[],
+            [new(delivery,account.Id,account.LegalOwner,"delivery_obligation","physical_delivery_v1",1,10,at.AddDays(-1),evidence,reconstructed,quantity){DefinitionRevisionId=definition.RevisionId}],[],
             ImmutableDictionary<Guid,GasOwnedMarket>.Empty.Add(definition.RevisionId,new(data,f.Frame,source)),ImmutableDictionary<MeasureBinding,BindingAccountingFacts>.Empty);
         var transition=new GasKnownQuantityTransition(Guid.NewGuid(),at.AddDays(1),at,[],[],[new(delivery,quantity)],[new(delivery,received)]);
         var supplement=new GasPhysicalQuantitySupplement([held],[transition],ImmutableDictionary<Guid,int>.Empty.Add(transition.Id,20));
         var markets=ImmutableDictionary<DefinitionRevision,GasOwnedProjectionMarket>.Empty.Add(definition,new(source,ImmutableDictionary<ReferenceKey,ISideDiscounting>.Empty));
         if(!supplement.RequireSource(known,opening,markets).SetEquals([delivery,stock]))throw new Exception("The exact physical native source lost its independently owned delivery or title.");
+        var changedTerms=new GasPhysicalDeliveryTerms(terms.Id,terms.Series,terms.Quantity,terms.Currency,terms.Location,
+            terms.From,terms.To,terms.CashDueAt.AddHours(1),terms.Mark,terms.Carrying,terms.Implementation);
+        foreach(var changedObligation in new[]{new GasPhysicalDeliveryObligationInstrument(Guid.NewGuid(),terms,final),
+            new GasPhysicalDeliveryObligationInstrument(obligation.Id,changedTerms,final),
+            new GasPhysicalDeliveryObligationInstrument(obligation.Id,terms,ExactUnitPrice.Parse("11",final.Unit))})
+        {
+            var changedOpening=opening with{Positions=[opening.Positions[0] with{Instrument=changedObligation}]};
+            try{_=supplement.RequireSource(known,changedOpening,markets);}
+            catch(MarketDataException error)when(error.Code=="gas_projection_source"){continue;}
+            throw new Exception("Reconstructed physical obligations must retain their exact native ID, delivery terms and accepted final price.");
+        }
         var wrong=(GasCommodityHoldingInstrument)received.Instrument;
         var changed=received with{Instrument=new GasCommodityHoldingInstrument(Guid.NewGuid(),otherMark,unit,currency,null,GasHoldingCarrying.Nominal)};
         Reject(supplement with{Transitions=[transition with{Receipts=[new(delivery,changed)]}]});

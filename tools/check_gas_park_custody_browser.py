@@ -82,7 +82,7 @@ def main():
             parkAt='2020-12-20T10:00:00Z', partialAt='2020-12-20T12:00:00Z', finalAt='2020-12-20T13:00:00Z',
             returnAt='2020-12-21T12:00:00Z', feeDueAt='2020-12-22T12:00:00Z')
         run_browser(query, manifest, args.dotnet.resolve(), args.browser.resolve(), children, packet, 'tests/browser/gas-park-custody.mjs',
-            worker_enabled=False, timeout=720, api_bin=args.api_bin, artifacts=[prefix + '-entry.png', prefix + '-review.png', prefix + '-mobile.png', *[prefix + '-' + perspective + suffix for perspective in sorted({case['perspective'] for case in cases}) for suffix in ['-history.png', '-raw-history.png']]])
+            worker_enabled=False, timeout=720, api_bin=args.api_bin, artifacts=[prefix + '-entry.png', prefix + '-review.png', prefix + '-mobile.png', prefix + '-sides-mobile.png', *[prefix + '-' + perspective + suffix for perspective in sorted({case['perspective'] for case in cases}) for suffix in ['-history.png', '-raw-history.png']]])
         for case in cases:
             trade = query(f"SELECT trade_id FROM trading.gas_park_custody_trades WHERE(catalog_id,book_id)=('{state.catalog}','{case['bookId']}');")
             assert trade and '\n' not in trade

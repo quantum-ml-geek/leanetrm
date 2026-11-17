@@ -32,8 +32,8 @@ internal static class OperatingSideSelectionChecks
             .Where(b=>b.Kind=="contract_price").Select(b=>b.Market!.Value).Distinct().ToImmutableArray();
         var frame=new InputFrame(Guid.NewGuid(),"Synthetic selected-side inspection",at,DateOnly.FromDateTime(at.UtcDateTime),[],ImmutableDictionary<string,ImmutableArray<Guid>>.Empty);
         var snapshot=f.Data.Snapshot(frame).WithKnowledge(Guid.NewGuid(),at);var market=f.Data.Model.Build(snapshot,dependencies);
-        var value=ScheduleMarketSources.ForOperating(market).Evaluate(selected.Single().Program,fixedSide.Id,market,
-            new ExplicitDiscounting(one,DiscountFactorSource.Undiscounted));
+        var concrete=RetainedProgramSide.ForOperating(fixedSide.Id,selected.Single().Program,unit,quote.Currency);
+        var value=concrete.PV(SideValuationContext.ForRetainedPrograms(market,market,new ExplicitDiscounting(one,DiscountFactorSource.Undiscounted))).Execution;
         if(value.PresentValue.ToExactString()!="500")throw new Exception("The selected fixed operating Side must value independently of unrelated missing market inputs.");
         try{StructuredPowerBookingStore.SelectPrograms(retained,99);throw new Exception("An absent operating Side slot must not return an empty successful valuation.");}
         catch(MarketDataException error)when(error.Code=="side_schedule_inspection"){}

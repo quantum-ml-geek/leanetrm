@@ -135,17 +135,16 @@ internal static class ConnectedScenarioChecks
         f.Context.ValuationAt,f.Context.MarketAsOf,InputSelectionPolicy.ExactPinnedFinalObservationsNoAgeFiltering,
         f.RawPoints.Select(p=>(ConnectedSource)p.Expression).Select(s=>new SelectedObservation(s.Input,s.Observation)).ToImmutableArray());
 
-    private sealed record CurvePv : Instrument
+    private sealed record CurvePv : SyntheticSidedInstrument
     {
         public override bool SupportsQuantityScaling=>true;
         private readonly ImmutableArray<CurveRequest> dependencies;
-        private readonly Func<SideValuationContext,ExactMoney> calculate;
         public override ReferenceKey Currency{get;}
         public override Quantity UnitQuantity{get;}
         public InstrumentValuation? Saved{get;init;}
-        public CurvePv(Guid id,PriceUnit unit,ImmutableArray<CurveRequest> dependencies,Func<SideValuationContext,ExactMoney> calculate):base(id)
-        {Currency=unit.Currency;UnitQuantity=new(ExactDecimal.Parse("1"),unit.Quantity);this.dependencies=dependencies;this.calculate=calculate;}
+        public CurvePv(Guid id,PriceUnit unit,ImmutableArray<CurveRequest> dependencies,Func<SideValuationContext,ExactMoney> calculate):base(id,SyntheticValueSide.One(id,unit.Currency,unit.Quantity,dependencies,calculate,"synthetic_connected_curve_pv_v1"))
+        {Currency=unit.Currency;UnitQuantity=new(ExactDecimal.Parse("1"),unit.Quantity);this.dependencies=dependencies;}
         public override UnitPricingContract Declare(UnitValuationContext context)=>new(Id,"synthetic_connected_curve_pv_v1",dependencies,UnitQuantity.Specification,Currency) { Time = ValuationTimeDependency.Independent };
-        public override InstrumentValuation PV(SideValuationContext context)=>Saved??new(this,context,calculate(context),"synthetic_connected_curve_pv_v1");
+        public override InstrumentValuation PV(SideValuationContext context)=>Saved??base.PV(context);
     }
 }

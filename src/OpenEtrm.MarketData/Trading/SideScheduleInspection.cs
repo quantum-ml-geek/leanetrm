@@ -10,6 +10,7 @@ public sealed record ScheduleInspectionRow(string Key,string Operation,string Ki
  string? Quantity,string? Price,string? Amount,string? DiscountFactor,string? PresentValue,
  string? QuantityState,ImmutableArray<string> PriceStates,ScheduleInspectionLifecycle Lifecycle)
 {
+ public string? PaymentTiming{get;init;}
  public DateTimeOffset? PaymentAt=>Kind==nameof(ComponentKind.Payment)?ValueAt:null;
  public ReferenceKey? QuantitySpecification{get;init;}
  public ReferenceKey? Currency{get;init;}
@@ -30,6 +31,16 @@ public sealed record ScheduleInspectionPage(string Side,string Manifest,DateTime
 public static partial class SideScheduleInspection
 {
  public const int MaximumPageSize=128;
+ internal static string Timing(ValueTimingKind timing)=>timing switch
+ {ValueTimingKind.Instant=>"instant",ValueTimingKind.UtcPaymentDay=>"utc_payment_day",_=>throw Error("Select the exact supported payment timing law.")};
+ internal static string? RetainedTiming(ScheduleDefinitionRow row,ComponentKind kind)
+ {
+  if(kind!=ComponentKind.Payment)return null;
+  // The stored payment lifecycles explicitly use the UTC payment-day law;
+  // a nonpayment output must never acquire cash timing from its valueAt.
+  if(!ScheduleLifecycles.IsPayment(row))throw Error("A cash row requires its actual saved payment lifecycle.");
+  return Timing(ValueTimingKind.UtcPaymentDay);
+ }
  public static ScheduleInspectionPage Read(SideViewInput side,Func<DateOnly,DateTimeOffset> boundary,int offset,int limit,CancellationToken ct=default)
  {
   RequirePage(offset,limit);ct.ThrowIfCancellationRequested();RequireEvaluation(side);
@@ -66,7 +77,7 @@ public static partial class SideScheduleInspection
      Scaled(contribution.Amount,cell,true),Scaled(discount.Column,discount.Cell,false),Scaled(contribution.PresentValue,cell,true),quantity.Column.States[quantity.Cell].Quantity?.ToString(),prices,
      new ScheduleInspectionLifecycle(Delivery(geometry.Start,geometry.End,evaluation.Context.ValuationAt),due,state.Kind==ComponentKind.Payment?"NotTracked":null,state.Class?.ToString(),state.Coverage.ToString(),state.UnavailableReason)
       {Fulfillment=state.Kind is ComponentKind.Delivery or ComponentKind.Holding?"NotTracked":null})
-      {QuantitySpecification=quantity.Column.Unit,Currency=contribution.Amount.Currency,QuoteMultiplier=price.Column.QuoteMultiplier,OperatingDate=geometry.OperatingDate});
+      {PaymentTiming=RetainedTiming(guard.Output,state.Kind),QuantitySpecification=quantity.Column.Unit,Currency=contribution.Amount.Currency,QuoteMultiplier=price.Column.QuoteMultiplier,OperatingDate=geometry.OperatingDate});
    }
   }
   return new(side.Code,program.ScheduleManifest,evaluation.Context.ValuationAt,evaluation.Context.KnownAt,offset,total,rows.ToImmutable());

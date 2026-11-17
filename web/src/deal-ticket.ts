@@ -9,6 +9,8 @@ import {reasonOf} from './ticket-preview.js';
 import {measureLines,type GasMeasures} from './lifecycle-text.js';
 import {sideCardHeader} from './side-card.js';
 import {localTimeValue} from './user-time.js';
+import {renderInstrumentSides,requireInstrumentSideGroups,type InstrumentSideGroup} from './instrument-sides.js';
+import {ticketFieldGroups,requireSideGroupMappings,type TicketFieldGroup} from './ticket-field-groups.js';
 
 // Draws a deal ticket from its backend description, the model's state and the latest preview: the trade strip, one card per side whose
 // common band rows line up across the cards, and the schedule panel. Every value, aggregate and refusal is the backend's or the model's;
@@ -24,7 +26,7 @@ export type TicketEntry={side:string;day:string;fields:TicketField[];values:Reco
 // level every schedule row is open but those in `closed`, the rows the person closed. quantityUnit is the unit the schedule's preview resolved,
 // and instant the page's formatter for the instants the ticket shows. links are the schedule's quantity links, and entry the day entry open, if any.
 export type TicketView={state:TicketState;mode:'new'|'booked'|'amend';presentation?:'schedules'|'terms';actions:TradeActions|null;schedule:ScheduleView|null;quantityUnit:string|null;instant:(at:string)=>string;zone:string;previous:ScheduleView|null;summaries:TicketSummary[];
- links:TicketLink[];entry:TicketEntry|null;sideSchedule?:(host:HTMLElement,side:TicketSide)=>()=>void;facilityAllocations?:FacilityAllocationTrack[];
+ links:TicketLink[];entry:TicketEntry|null;sideSchedule?:(host:HTMLElement,side:TicketSide)=>()=>void;facilityAllocations?:FacilityAllocationTrack[];sideGroups?:InstrumentSideGroup[];sideGroupsReason?:string|null;
  // A booked started-delivery gas trade's measures, with the currency its figures are in; none for any other trade.
  measures?:GasMeasures|null;currency?:string;
 
@@ -187,6 +189,10 @@ function tradeFields(o:TicketView,fields:TicketField[]){
  return node;
 }
 
+function statusLine(status:TicketStatus){
+ const line=el('p','ticket-status',status.text);line.dataset.kind=status.kind;line.setAttribute('role','status');return line;
+}
+
 function strip(o:TicketView,fields:TicketField[]){
  const view=o.schedule,node=el('header','ticket-strip');
  const title=el('div','ticket-title');
@@ -198,7 +204,7 @@ function strip(o:TicketView,fields:TicketField[]){
   progress.append(bar,el('span','ticket-progress-text',`${view.deliveredLeaves} of ${view.leaves} delivered`),el('span','ticket-valuation',`Valued at ${o.instant(view.valuationAt)}`));
   node.append(progress);
  }
- const line=el('p','ticket-status',o.status.text);line.dataset.kind=o.status.kind;line.setAttribute('role','status');node.append(line);
+ node.append(statusLine(o.status));
  return node;
 }
 
@@ -290,8 +296,24 @@ function linksGrid(o:TicketView,content:HTMLElement):GridHandle|undefined{
   displayRows:o.links.map((l,i)=>[l.source,l.target,rule(l),...rows[i].slice(3).map(numberText)]),rowKeys:o.links.map(l=>l.target),layout:emptyGridLayout(),onLayout:()=>{}});
 }
 
+function groupedFields(o:TicketView,groups:TicketFieldGroup[],actual:InstrumentSideGroup[]|undefined){
+ const root=el('section','ticket-strip ticket-grouped-fields');
+ for(const group of groups){
+  const card=el('fieldset',group.kind==='agreement'?'ticket-field-group':'ticket-field-group instrument-side');card.dataset.ticketFieldGroup=group.id;card.dataset.fieldGroupKind=group.kind;
+  card.append(el('legend',undefined,group.label));const mapped=actual?.filter(member=>member.fieldGroupId===group.id)??[];
+  card.append(tradeFields(o,group.fields.map(id=>o.state.description.tradeFields.find(field=>field.id===id)!)));
+  if(mapped.length)renderInstrumentSides(card,mapped,{zone:o.zone,retained:o.mode==='booked',disclosure:true});
+  root.append(card);
+ }
+ root.append(statusLine(o.status));
+ return root;
+}
+
 export function renderTicket(host:HTMLElement,o:TicketView){
  const d=o.state.description,sides=o.state.sides,rows=bandRows(d,[...new Set(sides.map(s=>s.kind))]);
+ if(d.sideGroupsRequired!==undefined&&typeof d.sideGroupsRequired!=='boolean')throw Error('Reread the ticket Side composition requirement.');
+ const groups=o.sideGroups!==undefined||o.sideGroupsReason!==undefined||d.sideGroupsRequired&&o.mode==='booked'?requireInstrumentSideGroups(o.sideGroups,o.mode==='booked',o.sideGroupsReason):undefined;
+ const fields=ticketFieldGroups(d);if(groups)requireSideGroupMappings(groups,fields);
  const named:ScheduleSide[]=sides.map(s=>({kind:s.kind,code:s.code,name:sideName(d,s)}));
  // The ticket keeps its controls' states itself: a page's busy sweep leaves them as drawn.
  const root=el('div','deal-ticket');root.dataset.mode=o.mode;root.dataset.ownControls='';
@@ -307,11 +329,17 @@ export function renderTicket(host:HTMLElement,o:TicketView){
  if(o.mode!=='booked'&&d.sides.some(kind=>!kind.soon))deck.append(addCard(o));
  const {panel,content}=schedulePanel(o,named);
  if(o.presentation!=='schedules'){
-  const fields=d.tradeFields.filter(f=>f.state!=='soon'),ownership=o.mode==='booked'?[]:fields.filter(f=>ownershipFields.has(f.id));
-  root.append(strip(o,fields.filter(f=>!ownership.includes(f))),...o.state.notices.length?[notices]:[],...sides.length?[chips]:[],...deck.children.length?[deck]:[]);
-  if(ownership.length){const section=el('section','ticket-ownership');section.append(el('h3',undefined,'Ownership and parties'),tradeFields(o,ownership));root.append(section);}
+  if(fields&&!sides.length){
+   root.append(groupedFields(o,fields,groups),...o.state.notices.length?[notices]:[]);
+   const unmapped=groups?.filter(group=>group.fieldGroupId==null);if(unmapped?.length||groups?.length===0)renderInstrumentSides(root,unmapped??groups,{zone:o.zone,retained:o.mode==='booked',reason:o.sideGroupsReason});
+  }else{
+   const shown=d.tradeFields.filter(f=>f.state!=='soon'),ownership=o.mode==='booked'?[]:shown.filter(f=>ownershipFields.has(f.id));
+   root.append(strip(o,shown.filter(f=>!ownership.includes(f))),...o.state.notices.length?[notices]:[],...sides.length?[chips]:[],...deck.children.length?[deck]:[]);
+   if(ownership.length){const section=el('section','ticket-ownership');section.append(el('h3',undefined,'Ownership and parties'),tradeFields(o,ownership));root.append(section);}
+   if(!sides.length&&groups)renderInstrumentSides(root,groups,{zone:o.zone,retained:o.mode==='booked',reason:o.sideGroupsReason});
+  }
  }
- if(o.presentation==='schedules'){const state=el('p','ticket-status',o.status.text);state.dataset.kind=o.status.kind;root.append(state);}
+ if(o.presentation==='schedules')root.append(statusLine(o.status));
  if(o.measures){if(!o.currency)throw Error('The trade measures require their currency.');root.append(measures(o.measures,o.currency,o.instant));}
  if(o.presentation!=='terms')root.append(panel);
  const planned=upcoming(o);

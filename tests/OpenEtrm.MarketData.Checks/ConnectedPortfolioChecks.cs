@@ -212,22 +212,20 @@ internal static class ConnectedPortfolioChecks
         return count;
     }
 
-    private sealed record CurvePv : Instrument
+    private sealed record CurvePv : SyntheticSidedInstrument
     {
         public override bool SupportsQuantityScaling=>true;
         private readonly ImmutableArray<CurveRequest> dependencies;
-        private readonly Func<SideValuationContext,ExactMoney> calculate;
         private readonly Action? factorRead;
         public override ReferenceKey Currency{get;}
         public override Quantity UnitQuantity{get;}
         // Parts: the named components it records for each unit value, if any.
         public Func<ExactMoney,ImmutableArray<ValueComponent>>? Parts{get;init;}
         public CurvePv(Guid id,PriceUnit unit,ImmutableArray<CurveRequest> dependencies,Func<SideValuationContext,ExactMoney> calculate,Action? factorRead=null,
-            Func<ExactMoney,ImmutableArray<ValueComponent>>? parts=null):base(id)
-        {Currency=unit.Currency;UnitQuantity=new(ExactDecimal.Parse("1"),unit.Quantity);this.dependencies=dependencies;this.calculate=calculate;this.factorRead=factorRead;Parts=parts;}
+            Func<ExactMoney,ImmutableArray<ValueComponent>>? parts=null):base(id,SyntheticValueSide.One(id,unit.Currency,unit.Quantity,dependencies,calculate,"synthetic_connected_portfolio_pv_v1"))
+        {Currency=unit.Currency;UnitQuantity=new(ExactDecimal.Parse("1"),unit.Quantity);this.dependencies=dependencies;this.factorRead=factorRead;Parts=parts;}
         public override ExactMoney Value(UnitValuationContext context){var value=base.Value(context);if(Parts is {} parts)context.RecordComponents(parts(value));return value;}
         public override UnitPricingContract Declare(UnitValuationContext context)=>new(Id,"synthetic_connected_portfolio_pv_v1",dependencies,UnitQuantity.Specification,Currency) { Time = ValuationTimeDependency.Independent };
         public override ImmutableArray<QuoteFactor> MarketFactors(UnitValuationContext context){factorRead?.Invoke();return base.MarketFactors(context);}
-        public override InstrumentValuation PV(SideValuationContext context)=>new(this,context,calculate(context),"synthetic_connected_portfolio_pv_v1");
     }
 }

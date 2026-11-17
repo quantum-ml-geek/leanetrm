@@ -1,6 +1,7 @@
 import {withOwnedBrowser} from './owned-browser.mjs';
 import {startNewTrade} from './new-trade.mjs';
 import {gasTicket} from './gas-ticket.mjs';
+import {sideCards,serviceFieldGroups,sidePhone} from './instrument-side-qualification.mjs';
 
 const q=JSON.stringify,panel='[data-lifecycle=panel]';
 
@@ -87,10 +88,13 @@ async function run(driver){
   await set(control(null,'fixed_fee_amount'),'0');
   await evaluate(`(()=>{const n=document.querySelector(${q(ticket+' [data-field=fee_due_at] [data-role=not-applicable]')});n.checked=true;n.dispatchEvent(new Event('change',{bubbles:true}));})()`);
   await until(current());
+  await serviceFieldGroups(driver,ticket,['agreement','principal','fee'],'Park and Loan edits distinguish agreement, principal Sides and independent fee terms');
+  await sideCards(driver,ticket,await evaluate("calls.findLast(c=>c.path==='/api/tickets/preview'&&c.status===200).result"),{label:'zero fixed fee preview retains two actual gas principal Sides and no cash Side',roles:['Gas principal claim','Gas principal claim']});
   await check('an explicit zero fee retains the independently selected direction and Not applicable due date',`(()=>{const p=calls.filter(c=>c.path==='/api/tickets/preview'&&c.status===200).at(-1);return p.body.draft.trade.fixed_fee_amount==='0'&&p.body.draft.trade.fee_due_at==='none'&&p.body.draft.trade.fee_direction===${q(input.feeDirection)};})()`);
   await set(control(null,'fixed_fee_amount'),'12.5');
   await evaluate(`(()=>{const n=document.querySelector(${q(ticket+' [data-field=fee_due_at] [data-role=not-applicable]')});n.checked=false;n.dispatchEvent(new Event('change',{bubbles:true}));})()`);
   await setInstant(null,'fee_due_at','2020-12-22T12:00:00Z');await until(current());
+  await sideCards(driver,ticket,await evaluate("calls.findLast(c=>c.path==='/api/tickets/preview'&&c.status===200).result"),{label:'reviewed fixed fee is a separate actual cash Instrument beside both principal Sides',roles:['Gas principal claim','Gas principal claim','Ordinary cash payment']});
   if(input.receiver)await evaluate('window.loseBooking=true');
   await click(ticket+' .ticket-book',60000);
   if(input.receiver){
@@ -105,6 +109,8 @@ async function run(driver){
   await wait(`document.querySelector('#position-details').dataset.mode==='position'&&${idle}`,60000);
   await wait("!!document.querySelector('#position-details .deal-ticket[data-mode=booked]')",60000);
   const reopened=await readTrade(c,'before');
+  await sideCards(driver,'#position-details',reopened,{label:'saved fixed-fee agreement retains exact Side definitions and native component bindings',retained:true,roles:['Gas principal claim','Gas principal claim','Ordinary cash payment']});
+  if(input===f.cases[0])await sidePhone(driver,'#position-details','gas-park-loan-sides-mobile');
   if(reopened.draft.trade.principal_quantity!=='720'||reopened.draft.trade.fixed_fee_amount!=='12.5'||reopened.draft.trade.perspective!==input.perspective)throw Error('Reopening changed saved commercial terms: '+JSON.stringify({expected:input.perspective,trade:c.tradeId,draft:reopened.draft}));
   await value(c,'before',...expected(c,c.feeAmount));
   await shot('gas-park-loan-booked');

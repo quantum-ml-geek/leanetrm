@@ -5,6 +5,117 @@ ordinary retained Side valuation, a price hedge report and manually evidenced
 certificate inventory. The implementation has separate native admission and
 managed calculation contracts. A saved facility alone creates no trade.
 
+## Explicit Side assembly (D417)
+
+Status: the operating assembly and universal gas, cash and service Side
+implementation pass bounded combined local qualification. The earlier power/REC
+checkpoint below retains its own artifact identity; the final combined results
+are recorded in [verification](verification.md#instrument-and-side-alignment-qualification-d417).
+
+The optional preview `composition` selects `operating_side_composition_v2` while
+legacy `valuation` is null. It explicitly states perspective, measure, currency,
+complete-right quantity and discounting policy, then one to eight ordered
+Sides. Each Side has a stable key, name, quantity source, coefficient,
+`payment`/`delivery` kind, price and its own payment rule or explicit null for a
+delivery. The legacy valuation request remains a separate unchanged version.
+No price, direction or payment convention is inferred from resource kind, role
+name or slot. Several Sides may price the same source with different terms.
+The bounded complete-right profile admits coefficients `1` and `-1` and requires
+at least one Side linked to a plan output. `horizon_right` supplies one literal
+complete-right quantity, consumed once in the first native interval, for an
+independently priced payment Side; delivery kind is refused for this source.
+Its monthly payment uses the first operating month's end and the Side's explicit
+payment rule. It is not a periodic capacity fee. A composition containing only
+those payments is not admitted.
+
+| Plan | Admitted quantity sources |
+| --- | --- |
+| Battery | `charging_energy`, `discharging_energy`, `grid_throughput` |
+| Thermal toll | `energy_output`, `guaranteed_fuel`, `consumption_fuel` |
+| Solar | `energy_output`, `payment_energy` |
+| Whole-horizon payment | `horizon_right`, exactly once per selected Side |
+
+Guaranteed and modeled consumption use distinct typed ports even when they have
+the same native unit. Several Sides consuming one output do not create additional
+physical production, fuel use or stored energy. The initial price profile remains
+explicitly undiscounted, with fixed or selected-contract flat prices and monthly,
+unadjusted calendar-day payment rules; delivery Sides use native interval ends.
+
+Every member is a concrete subclass of abstract `Side`, owns its complete
+immutable schedule and implements Side PV. Shared fixed/floating mechanics may
+be reused; the instrument combines only signed Side contributions. A retained
+program is executed by its concrete Side. Common feasibility outputs supply
+typed quantities to all members without invoking a Side or Instrument PV.
+
+The GUI prepares this same explicit contract and invalidates review after
+composition or context edits. Native saved-v2 admission validates each original
+member against its sealed quantity, price, sign, roots and independent value date.
+Ordinary reopen, Side inspection and portfolio valuation execute concrete
+`RetainedProgramSide` members. Feasibility-only reconstruction clears both
+financial request versions and cannot reprice or regenerate those saved Sides.
+Existing v1 commands, identities and first outcomes remain unchanged.
+
+The owned HTTP workflow books and reopens five independent Sides, including two
+same-source fees with the same display name and different payment dates, at an
+independently expected value of `550.7`. Native checks preserve distinct thermal
+guaranteed and consumption sources, reject malformed compositions and match
+managed label whitespace/length rules. A delayed native receipt insertion that
+expires the caller's authority refuses and rolls back, including semantic no-ops.
+These are bounded qualification results, not production capacity evidence.
+
+Independent Side dates do not enable started delivery, shared-resource pooling,
+optimization, invoices or payment processing. The legacy profile and its
+existing numerical oracles remain documented below. Populated installation
+upgrade and release qualification remain explicit activation gates.
+
+### D417 qualification
+
+Independent operating-assembly verification on 2026-11-16 covered power, REC and
+the required common adapters before the universal-Side integration. These counts
+describe that verified workload, not the later merged artifact, broader products
+or production capacity:
+
+| Check | Verified result |
+| --- | --- |
+| Managed domain | 775 core checks pass, including concrete retained Sides, independent signed assembly, exact legacy identities, concurrent first access and context/scenario/discount isolation. |
+| Managed API and builds | Default API suite emits 98 PASS records; four structured-power groups and one hedge group pass. Core, API and worker builds have zero warnings/errors. |
+| Frontend | 1,961 checks pass, including actual Chrome component checks for independent Side entry, repeated sources, presets, allowed kinds and review invalidation. |
+| Native storage | The complete 349-migration chain and native workflows pass on stock PostgreSQL 16.14 and 18.1, including malformed composition, exact source quantities, label parity, replay and current authority. |
+| Saved trading HTTP | Five independent Sides reopen at `550.7`; an explicit sixth repeated-source membership gives `532.6`. All six native Side pages and calculation details pass. Legacy/v2 booking, expiry refusal, REC forwards and inventory remain green. |
+| Populated operating upgrade | On PostgreSQL 16.14 and 18.1, exact predecessor helpers reproduce saved battery, thermal toll and solar quantities and admit their retained programs. Committed migration-body application preserves 30 history/program/relationship sets; original API commands reopen, reprice and replay unchanged. |
+| Live API-backed browser | 27 checks pass: 15 facility/plan checks and 12 saved trading/REC checks. The run removes its owned disposable resources. |
+| Repository | 142 Python checks pass. |
+
+The subsequent combined Side packet also passes 16 operating and 19 saved
+trading/REC actual browser checks, exact five/six-Side values of `550.7`/`532.6`,
+30-set populated legacy preservation, both original ReadPhysical timers and native
+semantic-receipt expiry refusal. Its compiled outputs are unchanged by the later
+scoped-presence SQL correction. These results do not authorize deployment, schema
+activation or operations on an existing database. Installation-specific populated
+upgrade and release checks remain separate gates; no optimizer, pooled resource
+operation or new physical/cash lifecycle is qualified by Side assembly.
+
+### Populated operating upgrade compatibility
+
+The owned API workflow books legacy battery, thermal toll and solar agreements
+before exercising migration 0356 over their populated state. It restores the
+tracked predecessor functions and constraints, verifies all four function
+contracts against the migration's complete metadata guards, and uses the
+predecessor quantity kernel and schedule admission to
+validate the original plans and retained records. Original request outcomes must
+also replay under the predecessor contract.
+
+The migration body is committed before the subsequent API reads. Complete-row
+digests cover 30 native history, identity, request, program and relationship sets,
+including executable bytes and command hashes. The original trades reopen and
+reprice at their independent values of 610, 760 and 500, with unchanged first
+outcomes. Separate rolled-back probes detect altered helper metadata and a
+corrupted synthetic fuel quantity without changing retained history.
+
+This checks populated function/constraint and retained-record compatibility in a
+disposable fixture. It does not exercise deployment bookkeeping, backup/restore
+or an installation's migration runner, and it changes no migration journal.
+
 ## Operating-right booking
 
 `supplied_operating_right_trade_v1` books one complete specified thermal toll,
@@ -178,7 +289,8 @@ python3 tools/run_preview.py --check --structured-power-check \
 ```
 
 Local qualification on 2026-11-16 used the pinned .NET 10.0.402 SDK and Node
-24.7.0, stock PostgreSQL 16.14 and 18.1, and an owned Chrome profile:
+24.7.0, stock PostgreSQL 16.14 and 18.1, and an owned Chrome profile. These results
+record the D412 legacy profile; they do not qualify the D417 assembly increment:
 
 | Check | Verified result |
 | --- | --- |

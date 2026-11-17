@@ -9,7 +9,7 @@ from uuid import uuid4
 from check_reference_editing import main as native_main
 from close_session_fixture import sql_session
 from gas_park_loan_fixture import ParkLoanFixture, fixture, literal
-from owned_lifecycle_browser import build_assets, run as run_browser
+from owned_lifecycle_browser import api_artifact, build_assets, run as run_browser
 
 
 def main():
@@ -17,10 +17,18 @@ def main():
     for name in ['pg-bin', 'dotnet', 'browser']:
         parser.add_argument('--' + name, type=Path, required=True)
     parser.add_argument('--no-build', action='store_true')
+    parser.add_argument('--api-bin', type=Path, help='Coherent frozen current-tree API artifact, with --no-build')
     args = parser.parse_args()
     for path in [args.pg_bin / 'psql', args.dotnet, args.browser]:
         if not path.is_file():
             parser.error('An installed executable is required: ' + str(path))
+    if args.api_bin is not None:
+        if not args.no_build:
+            parser.error('--api-bin requires --no-build')
+        try:
+            args.api_bin = api_artifact(args.api_bin)
+        except ValueError as error:
+            parser.error(str(error))
     os.environ['DOTNET'] = str(args.dotnet.resolve())
     children = []
     if not args.no_build:
@@ -67,7 +75,7 @@ def main():
                 f"'Synthetic Park and Loan {label}','{session}','{day}','{day}T16:00:00Z',{literal(market['pins'])},{literal(market['members'])});")
         packet = dict(session=session, closes=closes, cases=cases, **{key: market[key] for key in ['markId', 'rateIds', 'contractId', 'definitionRevisionId']})
         run_browser(query, manifest, args.dotnet.resolve(), args.browser.resolve(), children, packet, 'tests/browser/gas-park-loan.mjs',
-            worker_enabled=False, timeout=540, artifacts=['gas-park-loan-booked.png', 'gas-park-loan-review.png', 'gas-park-loan-mobile.png', 'gas-park-loan-risk.png'])
+            worker_enabled=False, timeout=540, api_bin=args.api_bin, artifacts=['gas-park-loan-booked.png', 'gas-park-loan-review.png', 'gas-park-loan-mobile.png', 'gas-park-loan-risk.png', 'gas-park-loan-sides-mobile.png'])
         for case in cases:
             trade = query(f"SELECT trade_id FROM trading.gas_park_loan_trades WHERE(catalog_id,owned_account_id)=('{f.catalog}','{case['ownedAccountId']}');")
             assert trade and '\n' not in trade

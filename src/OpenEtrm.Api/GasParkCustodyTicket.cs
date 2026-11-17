@@ -18,7 +18,7 @@ public static class GasParkCustodyTicket
         new(id,label,meaning,type,null,"editable",true,null,type=="choice"?choices??id:null,[..depends],null,null,null);
     public static TicketDescription Description{get;}=Build(false);
     static readonly TicketDescription SelectedDescription=Build(true);
-    static TicketDescription Build(bool selected)=>TicketDescriptions.Validate(new TicketDescription(TicketProduct,1,"flow",
+    static TicketDescription Build(bool selected)=>ServiceTicketFieldGroups.ParkCustody(new TicketDescription(TicketProduct,1,"flow",
     [
         Field("profile","Contract profile","Select the qualified custody agreement explicitly.") with{RefreshDescription=true},
         Field("service_kind","Service","The supported retained-title service."),

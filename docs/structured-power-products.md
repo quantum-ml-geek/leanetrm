@@ -22,9 +22,18 @@ Only consumed physical parameters are saved; guarantees, entitlement, state,
 dispatch, prices and fees remain explicit preview inputs. Unsupported planned
 fields appear disabled as **Coming soon**.
 
+D417 implements explicit operating assembly through concrete Side composition,
+with separate independent dates and prices, repeated quantity sources and native
+saved admission. It preserves the qualified D412 request/identity contract below.
+Fixed/floating pricing is shared economics; the concrete Side owns its
+asset/delivery/payment behavior and retained schedule. The
+[instrument contract](instrument-contracts.md) applies to previews, booked
+programs and ordinary portfolio valuation alike. Qualification is bounded to
+power, REC and their required common adapters.
+
 The managed supplied-plan preview validates thermal commitment/fuel and battery
 state paths, and resolves solar entitlement and delivery/payment quantities.
-Ordinary independent payment Sides own the schedules and price typed outputs
+Ordinary independent delivery/payment Sides own the schedules and price typed outputs
 from the same plan. Results expose exact gross rows and signed contributions
 under the explicit right-holder, remaining-operating-value measure. Current
 priced previews are undiscounted; fixed-profile solar exposes quantity residuals
@@ -152,7 +161,9 @@ Use **toll** as a commercial composition: pay for a specified resource right,
 with explicit output entitlement and operating responsibilities. Reuse ordinary
 payment and delivery Side behavior where it fits; resource-specific production
 and state rules remain versioned managed implementations. A shared composition
-does not require a universal resource algorithm or a subclass per technology.
+does not require a universal resource algorithm. Concrete Side subclasses own
+the supported resource-specific behavior and reuse common pricing/schedule
+mechanisms; instrument subclasses must not encode every combination of Sides.
 Keep industry product names in entry: an ordinary solar agreement is offered as
 a PPA; use a solar output-right/toll classification only where its actual rights
 support it. Financial reference payoffs and physical operating control remain

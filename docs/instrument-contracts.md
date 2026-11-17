@@ -1,5 +1,47 @@
 # Unit instruments and trade bindings
 
+## Mandatory composition boundary (D417)
+
+Every financial instrument derives from `Instrument`. The only products allowed
+to have no Sides are `FuturesContract` and exchange-traded
+`FuturesOptionInstrument`. Every other instrument composes a nonempty ordered
+collection of concrete subclasses of abstract `Side`. A single cash amount,
+physical claim or retained program does not create another exception.
+
+Each Side owns its immutable whole-term contractual parameters, declared inputs,
+schedule behavior and `PV` implementation. An unbooked Side generates its own
+schedule. A booked Side executes its exact retained schedule without regenerating
+contractual geometry from current terms. Retained-program execution is an
+implementation of a concrete Side; an instrument must not bypass Side by valuing
+raw programs directly. Instrument PV combines membership-signed Side results.
+
+Choose a concrete Side for its delivery, cash, fee or asset-specific behavior.
+Fixed versus floating describes pricing economics. Reuse proven fixed/floating
+price and payment mechanisms inside the appropriate Side implementation rather
+than copying them, adding product switches to the common evaluator or treating
+all physical behavior as a price-mode variant. A new asset label alone does not
+justify another class; a supported behavioral contract does.
+
+Membership identity includes the exact Side reference, occurrence/order,
+coefficient and any explicitly supported normalization. Two Sides may consume the
+same quantity source while retaining different prices, delivery/payment dates
+and schedules. They remain separate contributions. A Side contains neither peer
+Sides nor an Instrument whose PV it calls. Shared operating feasibility produces
+typed quantity/state outputs consumed by those Sides; it adds no separate PV.
+
+D417 applies this boundary to cash, holdings, rights and retained physical and
+operating contracts. Retained Sides own exact saved schedule execution and
+inspection, with ordinary signed aggregation and context-bound reuse. The
+power/REC assembly and universal Side implementations pass bounded combined local
+qualification, including native upgrades, retained workers and actual desktop/phone
+flows. The [qualification record](verification.md#instrument-and-side-alignment-qualification-d417)
+keeps earlier artifact checkpoints separate.
+Existing booking versions and retained identities remain readable under their
+original financial and authorization contracts. The rule alone establishes no
+new lifecycle, quantity-scaling or financial-model capability.
+
+## Trade ownership
+
 Trade owns an ordered collection of `TradeInstrument` values. Each binding has a
 stable occurrence key, an immutable Instrument reference and an external signed
 typed Quantity. Independent fills or amended obligations can reference the same
@@ -25,8 +67,23 @@ Currency remains part of the money type. Portfolio evaluation rejects a result
 with another context, currency or quantity basis before scaling or aggregation.
 `UnitMoney` remains the context-independent per-unit value used for execution
 basis. Existing `Value(UnitValuationContext)` and rich side-context PV methods
-are bridged by the common entry point; new leaf models can implement typed PV
-without introducing sides or an unused discount provider.
+are bridged by the common entry point.
+
+D417 requires every non-exchange instrument to own explicit Side memberships.
+Only `FuturesContract` and `FuturesOptionInstrument` remain standalone exchange
+contracts. A new cash, inventory, service-rights or retained-program model puts
+its own schedule and PV behavior on a genuine Side; its Instrument delegates
+and composes the contributions. A Side must not call back into Instrument PV.
+The managed contract rejects non-exchange held models without complete Side
+memberships before declaration or PV, including direct risk-position input.
+Adapter and UI integration pass bounded local qualification; the complete CI
+matrix remains required before merge.
+
+The unit-to-Side context carries the declared market inputs, exact calculation
+clock, measure and held state. It introduces no dummy discount provider. Cash
+retains its actual payment row; current commodity and rights values retain
+noncash holding rows without invented delivery or payment dates. Paid state,
+title, custody and operational performance remain independently owned facts.
 
 `Declare(context)` supplies model version, complete market dependencies, quantity
 basis and output currency. Declarations enable shared scenarios and unaffected
@@ -56,11 +113,56 @@ then reaches every consumer through normal PV evaluation. The dependency graph
 retains price construction and exact source identity; curve labels, instrument
 IDs and repeated holdings do not create extra market factors.
 
-Only instruments declaring `SupportsQuantityScaling` can enter this unit-based
-trade/portfolio path. This means linear scaling in booked size, not linearity in
-prices. A nonlinear market model can still scale by contract count. A
-quantity-dependent payoff needs an explicitly supported alternative before
-admission; it cannot silently use unit scaling.
+`SupportsQuantityScaling` permits linear scaling in booked size, independently
+of market linearity. A nonlinear market model can still scale by contract count.
+`SupportsFixedUnitBinding` instead admits the exact declared complete unit and
+refuses duplicate ownership within its portfolio. The separately selected
+`SupportsWholePosition` contract admits one normalized positive package for PV
+only, with no coverage, execution basis, fractional size, sign reversal or
+duplicate whole-position identity across valuation groups. These capabilities
+are distinct; a model cannot silently claim quantity scalability to gain entry.
+
+## Retained program Sides
+
+Gas, crude, LNG, operating-right and certificate-forward projections retain their
+published v1 ordered `Members`, program bytes and digests as their canonical
+financial definitions. Their genuine `RetainedProgramSide` memberships are a
+deterministic execution view of those same programs. They do not select a new
+schedule generator, compile replacement programs or invent calendar bindings.
+The pure calendar decoder retains the exact saved policy, including nullable
+synthetic publication evidence. Native API hydration still requires the original
+applicable calendar publication proofs.
+
+A correspondence proof validates every membership occurrence's native Side ID,
+program, coefficient, quantity ratio, unit and captured calendar before identity,
+interning, declaration or PV. Derived Sides are excluded from canonical encoding
+only for this internal retained-composition contract; other Sided Instruments
+retain their explicit Side definitions in economic identity. Reordered or altered
+copies refuse. The proof and schedule wrapper are cached per immutable object;
+each record copy receives its own proof. Inspection rows are allocated only when
+requested, over the exact stored program addresses.
+
+Each retained Side executes its own program using admitted immutable source
+values. The gas Instrument supplies typed connected day geometry and its held
+quantity normalization; each Side owns its accrued and paid cash rows. The
+Instrument applies explicit signs and ratios and aggregates the resulting
+contributions and named measures. Source authority, paid state and valuation
+inputs are never cached as economic-definition proof. Runtime model versions
+identify this Side execution without silently converting stored v1 definitions.
+
+The ordered occurrence slot belongs to composition, rather than the reusable
+Side definition. Connected cash execution receives an explicit occurrence context
+with its exact owner, program, geometry, held normalization and binding state.
+Reusing a Side must not reuse another occurrence's paid state or value cache;
+missing or conflicting occurrence evidence refuses before valuation.
+
+Retained gas source receipts encode timed-cash and commodity-holding definitions
+through explicit versioned projections. They preserve native instrument IDs,
+exact reference versions, cash timing or holding mark/carrying terms, complete
+canonical economic definitions and the selected execution-model version. The
+enclosing source retains ownership, quantities, paid state, chronology and native
+receipts. Authorized native reads materialize the executable instruments; source
+receipts have no instrument-reconstruction operation.
 
 ## Futures contracts and execution
 
@@ -113,7 +215,10 @@ Instrument identity alone does not establish calculation equivalence.
 Ordinary sided instruments also share an operation/scenario-local side-context
 cache. Its key includes the exact declared dependency set and resolved
 discount-provider object. Shared Side objects evaluate once in that context.
-Different providers, dependency fences or scenarios create different contexts.
+Different providers, dependency fences, binding states, operating inputs or
+scenarios create different contexts. Retained-program execution additionally
+scopes admitted source values and connected physical-day geometry; these inputs
+cannot share Side values with another held lifecycle state.
 The cache grants no market access and cannot cross runs or historical cutoffs.
 Keys use hashed lookup rather than scanning prior scopes. Work reports include
 these side calculations alongside interval-side work.
@@ -126,7 +231,17 @@ events; accounting/clearing netting remains a separate operation.
 
 ## Verification
 
-Managed checks cover a PV-only model without a product adapter, shared unit values
+Composition qualification must exercise concrete Side inheritance, nonempty and
+independently scheduled memberships, exact retained execution, signed membership
+and trade quantity application, shared quantity sources with different economic
+terms, and deterministic base/up/down portfolio PV. API and native admission
+must agree on the same closed composition, exact references and supported bounds.
+Malformed or missing members, duplicate member keys, conflicting definitions
+under one Side ID and cross-context inputs refuse. Valid reuse of a Side or
+quantity source remains explicit. Neither templates nor product slots may
+silently supply a direction, price or payment convention.
+
+Managed checks cover a Side-owned PV model without a product adapter, shared unit values
 across books, repeated instrument occurrences in one trade, incorrect units,
 stale results, undeclared size scaling and missing execution facts. Forward checks
 use independent price/strike/quantity arithmetic, definition interning, shared

@@ -1,9 +1,29 @@
 # Delivery plan and acceptance criteria
 
+D417 aligns every non-exchange Instrument with explicit reusable Sides and makes
+their memberships visible in booking, review and saved-trade views. Futures and
+futures options remain the only exceptions. Acceptance requires independent Side
+valuation and honest schedule inspection, complete production-type coverage,
+unchanged native ownership and retained-program identities, and cash, lifecycle
+and shared-scenario regression checks. Actual browser checks must verify the
+integrated booking and inspection flows before release. Combined local
+qualification is complete, including exact retained workers and actual desktop/phone
+flows. The complete CI matrix must pass before merge; deployment and production
+schema activation remain separate.
+
+D418 implements [ordinary direct point market-value publication](point-trader-marks.md),
+independent of financial adoption. Native and focused managed/UI checks cover a
+first value on a genuine empty point, exact correction/acknowledgement, retained
+actor-bound status and complete optional input provenance. The combined facility,
+certificate and financial Transport baseline passes actual HTTP/browser and
+upgrade checks. Combined Side alignment has local qualification; merge CI and
+deployment remain separate gates.
+
 D416 implements the selected [financial Transport rights and fixed-fee
 contract](gas-transport-financial.md). Native and managed value/upgrade controls
-and actual shared browser checks provide local evidence. First-value market
-publication, integrated upstream qualification and release remain delivery gates.
+and actual shared browser checks provide local evidence. D418 supplies first-value
+market publication and combined Side qualification is complete locally. Release
+and production activation remain separate gates.
 Physical performance and commercial Storage retain separate planned contracts.
 
 D413 locally qualifies [retained chosen routes](gas-transport-routes.md) with
@@ -34,6 +54,61 @@ controls and populated predecessor/drift checks. Actual browser qualification
 passed 64 Transport checks and 30 existing-storage regression checks against
 the same API, SQL and shared UI artifact. These results qualify the declared
 operating consumer, not the remaining financial or physical Transport products.
+
+## Mandatory Side composition (D417)
+
+Status: the combined power/REC assembly and universal Side implementation pass
+bounded local qualification. The combined scoped-presence source/SQL checkpoint
+passes native admission, populated upgrades, exact retained workers and 151 actual
+physical/operating/REC browser assertions. A subsequent physical-obligation
+admission checkpoint qualifies independent reconstruction and exact definition
+refusal through the actual native and retained-worker consumers. Earlier browser,
+service and standard-workflow checkpoints retain their own artifact identities. See [the qualification record](verification.md#instrument-and-side-alignment-qualification-d417).
+The complete CI matrix is a merge gate; release activation remains separate.
+
+All financial instruments derive from `Instrument`. Only `FuturesContract` and
+exchange-traded `FuturesOptionInstrument` may have no Sides. The current increment
+covers power, REC and their required common retained-program/claim adapters,
+using concrete subclasses of abstract `Side` with immutable independent schedules
+and Side-owned PV. The universal rule does not qualify another product family.
+Reuse shared fixed/floating economics without replacing asset-specific behavior
+with product switches. Instruments combine signed memberships; Trade applies external typed
+quantity once. Shared operating feasibility supplies typed quantities/state and
+does not own Sides or another PV.
+
+The implemented operating assembly contract:
+
+1. Admits the explicit `operating_side_composition_v2` contract through the common
+   managed API and UI: one to eight ordered independent Sides, explicit stable
+   keys, names, quantity sources, coefficients, delivery/payment kind, prices and
+   each Side's own payment rule where applicable. Repeated quantity sources remain
+   separate obligations. Missing policies refuse rather than selecting a product
+   template or generating financial terms from slot position. This full-right
+   profile admits explicit coefficients `1`/`-1` and requires at least one
+   plan-linked Side alongside any literal horizon payment Sides. The whole-right
+   literal is consumed once in the first native interval, with payment from the
+   first operating month under its explicit rule; it is not a periodic capacity
+   fee. Delivery uses a typed physical-plan output. The admission bound matches
+   the existing native eight-slot composition contract.
+2. Preserves legacy valuation JSON, economic identities, accepted receipts and
+   certified reads. Native saved-v2 admission independently validates the original
+   composition and sealed programs before publication; saved reads execute
+   concrete retained Sides without repricing authored definitions.
+3. Retains exact Side/program memberships and source/cell/quantity relationships,
+   current book/party/market/physical authority, expected heads, command replay,
+   business-fact no-ops and worker fences. Full-right facility overlap protection
+   spans old/new profiles and facility versions. Composition adds no pooled
+   solar/storage dispatch or physical lifecycle.
+4. Is covered by independent checks of Side dates and directions, repeated-source
+   cash legs, retained reopen/inspection, single application of member/trade signs, ordinary
+   portfolio base/up/down risk, malformed native commands and historical/current
+   authority boundaries. Native expiry checks reject a semantic no-op whose
+   receipt insertion outlives its authority. Final merged frontend/browser and
+   managed/native/HTTP results are recorded in the
+   [D417 qualification](structured-power-trading.md#d417-qualification).
+
+See [the developer contract](instrument-contracts.md) and
+[the operating profile](structured-power-trading.md#explicit-side-assembly-d417).
 
 D406 locally qualifies a bounded [Park and Loan consumer](gas-park-loan.md):
 explicit booking, native advance and partial return, independent fee cash, shared
@@ -852,9 +927,10 @@ Variation-margin processing and full futures settlement PV remain unimplemented.
 
 Simple futures contracts are leaf instruments keyed by the exact futures-series
 primary key, independent of the curve recipe. Explicit pricing bindings retain
-selected curve/member and quote policy. Composed products use `SidedInstrument`
-with nonempty immutable memberships; fixed/floating swaps remain its current
-consumer. Fused exact aggregation preserves final arithmetic and trade-owned
+selected curve/member and quote policy. D417 requires every other financial
+product except exchange-traded options to use concrete Side composition with
+nonempty immutable memberships; fixed/floating swaps are one existing consumer.
+Fused exact aggregation preserves final arithmetic and trade-owned
 quantities. Migration 0019 preserves historical UUID aliases and pricing bindings;
 new future bookings create neither a side nor a wrapper definition.
 

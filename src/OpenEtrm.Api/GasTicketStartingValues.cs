@@ -11,6 +11,15 @@ namespace OpenEtrm.Api;
 // resulting term explicitly. Existing valid terms are never replaced by these.
 internal static class GasTicketStartingValues
 {
+ internal static TicketLookup? Retained(TicketFieldRequest body)
+ {
+  var kind=GasTicket.LookupOf(body.Draft,body.Side,body.Field);
+  if(kind is not ("entry_from" or "entry_to" or "entry_quantity"))return null;
+  var side=body.Draft.Sides.Single(s=>s.Code==body.Side);
+  if(kind=="entry_quantity"&&side.Values.ContainsKey("link_source"))throw Missing("Quantity follows the selected physical source.");
+  var current=side.Values.GetValueOrDefault(body.Field);if(string.IsNullOrWhiteSpace(current))return null;
+  return new(current,new("suggestion",kind=="entry_quantity"?"Suggested native quantity":"Retained entry"));
+ }
  internal static TicketSideDraft Source(TicketDraft draft,TicketSideDraft side)=>side.Kind=="physical"?side:
   draft.Sides.SingleOrDefault(s=>s.Kind=="physical"&&s.Code==side.Values.GetValueOrDefault($"{side.Kind}_source"))??throw Missing("Choose the physical quantity source first.");
  internal static JsonElement Path(JsonElement catalog,TicketSideDraft side)=>catalog.GetProperty("locations").EnumerateArray().Where(p=>
@@ -18,10 +27,10 @@ internal static class GasTicketStartingValues
   throw Missing("Choose the complete delivery path to get a starting value.");
  internal static TicketLookup Value(PreviewData data,InputFrame frame,TicketFieldRequest body,JsonElement catalog)
  {
+  if(Retained(body) is {} retained)return retained;
   var side=body.Draft.Sides.Single(s=>s.Code==body.Side);var current=side.Values.GetValueOrDefault(body.Field);
   var kind=GasTicket.LookupOf(body.Draft,body.Side,body.Field);
   TicketLookup Suggest(string value,string label)=>new(value,new("suggestion",label));
-  if(kind=="entry_quantity"&&side.Values.ContainsKey("link_source"))throw Missing("Quantity follows the selected physical source.");
   if(kind=="entry_quantity")return Suggest(current??"100","Suggested native quantity");
   if(kind=="entry_spread")return Suggest(current??"0","Suggested zero additional spread");
   if(kind is "entry_from" or "entry_to")

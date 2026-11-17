@@ -6,31 +6,33 @@ namespace OpenEtrm.MarketData.Gas;
 
 // A declared physical exchange before its principal is fixed. The selected
 // marks and carrying inputs are valuation terms, never accepted final evidence.
-[EconomicDefinition("gas_unfixed_delivery_exchange_v1")]
-public sealed record GasUnfixedPhysicalDeliveryInstrument:Instrument
+[EconomicDefinition("gas_unfixed_delivery_exchange_v2")]
+public sealed record GasUnfixedPhysicalDeliveryInstrument:SidedInstrument
 {
-    public const string Version="gas_unfixed_delivery_exchange_pv_v1";
+    public const string Version="gas_unfixed_delivery_exchange_side_pv_v2";
+    // This published identity domain remains stable; execution is versioned above.
+    private const string IdentityDomain="gas_unfixed_delivery_exchange_pv_v1";
     [IdentityField]public GasPhysicalDeliveryTerms Terms{get;}
     [IdentityField]public CurveRequest PrincipalMark{get;}
     [IdentityField]public PriceUnit PriceUnit{get;}
     public override ReferenceKey Currency=>Terms.Currency;
     public override Quantity UnitQuantity=>new(ExactDecimal.Parse("1"),Terms.Quantity);
     public override bool SupportsQuantityScaling=>true;
-    public GasUnfixedPhysicalDeliveryInstrument(Guid id,GasPhysicalDeliveryTerms terms,CurveRequest principalMark,PriceUnit priceUnit):base(id)
+    internal override bool SupportsSettlement=>false;
+    public override DefinitionIdentity PricingBindingIdentity=>GasDeliveryExchangeSides.Binding(Id,Terms);
+    public GasUnfixedPhysicalDeliveryInstrument(Guid id,GasPhysicalDeliveryTerms terms,CurveRequest principalMark,PriceUnit priceUnit)
+        :base(id,GasDeliveryExchangeSides.Unfixed(id,terms,principalMark,priceUnit))
     {
-        Require(terms,principalMark,priceUnit);Terms=terms;PrincipalMark=principalMark;PriceUnit=priceUnit;
+        Terms=terms;PrincipalMark=principalMark;PriceUnit=priceUnit;
     }
     private static void Require(GasPhysicalDeliveryTerms terms,CurveRequest principalMark,PriceUnit priceUnit)
     {
-        if(terms is null||priceUnit is null||priceUnit.Currency!=terms.Currency||priceUnit.Quantity!=terms.Quantity||
-            principalMark.Curve.Revision.CatalogId==Guid.Empty||principalMark.Curve.Revision.RevisionId==Guid.Empty||
-            string.IsNullOrWhiteSpace(principalMark.Curve.Code)||principalMark.Contract.Id==Guid.Empty||principalMark.Contract.Revision!=principalMark.Curve.Revision)
-            throw new MarketDataException("gas_unfixed_delivery_terms","Select exact physical terms, principal mark and native quotation units.");
+        GasDeliveryExchangeSides.RequireUnfixed(terms,principalMark,priceUnit);
     }
     public static GasUnfixedPhysicalDeliveryInstrument Create(GasPhysicalDeliveryTerms terms,CurveRequest principalMark,PriceUnit priceUnit)
     {
         Require(terms,principalMark,priceUnit);
-        return new(ContractIdentity.FromCanonical(DefinitionIdentity.CanonicalTerm(new object?[]{Version,terms,principalMark,priceUnit})),terms,principalMark,priceUnit);
+        return new(ContractIdentity.FromCanonical(DefinitionIdentity.CanonicalTerm(new object?[]{IdentityDomain,terms,principalMark,priceUnit})),terms,principalMark,priceUnit);
     }
     public ImmutableArray<SidePaymentKey> RequiredDiscounts(DateTimeOffset calculationAt)=>
         GasDeliveryExchange.RequiredDiscounts(Id,Terms,calculationAt);
@@ -41,44 +43,24 @@ public sealed record GasUnfixedPhysicalDeliveryInstrument:Instrument
             Time=discounted.IsEmpty?ValuationTimeDependency.Independent:ValuationTimeDependency.Between(context.CalculationAt,discounted.Min(p=>p.PaymentAt)),
             DiscountInputs=[..discounted.Select(p=>new DiscountInput(p,context.PaymentDiscounting(Id)))]};
     }
-    public override UnitValuation PV(UnitValuationContext context)
-    {
-        if(context.Measure!=ValuationMeasure.PresentValue)throw new MarketDataException("valuation_measure","An unfixed physical exchange implements remaining PV.");
-        ValidateValuationState(context.BindingState);
-        return new(context,ExchangeValue(context),Terms.Quantity);
-    }
+    public override void ValidateValuationState(IBindingValuationState? state)=>GasDeliveryExchangeSides.RequireState(state);
+    internal override UnitPricingContract DeclareScope(UnitValuationContext context,bool lifecycle)=>Declare(context);
     internal ExactMoney ExchangeValue(UnitValuationContext context)
     {
-        var asset=context.Inputs.ExactPrice(Terms.Mark);var principal=context.Inputs.ExactPrice(PrincipalMark);
-        if(asset.Unit!=PriceUnit||principal.Unit!=PriceUnit)
-            throw new MarketDataException("gas_delivery_unit","The asset and principal marks require their exact selected native quotation; conversion must be configured explicitly.");
-        return GasDeliveryExchange.Value(Id,Terms,UnitQuantity,asset,principal,context);
+        // The enclosing future has already admitted its own margin state.
+        // That state is not a paid-state input to either delivery Side.
+        return base.PV(context.SideContextWithoutBindingState()).PresentValue;
     }
 }
 
 // One carrying calculation serves the unfixed and fixed principal contracts.
 internal static class GasDeliveryExchange
 {
-    private static SidePaymentKey Cash(Guid id,GasPhysicalDeliveryTerms terms)=>new(id,0,terms.CashDueAt,terms.Currency){Timing=ValueTimingKind.Instant};
-    private static SidePaymentKey Physical(Guid id,GasPhysicalDeliveryTerms terms)=>new(id,1,terms.From,terms.Currency){Timing=ValueTimingKind.Instant};
+    internal static SidePaymentKey Cash(Guid id,GasPhysicalDeliveryTerms terms)=>new(id,0,terms.CashDueAt,terms.Currency){Timing=ValueTimingKind.Instant};
+    internal static SidePaymentKey Physical(Guid id,GasPhysicalDeliveryTerms terms)=>new(id,1,terms.From,terms.Currency){Timing=ValueTimingKind.Instant};
     internal static ImmutableArray<SidePaymentKey> RequiredDiscounts(Guid id,GasPhysicalDeliveryTerms terms,DateTimeOffset calculationAt)
     {
         if(!TradingInstant.IsSupported(calculationAt))throw new MarketDataException("gas_delivery_discount","Select an exact supported calculation instant.");
         return terms.Carrying==GasHoldingCarrying.CurrencyCurve?[..new[]{Physical(id,terms),Cash(id,terms)}.Where(p=>p.PaymentAt>calculationAt)]:[];
-    }
-    internal static ExactMoney Value(Guid id,GasPhysicalDeliveryTerms terms,Quantity quantity,ExactUnitPrice mark,ExactUnitPrice principal,UnitValuationContext context)
-    {
-        if(mark.Unit!=principal.Unit)throw new MarketDataException("gas_delivery_unit","The delivery mark and principal require one exact native quotation; conversion must be configured explicitly.");
-        var physical=mark.ExactTimes(quantity);var cash=principal.ExactTimes(quantity);
-        var keys=RequiredDiscounts(id,terms,context.CalculationAt);
-        if(!keys.IsEmpty)
-        {
-            var factors=context.Inputs.Discounts(keys);
-            if(factors.Length!=keys.Length||keys.Any(key=>factors.Count(f=>f.Payment==key)!=1))
-                throw new MarketDataException("gas_delivery_discount","Select each exact physical-value and cash-due currency carrying input.");
-            foreach(var factor in factors)
-                if(factor.Payment==Physical(id,terms))physical=physical.Scale(factor.DiscountFactor);else cash=cash.Scale(factor.DiscountFactor);
-        }
-        return physical.Subtract(cash);
     }
 }

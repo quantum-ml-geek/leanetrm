@@ -50,7 +50,7 @@ public static class GasParkLoanTicket
         Field("fee_rounding_stage","Fee rounding stage","Round cumulative payment totals, preserving exact elapsed-balance arithmetic before that boundary."),
         Field("fee_due_at","Fee due","Explicit payment due time at or after the fee accrual cutoff, including a zero-rate agreement.","datetime")
     ],GasParkLoanBalanceFeeTerms.Version);
-    static TicketDescription Build(ImmutableArray<TicketField> feeFields,string? profile=null)=>TicketDescriptions.Validate(new TicketDescription(Product,1,"flow",
+    static TicketDescription Build(ImmutableArray<TicketField> feeFields,string? profile=null)=>ServiceTicketFieldGroups.ParkLoan(new TicketDescription(Product,1,"flow",
     [
         Field("profile","Contract profile","The installed title-transfer agreement and its qualified financial behavior.") with{RefreshDescription=true},
         Field("service_kind","Service","The commercial service being booked."),
@@ -70,7 +70,7 @@ public static class GasParkLoanTicket
         Field("legal_entity","Legal entity","Our exact legal entity revision.",choices:"legal_entities"),
         Field("counterparty","Counterparty","The other exact legal party revision.",choices:"counterparties")
     ],[],[],[new("principal","Principal","quantity","quantity",[]),new("present_value","Remaining plan PV",null,"money",[])],["term"],[],["new","booked"])
-    {Selection=profile is null?ImmutableDictionary<string,string>.Empty:ImmutableDictionary<string,string>.Empty.Add("profile",profile)});
+    {Selection=profile is null?ImmutableDictionary<string,string>.Empty:ImmutableDictionary<string,string>.Empty.Add("profile",profile)},profile is not null);
 
     public static TicketDescription Describe(TicketDraft? draft)
     {

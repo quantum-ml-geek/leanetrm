@@ -27,6 +27,13 @@ internal static class GasUnfixedDeliveryChecks
         Reject("gas_unfixed_delivery_terms",()=>GasUnfixedPhysicalDeliveryInstrument.Create(null!,a,unit));
         Reject("gas_unfixed_delivery_terms",()=>GasUnfixedPhysicalDeliveryInstrument.Create(terms,default,unit));
         var locked=terms.CreateObligation(ExactUnitPrice.Parse("-1.01",unit));
+        var otherAssetTerms=new GasPhysicalDeliveryTerms(terms.Id,terms.Series,terms.Quantity,terms.Currency,terms.Location,
+            terms.From,terms.To,terms.CashDueAt,a,terms.Carrying,terms.Implementation);
+        var otherAsset=new GasUnfixedPhysicalDeliveryInstrument(Guid.NewGuid(),otherAssetTerms,a,unit);
+        var otherPrincipal=new GasUnfixedPhysicalDeliveryInstrument(Guid.NewGuid(),terms,b,unit);
+        if(DefinitionIdentity.For(unfixed.Sides[1].Side)!=DefinitionIdentity.For(otherAsset.Sides[1].Side)||
+            DefinitionIdentity.For(unfixed.Sides[0].Side)!=DefinitionIdentity.For(otherPrincipal.Sides[0].Side))
+            throw new Exception("Independent physical and principal Sides must not retain the other Side's pricing terms in their economic identities.");
         var provider=new Factors(terms);
         ValuationPortfolio Portfolio(Instrument instrument,string quantity)=>ValuationPortfolio.FromTrades(
             [new(Guid.NewGuid(),Guid.NewGuid(),[new(Guid.NewGuid(),instrument,new(ExactDecimal.Parse(quantity),unit.Quantity))])],
@@ -42,6 +49,7 @@ internal static class GasUnfixedDeliveryChecks
         Equal(RiskEngine.CalculateExact(RiskEngine.WithShifts(prepared,[shifts[0]]),[],RiskEngine.ExactNumericalPolicy).Groups.Single().BaseValues.Single().Value,"278.75");
         Equal(RiskEngine.CalculateExact(RiskEngine.WithShifts(prepared,[shifts[1]]),[],RiskEngine.ExactNumericalPolicy).Groups.Single().BaseValues.Single().Value,"297.55");
         var lockedPrepared=RiskEngine.Prepare(model,snapshot,[Portfolio(locked,"40")]);
+        CheckSides(unfixed);CheckSides(locked);
         Equal(RiskEngine.CalculateExact(RiskEngine.WithShifts(lockedPrepared,[shifts[0]]),[],RiskEngine.ExactNumericalPolicy).Groups.Single().BaseValues.Single().Value,"287.85");
         Equal(RiskEngine.CalculateExact(RiskEngine.WithShifts(lockedPrepared,[shifts[1]]),[],RiskEngine.ExactNumericalPolicy).Groups.Single().BaseValues.Single().Value,"297.55");
         if(!portfolio.Declare(snapshot).Single().Dependencies.ToHashSet().SetEquals([a,b])||
@@ -58,6 +66,23 @@ internal static class GasUnfixedDeliveryChecks
         if(unfixed.EconomicIdentity==new GasUnfixedPhysicalDeliveryInstrument(Guid.NewGuid(),terms,b,unit).EconomicIdentity)
             throw new Exception("The principal mark must belong to the economic definition.");
         Console.WriteLine("PASS unfixed physical exchange: independent A/B shocks, negative marks, signed fractional/nonunit quantities, exact distinct carrying dates and fixed-principal handoff");
+
+        void CheckSides(Instrument instrument)
+        {
+            if(instrument is not SidedInstrument sided||sided.Sides.Length!=2||
+                sided.Sides[0].Coefficient!=ExactDecimal.Parse("1")||sided.Sides[1].Coefficient!=ExactDecimal.Parse("-1")||
+                sided.Sides[0].Side.Id==sided.Sides[1].Side.Id)
+                throw new Exception("A physical exchange must own independent delivery and principal-payment Sides, with explicit opposite memberships.");
+            var selectedPortfolio=Portfolio(instrument,"40");var selected=RiskEngine.Prepare(model,snapshot,[selectedPortfolio]);
+            var context=new UnitValuationContext(snapshot,selectedPortfolio.Setup,selected.Market.Pricing,selected.Contracts[0][0]);
+            var value=sided.PV(context.SideContext());
+            Equal(value.Sides[0].Value.PresentValue,"4.8985");Equal(value.Sides[1].Value.PresentValue,"-2.29775");
+            Equal(value.PresentValue,"7.19625");
+            var physical=sided.Sides[0].Side.GenerateSchedule().Rows.Single();var payment=sided.Sides[1].Side.GenerateSchedule().Rows.Single();
+            if(physical.SideId!=sided.Sides[0].Side.Id||physical.DeliveryWindow is not ValueScheduleWindow {From:var from,To:var to}||
+                from!=terms.From||to!=terms.To||payment.SideId!=sided.Sides[1].Side.Id||payment.PaymentAt!=terms.CashDueAt)
+                throw new Exception("Physical and consideration Sides must expose their genuine delivery window and independent payment date.");
+        }
     }
     private sealed class Factors(GasPhysicalDeliveryTerms terms):ISideDiscounting
     {

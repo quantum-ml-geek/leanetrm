@@ -124,6 +124,7 @@ internal static class LngCargoChecks
                 BookedSideProgram.Read(data, new(BookedSideProgram.Digest(data), d.Manifest, d.Family, d.EconomicIdentity, d.PricingBindingIdentity)));
         }).ToImmutableArray();
         var retainedInstrument = new RetainedLngInstrument(instrument.Id, assignment, terms, members);
+        RetainedInstrumentContractChecks.Sides(retainedInstrument,[..members.Select(m=>(m.SideId,m.Program,m.Coefficient,(OpenEtrm.Shared.Numerics.ExactRatio?)null))]);
         FixedSide OtherCash(QuoteSpecification quote, int allocation, DateTimeOffset payment, DateOnly? end = null) =>
             new(Guid.NewGuid(), new FlatPrice(new UnitPrice(ExactDecimal.Parse("10"), quote)), quote,
                 new(ExactDecimal.Parse("1"), quote.Quantity), [new(side.DateFrom, end ?? side.DateTo, payment, new(allocation, 1), null)],SyntheticSideCalendars.FixedPeriods([new(side.DateFrom, end ?? side.DateTo, payment, new(allocation, 1), null)]));

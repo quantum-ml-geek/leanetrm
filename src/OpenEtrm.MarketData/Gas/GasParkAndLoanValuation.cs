@@ -32,13 +32,22 @@ public static class GasParkAndLoanValuation
         if(terms is null)throw new MarketDataException("gas_park_loan_terms","Supply the agreement's exact saved service terms before composing its remaining value.");
         var plan=GasParkAndLoanPrincipal.Plan(terms,committed,acceptedAdvance,new(default,terms.Quantity),at);
         if(plan.RemainingAdvance.Amount==default)return [];
+        return ContractualComponents(terms,plan.RemainingAdvance);
+    }
+
+    // Definition inspection is independent of performance and valuation time.
+    // These are the saved contractual components, never new remaining holdings.
+    public static ImmutableArray<GasParkAndLoanComponent> ContractualComponents(GasParkAndLoanTerms terms,Quantity committed)
+    {
+        if(terms is null||committed is null||committed.Specification!=terms.Quantity||committed.Amount.CompareTo(default)<=0)
+            throw new MarketDataException("gas_park_loan_component","Inspect the exact saved service terms and positive committed quantity.");
         var components=ImmutableArray.CreateBuilder<GasParkAndLoanComponent>();
         var advance=Principal(terms,terms.AdvanceAt);var returned=Principal(terms,terms.ReturnAt);
-        var signed=plan.RemainingAdvance.Scale(terms.AdvanceDirection);
+        var signed=committed.Scale(terms.AdvanceDirection);
         components.Add(new(AdvanceRole,advance,signed));
         components.Add(new(ReturnRole,returned,signed.Scale(ExactDecimal.Parse("-1"))));
         if(terms.FixedFee.Amount!=default)
-            components.Add(new(FeeRole,new TimedCashPayment(terms.Currency,terms.FeeDueAt!.Value),new(plan.FixedFee.Amount,terms.Currency)));
+            components.Add(new(FeeRole,new TimedCashPayment(terms.Currency,terms.FeeDueAt!.Value),new(terms.SignedFixedFee.Amount,terms.Currency)));
         return components.ToImmutable();
     }
 

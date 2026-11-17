@@ -18,7 +18,7 @@ internal static class TradeContractChecks
         {
             var calls=0;
             var instrument=new PvOnly(Guid.NewGuid(),currency,quantity,request,context=>
-            {calls++;var p=context.Inputs.ExactPrice(request);return new(p.ExactTimes(new(ExactDecimal.Parse("1"),quantity)),quantity);});
+            {calls++;var p=context.ExactPrice(request);return p.ExactTimes(new(ExactDecimal.Parse("1"),quantity));});
             TradeInstrument Binding(string amount)=>new(Guid.NewGuid(),instrument,new(ExactDecimal.Parse(amount),quantity));
             var trade=new Trade(Guid.NewGuid(),book,[Binding("2"),Binding("-1")]);
             var second=new Trade(Guid.NewGuid(),Guid.NewGuid(),[Binding("3")]);
@@ -37,13 +37,13 @@ internal static class TradeContractChecks
         });
         Check("typed PV rejects another output quantity basis",()=>
         {
-            var invalid=new PvOnly(Guid.NewGuid(),currency,quantity,request,_=>new(new Money(default,currency),f.R("power_quantity")));
+            var invalid=new WrongBasis(Guid.NewGuid(),currency,quantity,f.R("power_quantity"));
             var portfolio=ValuationPortfolio.FromTrades([new(Guid.NewGuid(),book,[new(Guid.NewGuid(),invalid,new(ExactDecimal.Parse("1"),quantity))])],setup);
             Reject("risk_quantity",()=>RiskEngine.Calculate(f.Model(),f.Snapshot(),portfolio,[],RiskEngine.NumericalPolicy));
         });
         Check("stale typed results and undeclared size scaling are refused",()=>
         {
-            var stale=new PvOnly(Guid.NewGuid(),currency,quantity,request,c=>new(c.Inputs.Price(request).ExactTimes(new(ExactDecimal.Parse("1"),quantity)),quantity)){ReuseResult=true};
+            var stale=new PvOnly(Guid.NewGuid(),currency,quantity,request,c=>c.Price(request).ExactTimes(new(ExactDecimal.Parse("1"),quantity))){ReuseResult=true};
             var portfolio=ValuationPortfolio.FromTrades([new(Guid.NewGuid(),book,[new(Guid.NewGuid(),stale,new(ExactDecimal.Parse("1"),quantity))])],setup);
             var factor=f.Model().QuoteFactors(f.Snapshot()).Single(p=>p.Input.Series==f.S(1));
             Reject("instrument_context",()=>RiskEngine.Calculate(f.Model(),f.Snapshot(),portfolio,
@@ -91,23 +91,35 @@ internal static class TradeContractChecks
     }
 
     [EconomicDefinition("synthetic_pv_only_v1")]
-    private sealed record PvOnly:Instrument
+    private sealed record PvOnly:SyntheticSidedInstrument
     {
         public override bool SupportsQuantityScaling=>supportsScaling;
         [IdentityField] public CurveRequest Request{get;}
         public override ReferenceKey Currency{get;}
         public override Quantity UnitQuantity{get;}
-        private readonly Func<UnitValuationContext,UnitMoney> evaluate;
         private readonly bool supportsScaling;
         private UnitValuation? previous;
         public bool ReuseResult{get;init;}
-        public PvOnly(Guid id,ReferenceKey currency,ReferenceKey quantity,CurveRequest request,Func<UnitValuationContext,UnitMoney> evaluate,bool supportsScaling=true):base(id)
-        {Currency=currency;UnitQuantity=new(ExactDecimal.Parse("1"),quantity);Request=request;this.evaluate=evaluate;this.supportsScaling=supportsScaling;}
+        public PvOnly(Guid id,ReferenceKey currency,ReferenceKey quantity,CurveRequest request,Func<PricingInputs,ExactMoney> evaluate,bool supportsScaling=true):base(id,SyntheticValueSide.One(id,currency,quantity,[request],c=>
+        evaluate(c.Inputs),"synthetic_pv_only_v1"))
+        {Currency=currency;UnitQuantity=new(ExactDecimal.Parse("1"),quantity);Request=request;this.supportsScaling=supportsScaling;}
         public override UnitPricingContract Declare(UnitValuationContext context)=>new(Id,"synthetic_pv_only_v1",[Request],UnitQuantity.Specification,Currency) { Time = ValuationTimeDependency.Independent };
         public override UnitValuation PV(UnitValuationContext context)
         {
             if(ReuseResult&&previous is not null)return previous;
-            var value=evaluate(context);return previous=new(context,value.Money,value.Quantity);
+            return previous=base.PV(context);
         }
     }
+    private sealed record WrongBasis : SyntheticSidedInstrument
+    {
+        public override ReferenceKey Currency{get;}
+        public override Quantity UnitQuantity{get;}
+        private readonly ReferenceKey wrong;
+        internal WrongBasis(Guid id,ReferenceKey currency,ReferenceKey quantity,ReferenceKey wrong)
+            :base(id,SyntheticValueSide.One(id,currency,quantity,[],_=>ExactMoney.Parse("0",currency),"synthetic_wrong_basis_v1"))
+        {Currency=currency;UnitQuantity=new(ExactDecimal.Parse("1"),quantity);this.wrong=wrong;}
+        public override UnitPricingContract Declare(UnitValuationContext context)=>new(Id,"synthetic_wrong_basis_v1",[],UnitQuantity.Specification,Currency){Time=ValuationTimeDependency.Independent};
+        public override UnitValuation PV(UnitValuationContext context)=>new(context,base.PV(context).Money,wrong);
+    }
+
 }
