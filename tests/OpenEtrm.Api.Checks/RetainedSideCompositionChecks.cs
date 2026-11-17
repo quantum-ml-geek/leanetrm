@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using OpenEtrm.Api;
+using OpenEtrm.Api.Presentation;
 using OpenEtrm.MarketData;
 using OpenEtrm.MarketData.Trading;
 using OpenEtrm.Shared.Temporal;
@@ -8,6 +9,18 @@ internal static class RetainedSideCompositionChecks
 {
     internal static void Run()
     {
+        ImmutableArray<System.Text.Json.JsonElement> nativeGas=[
+            ReferenceJson.PreserveNumericLexemes("""{"slot":0,"code":"delivery","role":"physical","direction":-1,"ratio_n":1,"ratio_d":1}"""),
+            ReferenceJson.PreserveNumericLexemes("""{"slot":"1","code":"consideration","role":"consideration","direction":"1","ratio_n":"7","ratio_d":"9"}""")];
+        if(RetainedInstrumentSidePresentation.GasComponent(nativeGas,0).Text("code")!="delivery"||
+            RetainedInstrumentSidePresentation.GasComponent(nativeGas,1).Text("ratio_n")!="7")
+            throw new Exception("The saved gas Side adapter must match exact ordered components through the native numeric-text row reader.");
+        foreach(var malformed in new[]{nativeGas.RemoveAt(0),nativeGas.Add(nativeGas[0])})
+        {
+            try{RetainedInstrumentSidePresentation.GasComponent(malformed,0);}
+            catch(MarketDataException error)when(error.Code=="instrument_side_presentation"){continue;}
+            throw new Exception("A missing or repeated native component slot cannot acquire a saved Side.");
+        }
         var f=StructuredPowerChecks.Fixture();var one=ExactDecimal.Parse("1");var day=new DateOnly(2040,2,1);
         var at=new DateTimeOffset(day.ToDateTime(TimeOnly.MinValue,DateTimeKind.Utc));
         var interval=new DeliveryInterval(at,at.AddHours(1),day,0,0,1);var quote=f.Data.QuoteRows("energy_price").Single();

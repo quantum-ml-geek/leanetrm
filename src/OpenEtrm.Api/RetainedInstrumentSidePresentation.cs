@@ -10,6 +10,11 @@ namespace OpenEtrm.Api;
 internal static class RetainedInstrumentSidePresentation
 {
     internal sealed record Membership(int Slot,ExactDecimal Coefficient,ExactRatio? Ratio=null);
+    internal static JsonElement GasComponent(ImmutableArray<JsonElement> components,int slot)
+    {
+        var selected=components.Where(member=>int.Parse(member.Text("slot"),System.Globalization.CultureInfo.InvariantCulture)==slot).ToArray();
+        return selected.Length==1?selected[0]:throw Invalid();
+    }
     internal static InstrumentSideGroup Compose(Guid instrument,ReferenceKey quantity,ReferenceKey currency,
         ImmutableArray<RetainedSideProgram> programs,ImmutableArray<Membership> memberships,ImmutableArray<InstrumentSideLabels> labels,string label)
     {
@@ -50,8 +55,7 @@ internal static class RetainedInstrumentSidePresentation
             if(components.Length!=programs.Length)throw Invalid();
             foreach(var program in programs)
             {
-                var selected=components.Where(member=>member.GetProperty("slot").GetInt32()==program.Slot).ToArray();
-                if(selected.Length!=1)throw Invalid();var member=selected[0];var role=member.Text("role");
+                var member=GasComponent(components,program.Slot);var role=member.Text("role");
                 if(role is not("physical" or "consideration" or "indexed_consideration" or "fee"))throw Invalid();
                 var physical=role=="physical";
                 memberships.Add(new(program.Slot,ExactDecimal.Parse(member.Text("direction")),new(BigInteger.Parse(member.Text("ratio_n"),System.Globalization.CultureInfo.InvariantCulture),BigInteger.Parse(member.Text("ratio_d"),System.Globalization.CultureInfo.InvariantCulture))));
