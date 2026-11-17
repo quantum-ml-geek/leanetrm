@@ -6154,6 +6154,49 @@ only after commit, compare repeated selection identities by full input content,
 and recheck actor/header identity before UI selection. Optional-view failure does
 not turn accepted publication into business failure. See the [contract](point-trader-marks.md).
 
+## D419 · One definition per covered read; its ordinary route releases the session gate
+
+Amends D404. Each read the response channel admits is written once, as a capture
+of the session's selection, an execution and a recheck. Its ordinary HTTP route
+and its channel operation both run that definition; the second, hand-written
+copy D404 left beside each ordinary handler is removed.
+
+An ordinary route of a covered read captures under the session gate, executes
+without it, and takes the gate again to answer. Before answering it requires the
+sign-in unexpired and the profile unchanged and, in a fresh identity
+transaction, the read's permissions, the sign-in, the read's own recheck and
+the sealed evidence of the exact sources and books it touched, as the channel
+does.
+One slow read therefore no longer delays the other requests of its session. Two
+such reads run per session at once and a further one waits within its request
+deadline; the bound is a fixed contract value sized to the hosted application
+pool of eight connections, not a configuration value.
+
+The session match of an ordinary read is sign-in and profile only. Its inputs
+are an immutable capture of the snapshot the request named, so a later context
+change or live update does not make its result wrong, and the page discards a
+result it no longer wants. Its answer can wait for the gate as a channel result
+waits for delivery, so it is disclosed on the same evidence.
+
+A delegated assistant invocation runs the same definition inside the session
+gate, as before, and remains refused on the channel. A handler that assigns
+session state is not such a read: the ordinary `history` route discovers frames
+in the gate hold that captures its read, and the channel still refuses an
+unprepared session. The freshness version, which the `trading/changes` waiter
+also computes, keeps a second form.
+The progressive `trading/workspace` request and the Blotter row stream keep
+their existing gate release and recheck.
+
+An operation is admitted to the channel only while a page requests it. One
+position's read and the separate statistical setup, summary, sample and
+calculation operations had no page consumer and are removed from the allowlist,
+leaving 18; their ordinary routes remain.
+
+- **Not decided here.** Reads outside D404's coverage, page loading, the
+  channel's encoding, compression and lifetime, and pushed job status. See
+  [the design](superpowers/specs/2026-11-16-non-blocking-page-reads-design.md).
+- **Evidence.** [Verification](verification.md#ordinary-reads-outside-the-session-gate-d419).
+
 ## D420 · A working trading read captures current knowledge in a transaction of its own
 
 Amends how D134's publication gate applies to reads. `security.capture_date_context`

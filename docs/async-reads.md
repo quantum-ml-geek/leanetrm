@@ -36,16 +36,49 @@ uses its own API prefix and session scope. Neither arbitrary URLs nor financial
 commands are valid operations. A repeated ID with the same normalized typed
 input acknowledges the original work; conflicting reuse refuses.
 
-The 26 admitted operations cover these existing consumers:
+The 18 admitted operations cover these existing consumers:
 
 | Consumer | Reads |
 | --- | --- |
 | Curves | Evaluation with optional source/workspace detail, history and curve shapes. |
-| Trading | Freshness, directory, position pages, one position, workspace, Blotter and futures/swap editors. |
-| Risk | Scope, catalog, scenario calculation, dated-factor history and statistical setup. |
-| Statistical Risk | Parametric calculation/summary, historical calculation/summary/sample and Monte Carlo calculation. |
+| Trading | Freshness, directory, position pages, workspace, Blotter and futures/swap editors. |
+| Risk | Scope, catalog, scenario and statistical calculation, and dated-factor history. |
 | Retained Risk | Recent job list, exact job read and paged statistical archive. |
 | Options | The analysis of a strategy of option legs on one expiry (D409). |
+
+## One definition, two transports
+
+Each admitted read has one definition: a capture of the session's selection, an
+execution on a connection bound to the captured identity, and a recheck of what
+it read. Its ordinary route and its channel operation both run that definition.
+Two reads still have a second form beside it: the freshness version that the
+`trading/changes` waiter also computes, and the progressive `trading/workspace`
+request.
+
+| Step | Ordinary HTTP | Response channel |
+| --- | --- | --- |
+| Admit | Wait for one of the session's two read slots, take the session gate, capture, release. | Take the gate, capture, release, answer 202. |
+| Execute | In the request, with no gate held. | On a detached worker with explicit inputs. |
+| Publish | Take the gate; require the sign-in unexpired and the profile unchanged; in a fresh transaction require the read's permissions, the sign-in, the read's recheck and its sealed evidence; answer. | Take the gate; require the channel's profile, context and live selection unchanged; authorize the same way; write the event. |
+
+An ordinary read therefore no longer delays another request of its session, and
+a profile switch or an ended sign-in during it refuses its answer as
+`access_denied`. Its inputs are an immutable capture of the snapshot the request
+named, so a later context change does not alter the result; the page discards a
+result it no longer wants. The capture precedes the read's identity transaction,
+as channel submission already does, so a request that names a frame its session
+does not hold is refused for that before its permission is examined. The
+statistical archive routes likewise refuse a malformed page request first.
+
+A third ordinary read of one session waits for a slot within its request
+deadline; it is not refused. Both transports seal the exact sources, references
+and books a read touched and require them again at publication, within the
+evidence bounds below. A delegated assistant invocation runs the same definition
+inside the session gate, without the second authorization, and is still refused
+on the channel. `history` discovers its session's frames in the gate hold that
+captures its ordinary read; the channel refuses an unprepared session with
+`async_workspace_not_ready`. The progressive `trading/workspace` request and the
+Blotter row stream keep their own gate release and recheck.
 
 ## Lifecycle and limits
 
@@ -85,11 +118,16 @@ HTTP operations.
 
 ## Coverage boundaries
 
-The 26 allowlisted operations cover selected curve evaluation/history/shapes,
+The 18 allowlisted operations cover selected curve evaluation/history/shapes,
 trading directory/positions/workspace/Blotter, futures/swap editors, portfolio
 Risk setup, calculations, history and retained reports, and the option strategy
 analysis, whose tree prices can outlast an ordinary request. Dashboard curve widgets
 inherit these reads; saved layouts and definitions remain ordinary HTTP.
+
+An operation is admitted only while a page requests it. One position's read and the
+separate statistical setup, summary, sample and calculation routes have no page
+consumer on the channel and are ordinary HTTP only; statistical runs reach the
+channel through the scenario calculation.
 
 Distinct delivery-price, interval-data, hourly-price and volatility-surface paths
 and the other Options reads remain ordinary HTTP, as do curve-definition authoring/catalogs, Trading P&L,

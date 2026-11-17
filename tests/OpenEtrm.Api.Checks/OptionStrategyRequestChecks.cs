@@ -18,7 +18,7 @@ internal static class OptionStrategyRequestChecks
     private static readonly FuturesReadRequest Context=new(Guid.Parse("00000000-0000-0000-0000-00000000a001"),FuturesOptionStore.Convention,"current");
     private static ExactDecimal D(string value)=>ExactDecimal.Parse(value);
     private static OptionStrategyLegRequest Leg(string series,string side="buy",int lots=1,string entry="0.08")=>new(series,side,lots,D(entry));
-    private static OptionStrategyAnalyzeRequest Request()=>new(Context,"synthetic_on",Expiry,[Leg("c3"),Leg("p3","sell",2)],new(D("2.5"),D("3.5"),21),[At,At.AddDays(1)],D("5"),
+    internal static OptionStrategyAnalyzeRequest Request()=>new(Context,"synthetic_on",Expiry,[Leg("c3"),Leg("p3","sell",2)],new(D("2.5"),D("3.5"),21),[At,At.AddDays(1)],D("5"),
         FuturesOptionValuationPolicy.Release1,new(FuturesOptionSensitivities.Policy,TradingPnlReport.Offered,OptionSurfaceAnalytics.VolatilityBump,Utc),OptionStrategies.ExerciseRule);
 
     internal static void Run()
@@ -59,7 +59,7 @@ internal static class OptionStrategyRequestChecks
 
         var channel=Guid.NewGuid();
         var wire=JsonSerializer.SerializeToNode(request,AsyncReadContract.Json)!.AsObject();
-        AsyncReadInput Decode(JsonNode body)=>AsyncReadContract.Decode(new(channel,Guid.NewGuid(),"options.strategy.analyze.v1",JsonSerializer.SerializeToElement(body)));
+        ReadInput Decode(JsonNode body)=>AsyncReadContract.Decode(new(channel,Guid.NewGuid(),"options.strategy.analyze.v1",JsonSerializer.SerializeToElement(body)));
         var admitted=Decode(wire);
         if(admitted.Body is not OptionStrategyAnalyzeRequest decoded||decoded.Legs.Length!=2||decoded.Legs[1]!=request.Legs[1]||decoded.Prices!=request.Prices||!decoded.Instants.SequenceEqual(request.Instants)||
             decoded.Valuation!=request.Valuation||decoded.Sensitivities!=request.Sensitivities||admitted.SnapshotId!=Context.SnapshotId||admitted.Context!=Context||
