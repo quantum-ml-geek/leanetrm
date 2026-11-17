@@ -25,19 +25,25 @@ database command timeout inside the knowledge capture of a trading read. The
 same step passed on a runner where it took about five seconds.
 
 The asynchronous workbench check now holds one session's read of working data
-while it values and starts a second session's read of working data. Before the
-change the second read waited for the publication gate and never reached its
-own work; the check failed with one waiter on the gate. After it, both reads
-reach their own work and complete, and the check passes with the other 32.
-The live-calculation check and the latest-risk-run check also passed in owned
-disposable previews on one two-processor Linux machine with PostgreSQL 18.7 and
-.NET 10.0.402. Locally, `--trading-read-selection`, `--async-reads` and
-`--assistant-workspace` passed.
+while it values and starts a second session's read of working data, once behind
+a Risk catalog read and once behind a futures ticket read. It requires both
+reads to reach their own work with nothing waiting on the publication gate.
+Before the change the second read waited on the gate and never reached its own
+work. With the capture split but the trade head still read in the valuing
+transaction, the ticket case still failed that way. With the head read before
+the capture, both cases pass with the other 32 checks.
 
-This shows that one working trading read no longer holds the gate while it
-values. It does not measure throughput, and the readers D420 lists as unchanged
-still hold the gate for their transaction. Browser suites and the complete gate
-were not run for this change outside CI.
+In owned disposable previews on one two-processor Linux machine with PostgreSQL
+18.7 and .NET 10.0.402, the live-calculation check and the latest-risk-run check
+passed on the final code, and the complete exchange check passed on the capture
+split before the head was moved. Locally, `--trading-read-selection`,
+`--async-reads` and `--assistant-workspace` passed.
+
+This shows that a working trading read, with or without a head trade, no longer
+holds the gate while it values. It does not measure throughput or memory with
+several valuations at once, and the readers D420 lists as unchanged still hold
+the gate for their transaction. Browser suites and the complete gate were not
+run for this change outside CI.
 
 ## Current runner
 
