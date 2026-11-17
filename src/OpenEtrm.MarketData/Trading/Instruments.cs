@@ -175,8 +175,18 @@ public abstract record SidedInstrument : Instrument
         if(state is not SwapBindingValuation { Settlement: not null, Discounting: not null } || !SupportsSettlement)
             throw new MarketDataException("settlement_scope","This instrument does not support the supplied binding valuation state.");
     }
+    private ImmutableArray<SideMembership> sides;
     [IdentityField]
-    public ImmutableArray<SideMembership> Sides { get; internal init; }
+    public ImmutableArray<SideMembership> Sides
+    {
+        get => sides;
+        internal init
+        {
+            if(value.IsDefaultOrEmpty || value.Any(m => m is null || m.Side is null))
+                throw new MarketDataException("instrument_definition", "An instrument requires at least one valid Side membership.");
+            sides = value;
+        }
+    }
     public ImmutableArray<CurveRequest> Dependencies =>
         Sides.SelectMany(m => m.Side.Dependencies).Distinct().ToImmutableArray();
     public ImmutableArray<CurveRequest> DependenciesAt(MarketSnapshot snapshot) =>

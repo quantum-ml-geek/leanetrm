@@ -6053,7 +6053,8 @@ remain independent; equal currency labels do not authorize netting. See the
 
 ## D417 · Explicit Sides for every non-exchange Instrument
 
-**Status:** owner-directed requirement, 2026-11-16; alignment in implementation.
+**Status:** managed and UI implementations have local qualification checkpoints;
+combined integration qualification is in progress, 2026-11-16.
 
 **Requirement.** Every Instrument has one or more independent reusable Sides,
 except exchange-traded futures and futures options. The user must be able to
@@ -6085,6 +6086,20 @@ cash Instruments show their own cash Sides; they do not become hidden members of
 the service-rights Instrument. UI grouping cannot invent additional economics,
 mark signs or ownership. Futures and futures options retain their exchange
 contract presentation.
+
+The explicit operating assembly contract is `operating_side_composition_v2`.
+It selects one to eight ordered independent delivery/payment Sides with stable
+keys, names, quantity sources, explicit coefficients `1`/`-1`, prices and each
+applicable payment rule. At least one Side consumes the selected operating plan.
+Repeated quantity sources remain independent obligations. A whole-horizon
+literal payment is consumed once in the first native interval under its own
+payment rule; it does not imply a periodic fee. The admission bound matches
+the existing native eight-slot composition contract. Missing financial choices
+refuse. Native saved admission verifies the original composition, sealed programs,
+relationships, authority and certified history, retaining full-right facility
+exclusion across old/new profiles and versions. Existing legacy JSON, identities
+and first-outcome receipts remain unchanged. This does not add optimization,
+shared-resource pooling, started-delivery valuation or cash settlement.
 
 **Qualification.** Inventory all concrete production Instrument types, enforce
 the two explicit exceptions, and test independent Side delegation and retained

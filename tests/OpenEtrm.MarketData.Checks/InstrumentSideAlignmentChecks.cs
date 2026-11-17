@@ -19,8 +19,13 @@ internal static class InstrumentSideAlignmentChecks
             new(new Money(default,direct.Currency),direct.UnitQuantity.Specification),new(default,direct.Currency));
         Refuse(()=>_=new ValuationPortfolio([direct],[raw],new(ValuationMeasure.PresentValue,ImmutableDictionary<Guid,FuturesMarketBinding>.Empty,null)));
         SidedInstrument empty=new TimedCashPayment(f.R("currency"),f.Snapshot().ValuationAt);
-        empty=empty with{Sides=[]};
-        Refuse(()=>_=new TradeInstrument(Guid.NewGuid(),empty,empty.UnitQuantity));
+        try
+        {
+            empty=empty with{Sides=[]};
+            _=new TradeInstrument(Guid.NewGuid(),empty,empty.UnitQuantity);
+            throw new Exception("A copied non-exchange Instrument cannot omit its Side memberships.");
+        }
+        catch(MarketDataException error)when(error.Code is "instrument_definition" or "instrument_sides") { }
         Console.WriteLine("PASS instrument Side alignment: every non-exchange family requires Side composition");
     }
     private static void Refuse(Action use)

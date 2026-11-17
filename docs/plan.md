@@ -51,6 +51,57 @@ passed 64 Transport checks and 30 existing-storage regression checks against
 the same API, SQL and shared UI artifact. These results qualify the declared
 operating consumer, not the remaining financial or physical Transport products.
 
+## Mandatory Side composition (D417)
+
+Status: the power/REC assembly and universal Side implementations have separate
+local qualification checkpoints. Their combined implementation is undergoing
+integration qualification. Earlier results are not qualification of this merged
+artifact; release activation remains separate.
+
+All financial instruments derive from `Instrument`. Only `FuturesContract` and
+exchange-traded `FuturesOptionInstrument` may have no Sides. The current increment
+covers power, REC and their required common retained-program/claim adapters,
+using concrete subclasses of abstract `Side` with immutable independent schedules
+and Side-owned PV. The universal rule does not qualify another product family.
+Reuse shared fixed/floating economics without replacing asset-specific behavior
+with product switches. Instruments combine signed memberships; Trade applies external typed
+quantity once. Shared operating feasibility supplies typed quantities/state and
+does not own Sides or another PV.
+
+The implemented operating assembly contract:
+
+1. Admits the explicit `operating_side_composition_v2` contract through the common
+   managed API and UI: one to eight ordered independent Sides, explicit stable
+   keys, names, quantity sources, coefficients, delivery/payment kind, prices and
+   each Side's own payment rule where applicable. Repeated quantity sources remain
+   separate obligations. Missing policies refuse rather than selecting a product
+   template or generating financial terms from slot position. This full-right
+   profile admits explicit coefficients `1`/`-1` and requires at least one
+   plan-linked Side alongside any literal horizon payment Sides. The whole-right
+   literal is consumed once in the first native interval, with payment from the
+   first operating month under its explicit rule; it is not a periodic capacity
+   fee. Delivery uses a typed physical-plan output. The admission bound matches
+   the existing native eight-slot composition contract.
+2. Preserves legacy valuation JSON, economic identities, accepted receipts and
+   certified reads. Native saved-v2 admission independently validates the original
+   composition and sealed programs before publication; saved reads execute
+   concrete retained Sides without repricing authored definitions.
+3. Retains exact Side/program memberships and source/cell/quantity relationships,
+   current book/party/market/physical authority, expected heads, command replay,
+   business-fact no-ops and worker fences. Full-right facility overlap protection
+   spans old/new profiles and facility versions. Composition adds no pooled
+   solar/storage dispatch or physical lifecycle.
+4. Is covered by independent checks of Side dates and directions, repeated-source
+   cash legs, retained reopen/inspection, single application of member/trade signs, ordinary
+   portfolio base/up/down risk, malformed native commands and historical/current
+   authority boundaries. Native expiry checks reject a semantic no-op whose
+   receipt insertion outlives its authority. Final merged frontend/browser and
+   managed/native/HTTP results are recorded in the
+   [D417 qualification](structured-power-trading.md#d417-qualification).
+
+See [the developer contract](instrument-contracts.md) and
+[the operating profile](structured-power-trading.md#explicit-side-assembly-d417).
+
 D406 locally qualifies a bounded [Park and Loan consumer](gas-park-loan.md):
 explicit booking, native advance and partial return, independent fee cash, shared
 ticket and lifecycle forms, and ordinary/retained current-clock price risk. Real
@@ -868,9 +919,10 @@ Variation-margin processing and full futures settlement PV remain unimplemented.
 
 Simple futures contracts are leaf instruments keyed by the exact futures-series
 primary key, independent of the curve recipe. Explicit pricing bindings retain
-selected curve/member and quote policy. Composed products use `SidedInstrument`
-with nonempty immutable memberships; fixed/floating swaps remain its current
-consumer. Fused exact aggregation preserves final arithmetic and trade-owned
+selected curve/member and quote policy. D417 requires every other financial
+product except exchange-traded options to use concrete Side composition with
+nonempty immutable memberships; fixed/floating swaps are one existing consumer.
+Fused exact aggregation preserves final arithmetic and trade-owned
 quantities. Migration 0019 preserves historical UUID aliases and pricing bindings;
 new future bookings create neither a side nor a wrapper definition.
 

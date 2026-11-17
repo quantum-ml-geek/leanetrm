@@ -5060,3 +5060,52 @@ and the two qualifier hooks change. All predecessor migrations remain unchanged.
 Upgrade checks preserve unrelated helper metadata and still refuse protected
 helper drift. This baseline contains no subsequent Side implementation, and it
 does not qualify that later increment or authorize production activation.
+
+
+## Instrument and Side alignment qualification (D417)
+
+The universal managed inventory checkpoint covers 27 concrete production
+Instrument types and the two exact exchange exceptions. Independent checks cover
+Side-owned cash, holding, rights, physical-exchange and retained-program PV;
+source/scenario/held-state fences; exact whole-position and fixed-unit admission;
+and separate fee ownership. Five retained-family compatibility oracles preserve
+v1 ordered member bytes, program digests, captured calendar policies and native
+occurrence IDs. Altered or reordered copies refuse before identity reuse.
+
+Native gas source evidence retains exact definitions through
+`timed_cash_source_definition_v1` and `gas_holding_source_definition_v1`. Complete
+enclosing ownership, chronology, quantity and paid-state evidence remains
+independent of the executable model graph. Backend entry, review and saved-term
+membership contracts cover eleven product/profile families. Draft bindings remain
+explicitly absent; saved slots, Side IDs, coefficients and ratios remain exact.
+Unpriced structural Sides and zero-fee financial absence are distinct states.
+Selected operating reads retain their certified source, original authority and
+touched-program visibility through publication.
+
+Completed checkpoints include 784 managed core, 88 rates, API build/default and
+schedule checks, 2,157 frontend and 160 Python checks. Native service, gas ownership,
+physical economic projection and futures consumers, including retained workers,
+pass. Actual application checkpoints include the complete standard suite, dedicated
+189-check swaps and 43-check assistant-workspace suites, and 21 point-publication
+checks. The standard suite includes 327 futures and 189 swap checks. Product
+chooser and correction-retry identity regressions pass.
+
+On the reviewed final universal-Side API and web packet, fixed-fee Park/Loan (90),
+balance-fee Park/Loan (214), custody (126), financial Transport (43) and structured
+operating/REC (31) actual browser checks pass. Phone captures show real Side roles
+and exact terms. Native postconditions, exact-cut/hidden-book controls and both
+original operating-authority timers pass. Full physical-gas/deal-ticket,
+strong-phone crude and LNG qualification remain open. These are checkpoints
+across reviewed artifacts, not one claim about a later combined application.
+
+Explicit operating assembly also has its independently recorded power/REC
+checkpoint. Its SQL migration is renumbered to 0356 after the gas/point sequence;
+its bytes are unchanged. The populated upgrade preserves the original legacy
+bookings, retained programs and first outcomes. Combining that assembly with the
+universal Side implementation requires fresh managed, native, upgrade and browser
+qualification. Earlier successful fixtures do not qualify this combined artifact.
+
+Local fixtures use synthetic owned resources, stock PostgreSQL 16.14, .NET
+10.0.402, Node 24.22.0, Python 3.13 and Chrome on macOS arm64. Completed fixtures
+are cleaned. Production activation, performance/capacity qualification and
+commercial Storage valuation remain separate work.

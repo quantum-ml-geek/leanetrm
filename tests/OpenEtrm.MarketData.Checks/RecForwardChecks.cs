@@ -53,6 +53,9 @@ internal static class RecForwardChecks
   if(reopened.Base!=risk.Base||reopened.Up!=risk.Up||reopened.Down!=risk.Down)throw new Exception("Retained certificate schedules must preserve native unit scaling and factor scenarios.");
   if(retained.Sides[0].Side.GenerateSchedule().Rows.Single().Key.Timing!=ValueTimingKind.Instant)
    throw new Exception("A retained physical output must keep the saved instant carrying key; its scalar row is not a UTC cash-payment day.");
+  RetainedInstrumentContractChecks.Rec(retained);
+  try{retained.PV(new SideValuationContext(snapshot with{ValuationAt=interval.Start},setup.Discounting!));throw new Exception("A started REC instrument must reject direct Side-context PV.");}
+  catch(MarketDataException error)when(error.Code=="rec_delivery_lifecycle"){}
   if(physical.GenerateSchedule().Rows.Single().Key.Timing!=ValueTimingKind.Instant)throw new Exception("Certificate delivery is a physical mark with an instant boundary.");
   Console.WriteLine("PASS REC forward: exact product/vintage, independently retained physical/cash sides and one-time native count scaling");return 1;
  }

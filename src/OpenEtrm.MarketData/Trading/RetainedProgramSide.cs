@@ -1,5 +1,7 @@
 using System.Collections.Immutable;
 using OpenEtrm.Shared.Numerics;
+using System.Text.Json;
+using OpenEtrm.MarketData.Risk;
 
 namespace OpenEtrm.MarketData.Trading;
 
@@ -9,13 +11,64 @@ internal sealed record RetainedProgramContext(ScheduleMarketSources Sources, Cur
 {
     internal PhysicalLifecycleGeometry? Geometry { get; init; }
     internal PhysicalCashState? Cash { get; init; }
+    internal RetainedProgramOwner? Owner { get; init; }
+    internal RetainedProgramOccurrence? Occurrence { get; init; }
     internal ImmutableArray<SignedRatio> HeldFactors { get; init; } = [];
 }
+internal sealed record RetainedProgramOwner(Guid InstrumentId, DefinitionIdentity Definition);
+internal sealed record RetainedProgramOccurrence(int Slot, Guid SideId, string ProgramDigest);
 public sealed partial class SideValuationContext
 {
     internal RetainedProgramContext? RetainedPrograms { get; private set; }
+    private sealed class RetainedOccurrenceContexts(SideValuationContext owner)
+    {
+        internal SideValuationContext Owner { get; } = owner;
+        internal Dictionary<int,SideValuationContext> Children { get; } = [];
+    }
+    private RetainedOccurrenceContexts? retainedOccurrences;
+    private SideValuationContext? retainedOccurrenceParent;
+    internal int RetainedOccurrenceCalculations => retainedOccurrences is {} scopes && ReferenceEquals(scopes.Owner, this)
+        ? scopes.Children.Values.Sum(child => child.EvaluatedSides) : 0;
+    public static SideValuationContext ForRetainedPrograms(CurveBuild basis,CurveBuild scenario,ISideDiscounting discounting,CancellationToken cancellation=default)
+    {
+        if(basis is null || scenario is null || !basis.Snapshot.HasSameInputs(scenario.Snapshot))
+            throw new MarketDataException("native_program_context", "Retain the exact base and scenario source snapshot.");
+        return new SideValuationContext(scenario,discounting)
+            .WithUnitEvaluation(scenario.Snapshot.ValuationAt,false,ValuationMeasure.PresentValue,cancellation)
+            .WithRetainedPrograms(new(ScheduleMarketSources.ForOperating(basis),scenario));
+    }
+
     internal SideValuationContext WithRetainedPrograms(RetainedProgramContext inputs)
-    {var copy=(SideValuationContext)MemberwiseClone();copy.RetainedPrograms=inputs;return copy;}
+    {
+        var copy=(SideValuationContext)MemberwiseClone();
+        copy.RetainedPrograms=inputs;
+        copy.sideValues=new(ReferenceEqualityComparer.Instance);
+        copy.retainedOccurrences=null;
+        copy.retainedOccurrenceParent=null;
+        return copy;
+    }
+    internal SideValuationContext ForRetainedOccurrence(int slot, RetainedProgramSide side)
+    {
+        if(RetainedPrograms is not { Cash: not null, Owner: not null, Occurrence: null } inputs ||
+            inputs.HeldFactors.IsDefault || slot < 0 || slot >= inputs.HeldFactors.Length)
+            throw new MarketDataException(PhysicalLifecycle.ContextRefusal, "Select the exact prepared retained membership occurrence.");
+        if(retainedOccurrences is null || !ReferenceEquals(retainedOccurrences.Owner, this)) retainedOccurrences=new(this);
+        if(!retainedOccurrences.Children.TryGetValue(slot, out var child))
+        {
+            child=WithRetainedPrograms(inputs with { Occurrence=new(slot, side.Id, side.ProgramDigest) });
+            child.retainedOccurrenceParent=this;
+            retainedOccurrences.Children.Add(slot, child);
+        }
+        if(child.RetainedPrograms!.Occurrence != new RetainedProgramOccurrence(slot, side.Id, side.ProgramDigest))
+            throw new MarketDataException(PhysicalLifecycle.ContextRefusal, "A retained occurrence cannot change its exact Side program.");
+        return child;
+    }
+    internal bool IsRegisteredRetainedOccurrence(RetainedProgramSide side) =>
+        RetainedPrograms?.Occurrence is {} occurrence && retainedOccurrenceParent?.OwnsRetainedOccurrence(this, occurrence.Slot, side) == true;
+    internal bool OwnsRetainedOccurrence(SideValuationContext child, int slot, Side side) =>
+        retainedOccurrences is {} scopes && ReferenceEquals(scopes.Owner, this) &&
+        scopes.Children.TryGetValue(slot, out var selected) && ReferenceEquals(selected, child) &&
+        side is RetainedProgramSide retained && child.RetainedPrograms?.Occurrence == new RetainedProgramOccurrence(slot, side.Id, retained.ProgramDigest);
 }
 
 [EconomicDefinition("retained_program_side_v1")]
@@ -25,23 +78,39 @@ public sealed record RetainedProgramSide : Side
     [IdentityField] public string ProgramDigest { get; }
     [IdentityField] public ReferenceKey Currency { get; }
     [IdentityField] public Quantity UnitQuantity { get; }
-    internal int Slot { get; }
     public override ImmutableArray<CurveRequest> Dependencies => [..Program.Document.Instructions.SelectMany(i => i.Bindings)
         .Where(b => b.Market is not null).Select(b => b.Market!.Value).Distinct()];
     // Structure-only construction uses the same definition as valued retained
     // Instruments. Authority and executable source inputs stay with the caller.
-    public static RetainedProgramSide Define(Guid sideId,int slot,BookedSideProgram program,Quantity normalizedUnit,ReferenceKey currency)
+    public static RetainedProgramSide Define(Guid sideId,BookedSideProgram program,Quantity normalizedUnit,ReferenceKey currency)
     {
         if(program is null)throw new MarketDataException("retained_side_composition","Retain an exact admitted Side program.");
-        return new(sideId,slot,program,normalizedUnit,currency);
+        return new(sideId,program,normalizedUnit,currency);
     }
-    private RetainedProgramSide(Guid id, int slot, BookedSideProgram program, Quantity unit, ReferenceKey currency)
+    public static RetainedProgramSide ForOperating(Guid sideId,BookedSideProgram program,Quantity unit,ReferenceKey currency)
+    {
+        if(program is null || program.Document.Family != "operating" || unit is null ||
+            program.Document.Instructions.Any(i => i.Output.Currency is {} selected && selected != currency))
+            throw new MarketDataException("retained_side", "Retain the admitted operating program and its exact unit and currency.");
+        try
+        {
+            using var economic = JsonDocument.Parse(program.Document.EconomicIdentity);
+            if(!economic.RootElement.TryGetProperty(nameof(FixedSide.OperatingDefinition), out var terms) ||
+                terms.ValueKind != JsonValueKind.Object || !terms.TryGetProperty(nameof(OperatingSideTerms.UnitQuantity), out var declared) ||
+                declared.GetRawText() != DefinitionIdentity.CanonicalTerm(unit))
+                throw new MarketDataException("retained_side", "The operating Side requires the exact complete unit sealed in its program.");
+        }
+        catch(JsonException error)
+        { throw new MarketDataException("retained_side", "Retain the operating program's exact sealed economic terms.", error); }
+        return Define(sideId,program,unit,currency);
+    }
+    private RetainedProgramSide(Guid id, BookedSideProgram program, Quantity unit, ReferenceKey currency)
         : base(id, RetainedSideCalendarPolicy.Read(program))
     {
-        if(slot < 0 || unit is null || unit.Amount != ExactDecimal.Parse("1"))
-            throw new MarketDataException("retained_side_composition", "A retained Side requires its exact normalized unit and ordered membership slot.");
+        if(unit is null || unit.Amount != ExactDecimal.Parse("1"))
+            throw new MarketDataException("retained_side_composition", "A retained Side requires its exact normalized unit.");
         Program = program; ProgramDigest = BookedSideProgram.Digest(program.Write());
-        Slot = slot; UnitQuantity = unit; Currency = currency;
+        UnitQuantity = unit; Currency = currency;
     }
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<RetainedProgramSide,RetainedProgramSchedule> Schedules = new();
     public override RetainedProgramSchedule GenerateSchedule() => Schedules.GetValue(this, static side => new(side));
@@ -69,15 +138,26 @@ public sealed record RetainedProgramSchedule : SideSchedule
     {
         if(context?.RetainedPrograms is not {} inputs)
             throw new MarketDataException("native_program_context", "A retained Side requires its exact admitted base/scenario source values.");
-        var execution = inputs.Sources.Evaluate(Program, SideId, inputs.Scenario, context.Discounting, context.UnitEvaluation.Cancellation);
-        PhysicalLifecycleValue? lifecycle = null;
+        if(!context.Snapshot.HasSameInputs(inputs.Scenario.Snapshot))
+            throw new MarketDataException("native_program_context", "Retain this Side's exact scenario source snapshot.");
+        if(inputs.HeldFactors.IsDefault)
+            throw new MarketDataException(PhysicalLifecycle.ContextRefusal, "Supply the explicit retained occurrence normalization array.");
+        if(context.BindingState is not null && context.BindingState is not PhysicalCashState)
+            throw new MarketDataException("settlement_scope", "A retained Side cannot consume unrelated settlement state.");
         if(inputs.Cash is {} state)
         {
-            if(inputs.Geometry is null || Side.Slot >= inputs.HeldFactors.Length)
+            if(!ReferenceEquals(context.BindingState, state) || inputs.Geometry is null || inputs.Owner is not { InstrumentId: var ownerId } || ownerId == Guid.Empty ||
+                inputs.Occurrence is not {} occurrence || occurrence.SideId != SideId || occurrence.ProgramDigest != Side.ProgramDigest ||
+                occurrence.Slot < 0 || occurrence.Slot >= inputs.HeldFactors.Length || inputs.HeldFactors[occurrence.Slot].Numerator.IsZero ||
+                !context.IsRegisteredRetainedOccurrence(Side))
                 throw new MarketDataException(PhysicalLifecycle.ContextRefusal, "The Side requires its exact connected gas-day geometry and held cash normalization.");
-            lifecycle = PhysicalLifecycle.EvaluateSide(Program, execution, Program.Document.Family == "gas", Side.Slot,
-                inputs.HeldFactors[Side.Slot], inputs.Geometry, state, context.Snapshot, Currency);
         }
+        else if(context.BindingState is not null || inputs.Geometry is not null || inputs.Owner is not null || inputs.Occurrence is not null || !inputs.HeldFactors.IsEmpty)
+            throw new MarketDataException(PhysicalLifecycle.ContextRefusal, "A held retained Side requires its complete explicit occurrence inputs.");
+        // Admission precedes any program execution or price/discount demand.
+        var execution = inputs.Sources.Evaluate(Program, SideId, inputs.Scenario, context.Discounting, context.UnitEvaluation.Cancellation);
+        var lifecycle = inputs.Cash is {} cash ? PhysicalLifecycle.EvaluateSide(Program, execution, Program.Document.Family == "gas", inputs.Occurrence!.Slot,
+            inputs.HeldFactors[inputs.Occurrence.Slot], inputs.Geometry!, cash, context.Snapshot, Currency) : null;
         return new(this, context, execution, lifecycle);
     }
 }

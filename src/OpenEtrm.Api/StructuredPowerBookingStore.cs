@@ -28,7 +28,7 @@ public sealed partial class StructuredPowerBookingStore(PreviewDatabase database
     {
         if(request is null||request.OperationId==Guid.Empty||request.BookId==Guid.Empty||request.Convention!=Convention||
             request.TradeId is not null||request.ExpectedRevision!=0||string.IsNullOrWhiteSpace(request.Reason)||request.Reason.Length>500||
-            request.Plan is null||request.Plan.Valuation is null)
+            request.Plan is null||(request.Plan.Valuation is null&&request.Plan.Composition is null))
             throw Invalid("Supply a new complete operating-right booking, explicit book, parties, reason and financial terms; amendments are not yet qualified.");
         // Booking date is the ordinary server UTC booking fact, independent of
         // the selected historical market's valuation instant.
@@ -156,13 +156,15 @@ public sealed partial class StructuredPowerBookingStore
         var facility=await new PhysicalOperatingFacilityStore(Catalog).ReadExact(connection,p.Head.Id("facility_id"),int.Parse(p.Head.Text("facility_version"),CultureInfo.InvariantCulture),
             frame.ContextId.Value,frame.At,frame.Time.Date,ct);
         var request=p.Terms(source.Frame.Id).Plan;
-        var physical=StructuredPowerPreview.Calculate(source.Data,source.Frame,facility,knownAt,request with{Valuation=null});
+        var physical=StructuredPowerPreview.Calculate(source.Data,source.Frame,facility,knownAt,PhysicalPlan(request));
         if(physical.Intervals[0].Interval.Start<=frame.At)throw new MarketDataException("operating_delivery_lifecycle","A started operating right requires a separately qualified operational lifecycle.");
         var result=await EvaluatePrograms(connection,source.Data,source.Frame,p,ct);
         return physical with{PreviewId=p.Binding,Valuation=result,
             Limitations=["Saved hypothetical supplied-plan quantities are retained assumptions; no dispatch instruction, actual production or certificate issuance.",
                 "This complete exclusive-right profile values future plans only; operational actuals and cash lifecycle require separate admission."]};
     }
+    internal static StructuredPowerPreviewRequest PhysicalPlan(StructuredPowerPreviewRequest request)=>request with{Valuation=null,Composition=null};
+
     internal static ImmutableArray<RetainedSideProgram> SelectPrograms(ImmutableArray<RetainedSideProgram> programs,int? selectedSlot)
     {
         if(programs.IsDefaultOrEmpty)throw new MarketDataException("side_schedule_inspection","Retain the operating instrument's owned Side programs.");
@@ -182,13 +184,18 @@ public sealed partial class StructuredPowerBookingStore
         var context=(await new KnowledgeStore(Catalog).Read(connection,frame.ContextId!.Value,ct)).Context;
         var snapshot=MarketSnapshotBinding.Bind(data.Snapshot(frame),frame.ContextId.Value,SchedulePreview.ParseAt(context.KnownAt));
         var dependencies=programs.SelectMany(p=>p.Program.Document.Instructions).SelectMany(i=>i.Bindings).Where(b=>b.Kind=="contract_price").Select(b=>b.Market!.Value).Distinct().ToImmutableArray();
-        var market=data.Model.Build(snapshot,dependencies,ct);var sources=ScheduleMarketSources.ForOperating(market);
+        var market=data.Model.Build(snapshot,dependencies,ct);
         var discounting=new ExplicitDiscounting(ExactDecimal.Parse("1"),DiscountFactorSource.Undiscounted);
+        var sideContext=SideValuationContext.ForRetainedPrograms(market,market,discounting,ct);
         var sides=ImmutableArray.CreateBuilder<StructuredPowerSideResult>();var total=ExactMoney.FromMoney(new(default,position.Currency));
+        var plan=position.Terms(frame.Id).Plan;
         foreach(var program in programs.OrderBy(p=>p.Slot))
         {
             var member=members.Single(m=>int.Parse(m.Text("slot"),CultureInfo.InvariantCulture)==program.Slot);
-            var sign=ExactDecimal.Parse(member.Text("coefficient"));var value=sources.Evaluate(program.Program,program.SideId,market,discounting,ct);
+            var sign=ExactDecimal.Parse(member.Text("coefficient"));
+            if(member.Id("sideId")!=program.SideId)throw Invalid("A retained program must belong to its exact Side membership.");
+            var concrete=RetainedProgramSide.ForOperating(program.SideId,program.Program,new(ExactDecimal.Parse("1"),position.Quantity),position.Currency);
+            var value=concrete.PV(sideContext).Execution;
             inspect?.Invoke(program.Slot,new(member.Text("name"),value,program.Program,ExactDecimal.Parse("1"),new(sign.Power(1).Numerator,sign.Power(1).Denominator),[]));
             var rows=ImmutableArray.CreateBuilder<StructuredPowerSideRow>();
             foreach(var guard in program.Program.Document.Instructions.Where(i=>i.Output.Operation=="output_guard"))
@@ -201,11 +208,13 @@ public sealed partial class StructuredPowerBookingStore
                 var unit=new PriceUnit(pr.Currency!.Value,pr.Unit!.Value,ExactDecimal.Parse(pr.QuoteMultiplier!));
                 rows.Add(new(guard.Output.Interval!,guard.Output.ValueAt!.Value,quantity,ExactUnitPrice.Parse(pr.Values[0].Numerator+"/"+pr.Values[0].Denominator,unit),
                     ExactMoney.Parse(ar.Values[0].Numerator+"/"+ar.Values[0].Denominator,position.Currency),ExactMoney.Parse(pv.Values[0].Numerator+"/"+pv.Values[0].Denominator,position.Currency),
-                    member.Text("name")=="access_fee"?OpenEtrm.MarketData.Power.VolumeState.Contractual:OpenEtrm.MarketData.Power.VolumeState.Forecast,null,null));
+                    (plan.Composition is {} composed?composed.Sides[program.Slot].QuantitySource=="horizon_right":member.Text("name")=="access_fee")?
+                        OpenEtrm.MarketData.Power.VolumeState.Contractual:OpenEtrm.MarketData.Power.VolumeState.Forecast,null,null));
             }
-            var financial=position.Terms(frame.Id).Plan.Valuation!;
-            var quoteCode=member.Text("name") switch{"fuel_input"=>financial.FuelPrice!.QuoteCode,"charging_energy"=>financial.ChargingPrice!.QuoteCode,
-                "access_fee"=>financial.AccessQuoteCode!,_=>financial.EnergyPrice.QuoteCode};
+            var financial=plan.Valuation;
+            var quoteCode=plan.Composition is {} composition?composition.Sides[program.Slot].Price.QuoteCode:member.Text("name") switch{
+                "fuel_input"=>financial!.FuelPrice!.QuoteCode,"charging_energy"=>financial!.ChargingPrice!.QuoteCode,
+                "access_fee"=>financial!.AccessQuoteCode!,_=>financial!.EnergyPrice.QuoteCode};
             var quote=data.QuoteRows(quoteCode).Single().Key;
             var contribution=value.PresentValue.Scale(sign);total=total.Add(contribution);
             sides.Add(new(program.SideId,member.Text("name"),sign.ToString(),quote,value.PresentValue,contribution,rows.ToImmutable()));

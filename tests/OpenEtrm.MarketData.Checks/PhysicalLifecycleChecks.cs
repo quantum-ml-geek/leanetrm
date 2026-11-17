@@ -19,6 +19,7 @@ internal static class PhysicalLifecycleChecks
         var undiscounted=demo.Value(Demo.Close,paid,Demo.Undiscounted);
         Equal(undiscounted.RealizedUnsettled,"-10855");Equal(undiscounted.Unrealized,"0");Equal(undiscounted.Total,"-10855");
         Equal(demo.Headline(Demo.Close,paid,Demo.Undiscounted),"-10855");
+        demo.OccurrenceContexts(paid);
         static bool Cash(PhysicalLifecycleRow r)=>r.Slot>=Demo.Months;
         Require(undiscounted.Rows.Count(Cash)==122&&undiscounted.Rows.Count(r=>!Cash(r))==122,"Every gas day keeps one physical and one cash row.");
         var cash=undiscounted.Rows.Where(Cash).ToDictionary(r=>r.DeliveryFrom);
@@ -284,6 +285,64 @@ internal static class PhysicalLifecycleChecks
         internal ImmutableArray<CashOccurrencePayment> SeptemberPaid(DateTimeOffset knownAt)=>
             [..Enumerable.Range(0,30).Select(n=>Payment(Months,n,Fixture.Utc("2026-10-10T00:00:00Z"),knownAt,"-290"))];
         internal PhysicalCashState State(ImmutableArray<CashOccurrencePayment> paid)=>new(Trade.Id,Binding,Held,Trade.BookId,paid,PhysicalCashState.Policy);
+
+        internal void OccurrenceContexts(ImmutableArray<CashOccurrencePayment> paid)
+        {
+            // The same September cash Side is paid under its original payable
+            // membership and independently unpaid under an added receivable one.
+            var original=Instrument.Members[Months];
+            var repeated=new RetainedGasInstrument(Guid.NewGuid(),Instrument.Members.Add(new(original.SideId,ExactDecimal.Parse("1"),original.Ratio,original.Program)),assignments,Instrument.PriceLookups);
+            Require(ReferenceEquals(repeated.Sides[Months].Side,repeated.Sides[^1].Side),"One sealed program has one reusable Side definition, independently of its membership slots.");
+            var snapshot=Snapshot(Close,null);
+            var dependencies=PhysicalLifecycle.PriceDependencies(repeated.Members.Select(m=>m.Program),repeated.PriceLookups,snapshot);
+            var market=model.Build(snapshot,dependencies);
+            var sources=new ScheduleMarketSources(market.Graph.Plan.Context,market,null,null,IntervalKnowledgePolicy.ResolvedCutoff,PendingActualsPolicy.RequireActuals,repeated.PriceLookups,[],assignments);
+            var state=State(paid);
+            var quantity=new SignedRatio(Held.Amount.ScaledValue,ExactDecimal.WorkingScale);
+            var input=new RetainedProgramContext(sources,market)
+            {
+                Cash=state,Owner=new(repeated.Id,repeated.EconomicIdentity),
+                Geometry=PhysicalLifecycle.PrepareGeometry(repeated.Members.Where(m=>m.Program.Document.Family=="gas").Select(m=>m.Program),snapshot),
+                HeldFactors=[..repeated.Members.Select(m=>quantity*new SignedRatio(m.Direction.ScaledValue,ExactDecimal.WorkingScale)*new SignedRatio(m.Ratio.Numerator,m.Ratio.Denominator))]
+            };
+            SideValuationContext Context(RetainedProgramContext selected,PhysicalCashState cash,ISideDiscounting discount)=>new SideValuationContext(market,discount)
+                .WithUnitEvaluation(Close,false,ValuationMeasure.PresentValue,default).WithBindingState(cash).WithRetainedPrograms(selected);
+            var context=Context(input,state,Undiscounted);
+            var value=repeated.PV(context);
+            Equal(value.PresentValue,"-21.55");
+            Equal(value.Sides[Months].Contribution,"0");Equal(value.Sides[^1].Contribution,"87");
+            Require(context.EvaluatedSides==repeated.Sides.Length&&value.Sides[Months].Value.Context!=value.Sides[^1].Value.Context,
+                "Held paid state is evaluated per exact occurrence; its work cannot be hidden or shared across opposite memberships.");
+            var first=(RetainedProgramSide)repeated.Sides[Months].Side;
+            var child=value.Sides[Months].Value.Context;
+            var occurrence=child.RetainedPrograms!.Occurrence!;
+            var noDemand=new DatedFactors();
+            var unprepared=Context(input with{Occurrence=null},state,noDemand);
+            var november=(RetainedProgramSide)repeated.Sides[Months+2].Side;
+            Reject(PhysicalLifecycle.ContextRefusal,()=>november.PV(unprepared));
+            Require(noDemand.Requested.Count==0,"Missing occurrence wiring refuses before any discount or price execution demand.");
+            Reject(PhysicalLifecycle.ContextRefusal,()=>first.PV(child.WithRetainedPrograms(child.RetainedPrograms with{Occurrence=occurrence with{SideId=Guid.NewGuid()}})));
+            Reject(PhysicalLifecycle.ContextRefusal,()=>first.PV(child.WithRetainedPrograms(child.RetainedPrograms with{Occurrence=occurrence with{ProgramDigest="wrong"}})));
+            Reject(PhysicalLifecycle.ContextRefusal,()=>repeated.PV(Context(input with{Owner=new(Guid.NewGuid(),repeated.EconomicIdentity)},state,Undiscounted)));
+            Reject(PhysicalLifecycle.ContextRefusal,()=>repeated.PV(Context(input with{HeldFactors=input.HeldFactors.SetItem(Months,new SignedRatio(1,1))},state,Undiscounted)));
+            var absentFactors=Context(input with{HeldFactors=default},state,Undiscounted);
+            Reject(PhysicalLifecycle.ContextRefusal,()=>repeated.PV(absentFactors));
+            Reject(PhysicalLifecycle.ContextRefusal,()=>absentFactors.ForRetainedOccurrence(Months,first));
+            Reject(PhysicalLifecycle.ContextRefusal,()=>first.PV(child.WithRetainedPrograms(child.RetainedPrograms with{HeldFactors=default})));
+            Reject(PhysicalLifecycle.ContextRefusal,()=>first.PV(child.WithBindingState(State([]))));
+            Reject("instrument_context",()=>_=new InstrumentValuation(repeated,context,[..value.Sides.Select((s,n)=>n==Months?value.Sides[^1].Value:s.Value)]));
+            var unpaid=State([]);
+            Equal(repeated.PV(Context(input with{Cash=unpaid},unpaid,Undiscounted)).PresentValue,"-108.55");
+            Equal(repeated.PV(context).PresentValue,"-21.55");
+            Require(context.EvaluatedSides==repeated.Sides.Length,"Reusing the exact parent operation retains its own per-occurrence work without repricing.");
+            var dated=repeated.PV(Context(input,state,noDemand));
+            Require(noDemand.Requested.Count>0,"The admitted November cash Side genuinely consumes its explicit future discount factors.");
+            noDemand.Requested.Clear();
+            var futureChild=dated.Sides[Months+2].Value.Context;
+            var copied=futureChild.WithRetainedPrograms(futureChild.RetainedPrograms!);
+            Reject(PhysicalLifecycle.ContextRefusal,()=>november.PV(copied));
+            Require(noDemand.Requested.Count==0,"An unregistered occurrence copy must refuse before repeated program or discount work.");
+        }
 
         // Fixings visible at the instant; each curve contract's live mark, or its final settlement once expired, equal to the
         // fixing unless `marked` sets one day's (a null price leaves that day with neither); the knowledge cutoff is the close.

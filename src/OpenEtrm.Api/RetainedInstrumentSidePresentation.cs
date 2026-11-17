@@ -20,7 +20,7 @@ internal static class RetainedInstrumentSidePresentation
         // Repeated Side IDs are legitimate reusable definitions. Each ordered
         // membership occurrence keeps its own slot and exact saved program.
         ImmutableArray<SideMembership> definitions=[..programs.Select((program,slot)=>new SideMembership(
-            RetainedProgramSide.Define(program.SideId,program.Slot,program.Program,unit,currency),memberships[slot].Coefficient,memberships[slot].Ratio))];
+            RetainedProgramSide.Define(program.SideId,program.Program,unit,currency),memberships[slot].Coefficient,memberships[slot].Ratio))];
         var annotated=labels.Select(member=>{
             if(member.Slot<0||member.Slot>=memberships.Length)throw Invalid();var saved=memberships[member.Slot];
             var values=ImmutableArray.CreateBuilder<InstrumentSideValue>();values.Add(new("Coefficient",saved.Coefficient.ToString()));
@@ -84,15 +84,77 @@ internal static class RetainedInstrumentSidePresentation
     {
         var members=position.Head.GetProperty("members").EnumerateArray().ToArray();
         if(members.Length!=programs.Length)throw Invalid();var labels=ImmutableArray.CreateBuilder<InstrumentSideLabels>();
+        var composition=OperatingComposition(position);
+        if(composition is not null&&composition.Sides.Length!=programs.Length)throw Invalid();
         foreach(var program in programs)
         {
             var selected=members.Where(member=>member.GetProperty("slot").GetInt32()==program.Slot).ToArray();
             if(selected.Length!=1||selected[0].Id("sideId")!=program.SideId)throw Invalid();var member=selected[0];var name=member.Text("name");
+            if(composition is not null)
+            {
+                if(program.Slot<0||program.Slot>=composition.Sides.Length)throw Invalid();
+                var declaration=composition.Sides[program.Slot];var direction=Sign(declaration.Coefficient);var delivery=declaration.Kind=="delivery";
+                if(name!=declaration.Name||Sign(member.Text("coefficient"))!=direction)throw Invalid();
+                var quoteUnit=OperatingSideProgramProof.Require(position,declaration,program.Program);
+                var guards=program.Program.Document.Instructions.Where(row=>row.Output.Operation=="output_guard").ToArray();
+                if(guards.Length==0||guards.Any(row=>row.Output.Parameters.GetValueOrDefault("lifecycle")!=(delivery?OperatingContractScheduleSource.DeliveryLifecycle:"undue_payment_v1")||
+                    delivery&&row.Output.Parameters.GetValueOrDefault("paymentRule")!="not_applicable_delivery_v1"||
+                    !row.Inputs.TryGetValue("amount",out var amount)||amount.Length!=1||
+                    !program.Program.Document.Roots.Any(root=>root.Row==amount[0]&&root.Measure==(delivery?"physical_value":"contractual_amount"))))throw Invalid();
+                var label=Label(program.Slot,declaration.Name,delivery?"Operating-right delivery":"Operating-right payment",direction,delivery,position.Quantity,position.Currency);
+                labels.Add(label with{OverviewSections=label.OverviewSections.Add(OperatingTerms(declaration,quoteUnit))});
+                continue;
+            }
             var sign=name switch{"discharging_energy" or "energy_output" or "payment_energy"=>1,"charging_energy" or "fuel_input" or "variable_fee" or "access_fee"=>-1,_=>throw Invalid()};
             if(Sign(member.Text("coefficient"))!=sign)throw Invalid();
             labels.Add(Label(program.Slot,name.Replace('_',' '),"Operating-right "+name.Replace('_',' '),sign,false,position.Quantity,position.Currency));
         }
         return Compose(position.Binding,position.Quantity,position.Currency,programs,[..programs.Select(program=>new Membership(program.Slot,ExactDecimal.Parse(members.Single(member=>member.GetProperty("slot").GetInt32()==program.Slot).Text("coefficient"))))],labels.ToImmutable(),"Retained operating-right composition");
+    }
+
+    static StructuredPowerCompositionInput? OperatingComposition(OperatingPosition position)
+    {
+        try
+        {
+            var plan=position.Head.GetProperty("request").GetProperty("plan");
+            var options=new JsonSerializerOptions(JsonSerializerDefaults.Web);
+            var valuation=plan.GetProperty("valuation");
+            if(!plan.TryGetProperty("composition",out var saved))
+            {
+                var legacy=valuation.Deserialize<StructuredPowerValuationInput>(options)??throw Invalid();
+                StructuredPowerPreview.ValidateValuationProfile(legacy.Perspective,legacy.Measure,legacy.Discounting);
+                if(legacy.EnergyPrice is null||legacy.PaymentRule is null||legacy.CurrencyCode!=position.Currency.Code||legacy.RightQuantityCode!=position.Quantity.Code)throw Invalid();
+                _=StructuredPowerPreview.OperatingPayment(legacy.PaymentRule);
+                return null;
+            }
+            if(valuation.ValueKind!=JsonValueKind.Null)throw Invalid();
+            var composition=saved.Deserialize<StructuredPowerCompositionInput>(options)??throw Invalid();
+            StructuredPowerPreview.ValidateComposition(composition,position.Physical.Text("kind"));
+            if(composition.CurrencyCode!=position.Currency.Code||composition.RightQuantityCode!=position.Quantity.Code)throw Invalid();
+            return composition;
+        }
+        catch(Exception error)when(error is JsonException or InvalidOperationException or KeyNotFoundException or MarketDataException){throw Invalid();}
+    }
+
+    static InstrumentSideSection OperatingTerms(StructuredPowerOperatingSideInput side,PriceUnit quoteUnit)
+    {
+        var price=side.Price;var values=ImmutableArray.CreateBuilder<InstrumentSideValue>();
+        values.Add(new("Side key",side.Key));values.Add(new("Quantity source",side.QuantitySource));values.Add(new("Side kind",side.Kind));
+        values.Add(new("Price policy",price.Mode));values.Add(new("Quote",price.QuoteCode));
+        values.Add(new("Quote quantity",quoteUnit.Quantity.Code));values.Add(new("Quote multiplier",quoteUnit.Multiplier.ToString()));
+        if(price.Mode=="fixed"&&price.FixedPrice is {} amount&&price.CurveCode is null&&price.ContractId is null)values.Add(new("Fixed price",amount));
+        else if(price.Mode=="selected_contract_flat_v1"&&price.FixedPrice is null&&price.CurveCode is {} curve&&price.ContractId is {} contract)
+        {values.Add(new("Market curve",curve));values.Add(new("Market contract",contract.ToString("D")));}
+        else throw Invalid();
+        if(side.Kind=="payment")
+        {
+            var payment=side.PaymentRule!;_ = StructuredPowerPreview.OperatingPayment(payment);
+            values.Add(new("Payment policy",payment.Implementation));values.Add(new("Payment rule",payment.Rule));
+            values.Add(new("Payment days after delivery month",payment.Days!.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+            values.Add(new("Payment day basis",payment.DayBasis!));values.Add(new("Date adjustment",payment.Adjustment));
+        }
+        else values.Add(new("Payment rule","Not applicable to delivery"));
+        return new("Retained operating Side terms",values.ToImmutable());
     }
 
     internal static InstrumentSideGroup Rec(RecPosition position,ImmutableArray<RetainedSideProgram> programs)

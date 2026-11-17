@@ -35,9 +35,9 @@ internal static class SideEntryAndReadChecks
                 throw new Exception("Current operating and certificate entry must explicitly partition every active form field into agreement or independent Side terms.");
         }
         var operating=EntrySideFieldGroups.Operating();
-        if(operating.Count!=3||operating["solar"].Fields.Contains("fuelPrice")||operating["thermal"].Fields.Contains("chargePrice")||
-            !operating["battery"].Fields.Contains("chargePrice")||!operating["thermal"].Fields.Contains("fuelPrice"))
-            throw new Exception("The backend owns each selected operating kind's exact active Side fields without inert fuel/charging terms or a client condition law.");
+        if(operating.Count!=3||operating.Values.Any(layout=>!layout.Fields.SequenceEqual(new[]{"right","currency","perspective","measure","discounting","sideDefinitions"})||
+            !layout.Groups.Select(group=>group.Id).SequenceEqual(new[]{"valuation","sides"})))
+            throw new Exception("The backend must partition the v2 agreement and its ordered independent Side editor without retaining inactive legacy price fields.");
         var failures=new List<Exception>();
         foreach(var check in new Action[]{()=>UnsupportedValuation(request),EmptySelectedScope})try{check();}catch(Exception error){failures.Add(error);}
         if(failures.Count>0)throw new AggregateException("Exact operating read boundaries failed.",failures);

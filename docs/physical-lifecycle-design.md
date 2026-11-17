@@ -334,7 +334,7 @@ not automatically widened to shared receipts by this proposed ownership model.
 classDiagram
     Trade "1" *-- "1..*" TradeInstrument : owns bindings
     TradeInstrument "*" --> "1" Instrument : immutable definition
-    Instrument "1" o-- "0..*" SideMembership : explicit composition
+    Instrument "1" o-- "1..*" SideMembership : explicit physical composition
     SideMembership --> Side : exact retained terms
     TradeInstrument "1" *-- "0..*" DeliverySchedule : owned per physical membership
     DeliverySchedule "*" --> "1" Side : retained terms
@@ -437,7 +437,9 @@ profile's coincident receipt/title rule and current payment ordering remain inta
 
 The shared lifecycle planner consumes an existing declared schedule/capability.
 It does not require every Instrument to generate artificial delivery or cash
-events. Futures margining remains its own explicit contract.
+events. This lifecycle capability boundary is separate from D417's mandatory
+Side composition: another instrument cannot bypass Side because it lacks a
+qualified operational action. Futures margining remains its own explicit contract.
 
 ## Commodity-specific evidence and reference data
 

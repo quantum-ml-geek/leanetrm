@@ -10,6 +10,7 @@ if(args is ["--gas-rights-side"]){GasRightsSideChecks.Run();return;}
 if(args is ["--calendar-policy"]){CalendarPolicyChecks.Run();RetainedPowerQuantityChecks.Run();ClockCompletionChecks.Run();PublishedTouCalendarChecks.Run();IntervalCalendarAdmissionChecks.Run();return;}
 if(args is ["--interval-calendar-admission"]){IntervalCalendarAdmissionChecks.Run();return;}
 if(args is ["--payment-date-policy"]){PaymentDatePolicyChecks.Run();return;}
+if(args is ["--side-composition"]){SideCompositionChecks.Run();return;}
 
 if(args is ["--physical-option"]){PhysicalOptionChecks.Run();return;}
 if(args is ["--cash-option-model"]){CashOptionModelChecks.Run();return;}
@@ -638,6 +639,7 @@ passed += PaymentRuleChecks.Run();
 passed += CalendarPolicyChecks.Run();
 passed += PaymentDatePolicyChecks.Run();
 passed += IndependentSideChecks.Run();
+passed += SideCompositionChecks.Run();
 passed += RiskChecks.Run();
 passed += NestedScenarioChecks.Run();
 passed += RiskPropagationChecks.Run();

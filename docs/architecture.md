@@ -4,8 +4,11 @@ D417 requires every non-exchange Instrument to expose independent reusable Sides
 through explicit memberships. Futures and futures options are the only exceptions.
 The Side owns its schedule, inputs and valuation; the Instrument owns composition.
 Booking, review and saved-trade views must show those same memberships and their
-roles and terms. The alignment is in implementation, including cash, gas holdings,
-retained programs and service rights; see [the decision](decisions.md#d417--explicit-sides-for-every-non-exchange-instrument).
+roles and terms. Cash, gas holdings, retained programs and service rights have
+managed Side implementations. Explicit operating assembly admits one to eight
+independently signed delivery/payment Sides, with separate quantity sources,
+prices and payment rules. The combined implementation is undergoing integration
+qualification; see [the decision](decisions.md#d417--explicit-sides-for-every-non-exchange-instrument).
 
 D418 adds [ordinary direct point market-value publication](point-trader-marks.md)
 with exact source/temporal selection, final observations and independent reviewed
@@ -888,7 +891,9 @@ Instrument
   FuturesOptionInstrument: exact exchange option contract and model binding
   SidedInstrument: every other instrument has explicit independent side memberships
     Side reference, signed coefficient, role and order
-    Side definition: index/curve, observation/averaging and payment conventions
+    Concrete Side: immutable terms, declared inputs, schedule and PV implementation
+      Shared fixed/floating economics; asset-specific behavior where required
+      Exact retained program execution belongs to a Side
     Separate resolved pricing bindings and generated dated schedules
 ```
 
@@ -1416,8 +1421,9 @@ valuation contract without knowing the side's internal algorithm.
 
 Persist versioned definitions and type identifiers through explicit schemas,
 rather than serializing arbitrary runtime objects. Deriving a class does not
-permit loading tenant-provided executable code. Cache resolved schedules where
-their complete inputs agree instead of regenerating them for every `PV()` call.
+permit loading tenant-provided executable code. Booked Sides load their exact
+retained schedules; they do not regenerate contractual geometry on read. Cache
+execution results only where their complete inputs and context agree.
 
 ### 3.4 Instrument-owned connections between sides
 

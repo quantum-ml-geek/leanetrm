@@ -18,15 +18,7 @@ internal static class EntrySideFieldGroups
         Group("agreement","Agreement and parties","agreement","calendar","discount","book","entity","party","tradeDate","convention"),
         Group("delivery","Certificate delivery Side terms","side_terms","assignment","deliveryFrom","deliveryTo","quantity","physical"),
         Group("consideration","Consideration Side terms","side_terms","consideration","mode","quote","price","contract","payment","days"));
-    internal static ImmutableDictionary<string,EntryFieldLayout> Operating()=>new[]{"battery","thermal","solar"}.ToImmutableDictionary(kind=>kind,kind=>
-    {
-        var groups=new List<TicketFieldGroup>{
-            Group("valuation","Valuation agreement terms","agreement","right","currency","perspective","measure","discounting","paymentDays","paymentPolicy"),
-            Group("energy",kind switch{"battery"=>"Discharging energy Side terms","thermal"=>"Energy output Side terms",_=>"Payment energy Side terms"},"side_terms","saleMode","saleContract","saleQuote","salePrice")};
-        if(kind=="battery")groups.Add(Group("charging","Charging energy Side terms","side_terms","chargeMode","chargeContract","chargeQuote","chargePrice"));
-        if(kind=="thermal")groups.Add(Group("fuel","Fuel input Side terms","side_terms","fuelMode","fuelContract","fuelQuote","fuelPrice","fuelBasis"));
-        groups.Add(Group("variable_fee","Optional variable fee terms","side_terms","variablePrice","variableBasis"));
-        groups.Add(Group("access_fee","Optional access fee terms","side_terms","accessQuote","accessPrice","accessBasis"));
-        return Layout([..groups]);
-    },StringComparer.Ordinal);
+    internal static ImmutableDictionary<string,EntryFieldLayout> Operating()=>new[]{"battery","thermal","solar"}.ToImmutableDictionary(kind=>kind,_=>Layout(
+        Group("valuation","Valuation agreement terms","agreement","right","currency","perspective","measure","discounting"),
+        Group("sides","Independent operating Side terms","side_terms","sideDefinitions")),StringComparer.Ordinal);
 }
