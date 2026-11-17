@@ -86,6 +86,24 @@ the corresponding booking form opens. These calculations are not viewport
 subsets. The position-facts response remains paged after scoped fact assembly;
 this increment does not claim database paging for every portfolio product.
 
+### Gas ticket choices and entered terms
+
+Gas ticket discovery keeps the existing authorized source and knowledge context.
+Fixed lists and draft-owned Side choices do not hydrate pricing assignments.
+Books and parties use their existing scoped native readers; setup discovery uses
+the exact selected setup identity and publication order. Current and retained
+cuts can therefore return different published setups without substituting one
+for the other. Forecast choices retain their source-qualified admission before
+the assigned-forecast starting choice is considered.
+
+An already-entered delivery start, delivery end or independent native quantity
+can be returned with its existing suggestion label without reading an unrelated
+pricing catalog. Linked quantities still refuse independent suggestions. Blank
+suggestions, clock, payment, price, index, forecast and tariff lookups retain
+their existing source requirements. These changes add no cache, timeout or
+financial fallback. Native HTTP regressions deny assignment reads to distinguish
+these consumers and preserve exact current/retained answers and refusals.
+
 Automated checks cover web and managed contracts, standard browser flows,
 exchange futures/options/volatility, custom curves and the close calendar.
 Native checks cover hidden original pins, correction visibility, partial-reader
