@@ -1,10 +1,9 @@
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using OpenEtrm.MarketData;
 using OpenEtrm.MarketData.Physical;
 using OpenEtrm.MarketData.Trading;
+using OpenEtrm.Shared.Commands;
 
 namespace OpenEtrm.Api;
 
@@ -129,8 +128,7 @@ internal static class StorageFacilityCommands
         return new JsonArray(ids.Select(id=>(JsonNode)JsonValue.Create(id)!).ToArray());
     }
 
-    internal static Guid TechnicalId(string domain,Guid operation,int ordinal=0)=>Guid.ParseExact(Convert.ToHexStringLower(
-        SHA256.HashData(Encoding.UTF8.GetBytes(FormattableString.Invariant($"{domain}:{operation:D}:{ordinal}"))))[..32],"N");
+    internal static Guid TechnicalId(string domain,Guid operation,int ordinal=0)=>OperationIdentity.For(domain,operation,ordinal);
     private static JsonElement[] Array(JsonElement value,int minimum,int maximum)
     {if(value.ValueKind!=JsonValueKind.Array||value.GetArrayLength()<minimum||value.GetArrayLength()>maximum)throw Invalid();return[..value.EnumerateArray()];}
     private static void Keys(JsonElement value,string[] required,string[] optional)

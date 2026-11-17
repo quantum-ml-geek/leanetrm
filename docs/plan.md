@@ -1,5 +1,40 @@
 # Delivery plan and acceptance criteria
 
+D416 implements the selected [financial Transport rights and fixed-fee
+contract](gas-transport-financial.md). Native and managed value/upgrade controls
+and actual shared browser checks provide local evidence. First-value market
+publication, integrated upstream qualification and release remain delivery gates.
+Physical performance and commercial Storage retain separate planned contracts.
+
+D413 locally qualifies [retained chosen routes](gas-transport-routes.md) with
+explicit graph/law definitions, complete exact source claims and exclusive
+logical memberships. Correction makes a current assessment unavailable until
+explicit re-adoption, while own release can free stale memberships. Local native,
+managed, populated-upgrade and actual browser gates passed. Integrated release,
+Transport performance and financial product qualification remain separate.
+
+The route checkpoint passed 742 managed core, the full API schedule suite,
+1,997 frontend and 152 Python checks. Native gates include exact full-witness
+parity through nine actual managed checkpoints, source/membership concurrency,
+deferred source changes, original authority, historical reads and populated
+upgrades. The same frozen application artifact passed 55 route, 64 capacity and
+30 storage browser checks, with desktop, local-zone and phone views reviewed.
+
+D415 implements [commercial Transport capacity operations](gas-transport-capacity-operations.md)
+with immutable legal/reference/path scope, complete dated gross limits and
+independent chosen plans. Explicit empty release permits cleanup while retaining
+other breaches. Local managed/native, populated-upgrade and actual browser
+checks passed. Integration/release gates remain open.
+This operating consumer does not enable financial Transport booking, route
+conservation, accepted flow or complete service value.
+
+The D415 checkpoint passed 741 managed core, 1,984 frontend and 146 Python
+checks, the full API schedule suite, native source/concurrency/receipt/authority
+controls and populated predecessor/drift checks. Actual browser qualification
+passed 64 Transport checks and 30 existing-storage regression checks against
+the same API, SQL and shared UI artifact. These results qualify the declared
+operating consumer, not the remaining financial or physical Transport products.
+
 D406 locally qualifies a bounded [Park and Loan consumer](gas-park-loan.md):
 explicit booking, native advance and partial return, independent fee cash, shared
 ticket and lifecycle forms, and ordinary/retained current-clock price risk. Real

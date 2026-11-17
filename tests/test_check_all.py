@@ -38,10 +38,110 @@ LIFECYCLE_PORTFOLIO={f'tools/{name}.py' for name in (
 OPTION_VALUE_APPS={'tools/check_lifecycle_valuation_browser.py'}
 AGENT_SETTINGS_BROWSER={'tools/check_agent_operating_settings.py'}
 STORAGE_FACILITY={f'tools/{name}.py' for name in ('check_storage_facility','check_storage_facility_upgrade','check_storage_facility_browser')}
+TRANSPORT_CAPACITY={f'tools/{name}.py' for name in ('check_gas_transport_capacity','check_gas_transport_capacity_upgrade','check_gas_transport_capacity_browser')}
+TRANSPORT_ROUTE={f'tools/{name}.py' for name in ('check_gas_transport_route','check_gas_transport_route_upgrade','check_gas_transport_route_browser')}
 OPERATING_FACILITIES={'tools/check_operating_facilities.py','tools/check_operating_schedule_storage.py','tools/check_operating_trades.py','tools/check_rec_inventory.py','tools/check_rec_forward_storage.py'}
 
 
 class CheckAllTests(unittest.TestCase):
+    def test_financial_transport_requires_native_upgrade_worker_and_actual_browser(self):
+        helpers = {f'tools/check_gas_transport_financial{suffix}.py'
+                   for suffix in ('', '_upgrade', '_worker', '_browser')}
+        api = 'tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj'
+        for group in ALL_GROUPS:
+            commands = []
+            def run(command, **options):
+                commands.append(command)
+                found = helpers.intersection(command)
+                if not found:
+                    return
+                helper = found.pop()
+                self.assertEqual(command[command.index('--pg-bin') + 1], '/stock pg')
+                self.assertEqual(options['env']['DOTNET'], '/selected sdk')
+                self.assertIn(['/selected sdk', 'restore', api, '--locked-mode'], commands)
+                self.assertIn(['/selected sdk', 'build', api, '--no-restore'], commands)
+                if helper.endswith('_browser.py'):
+                    self.assertEqual(command[command.index('--dotnet') + 1], '/selected sdk')
+                    self.assertEqual(command[command.index('--browser') + 1], '/selected browser')
+                    self.assertIn('--no-build', command)
+            with redirect_stdout(io.StringIO()):
+                run_checks(Path('/stock pg'), Path('/selected sdk'), Path('/selected browser'),
+                           group=group, run=run)
+            selected = [part for command in commands for part in command if part in helpers]
+            self.assertEqual(set(selected), helpers if group == 'gas' else set())
+            self.assertEqual(len(selected), len(helpers) if group == 'gas' else 0)
+
+    def test_financial_transport_managed_contracts_run_once_in_managed(self):
+        flags = {'--gas-transport-financial-' + name for name in
+                 ('commands', 'source', 'ticket', 'positions', 'adapters', 'labels', 'setup')}
+        for group in ALL_GROUPS:
+            selected = []
+            with redirect_stdout(io.StringIO()):
+                run_checks(Path('/pg'), Path('/sdk'), Path('/browser'), group=group,
+                           run=lambda command, **options: selected.extend(flags.intersection(command)))
+            self.assertEqual(set(selected), flags if group == 'managed' else set())
+            self.assertEqual(len(selected), len(flags) if group == 'managed' else 0)
+
+    def test_chosen_route_native_upgrade_and_browser_are_required_with_the_selected_tools(self):
+        for group in ALL_GROUPS:
+            commands=[]
+            def run(command,**options):
+                commands.append(command)
+                for helper in TRANSPORT_ROUTE.intersection(command):
+                    self.assertEqual(command[command.index('--pg-bin')+1],'/stock pg')
+                    self.assertEqual(options['env']['DOTNET'],'/selected sdk')
+                    self.assertIn(['/selected sdk','build','tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj','--no-restore'],commands)
+                    if helper.endswith('_browser.py'):
+                        self.assertEqual(command[command.index('--dotnet')+1],'/selected sdk')
+                        self.assertEqual(command[command.index('--browser')+1],'/selected browser')
+                        self.assertIn('--no-build',command)
+            with redirect_stdout(io.StringIO()):
+                run_checks(Path('/stock pg'),Path('/selected sdk'),Path('/selected browser'),group=group,run=run)
+            selected=[part for command in commands for part in command if part in TRANSPORT_ROUTE]
+            self.assertEqual(set(selected),TRANSPORT_ROUTE if group=='physical' else set())
+            self.assertEqual(len(selected),len(TRANSPORT_ROUTE) if group=='physical' else 0)
+
+    def test_chosen_route_managed_contracts_are_required_once(self):
+        flags={'--gas-transport-route-adapters','--gas-transport-route-source','--gas-transport-route-metadata'}
+        for group in ALL_GROUPS:
+            selected=[]
+            with redirect_stdout(io.StringIO()):
+                run_checks(Path('/pg'),Path('/sdk'),Path('/browser'),group=group,
+                    run=lambda command,**options:selected.extend(flags.intersection(command)))
+            self.assertEqual(set(selected),flags if group=='managed' else set())
+            self.assertEqual(len(selected),len(flags) if group=='managed' else 0)
+
+    def test_transport_capacity_native_upgrade_and_browser_require_physical_partition_and_built_api(self):
+        api='tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj'
+        for group in ALL_GROUPS:
+            commands=[]
+            def run(command,**options):
+                commands.append(command)
+                found=TRANSPORT_CAPACITY.intersection(command)
+                if not found:return
+                helper=found.pop()
+                self.assertEqual(command[command.index('--pg-bin')+1],'/stock pg')
+                self.assertEqual(options['env']['DOTNET'],'/selected sdk')
+                self.assertIn(['/selected sdk','restore',api,'--locked-mode'],commands)
+                self.assertIn(['/selected sdk','build',api,'--no-restore'],commands)
+                if helper.endswith('_browser.py'):
+                    self.assertEqual(command[command.index('--dotnet')+1],'/selected sdk')
+                    self.assertEqual(command[command.index('--browser')+1],'/selected browser')
+                    self.assertIn('--no-build',command)
+            run_checks(Path('/stock pg'),Path('/selected sdk'),Path('/selected browser'),group=group,run=run)
+            selected=[part for command in commands for part in command if part in TRANSPORT_CAPACITY]
+            self.assertEqual(set(selected),TRANSPORT_CAPACITY if group=='physical' else set())
+            self.assertEqual(len(selected),len(TRANSPORT_CAPACITY) if group=='physical' else 0)
+
+    def test_transport_capacity_managed_source_metadata_and_business_context_run_once(self):
+        flags={'--gas-transport-capacity-adapters','--gas-transport-capacity-source','--gas-transport-capacity-metadata','--operational-business-context'}
+        for group in ALL_GROUPS:
+            selected=[]
+            run_checks(Path('/pg'),Path('/sdk'),Path('/browser'),group=group,
+                run=lambda command,**options:selected.extend(flags.intersection(command)))
+            self.assertEqual(set(selected),flags if group=='managed' else set())
+            self.assertEqual(len(selected),len(flags) if group=='managed' else 0)
+
     def test_custody_native_upgrade_worker_and_both_browser_roles_are_required(self):
         helpers={f'tools/{name}.py' for name in (
             'check_gas_park_custody','check_gas_park_custody_upgrade',
@@ -446,6 +546,12 @@ class CheckAllTests(unittest.TestCase):
                        '--gas-park-custody-actions','--gas-park-custody-effects','--gas-park-custody-handler',
                        '--gas-park-custody-setup','--gas-park-custody-overview','--ticket-status-routing',
                        '--cash-payment-status','--gas-instant-ingress','--lifecycle-context-ingress',
+                           '--gas-transport-capacity-adapters','--gas-transport-capacity-source',
+                           '--gas-transport-capacity-metadata','--operational-business-context',
+                           '--gas-transport-route-adapters','--gas-transport-route-source','--gas-transport-route-metadata',
+                           '--gas-transport-financial-commands','--gas-transport-financial-source',
+                           '--gas-transport-financial-ticket','--gas-transport-financial-positions',
+                           '--gas-transport-financial-adapters','--gas-transport-financial-labels','--gas-transport-financial-setup',
                            '--lifecycle-actions','--economic-risk-contract','--lifecycle-schedule-contract','--gas-owned-setup',
                           '--shared-native-markets','--derivative-methods','--gas-accepted-order','--lifecycle-residual-currencies','--gas-operator-contract')])
         self.assertTrue(any('--historical-risk-check' in c and '--browser-check' in c for c in commands))
@@ -548,7 +654,7 @@ class CheckAllTests(unittest.TestCase):
                 self.assertFalse(any('unittest' in c or 'test' in c or 'run' in c and '--project' in c for c in selected))
         margin={f'tools/check_futures_margin_{part}.py' for part in ('sources','adoption','projection_sources')}|{'tools/check_trading_business_date.py'}
         def shared(command):
-            return 'tools/run_preview.py' not in command and not (margin|LIFECYCLE_NATIVE|GAS_AMENDMENTS|LIFECYCLE_PORTFOLIO|OPTION_VALUE_APPS|AGENT_SETTINGS_BROWSER|STORAGE_FACILITY|OPERATING_FACILITIES).intersection(command)
+            return 'tools/run_preview.py' not in command and not (margin|LIFECYCLE_NATIVE|GAS_AMENDMENTS|LIFECYCLE_PORTFOLIO|OPTION_VALUE_APPS|AGENT_SETTINGS_BROWSER|STORAGE_FACILITY|TRANSPORT_CAPACITY|TRANSPORT_ROUTE|OPERATING_FACILITIES).intersection(command)
         previews = {name: [c for c in value if 'tools/run_preview.py' in c]
                     for name, value in groups.items()}
         owned = {name: [c for c in value if not shared(c)] for name, value in groups.items()}

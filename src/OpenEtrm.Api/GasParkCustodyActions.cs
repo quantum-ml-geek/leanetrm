@@ -39,7 +39,7 @@ internal sealed partial class GasParkCustodyActions
 
     static GasParkCustodyReturnSelection NormalizeReturn(GasParkCustodyReturnSelection value)
     {
-        var key=GasParkCustodyText.Key(value.BusinessKey,"gas_custody_input");
+        var key=GasOperationText.Key(value.BusinessKey,"gas_custody_input");
         if(value.ExpectedVersion<1||value.EvidenceId==Guid.Empty||
             value.Allocations is null||value.Allocations.Length>128||value.Allocations.Any(a=>a is null||a.ReservationId==Guid.Empty)||
             value.Allocations.Select(a=>a.ReservationId).Distinct().Count()!=value.Allocations.Length)
