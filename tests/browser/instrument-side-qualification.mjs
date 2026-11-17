@@ -58,6 +58,7 @@ export async function serviceFieldGroups(driver,host,ids,label){
 
 export async function sidePhone(driver,host,artifact){
  await driver.command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
+ await driver.evaluate('new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done)))');
  const member=host+' [data-instrument-side-slot]',disclosure=member+' details:not([open])>summary';
  if(await driver.evaluate(`!!document.querySelector(${q(disclosure)})`))await driver.click(disclosure);
  await driver.evaluate(`document.querySelector(${q(member)}).querySelector('h4').scrollIntoView({block:'center'})`);
