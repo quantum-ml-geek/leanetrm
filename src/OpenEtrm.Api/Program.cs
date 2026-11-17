@@ -1649,11 +1649,8 @@ Task<(object Result,TradingView View)> ExecuteTrading(string profile,Func<Tradin
     Func<NpgsqlConnection,TradingView,CancellationToken,Task<object>> read,CancellationToken cancellation,
     bool scenario=false,Guid? headTrade=null,bool amendmentPreview=false,string? expectedConvention=null,bool dealRisk=false,bool combinedWorkspace=false,
     Func<NpgsqlConnection,TradingView,CancellationToken,Task>? publicationCheck=null,string? hostedDigest=null)=>
-    database.WithIdentity(profile,"ReadTrades",async(connection,ct)=>
+    TradingTransaction(profile,capture,body,()=>RequireConvention(body,expectedConvention),async(connection,selection,resolve,ct)=>
     {
-
-        var selection=capture();
-        RequireConvention(body,expectedConvention);
         if(scenario && !await PreviewDatabase.HasPermission(connection,"RunScenario",ct)||dealRisk && !await PreviewDatabase.HasPermission(connection,"RunDealRisk",ct))throw new PreviewDeniedException();
         var working=selection.Working;
         if(amendmentPreview&&!working)
@@ -1665,7 +1662,7 @@ Task<(object Result,TradingView View)> ExecuteTrading(string profile,Func<Tradin
             await using var head=ScheduleStore.Command(connection,expectedConvention==SwapStore.Convention?"SELECT security.swap_current_head($1,$2)":"SELECT security.futures_current_head($1,$2)",database.Manifest.CatalogId,trade);
             currentHead=await head.ExecuteScalarAsync(ct) is int revision?revision:null;
         }
-        var view=await selection.Resolve(connection,knowledgeStore,body,ct);
+        var view=await resolve();
         var value=await read(connection,view,ct);
         if(scenario && !await PreviewDatabase.HasPermission(connection,"RunScenario",ct)||dealRisk && !await PreviewDatabase.HasPermission(connection,"RunDealRisk",ct))throw new PreviewDeniedException();
         var response=System.Text.Json.Nodes.JsonNode.Parse(JsonSerializer.Serialize(value,tradingJson))!.AsObject();
@@ -1693,7 +1690,25 @@ Task<(object Result,TradingView View)> ExecuteTrading(string profile,Func<Tradin
             database.Manifest.CatalogId,scenario,dealRisk);
         if(!Equals(await publication.ExecuteScalarAsync(ct),true))throw new PreviewDeniedException();
         return ((object)response,view);
+    },cancellation,hostedDigest);
+// A trading read in its identity transaction. A working read first captures current knowledge in a transaction of
+// its own: the capture certifies under the catalog's publication gate, and holding that gate while the read values
+// would make every other working read, in any session, wait behind it (D420). The read's transaction then reads at
+// that context. A retained or historical view takes no gate and reads in the one transaction.
+async Task<T> TradingTransaction<T>(string profile,Func<TradingReadSelection> capture,FuturesReadRequest body,Action admit,
+    Func<NpgsqlConnection,TradingReadSelection,Func<Task<TradingView>>,CancellationToken,Task<T>> read,CancellationToken cancellation,string? hostedDigest=null)
+{
+    TradingReadSelection? selection=null;
+    var first=await database.WithIdentity(profile,"ReadTrades",async(connection,ct)=>
+    {
+        selection=capture();admit();
+        if(selection.Working)return (Knowledge:await selection.CaptureKnowledge(connection,knowledgeStore,ct),Value:default(T));
+        return (Knowledge:(ScheduleContext?)null,Value:await read(connection,selection,()=>selection.Resolve(connection,knowledgeStore,body,ct),ct));
     },cancellation,hostedDigest:hostedDigest);
+    if(first.Knowledge is not {} knowledge)return first.Value!;
+    return await database.WithIdentity(profile,"ReadTrades",(connection,ct)=>
+        read(connection,selection!,()=>selection!.Captured(connection,knowledgeStore,knowledge,ct),ct),cancellation,hostedDigest:hostedDigest);
+}
 TradingReadSelection Capture(PreviewSession session,FuturesReadRequest body)=>TradingReadSelection.Capture(session,body,
     session.LivePin(body.SnapshotId)?.RequireFrame()??Frame(session,body.SnapshotId));
 void RequireConvention(FuturesReadRequest body,string? expected)
@@ -2170,9 +2185,9 @@ api.MapPost("/trading/workspace/stream",async(HttpContext c,TradingWorkspaceStre
  var writer=new BlotterStreamWriter(c.Response.Body,tradingJson);
  c.Items[typeof(BlotterStreamWriter)]=writer;
  var positions=0;
- var result=await Concurrent(c,context,(session,capture)=>database.WithIdentity(Profile(session),"ReadTrades",async(connection,ct)=>
+ var result=await Concurrent(c,context,(session,capture)=>TradingTransaction(Profile(session),capture,context,
+  ()=>RequireConvention(context,TradingBlotter.Convention),async(connection,selection,resolve,ct)=>
  {
-  var selection=capture();
   // The reader's authority on the run's own connection and epoch, checked before every frame: start and each rows frame.
   async Task Authorize(CancellationToken ct)
   {
@@ -2180,8 +2195,7 @@ api.MapPost("/trading/workspace/stream",async(HttpContext c,TradingWorkspaceStre
    await database.RequireSignedIn(connection,ct);
    selection.RequireSession(session);
   }
-  RequireConvention(context,TradingBlotter.Convention);
-  var view=await selection.Resolve(connection,knowledgeStore,context,ct);
+  var view=await resolve();
   var value=await tradeReads.WorkspaceRun(connection,view,body.View,body.Summaries.IsDefault?[]:body.Summaries,body.BookingCatalog=="directory",async run=>
   {
    positions=run.Positions;
