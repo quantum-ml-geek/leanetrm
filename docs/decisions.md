@@ -5958,22 +5958,33 @@ inside its read transaction, so it held the gate until it had valued. Every othe
 working read and every publication, in any session, waited behind it, and a
 wait longer than the command timeout failed the waiting read.
 
-The shared trading executor and the Blotter row stream now capture current
-knowledge in an identity transaction that does nothing else, then read at that
-context in a second identity transaction. The gate is held while the capture
-certifies and no longer. The read remains a working view: its context is current
-knowledge captured for that read.
+The shared trading executor and the Blotter row stream now run a working read as
+two identity transactions. The first admits the read, reads the trade head a
+ticket compares, and captures current knowledge; its commit releases the gate.
+The second reads at that context. What refuses a read still comes before its
+capture, so a refused read captures nothing, and the head and the capture share
+one gate hold, as they did. The read remains a working view: its context is
+current knowledge captured for that read, and the second transaction refuses a
+stored context whose coordinates differ from the captured ones.
 
 - **A publication may commit between the capture and the read.** The read is of
-  the captured context and does not see it, as a retained re-read does not. A
-  working read compares the trade's current head, read in the second
-  transaction, with the revision its context shows; an amendment that commits
-  between the two makes that read report an earlier revision until it is read
-  again. Commands still validate their expected revision under the gate.
-- **Cost.** One more identity transaction for each working trading read.
+  the captured context and does not see it, as a retained re-read does not. An
+  amendment that commits in that interval leaves the read showing the revision
+  its context knows, with the head it read just before; the amendment command
+  still validates its expected revision under the gate.
+- **Cost.** One more identity transaction for each working trading read. A read
+  that fails or is abandoned after its capture keeps the temporal context that
+  capture stored; before, its rollback discarded it. A catalog holds at most
+  4,096 contexts (O07), and each current-knowledge capture already adds one.
+- **Concurrency.** The gate had also limited working valuations to one at a time
+  across the database. They now run side by side up to the connection pool.
+  Throughput and memory under that load are not measured.
 - **Unchanged.** Commands capture inside their write transaction under the gate.
-  The live-context stream reads its head under the gate. Party views, lifecycle
-  operations and the readers that capture for themselves (market dates, interval
-  data, PPA, facility and REC reads) still hold the gate for their transaction.
-  A function that needs the gate takes it itself.
+  Every other reader that captures for itself still holds the gate for its
+  transaction: the P&L run, swap settlement P&L and preview, the live-context
+  stream and context selection, selected-close page reads, party views,
+  lifecycle operations, market dates, interval data, PPA, operating-facility,
+  crude-setup preview and REC reads, and the assistant's settlement view. The
+  P&L run holds it longest and is the next candidate. A function that needs the
+  gate takes it itself.
 - **Evidence.** [Verification](verification.md#working-reads-and-the-publication-gate-d420).
