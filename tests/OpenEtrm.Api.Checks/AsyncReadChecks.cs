@@ -8,7 +8,7 @@ internal static class AsyncReadChecks
     {
         var channelId=Guid.NewGuid();var snapshot=Guid.NewGuid();
         var request=new AsyncReadRequest(channelId,Guid.NewGuid(),"curve.evaluate.v1",JsonSerializer.SerializeToElement(new{snapshotId=snapshot,curve="synthetic",includeWorkspace=true}));
-        AsyncReadPlan Plan(AsyncReadRequest selected,Func<CancellationToken,Task<object>> work)=>new(AsyncReadContract.Decode(selected),async ct=>new(await work(ct),(_,_)=>Task.CompletedTask));
+        ReadPlan Plan(AsyncReadRequest selected,Func<CancellationToken,Task<object>> work)=>new(AsyncReadContract.Decode(selected),async ct=>new(await work(ct),(_,_)=>Task.CompletedTask));
         await using var channel=new AsyncReadChannel(channelId,CancellationToken.None);
         Refused("async_channel_not_ready",()=>channel.Submit(request,Plan(request,_=>Task.FromResult<object>(new {}))));
         channel.Connect();
@@ -86,7 +86,7 @@ internal static class AsyncReadChecks
         {
             await using var channel=new AsyncReadChannel(Guid.NewGuid(),CancellationToken.None);channel.Connect();
             var request=new AsyncReadRequest(channel.Id,Guid.NewGuid(),"curve.evaluate.v1",JsonSerializer.SerializeToElement(new{snapshotId=Guid.NewGuid(),curve="synthetic"}));
-            var plan=new AsyncReadPlan(AsyncReadContract.Decode(request),_=>Task.FromResult(new AsyncReadOutcome(
+            var plan=new ReadPlan(AsyncReadContract.Decode(request),_=>Task.FromResult(new ReadOutcome(
                 new{requestContext=accessor.HttpContext is not null,ambient=ambient.Value},(_,_)=>Task.CompletedTask)));
             channel.Submit(request,plan);
             if(!ReferenceEquals(accessor.HttpContext,submitting)||ambient.Value!="synthetic submission")
@@ -107,7 +107,7 @@ internal static class AsyncReadChecks
         await using var channel=new AsyncReadChannel(Guid.NewGuid(),CancellationToken.None);channel.Connect();
         var request=new AsyncReadRequest(channel.Id,Guid.NewGuid(),"curve.evaluate.v1",JsonSerializer.SerializeToElement(new{snapshotId=Guid.NewGuid(),curve="synthetic"}));
         var calls=0;var entered=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        AsyncReadPlan Plan(AsyncReadRequest selected)=>new(AsyncReadContract.Decode(selected),async ct=>
+        ReadPlan Plan(AsyncReadRequest selected)=>new(AsyncReadContract.Decode(selected),async ct=>
         {Interlocked.Increment(ref calls);entered.TrySetResult();await Task.Delay(Timeout.Infinite,ct);return new(new{},(_,_)=>Task.CompletedTask);});
         if(channel.Cancel(request.RequestId)!="not_admitted"||channel.Cancel(request.RequestId)!="not_admitted")
             throw new Exception("Cancellation before HTTP admission must return an idempotent promise that the request cannot execute later.");

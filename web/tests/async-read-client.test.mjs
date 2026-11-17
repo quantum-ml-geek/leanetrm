@@ -81,6 +81,10 @@ test('route descriptors cover explicit read operations, preserve bodies and neve
   assert.deepEqual(asyncReadRequest('trading/freshness',{snapshotId}),{operation:'trading.freshness.v1',body:{snapshotId}});
   assert.equal(asyncReadRequest('portfolio/risk/statistical/archive?limit=25&limit=50'),undefined);
   assert.equal(asyncReadRequest('portfolio/risk/statistical/archive?limit=25&target=private'),undefined);
+  // Reads no page requests keep their ordinary routes and are not response-channel operations.
+  for(const path of ['trading/position','portfolio/risk/statistical/setup','portfolio/risk/parametric','portfolio/risk/parametric/summary',
+    'portfolio/risk/historical','portfolio/risk/historical/summary','portfolio/risk/historical/sample','portfolio/risk/monte-carlo'])
+    assert.equal(asyncReadRequest(path,{}),undefined,path);
 });
 
 test('HTTP acceptance alone never completes a read; SSE may precede acknowledgement or its failure',async()=>{
@@ -231,10 +235,8 @@ test('captured request bodies cannot change during connection setup, and scoped 
 });
 
 test('explicit snapshot correlation follows each supported financial request shape, with null only for current job reads',async()=>{
-  const cases=[['trading.directory.v1',{snapshotId}],['trading.freshness.v1',{snapshotId}],['trading.position.v1',{context:{snapshotId},tradeId:snapshotId}],
+  const cases=[['trading.directory.v1',{snapshotId}],['trading.freshness.v1',{snapshotId}],['futures.editor.v1',{context:{snapshotId},tradeId:snapshotId}],
     ['portfolio.risk.catalog.v1',{context:{snapshotId}}],['portfolio.risk.history.v1',{scope:{context:{snapshotId}}}],
-    ['portfolio.risk.parametric.calculate.v1',{history:{scope:{context:{snapshotId}}}}],
-    ['portfolio.risk.historical.sample.v1',{request:{history:{scope:{context:{snapshotId}}}}}],
     ['portfolio.risk.jobs.list.v1',{}],['portfolio.risk.jobs.read.v1',{id:snapshotId}],['portfolio.risk.archive.v1',{method:'statistical',limit:25,before:null,id:null}]];
   const h=harness();let source;
   for(const [operation,body] of cases){
@@ -243,6 +245,9 @@ test('explicit snapshot correlation follows each supported financial request sha
     source.emit('response',h.result(request,{snapshotId:isCurrent?null:snapshotId}));await pending;
   }
   for(const [operation] of cases.filter(([op])=>!op.includes('.jobs.')&&!op.endsWith('.archive.v1')))await assert.rejects(h.client.read(operation,{}),{code:'async_read_request'});
+  for(const operation of ['trading.position.v1','portfolio.risk.statistical.setup.v1','portfolio.risk.parametric.calculate.v1','portfolio.risk.parametric.summary.v1',
+    'portfolio.risk.historical.calculate.v1','portfolio.risk.historical.summary.v1','portfolio.risk.historical.sample.v1','portfolio.risk.monte_carlo.calculate.v1'])
+    await assert.rejects(h.client.read(operation,{context:{snapshotId},history:{scope:{context:{snapshotId}}},request:{history:{scope:{context:{snapshotId}}}}}),{code:'async_read_request'},operation);
   await assert.rejects(h.client.read('write.trade',{}),{code:'async_read_request'});h.client.close();
 });
 

@@ -1,14 +1,10 @@
 const postOperations={
   evaluate:'curve.evaluate.v1',history:'curve.history.v1','market/curve-shapes':'curve.shapes.v1',
-  'trading/directory':'trading.directory.v1','trading/freshness':'trading.freshness.v1','trading/positions':'trading.positions.v1','trading/position':'trading.position.v1',
+  'trading/directory':'trading.directory.v1','trading/freshness':'trading.freshness.v1','trading/positions':'trading.positions.v1',
   'trading/workspace':'trading.workspace.v1','trading/blotter':'trading.blotter.v1',
   'futures/editor':'futures.editor.v1','swaps/editor':'swaps.editor.v1','options/strategy/analyze':'options.strategy.analyze.v1',
   'portfolio/risk/catalog':'portfolio.risk.catalog.v1','portfolio/risk':'portfolio.risk.calculate.v1',
-  'portfolio/risk/scope':'portfolio.risk.scope.v1','portfolio/risk/history':'portfolio.risk.history.v1',
-  'portfolio/risk/statistical/setup':'portfolio.risk.statistical.setup.v1',
-  'portfolio/risk/parametric':'portfolio.risk.parametric.calculate.v1','portfolio/risk/parametric/summary':'portfolio.risk.parametric.summary.v1',
-  'portfolio/risk/historical':'portfolio.risk.historical.calculate.v1','portfolio/risk/historical/summary':'portfolio.risk.historical.summary.v1',
-  'portfolio/risk/historical/sample':'portfolio.risk.historical.sample.v1','portfolio/risk/monte-carlo':'portfolio.risk.monte_carlo.calculate.v1'
+  'portfolio/risk/scope':'portfolio.risk.scope.v1','portfolio/risk/history':'portfolio.risk.history.v1'
 } as const;
 export type AsyncReadOperation=typeof postOperations[keyof typeof postOperations]|'portfolio.risk.jobs.list.v1'|'portfolio.risk.jobs.read.v1'|'portfolio.risk.archive.v1';
 export type AsyncReadIdentity={profile:string;context:unknown};
@@ -61,9 +57,7 @@ function identityKey(value:unknown):string{
 function snapshotFor(operation:AsyncReadOperation,body:Record<string,unknown>):string|null{
   if(operation==='portfolio.risk.jobs.list.v1'||operation==='portfolio.risk.jobs.read.v1'||operation==='portfolio.risk.archive.v1')return null;
   let context:unknown=body;
-  if(operation==='portfolio.risk.historical.sample.v1')context=record(context)?context.request:undefined;
-  if(/portfolio\.risk\.(parametric|historical|monte_carlo)\./.test(operation))context=record(context)?context.history:undefined;
-  if(operation==='portfolio.risk.history.v1'||/portfolio\.risk\.(parametric|historical|monte_carlo)\./.test(operation))context=record(context)?context.scope:undefined;
+  if(operation==='portfolio.risk.history.v1')context=record(context)?context.scope:undefined;
   if(!operation.startsWith('curve.')&&!['trading.directory.v1','trading.freshness.v1'].includes(operation))context=record(context)?context.context:undefined;
   const snapshot=record(context)?context.snapshotId:undefined;
   if(!uuid(snapshot))throw new AsyncReadError('async_read_request','The selected read requires its explicit input snapshot.');

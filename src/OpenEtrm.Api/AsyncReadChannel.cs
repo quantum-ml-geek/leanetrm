@@ -10,7 +10,7 @@ namespace OpenEtrm.Api;
 
 internal sealed record AsyncReadError(string Code,string Message);
 internal sealed record AsyncReadFailure(string Operation,Guid RequestId,string ExceptionType,string? Method,string? SqlState);
-internal sealed record AsyncReadCompletion(AsyncReadRequest Request,AsyncReadPlan Plan,string State,JsonElement? Result,AsyncReadError? Error,
+internal sealed record AsyncReadCompletion(AsyncReadRequest Request,ReadPlan Plan,string State,JsonElement? Result,AsyncReadError? Error,
     Func<NpgsqlConnection,CancellationToken,Task>? Recheck=null);
 
 // Ephemeral reads for the workbench. This channel retains request hashes,
@@ -58,7 +58,7 @@ internal sealed class AsyncReadChannel:IAsyncDisposable
         if(JsonSerializer.SerializeToUtf8Bytes(request,JsonSerializerOptions.Web).Length>MaximumRequestBytes)
             throw Refusal(413,"async_request_size","The read request exceeds the request limit.");
     }
-    internal void Submit(AsyncReadRequest request,AsyncReadPlan plan)
+    internal void Submit(AsyncReadRequest request,ReadPlan plan)
     {
         Validate(request);
         if(request.ChannelId!=Id||request.Operation!=plan.Input.Operation)throw Refusal(422,"async_request","The request and selected input frame must match.");
@@ -85,21 +85,16 @@ internal sealed class AsyncReadChannel:IAsyncDisposable
             else using(ExecutionContext.SuppressFlow())pending.Work=Task.Run(()=>Evaluate(request,plan,pending));
         }
     }
-    async Task Evaluate(AsyncReadRequest request,AsyncReadPlan plan,Pending pending)
+    async Task Evaluate(AsyncReadRequest request,ReadPlan plan,Pending pending)
     {
         AsyncReadCompletion completion;
         try
         {
-            using var visibility=new AsyncReadVisibility();
-            var outcome=await plan.Execute(pending.Cancellation.Token);pending.Cancellation.Token.ThrowIfCancellationRequested();
+            var outcome=await AsyncReadVisibility.Observed(plan).Execute(pending.Cancellation.Token);pending.Cancellation.Token.ThrowIfCancellationRequested();
             var bytes=JsonSerializer.SerializeToUtf8Bytes(outcome.Value,AsyncReadContract.Json);
             if(bytes.Length>MaximumResultBytes)throw Refusal(422,"async_result_size","The read result exceeds the response limit.");
             using var json=JsonDocument.Parse(bytes);
-            var evidence=visibility.Seal();var recheck=outcome.Recheck;
-            completion=new(request,plan,"completed",json.RootElement.Clone(),null,async(connection,ct)=>
-            {
-                await recheck(connection,ct);await evidence.Require(connection,ct);
-            });
+            completion=new(request,plan,"completed",json.RootElement.Clone(),null,outcome.Recheck);
         }
         catch(OperationCanceledException){completion=new(request,plan,"cancelled",null,new("request_cancelled","The read was cancelled or exceeded its time limit."));}
         catch(Exception e)
