@@ -253,7 +253,7 @@ public sealed partial class SideValuationContext
     private readonly PricingInputs? pricingInputs;
     public PricingInputs Inputs=>pricingInputs??throw new MarketDataException("risk_dependency","This Side requires its declared unit valuation inputs.");
     private Dictionary<Side,SideValuation> sideValues=new(ReferenceEqualityComparer.Instance);
-    internal int EvaluatedSides=>sideValues.Count;
+    internal int EvaluatedSides=>sideValues.Count+RetainedOccurrenceCalculations;
     internal SideValuation Evaluate(Side side)
     {
         if(!sideValues.TryGetValue(side,out var value)){value=side.PV(this);sideValues.Add(side,value);}
@@ -577,7 +577,8 @@ public sealed record InstrumentValuation
             v.SideId != instrument.Sides[n].Side.Id || v.Currency != instrument.Currency ||
             v.UnitQuantity != (instrument is CrossCommodityScheduledSwap ? ((FloatingSide)instrument.Sides[n].Side).UnitQuantity : instrument.UnitQuantity)).Any())
             throw new MarketDataException("instrument_contribution", "Every membership requires its own exact side valuation in the instrument currency and unit basis.");
-        if (values.Any(v => !ReferenceEquals(context, v.Context)))
+        if (values.Where((v,slot) => !ReferenceEquals(context, v.Context) &&
+                !(instrument is IRetainedSideComposition && context.OwnsRetainedOccurrence(v.Context, slot, instrument.Sides[slot].Side))).Any())
             throw new MarketDataException("instrument_context", "All side PVs must belong to this valuation operation, including its exact scenario and discount inputs.");
         Sides = values.Select((v, n) => new SideContribution(instrument.Sides[n], v)).ToImmutableArray();
         PresentValue = Sides.Select(s => s.Contribution).Aggregate((a, b) => a.Add(b));

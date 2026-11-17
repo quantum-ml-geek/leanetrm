@@ -15,7 +15,8 @@ public sealed record RecForwardPreviewResult(Guid SnapshotId,Guid? ContextId,Dat
  string VintageFrom,string VintageTo,string DeliveryFrom,string DeliveryTo,ExactQuantity Quantity,StructuredPowerValuationResult Valuation,ImmutableArray<string> Limitations);
 public sealed record RecForwardBookingReceipt(Guid OperationId,Guid TradeId,int Revision,Guid InstrumentId,string TradeReference,string InstrumentReference,bool Changed);
 public sealed record RecForwardBookedSide(int Slot,Guid SideId,Guid ScheduleId,string Name,string Coefficient,string Manifest);
-public sealed record RecForwardBookedTrade(Guid TradeId,int Revision,Guid InstrumentId,Guid BookId,string TradeReference,RecForwardBookRequest Request,ImmutableArray<RecForwardBookedSide> Sides);
+public sealed record RecForwardBookedTrade(Guid TradeId,int Revision,Guid InstrumentId,Guid BookId,string TradeReference,RecForwardBookRequest Request,ImmutableArray<RecForwardBookedSide> Sides)
+{public ImmutableArray<InstrumentSideGroup> SideGroups{get;init;}=[];public RetainedSideSource? RetainedSource{get;init;}}
 public sealed record RecForwardPrepared(RecForwardBookRequest Request,RecForwardInstrument Instrument,RecForwardPreviewResult Preview,DefinitionRevision Definitions,ReferenceRevision References)
 {
  internal RetainedScheduleTerms Retained=>new(Definitions,References,Instrument);

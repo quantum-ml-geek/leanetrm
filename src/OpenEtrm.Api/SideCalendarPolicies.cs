@@ -103,31 +103,12 @@ internal static class SideCalendarPolicies
     // program/publication. Reconstruction never selects another publication proof.
     internal static SideCalendarPolicyInput FromRetained(string economicIdentity,SideCalendarPolicyInput? authored=null)
     {
-        try
-        {
-            using var document=JsonDocument.Parse(economicIdentity);var saved=document.RootElement.GetProperty("CalendarPolicy");
-            CalendarBinding Read(string purpose)
-            {
-                var binding=saved.GetProperty(purpose);
-                if(!binding.GetProperty("Applicable").GetBoolean())return CalendarBinding.NotApplicable();
-                var definition=binding.GetProperty("Calendar");var key=definition.GetProperty("Key");
-                if(key.GetArrayLength()!=3||key[0].GetString()!="reference"||key[1].GetArrayLength()!=3||key[1][0].GetString()!="reference_revision")throw Invalid();
-                var proof=binding.GetProperty("Publication");
-                var calendar=new CalendarDefinition(new(new(key[1][1].GetGuid(),key[1][2].GetGuid()),key[2].GetString()!),
-                    DateWorkspace.Date(definition.Text("From")),DateWorkspace.Date(definition.Text("To")),definition.GetProperty("WeekendMask").GetInt32(),
-                    [..definition.GetProperty("Exceptions").EnumerateArray().Select(e=>new CalendarException(DateWorkspace.Date(e.Text("Date")),e.GetProperty("Open").GetBoolean()))],
-                    definition.Text("contract"),new(proof.GetProperty("CatalogId").GetGuid(),proof.GetProperty("EventOrder").GetInt32(),proof.GetProperty("KnownFrom").GetDateTimeOffset()));
-                return CalendarBinding.Owned(calendar);
-            }
-            var retained=new SideCalendarPolicy(Read("Delivery"),Read("Observation"),Read("Payment"),saved.Text("contract"));
-            if(DefinitionIdentity.For(retained).Canonical!=saved.GetRawText())throw Invalid();
-            if(authored is not null)RequireInput(authored,retained);
-            CalendarBindingInput Input(CalendarBinding binding)=>new(binding.Applicable,binding.Calendar?.Key);
-            return new(SideCalendarPolicy.Implementation,Input(retained.Delivery),Input(retained.Observation),Input(retained.Payment)){Retained=retained};
-        }
-        catch(Exception error)when(error is JsonException or KeyNotFoundException or InvalidOperationException or FormatException or IndexOutOfRangeException)
-        {throw Invalid();}
-        static MarketDataException Invalid()=>new("side_calendar_policy","The retained program has no complete, consistent captured calendar policy and publication evidence.");
+        var retained=RetainedSideCalendarPolicy.Read(economicIdentity);
+        if(new[]{retained.Delivery,retained.Observation,retained.Payment}.Any(binding=>binding.Applicable&&binding.Calendar?.Publication is null))
+            throw new MarketDataException("side_calendar_policy","The retained program requires the captured native calendar publication evidence.");
+        if(authored is not null)RequireInput(authored,retained);
+        CalendarBindingInput Input(CalendarBinding binding)=>new(binding.Applicable,binding.Calendar?.Key);
+        return new(SideCalendarPolicy.Implementation,Input(retained.Delivery),Input(retained.Observation),Input(retained.Payment)){Retained=retained};
     }
     internal static PpaTermsInput Retain(PpaTermsInput input,Func<SideSlot,string> identity)
     {

@@ -357,6 +357,10 @@ remaining bounds are recorded with the executable consumers in the linked contra
 
 | D412 | Keep consumed facility parameters separate from saved operating rights, their independent Sides and evidenced REC ownership | Decided 2026-11-16; [facility contract](operating-facilities.md), [trading and inventory contract](structured-power-trading.md), [details](#d412--operating-facility-versions-and-supplied-plan-previews). Extend exact reference locations with consumed physical/model parameters. Book complete exclusive supplied-plan rights through retained membership-owned schedules; compare separately booked financial hedges under shared scenarios. Standalone REC forwards own delivery/consideration Sides; durable manual inventory uses exact serial evidence, delivery capacity, certified history and idempotent commands. GUI consumers use those same authorized operations. Optimization and external registry submission remain separate. |
 
+| D417 | Use explicit independent Sides for every non-exchange Instrument, including one-Side cash, holdings and service rights | Owner requirement, 2026-11-16. Futures and futures options are the only exceptions. Side owns valuation and schedule behavior; Instrument owns memberships and composition. UI booking, review and saved-trade inspection show those actual memberships. [Details](#d417--explicit-sides-for-every-non-exchange-instrument). Implementation and qualification remain separate. |
+
+| D418 | Publish ordinary final point TraderMarks independently of trade adoption | Exact source/point, business and knowledge coordinates, explicit signed values and predecessor controls. Genuine observations and native receipts implement D238; optional input reconstruction cannot prevent or undo publication. [Contract](point-trader-marks.md). The combined facility, certificate and financial Transport baseline passes native, managed, populated-upgrade and actual browser checks. Subsequent Side alignment and release remain open. |
+
 ## Proposed implementation choices
 
 These are working proposals, not additional user requirements. Resolve them
@@ -6006,7 +6010,8 @@ broader assignment rights. See the [route contract](gas-transport-routes.md).
 ## D416 · Direct Transport rights values with independent fixed-fee cash
 
 **Status:** bounded implementation with local native, managed and actual browser
-qualification; first-value market publication and integrated release remain open.
+qualification. D418 qualifies first-value market publication and D417 records
+combined Side qualification. Complete CI and integrated release remain gates.
 
 **Requirement.** Book and value a complete Transport service-rights package using
 an explicitly selected direct market value, without inferring gas exposure or
@@ -6042,9 +6047,112 @@ independent unpaid cash survives.
 Automatic service valuation, assignment, partition, source/fee/party amendment,
 residual rights and complete economic horizon continuation require separately
 qualified contracts. Current-clock price risk does not establish cross-clock
-P&L or generated-close support. Exact operating and valuation reference versions
-remain independent; equal currency labels do not authorize netting. See the
+P&L or generated-close support. Exact source-visible absence within the selected
+books/trades retains every source, day, history, worker-scope and original-authority
+fence without imposing this product's current-clock pricing law on unrelated
+positions. A visible agreement, including closed rights with independent cash,
+remains subject to that law. Guarded migration 0357 preserves the published 0354
+predecessor and the independent source-known future-birth horizon scan.
+Exact operating and valuation reference versions remain independent; equal
+currency labels do not authorize netting. See the
 [financial contract and qualification gates](gas-transport-financial.md).
+
+
+## D417 · Explicit Sides for every non-exchange Instrument
+
+**Status:** combined managed, native, populated-upgrade, retained-worker and
+actual-browser local qualification completed on 2026-11-16. The complete CI
+matrix is required before merge; production activation remains separate.
+
+**Requirement.** Every Instrument has one or more independent reusable Sides,
+except exchange-traded futures and futures options. The user must be able to
+see the Sides in booking, review and saved-trade details. This replaces the
+previous allowance for arbitrary side-less leaf pricing models.
+
+**Decision.** Sides own contractual parameters, declared inputs, schedules and
+valuation behavior. Instrument owns exact memberships, coefficients, ordering
+and permitted connections; risk continues to call ordinary black-box Instrument
+PV under immutable shared scenarios. A single cash payment, gas holding or
+service-right value has a genuine Side. A payment schedule is not fabricated for
+a holding or an already-discounted rights mark. A Side never calls its owning
+Instrument's PV, and no unused discount provider is introduced to satisfy the
+interface.
+
+Retained Side programs are evaluated as booked, with exact Side/member IDs and
+program digests; loading does not regenerate schedules. Paid amounts, lifecycle
+state and observed performance belong to the exact trade binding or independent
+native owner, not a mutable reusable Side. Existing title, entitlement, activity
+and cash identities and supported financial policies remain distinct. Adding
+Sides does not grant quantity scaling, settlement, new pricing or lifecycle
+capabilities. Economic definition versions explicitly distinguish any changed
+canonical composition; existing inputs are never silently reinterpreted.
+
+The managed/backend contract supplies actual Side memberships and their roles,
+directions, units and contractual terms to UI consumers. Booking and review use
+the same supported composition as saved details and inspection. Independent fee
+cash Instruments show their own cash Sides; they do not become hidden members of
+the service-rights Instrument. UI grouping cannot invent additional economics,
+mark signs or ownership. Futures and futures options retain their exchange
+contract presentation.
+
+The explicit operating assembly contract is `operating_side_composition_v2`.
+It selects one to eight ordered independent delivery/payment Sides with stable
+keys, names, quantity sources, explicit coefficients `1`/`-1`, prices and each
+applicable payment rule. At least one Side consumes the selected operating plan.
+Repeated quantity sources remain independent obligations. A whole-horizon
+literal payment is consumed once in the first native interval under its own
+payment rule; it does not imply a periodic fee. The admission bound matches
+the existing native eight-slot composition contract. Missing financial choices
+refuse. Native saved admission verifies the original composition, sealed programs,
+relationships, authority and certified history, retaining full-right facility
+exclusion across old/new profiles and versions. Existing legacy JSON, identities
+and first-outcome receipts remain unchanged. This does not add optimization,
+shared-resource pooling, started-delivery valuation or cash settlement.
+
+**Qualification.** The production inventory covers 27 concrete Instrument types
+and the two exact exceptions. Independent delegation, retained identities and
+occurrence state, native financial/lifecycle consumers, shared price risk and
+actual entry/review/detail/inspection flows pass bounded local checks. The
+combined scoped-presence SQL/application checkpoint passes 151 physical/operating/REC
+browser assertions and exact retained-worker controls. Subsequent native
+physical-obligation reconstruction retains exact native IDs, economic, pricing
+and schedule definitions and ordered Side identities, with separate focused, native
+and retained-worker qualification. Earlier browser, service and standard
+checkpoints retain separate artifact identities. See [the verified results](verification.md#instrument-and-side-alignment-qualification-d417).
+A class hierarchy or UI label alone does not establish capability; the complete
+CI matrix must pass before merge.
+
+## D418 · Ordinary point publication before financial adoption
+
+**Status:** bounded implementation qualified on the combined facility, certificate
+and financial Transport baseline. D417 records combined Side qualification;
+complete CI and release remain separate gates.
+
+**Requirement.** A market editor can record the first real signed service-right
+market value, or another supported direct outright point, without needing a
+priced portfolio or trade permissions. Trade adoption remains separate.
+
+**Decision.** Reuse final TraderMark observations and certified knowledge rather
+than introducing a money ledger. Require exact sealed source/reference and point
+relationships, explicit publication policy, supported signed exact value, evidence
+and predecessor selection. Native source admission, actor-bound command receipts,
+original authority/deadline checks and deferred counterpart seals remain the
+business boundary. Generic fact authoring does not impose a financial consumer's
+expiry, multiplier or quantity eligibility law.
+
+A prospective successor identity is control data. An explicit genuine predecessor
+with the same value is acknowledged without reserving that identity, publishing
+another fact or moving a current head backwards. Actual observations alone reserve
+revision identities. Exact retries return the first outcome; imported lineage
+stays opaque. Read-only recovery serializes absence behind publication and does
+not require an old session frame or fresh source heads.
+
+An optional complete original-input fingerprint permits a separately authorized,
+explicit use-inputs operation after publication. Preserve all unrelated source
+parts, rates, roots and frozen pins; clear old close/knowledge claims. Install
+only after commit, compare repeated selection identities by full input content,
+and recheck actor/header identity before UI selection. Optional-view failure does
+not turn accepted publication into business failure. See the [contract](point-trader-marks.md).
 
 ## D420 · A working trading read captures current knowledge in a transaction of its own
 
@@ -6084,7 +6192,7 @@ stored context whose coordinates differ from the captured ones.
   crude-setup preview and REC reads, and the assistant's settlement view. The
   P&L run holds it longest and is the next candidate. A function that needs the
   gate takes it itself. A trading read that declares a source admission, as the
-  Transport ticket reads do, keeps one transaction: its admission is captured
-  before anything can wait and required again at the commit that publishes the
-  read.
+  Transport ticket reads and the selected operating-trade read do, keeps one
+  transaction: its admission is captured before anything can wait and required
+  again at the commit that publishes the read.
 - **Evidence.** [Verification](verification.md#working-reads-and-the-publication-gate-d420).

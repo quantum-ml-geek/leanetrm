@@ -17,6 +17,24 @@ test('a managed profile with trade fields and no editable sides does not offer a
  });
 });
 
+test('grouped Side terms retain one accessible status through review, updates and refusal',{skip:!browserAvailable,timeout:browserTestTimeout},async()=>{
+ await withBrowserPage('<div id="host"></div>',async evaluate=>{
+  await evaluate(`(async()=>{
+   const {renderTicket}=await import('/deal-ticket.js'),{newTicket}=await import('/ticket-model.js');
+   const field={id:'reference',label:'Agreement reference',meaning:'An explicit agreement reference.',type:'text',unit:null,state:'editable',required:true,band:null,choices:null,dependsOn:[],lookup:null,soon:null,rule:null};
+   const description={product:'synthetic_service',version:1,rowShape:'flow',tradeFields:[field],fieldGroups:[{id:'agreement',label:'Agreement terms',kind:'agreement',fields:['reference']}],sideLimits:[],levels:['term'],modes:['new','booked'],tabs:[],tradeColumns:[],sides:[]};
+   window.drawStatus=(status,presentation)=>renderTicket(document.querySelector('#host'),{state:newTicket(description),mode:'new',presentation,actions:null,schedule:null,quantityUnit:null,instant:at=>at,zone:'UTC',previous:null,summaries:[],links:[],entry:null,status,fieldErrors:{},choices:{},selectedSide:null,tab:'instrument',level:'term',closed:new Set(),on:new Proxy({},{get:()=>()=>{}})});
+  })()`);
+  for(const [kind,text] of [['current','Reviewed terms are current.'],['updating','Reviewing the selected terms.'],['stale','The displayed review is stale.'],['refused','Review refused; inspect the agreement terms.']]){
+   await evaluate(`drawStatus(${JSON.stringify({kind,text})})`);
+   assert.deepEqual(await evaluate("[...document.querySelectorAll('.ticket-status')].map(line=>({kind:line.dataset.kind,text:line.textContent,role:line.getAttribute('role')}))"),[{kind,text,role:'status'}]);
+   assert.equal(await evaluate("document.querySelectorAll('[data-ticket-field-group=agreement] [data-field=reference]').length"),1,'grouped terms remain rendered once');
+  }
+  await evaluate("drawStatus({kind:'current',text:'Selected terms remain current.'},'terms')");
+  assert.equal(await evaluate("document.querySelectorAll('.ticket-status[role=status]').length"),1,'a terms-only grouped view retains the same status');
+ });
+});
+
 test('retained terms presentation preserves backend labels and values without placing lifecycle commands or a second schedule on Terms',{skip:!browserAvailable,timeout:browserTestTimeout},async()=>{
  await withBrowserPage('<div id="host"></div>',async evaluate=>{
   await evaluate(`(async()=>{

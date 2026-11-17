@@ -165,13 +165,12 @@ internal static class BasisRiskChecks
         Console.WriteLine("PASS basis risk: four-level gas and two-level power chains, 27 factors, actual swap PV, independent all-in marks and upstream hedge cancellation");
         return 10;
     }
-    private sealed record HiddenDependency(Instrument Inner):Instrument(Guid.NewGuid())
+    private sealed record HiddenDependency(Instrument Inner):SyntheticSidedInstrument(Guid.NewGuid(),((SidedInstrument)Inner).Sides)
     {
         public override bool SupportsQuantityScaling=>true;
         public override ReferenceKey Currency=>Inner.Currency;
         public override Quantity UnitQuantity=>Inner.UnitQuantity;
         public override UnitPricingContract Declare(UnitValuationContext context)=>new(Id,"synthetic_missing_input_v1",[],UnitQuantity.Specification,Currency) { Time = ValuationTimeDependency.Independent };
-        public override InstrumentValuation PV(SideValuationContext context)=>Inner.PV(context);
     }
 
 }

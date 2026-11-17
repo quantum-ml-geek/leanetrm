@@ -14,6 +14,13 @@ and risk with explicit inputs and a retained calculation history.
 For a worked PPA example, follow the [PPA tester guide](docs/experimental-ppa-testing.md)
 for synthetic booking, graphical break-even pricing and settlement previews.
 
+The mandatory [instrument contract](docs/instrument-contracts.md) requires every
+financial product to derive from `Instrument`. Futures and exchange-traded options
+are the only Side-free products; all others must compose concrete Sides that own
+their schedules and PV. Independent signed memberships and trade quantities remain
+separate. The current composition refactor and its qualification gates are
+recorded in [the plan](docs/plan.md).
+
 ## What works today
 
 - **Trade capture:** futures, listed American options on futures, financial gas and

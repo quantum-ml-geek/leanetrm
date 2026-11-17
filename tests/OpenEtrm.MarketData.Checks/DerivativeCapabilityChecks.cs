@@ -48,13 +48,12 @@ internal static class DerivativeCapabilityChecks
     }
     private static void Reject(Action run,string code="risk_static_derivatives_unavailable")
     {try{run();}catch(MarketDataException e)when(e.Code==code){return;}throw new Exception("Expected model refusal "+code);}
-    private sealed record ValueOnly(Guid Key,CurveRequest Market,PriceUnit Unit,bool Restricted):Instrument(Key)
+    private sealed record ValueOnly(Guid Key,CurveRequest Market,PriceUnit Unit,bool Restricted):SyntheticSidedInstrument(Key,SyntheticValueSide.One(Key,Unit.Currency,Unit.Quantity,[Market],c=>c.Inputs.ExactPrice(Market).ExactTimes(new(ExactDecimal.Parse("1"),Unit.Quantity)),"synthetic_value_only_v1"))
     {
         public override bool SupportsQuantityScaling=>true;
         public override ReferenceKey Currency=>Unit.Currency;
         public override Quantity UnitQuantity=>new(ExactDecimal.Parse("1"),Unit.Quantity);
         public override UnitPricingContract Declare(UnitValuationContext context)=>new(Id,"synthetic_value_only_v1",[Market],Unit.Quantity,Unit.Currency)
             {Time=ValuationTimeDependency.Independent,StaticDerivatives=Restricted?new(StaticDerivativeRestriction.Version,"synthetic_model_derivatives_unqualified"):null};
-        public override UnitValuation PV(UnitValuationContext context)=>new(context,context.Inputs.ExactPrice(Market).ExactTimes(UnitQuantity),Unit.Quantity);
     }
 }

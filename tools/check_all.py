@@ -155,7 +155,11 @@ def run_checks(pg_bin, dotnet, browser, *, group='all', run=subprocess.run):
         ('check_gas_park_custody_worker','retained custody PRICE workers preserve exact source, scope and original authority'),
         ('check_gas_transport_financial','booked Transport rights, independent fee cash and explicit lifecycle execution'),
         ('check_gas_transport_financial_upgrade','populated financial Transport upgrade preserves operating sources and rejects boundary drift'),
+        ('check_gas_transport_financial_presence','scoped Transport absence preserves independent clocks and original read authority'),
+        ('check_gas_transport_financial_presence_upgrade','populated Transport presence upgrade preserves native facts and helper contracts'),
         ('check_gas_transport_financial_worker','retained Transport PRICE workers preserve exact state, sources and original authority'),
+        ('check_point_trader_marks','ordinary direct point publication, exact source authority and explicit financial adoption'),
+        ('check_point_trader_marks_upgrade','populated point publisher upgrade preserves existing facts and unrelated helper privileges'),
         ('check_gas_fee_existing_origins','fixed loan fee upgrade preserves exact existing financial origins and bank history'),
         ('check_gas_loan_quantity_reconciliation','loan withdrawal, exact source authority and cash-only maturity'),
         ('check_gas_owned_fact_acknowledgements','original gas commands acknowledge accepted financial snapshots without new effects'),
@@ -170,7 +174,7 @@ def run_checks(pg_bin, dotnet, browser, *, group='all', run=subprocess.run):
         ('check_gas_operator_ordinary_value','ordinary and zero operator corrections retain exact owners through economic workers'),
         ('check_gas_known_cashout','source-known future cashouts retain exact commodity and independent cash owners')):
         check(label,[sys.executable,f'tools/{helper}.py','--pg-bin',str(pg_bin),'--dotnet',str(dotnet),'--no-build'],suite='portfolio')
-    for helper,suite in (('check_gas_park_loan_browser','gas'),('check_gas_balance_fee_browser','gas'),('check_gas_park_custody_browser','gas'),('check_gas_transport_financial_browser','gas'),('check_gas_mixed_quantity_browser','lifecycle'),('check_lifecycle_browser','lifecycle'),('check_gas_fee_browser','gas'),
+    for helper,suite in (('check_gas_park_loan_browser','gas'),('check_gas_balance_fee_browser','gas'),('check_gas_park_custody_browser','gas'),('check_gas_transport_financial_browser','gas'),('check_point_trader_marks_browser','gas'),('check_gas_mixed_quantity_browser','lifecycle'),('check_lifecycle_browser','lifecycle'),('check_gas_fee_browser','gas'),
                          ('check_gas_loan_quantity_browser','gas'),('check_gas_operator_quantity_browser','gas'),('check_lifecycle_economic_browser','portfolio'),
                          ('check_agent_operating_settings','assistant')):
         check(helper,[sys.executable,f'tools/{helper}.py','--pg-bin',str(pg_bin),'--dotnet',str(dotnet),
@@ -194,6 +198,10 @@ def run_checks(pg_bin, dotnet, browser, *, group='all', run=subprocess.run):
     for name in ('commands','source','ticket','positions','adapters','labels','setup'):
         flag='--gas-transport-financial-'+name
         check('managed financial Transport '+flag,[str(dotnet),'run','--no-restore','--project',
+            'tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj','--',flag],suite='managed')
+    for name in ('identity','inputs','commands','receipts'):
+        flag='--point-trader-mark-'+name
+        check('managed ordinary point publication '+flag,[str(dotnet),'run','--no-restore','--project',
             'tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj','--',flag],suite='managed')
     for helper in ('check_storage_facility','check_storage_facility_upgrade'):
         check(helper,[sys.executable,f'tools/{helper}.py','--pg-bin',str(pg_bin)],suite='physical')

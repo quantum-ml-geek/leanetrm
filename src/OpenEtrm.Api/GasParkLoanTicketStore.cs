@@ -93,11 +93,12 @@ internal sealed class GasParkLoanTicketStore(PreviewDatabase database)
             var snapshot=MarketSnapshotBinding.Bind(d.Snapshot(f),f.ContextId.Value,SchedulePreview.ParseAt(knowledge.KnownAt));
             var agreement=Draft(body,account,f,snapshot);
             var value=await Value(c,d,f,snapshot,agreement,true,ct);
+            var composition=GasServiceSidePresentation.ParkLoan(database.Manifest.CatalogId,agreement,true);
             return new{snapshotId=frame.Id,definitionRevisionId=body.DefinitionRevisionId,presentValue=value,currency=account.Text("currency_code"),
                 quantityUnit=account.Text("quantity_code"),schedule=Schedule(agreement,value,f.At),summaries=Array.Empty<object>(),scheduleRefusal=(object?)null,links=Array.Empty<object>(),
                 source=new CatalogueSource(body.DefinitionRevisionId,account.Id("reference_catalog_id"),account.Id("reference_revision_id")),context=knowledge,
                 measure=GasParkLoanTicket.Measure,measureLabel=MeasureLabel(agreement),overviewSections=Sections(agreement),
-                ownershipNote=OwnershipNote(agreement)};
+                ownershipNote=OwnershipNote(agreement),sideGroups=composition.Groups,sideGroupsReason=composition.Reason};
         },ct);
 
     internal async Task<JsonElement> Book(string profile,InputFrame frame,TicketBookRequest request,CancellationToken ct)
@@ -140,11 +141,13 @@ internal sealed class GasParkLoanTicketStore(PreviewDatabase database)
         {unavailable=error.Message;}
 
         var t=row.GetProperty("terms");
+        var composition=GasServiceSidePresentation.ParkLoan(database.Manifest.CatalogId,row);
         return new{snapshotId=frame.Id,context=knowledge,draft=GasParkLoanTicket.Reopen(row),definitionRevisionId=t.Id("definitionRevisionId"),
             presentValue=value,currency=t.Text("currency"),quantityUnit=t.Text("quantity"),schedule=Schedule(row,value,frame.At),summaries=Array.Empty<object>(),scheduleRefusal=(object?)null,
             source=new CatalogueSource(t.Id("definitionRevisionId"),t.Id("referenceCatalogId"),t.Id("referenceRevisionId")),facilityAllocations=Array.Empty<object>(),links=Array.Empty<object>(),sideSlots=ImmutableDictionary<string,int>.Empty,
             actions=new{amend=new{allowed=false,reason="Agreement amendments require an installed continuity profile."},closeOut=new{allowed=false,reason="Complete the independent principal and cash obligations."},record=new{allowed=false,reason="Use the agreement's lifecycle actions to accept advances and returns."}},
             overviewSections=Sections(row,unavailable),unavailableReason=unavailable,measureLabel=MeasureLabel(row),ownershipNote=OwnershipNote(row),
+            sideGroups=composition.Groups,sideGroupsReason=composition.Reason,
             lifecycleTarget=new LifecycleTarget(GasParkLoanActions.Handler,request.TradeId,request.BindingId)};
     }
 

@@ -20,13 +20,21 @@ internal static class GasParkLoanPortfolio
 {
     internal static GasParkAndLoanTerms Terms(Guid catalog,JsonElement agreement)
     {
+        var terms=ContractTerms(catalog,agreement);
+        if(agreement.GetProperty("reconciliationRequired").GetBoolean())
+            throw new MarketDataException("gas_park_loan_reconciliation","Accepted service performance references corrected evidence. Reconcile the native facts before a complete scheduled-plan valuation.");
+        return terms;
+    }
+
+    // Saved contract inspection does not assert that corrected performance is
+    // eligible for a complete current valuation.
+    internal static GasParkAndLoanTerms ContractTerms(Guid catalog,JsonElement agreement)
+    {
         var balance=agreement.Text("implementation")==GasParkLoanBalanceFeeTerms.Version;
         if(catalog==Guid.Empty||agreement.Text("implementation") is not(GasParkAndLoanTerms.Version or GasParkLoanBalanceFeeTerms.Version))
             throw Invalid("Retain the exact installed service profile and native catalog.");
         if(!agreement.TryGetProperty("reconciliationRequired",out var reconciliation)||reconciliation.ValueKind is not(JsonValueKind.True or JsonValueKind.False))
             throw Invalid("Retain the native agreement's explicit reconciliation status at the selected knowledge cutoff.");
-        if(reconciliation.GetBoolean())
-            throw new MarketDataException("gas_park_loan_reconciliation","Accepted service performance references corrected evidence. Reconcile the native facts before a complete scheduled-plan valuation.");
         var t=agreement.GetProperty("terms");
         if(!t.TryGetProperty("feeRecognition",out var recognition)||recognition.ValueKind!=JsonValueKind.String||
             recognition.GetString()!=(balance?GasParkLoanBalanceFeeTerms.CumulativeDifference:GasParkAndLoanTerms.FeeAtAdvance))

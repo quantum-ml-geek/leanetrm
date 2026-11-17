@@ -75,7 +75,7 @@ internal static class PpaConnectedChecks
         Console.WriteLine("PASS PPA connected quote/output shocks, nested scenarios, native hours and one-time trade scaling");return 1;
     }
     [EconomicDefinition("synthetic_native_program_probe_v1")]
-    private sealed record NativeProgramProbe(Guid InstrumentId, CurveRequest Request, PriceUnit PriceUnit) : Instrument(InstrumentId)
+    private sealed record NativeProgramProbe(Guid InstrumentId, CurveRequest Request, PriceUnit PriceUnit) : SyntheticSidedInstrument(InstrumentId,SyntheticValueSide.One(InstrumentId,PriceUnit.Currency,PriceUnit.Quantity,[Request],c=>c.Inputs.ExactPrice(Request).ExactTimes(new(ExactDecimal.Parse("1"),PriceUnit.Quantity)),"synthetic_native_program_probe_v1"))
     {
         public override ReferenceKey Currency => PriceUnit.Currency;
         public override Quantity UnitQuantity => new(ExactDecimal.Parse("1"), PriceUnit.Quantity);
@@ -87,7 +87,7 @@ internal static class PpaConnectedChecks
             var (basis, scenario) = context.RetainedProgramMarkets([Request]);
             if (basis.Graph.Plan != scenario.Graph.Plan || basis.Graph.Depth != 0)
                 throw new Exception("Native inputs must preserve the immutable base graph.");
-            return scenario.Pricing.Price(Request, default).ExactTimes(UnitQuantity);
+            return base.Value(context);
         }
     }
     private sealed class Bindings:ICurveBindingResolver

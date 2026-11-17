@@ -11,7 +11,7 @@ from check_reference_editing import main as native_main
 from close_session_fixture import sql_session
 from gas_balance_fee_fixture import PROFILE, terms
 from gas_park_loan_fixture import ParkLoanFixture, fixture, literal
-from owned_lifecycle_browser import build_assets, run as run_browser
+from owned_lifecycle_browser import api_artifact, build_assets, run as run_browser
 
 
 def number(value):
@@ -23,10 +23,18 @@ def main():
     for name in ['pg-bin', 'dotnet', 'browser']:
         parser.add_argument('--' + name, type=Path, required=True)
     parser.add_argument('--no-build', action='store_true', help='Use coordinated frozen API and web artifacts')
+    parser.add_argument('--api-bin', type=Path, help='Coherent frozen current-tree API artifact, with --no-build')
     args = parser.parse_args()
     for path in [args.pg_bin / 'psql', args.dotnet, args.browser]:
         if not path.is_file():
             parser.error('An installed executable is required: ' + str(path))
+    if args.api_bin is not None:
+        if not args.no_build:
+            parser.error('--api-bin requires --no-build')
+        try:
+            args.api_bin = api_artifact(args.api_bin)
+        except ValueError as error:
+            parser.error(str(error))
     os.environ['DOTNET'] = str(args.dotnet.resolve())
     children = []
     if not args.no_build:
@@ -90,10 +98,10 @@ def main():
         packet = dict(profile=PROFILE, balanceFee=terms('0.004', 'to_even', '0.01'), currency=state.terms['currency'], session=session, closes=closes, cases=cases, futureEntry=future_entry,
             advanceAt='2020-12-20T10:00:00Z', partialAt='2020-12-20T11:00:00Z', returnAt='2020-12-20T12:00:00Z', feeDueAt='2020-12-23T16:00:00Z',
             **{key: market[key] for key in ['contractId', 'definitionRevisionId']})
-        artifacts = ['gas-balance-fee-entry.png', 'gas-balance-fee-review.png', 'gas-balance-fee-mobile.png', 'gas-balance-fee-risk.png']
+        artifacts = ['gas-balance-fee-entry.png', 'gas-balance-fee-review.png', 'gas-balance-fee-mobile.png', 'gas-balance-fee-risk.png', 'gas-balance-fee-sides-mobile.png']
         try:
             run_browser(query, manifest, args.dotnet.resolve(), args.browser.resolve(), children, packet, 'tests/browser/gas-balance-fee.mjs',
-                worker_enabled=False, timeout=900, artifacts=artifacts)
+                worker_enabled=False, timeout=900, api_bin=args.api_bin, artifacts=artifacts)
         finally:
             owned = Path(query('SHOW unix_socket_directories;')).resolve()
             for name in artifacts:

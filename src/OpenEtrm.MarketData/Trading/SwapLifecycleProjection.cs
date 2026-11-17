@@ -140,9 +140,9 @@ public sealed class SwapLifecycleProjection:ILifecycleProjection
     {
         this.trade=trade;SourceSnapshot=source;
         holding=trade.Instruments.SingleOrDefault(p=>p.Id==bindingId)??throw Error("Retain the exact swap holding.");
-        instrument=holding.Instrument as SidedInstrument??throw Error("Select a supported financial swap.");Owner=new(trade.Id,bindingId,trade.BookId);
+        instrument=FinancialSwap(holding.Instrument);Owner=new(trade.Id,bindingId,trade.BookId);
         this.setup=setup=setup.ForPosition(Owner,instrument.Id);
-        if(!Owner.IsValid||instrument is not(FinancialSwapInstrument or MonthlyFinancialSwap or ScheduledFinancialSwap or CrossCommodityScheduledSwap)||
+        if(!Owner.IsValid||
             actual.TradeId!=trade.Id||actual.BindingId!=bindingId||actual.BookId!=trade.BookId||actual.Quantity!=holding.Quantity||
             setup.Measure!=ValuationMeasure.PresentValue||!sourcePrices.Snapshot.HasSameInputs(source)||!sourcePrices.IsBaseScenario||
             source.Knowledge is null||roundings is null||roundings.Values.Any(r=>r.Currency!=Currency)||mappings is null)
@@ -332,9 +332,12 @@ public sealed class SwapLifecycleProjection:ILifecycleProjection
         });
     private static ImmutableDictionary<SwapProjectionPeriod,SwapSettlementRounding> RoundingMap(Trade trade,Guid binding,SwapSettlementRounding rounding)
     {
-        var instrument=trade.Instruments.Single(p=>p.Id==binding).Instrument as SidedInstrument??throw Error("Select an exact financial swap.");
-        return instrument.Sides.SelectMany((m,n)=>((SidePaymentSchedule)m.Side.GenerateSchedule()).Payments.Select(p=>
+        var instrument=FinancialSwap(trade.Instruments.SingleOrDefault(p=>p.Id==binding)?.Instrument);
+        return instrument.Sides.SelectMany((m,n)=>(m.Side.GenerateSchedule() as SidePaymentSchedule??
+            throw Error("This projection requires the qualified dated payment schedule.")).Payments.Select(p=>
             new SwapProjectionPeriod(n,p.DeliveryFrom,p.DeliveryTo))).ToImmutableDictionary(p=>p,_=>rounding);
     }
+    private static SidedInstrument FinancialSwap(Instrument? instrument)=>instrument is FinancialSwapInstrument or MonthlyFinancialSwap or ScheduledFinancialSwap or CrossCommodityScheduledSwap
+        ?(SidedInstrument)instrument:throw Error("Select a supported financial swap.");
     private static MarketDataException Error(string message)=>new("projection_swap_state",message);
 }

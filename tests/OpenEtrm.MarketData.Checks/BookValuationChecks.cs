@@ -133,7 +133,7 @@ internal static class BookValuationChecks
         return 19;
     }
     [EconomicDefinition("synthetic_probe_unit_v1")]
-    internal sealed record Probe:Instrument
+    internal sealed record Probe:SyntheticSidedInstrument
     {
         public override bool SupportsQuantityScaling=>true;
         [IdentityField] public string ModelVersion=>"synthetic_probe_unit_v1";
@@ -143,12 +143,9 @@ internal static class BookValuationChecks
         public int FactorDeclarations{get;private set;}
         public override ImmutableArray<QuoteFactor> MarketFactors(UnitValuationContext context)
         {FactorDeclarations++;return factors is null?base.MarketFactors(context):factors(context);}
-        private readonly Func<PricingInputs,ExactMoney> evaluate;
         private readonly Func<UnitValuationContext,ImmutableArray<QuoteFactor>>? factors;
-        public Probe(Guid id,ReferenceKey currency,ReferenceKey quantity,ImmutableArray<CurveRequest> dependencies,Func<PricingInputs,ExactMoney> evaluate,Func<UnitValuationContext,ImmutableArray<QuoteFactor>>? factors=null):base(id)
-        {Currency=currency;UnitQuantity=new(ExactDecimal.Parse("1"),quantity);Inputs=dependencies;this.evaluate=evaluate;this.factors=factors;}
+        public Probe(Guid id,ReferenceKey currency,ReferenceKey quantity,ImmutableArray<CurveRequest> dependencies,Func<PricingInputs,ExactMoney> evaluate,Func<UnitValuationContext,ImmutableArray<QuoteFactor>>? factors=null):base(id,SyntheticValueSide.One(id,currency,quantity,dependencies,c=>evaluate(c.Inputs),"synthetic_probe_unit_v1"))
+        {Currency=currency;UnitQuantity=new(ExactDecimal.Parse("1"),quantity);Inputs=dependencies;this.factors=factors;}
         public override UnitPricingContract Declare(UnitValuationContext context)=>new(Id,ModelVersion,Inputs,UnitQuantity.Specification,Currency) { Time = ValuationTimeDependency.Independent };
-        public override ExactMoney Value(UnitValuationContext context)=>evaluate(context.Inputs);
-        public override InstrumentValuation PV(SideValuationContext context)=>throw new Exception("The selected probe uses its explicitly declared unit valuation method.");
     }
 }

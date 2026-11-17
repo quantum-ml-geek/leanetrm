@@ -29,6 +29,14 @@ test('preview unions and dynamic context remain explicit without browser calcula
   assert.equal(request.batteryState.storedMwh,'1');
 });
 
+test('explicit composition is transported separately without rewriting a legacy valuation',()=>{
+ const base={snapshotId:'s',facilityId:'f',facilityVersion:1,kind:'solar',operatingDate:'2040-01-01',firstInterval:1,state:{},plan:'8,',valuation:null};
+ const composition={implementation:'operating_side_composition_v2',sides:[{key:'sale_a'},{key:'sale_b'}]};
+ assert.deepEqual(structuredPreviewRequest({...base,composition}).composition,composition);
+ const legacy={energyPrice:{fixedPrice:'12.000000000001'}};
+ const old=structuredPreviewRequest({...base,valuation:legacy});assert.deepEqual(old.valuation,legacy);assert.equal(Object.hasOwn(old,'composition'),false);
+});
+
 test('unknown save requests stay with their original profile through resets and retries',async()=>{
  const {StructuredPowerPendingStore}=await import('../dist/structured-power-model.js');
  const rows=new Map(),storage={getItem:key=>rows.get(key)??null,setItem:(key,value)=>rows.set(key,value),removeItem:key=>rows.delete(key)};

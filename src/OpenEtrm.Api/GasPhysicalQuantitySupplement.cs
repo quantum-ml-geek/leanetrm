@@ -25,7 +25,7 @@ internal sealed record GasPhysicalQuantitySupplement(ImmutableArray<GasProjectio
         {
             var original=nativeOpening[holding.Position];
             if(original.Quantity!=holding.Quantity||original.AccountId!=holding.Account.Id||
-                !original.Instrument.Equals(holding.Instrument.ValuationInstrument))throw Error();
+                !GasPhysicalQuantityMapping.SameObligation(original.Instrument,holding.Instrument.ValuationInstrument))throw Error();
         }
         var holdings=OpeningHoldings.Concat(Transitions.SelectMany(t=>(t.PhysicalOrigins??[]).Select(o=>o.Holding)))
             .Concat(Transitions.SelectMany(t=>t.Receipts.Select(r=>r.Stock))).ToArray();

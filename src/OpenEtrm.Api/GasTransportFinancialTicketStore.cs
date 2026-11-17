@@ -66,7 +66,7 @@ internal sealed partial class GasTransportFinancialTicketStore(PreviewDatabase d
                 await using var restore=ScheduleStore.Command(c,"ROLLBACK TO SAVEPOINT transport_booking_preview;RELEASE SAVEPOINT transport_booking_preview");
                 await restore.ExecuteNonQueryAsync(CancellationToken.None);
             }
-            return View(Draft(prepared),prepared.Frame,prepared.Known,request.Draft,null,"rights_mark_required",true);
+            return View(database.Manifest.CatalogId,Draft(prepared),prepared.Frame,prepared.Known,request.Draft,null,"rights_mark_required",true);
         },ct);
 
     internal Task<JsonElement> Book(string profile,InputFrame frame,TicketBookRequest request,CancellationToken ct)=>
@@ -106,7 +106,7 @@ internal sealed partial class GasTransportFinancialTicketStore(PreviewDatabase d
         catch(MarketDataException error)when(Unpriced(error)){unavailable=agreement.OptionalText("unpricedReason")??error.Code;}
         var draft=agreement.GetProperty("financialState").ValueKind==JsonValueKind.Null?null:GasTransportFinancialTicket.Reopen(agreement);
         var labels=draft is null?null:await RetainedChoices(c,agreement,draft,ct);
-        return View(agreement,frame,known,draft,value,unavailable,false,labels);
+        return View(database.Manifest.CatalogId,agreement,frame,known,draft,value,unavailable,false,labels);
     }
 
     internal async Task<string> Value(NpgsqlConnection c,PreviewData data,InputFrame frame,MarketSnapshot snapshot,JsonElement agreement,bool draft,CancellationToken ct)=>
@@ -118,16 +118,20 @@ internal sealed partial class GasTransportFinancialTicketStore(PreviewDatabase d
         var b=prepared.Body;var e=prepared.Capacity.GetProperty("entitlement");
         return JsonSerializer.SerializeToElement(new{implementation=b.Profile,tradeId=GasParkAndLoanValuation.PreviewIdentity(b.OperationId,b.SnapshotId,"trade"),
             instrumentId=GasParkAndLoanValuation.PreviewIdentity(b.OperationId,b.SnapshotId,"instrument"),b.BookId,b.BusinessKey,b.Evidence,
-            terms=new{b.DefinitionRevisionId,b.ValuationReferenceCatalogId,b.ValuationReferenceRevisionId,b.PackageQuantity,b.Currency,b.Perspective,
+            terms=new{b.DefinitionRevisionId,b.ValuationReferenceCatalogId,b.ValuationReferenceRevisionId,b.PackageQuantity,b.Currency,b.Perspective,profile=b.Profile,
                 b.RightsValuationPolicy,b.FeeProfile,b.FixedFeeAmount,b.FeeDirection,b.FeeDueAt,b.ExpiryPolicy,b.EntitlementId,
+                operationalReferenceCatalogId=e.Id("reference_catalog_id"),operationalReferenceRevisionId=e.Id("reference_revision_id"),
                 from=e.Text("from_at"),through=e.Text("through_at")},financialState=new{id=b.OperationId,capacityVersionId=b.CapacityVersionId,status="live"},
             cash=(object?)null,mark=(object?)null,unpricedReason="rights_mark_required"},GasOwnedOperations.Json);
     }
 
-    static object View(JsonElement agreement,InputFrame frame,ScheduleContext known,TicketDraft? draft,string? value,string? unavailable,bool preview,
+    static object View(Guid catalog,JsonElement agreement,InputFrame frame,ScheduleContext known,TicketDraft? draft,string? value,string? unavailable,bool preview,
         ImmutableDictionary<string,ImmutableArray<TicketChoice>>? retainedChoices=null)
     {
         var t=agreement.GetProperty("terms");var cells=new Dictionary<string,ScheduleViewCell>{["trade.present_value"]=new(value,["modeled"])}.ToImmutableDictionary();
+        // A future current state has no editable/inspectable current definition.
+        // Its explicit unavailable overview remains, without resurrecting a head.
+        var composition=draft is null?null:GasServiceSidePresentation.Transport(catalog,agreement,preview);
         var from=t.OptionalText("from");var through=t.OptionalText("through");
         var rows=from is null||through is null?ImmutableArray<ScheduleViewRow>.Empty:[new("transport",null,"term",
             TradingInstant.Parse(from,"gas_transport_financial_source"),TradingInstant.Parse(through,"gas_transport_financial_source"),null,cells,false)];
@@ -138,6 +142,7 @@ internal sealed partial class GasTransportFinancialTicketStore(PreviewDatabase d
             actions=new{amend=new{allowed=false,reason="Review supported financial capacity and mark adoptions through the agreement's operations."},
                 closeOut=new{allowed=false,reason="Use the selected contractual expiry action."},record=new{allowed=false,reason="Physical performance is recorded through its independent operating owner."}},
             measure=GasTransportFinancialTicket.Measure,measureLabel=MeasureLabel,ownershipNote=OwnershipNote,unavailableReason=unavailable,
+            sideGroups=composition?.Groups,sideGroupsReason=composition?.Reason,sideGroupsUnavailableReason=draft is null?unavailable:null,
             overviewSections=Overview(agreement,preview),lifecycleTarget=preview?null:new LifecycleTarget("gas_transport_financial",agreement.Id("tradeId"),agreement.Id("instrumentId")),
             working=preview,canBook=preview};
     }

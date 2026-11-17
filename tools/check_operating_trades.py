@@ -130,9 +130,48 @@ def run_checks(query, manifest, psql=None, environment=None):
         reject(book(malformed),'operating_booking_price',True)
         check('closed '+label+' shape refuses before schedule staging')
     reject(f"SET SESSION AUTHORIZATION preview_runtime;SELECT * FROM trading.power_operating_instruments;",'permission denied for table power_operating_instruments');check('raw operating instruments have no runtime table bypass')
+    from copy import deepcopy
+    composed=deepcopy(command)
+    financial=composed['plan']['valuation']
+    def side(key,source,price,coefficient,days):
+        return dict(key=key,name='Synthetic '+key,quantitySource=source,coefficient=coefficient,kind='payment',price=deepcopy(price),paymentRule=dict(financial['paymentRule'],days=days))
+    composed['plan']['valuation']=None
+    composed['plan']['composition']=dict(implementation='operating_side_composition_v2',perspective=financial['perspective'],measure=financial['measure'],
+        currencyCode=financial['currencyCode'],rightQuantityCode=financial['rightQuantityCode'],discounting=False,sides=[
+        side('sale','energy_output',financial['energyPrice'],'1',18),side('fuel','guaranteed_fuel',financial['fuelPrice'],'-1',25),
+        side('fee','energy_output',dict(financial['energyPrice'],fixedPrice='2'),'-1',7)])
+    reject(book(composed),'operating_schedule',True)
+    check('explicit repeated-source Side composition reaches the missing-stage boundary without inventing slots or signs')
+    result=json.loads(query(evaluate(composed['plan'])))
+    check('one thermal plan retains distinct guaranteed and consumption fuel sources for composed Sides',
+        {r['name']:r['numerator'] for r in result}=={'energy':'5','guaranteed_fuel':'35','consumption_fuel':'43'})
+    for label,mutate in [
+        ('duplicate Side key',lambda v:v['sides'][1].update(key='sale')),
+        ('undeclared Side coefficient',lambda v:v['sides'][0].update(coefficient='0')),
+        ('missing payment rule',lambda v:v['sides'][0].update(paymentRule=None)),
+        ('incompatible source',lambda v:v['sides'][0].update(quantitySource='charging_energy')),
+        ('extra contract field',lambda v:v.update(fallback='0'))]:
+        malformed=deepcopy(composed);mutate(malformed['plan']['composition'])
+        reject(book(malformed),'operating_composition',True);check('native composition rejects '+label)
+    malformed=deepcopy(composed);malformed['plan']['composition']['sides'][0]['name']='\t'
+    reject(book(malformed),'operating_composition',True)
+    check('native Side labels refuse whitespace-only names like managed authoring')
+    for name,valid in [('Synthetic output',True),('\u00a0Synthetic output',False),('Synthetic output\u3000',False),('\U0001f31e'*40,True),('\U0001f31e'*41,False)]:
+        assert query(f"SELECT trading.operating_side_name_valid('{name}');")==('t' if valid else 'f')
+    check('native Side labels preserve Unicode and match managed whitespace/UTF-16 length bounds')
     return passed
+
+
+def before_migration(query,migration):
+    if migration.name=='0356_operating_side_composition.sql':
+        from check_fact_anchor_upgrade import run_checks
+        run_checks(query,migration,number='0356',guard='operating_composition_upgrade',signatures=(
+            'trading.operating_plan_admission(physical.power_operating_facility_versions,jsonb,timestamp with time zone)',
+            'trading.require_operating_program_shape(uuid,uuid,integer,uuid)',
+            'security.book_operating_right(uuid,jsonb,jsonb,timestamp with time zone)',
+            'trading.request_side_calendar_policy(jsonb,integer)'))
 
 
 if __name__ == '__main__':
     from check_reference_editing import main
-    main(checks=run_checks)
+    main(checks=run_checks,before_migration=before_migration)

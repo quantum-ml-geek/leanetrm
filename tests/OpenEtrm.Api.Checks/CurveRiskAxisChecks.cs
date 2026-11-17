@@ -187,15 +187,15 @@ internal static class CurveRiskAxisChecks
         public CurveKey Resolve(LogicalCurveKey curve,ResolvedCalculationContext context)=>throw new NotSupportedException();
         public void RequireVisible(CurveKey curve,ResolvedCalculationContext context){}
     }
-    private sealed record MeanInstrument:Instrument
+    private sealed record MeanInstrument:ApiSidedProbe
     {
         public override bool SupportsQuantityScaling=>true;
         private readonly CurveRequest dependency;
         public override ReferenceKey Currency{get;}
         public override Quantity UnitQuantity{get;}
-        public MeanInstrument(CurveRequest dependency,PriceUnit unit):base(Guid.NewGuid())
+        public MeanInstrument(CurveRequest dependency,PriceUnit unit):base(Guid.NewGuid(),unit.Currency,unit.Quantity,[dependency],
+            context=>context.ExactPrice(dependency).ExactTimes(new(ExactDecimal.Parse("1"),unit.Quantity)),"synthetic_history_mean_pv_v1")
         {this.dependency=dependency;Currency=unit.Currency;UnitQuantity=new(ExactDecimal.Parse("1"),unit.Quantity);}
         public override UnitPricingContract Declare(UnitValuationContext context)=>new(Id,"synthetic_history_mean_pv_v1",[dependency],UnitQuantity.Specification,Currency) { Time = ValuationTimeDependency.Independent };
-        public override InstrumentValuation PV(SideValuationContext context)=>new(this,context,context.ExactPrice(dependency).ExactTimes(UnitQuantity),"synthetic_history_mean_pv_v1");
     }
 }

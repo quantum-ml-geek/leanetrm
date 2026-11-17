@@ -33,6 +33,21 @@ async function fixture(work,{inline=false,windows=[]}={}){
 }
 const shown=text=>`until(()=>find('.inspection-rows').textContent.includes('${text}'))`;
 
+test('an explicitly timed cash Side displays its payment instant in the user zone and keeps the raw instant in its title',{skip:!browserAvailable,timeout:browserTestTimeout},async()=>{
+ await fixture(async evaluate=>{
+  await evaluate("(async()=>{const {displayExactInstant}=await import('/market-view.js');displayInstant=at=>displayExactInstant(at,'America/Chicago');total=1;patchRow={deliveryFrom:null,deliveryTo:null,start:null,end:null,valueAt:'2041-02-10T08:30:00.123456Z',paymentAt:'2041-02-10T08:30:00.123456Z',paymentTiming:'instant'};mount();await until(()=>rowCount()===1);})()");
+  const payment=await evaluate("find('.inspection-rows tbody tr td:nth-child(3)').textContent");assert.match(payment,/02:30/);assert.match(payment,/CST|America\/Chicago/);
+  assert.equal(await evaluate("find('.inspection-rows tbody tr td:nth-child(3) [title]')?.title"),'2041-02-10T08:30:00.123456Z');
+ });
+});
+
+test('unknown payment timing cannot silently become a contractual date',{skip:!browserAvailable,timeout:browserTestTimeout},async()=>{
+ await fixture(async evaluate=>{
+  await evaluate("total=1;patchRow={paymentTiming:'inferred_time'};mount();until(()=>find('[role=status]').textContent.includes('payment timing'))");
+  assert.equal(await evaluate('rowCount()'),0);
+ });
+});
+
 test('the first Side shows its rows at once under a tab per Side, with nothing to expand or choose',{skip:!browserAvailable,timeout:browserTestTimeout},async()=>{
  await fixture(async evaluate=>{
   await evaluate(`(async()=>{mount();await ${shown('320')};})()`);

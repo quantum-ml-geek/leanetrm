@@ -3,18 +3,20 @@ import type {Holding} from './desk-model.js';
 import type {DetailRead,TermSection} from './position-panel.js';
 import {displayExactInstant} from './market-view.js';
 import {standardTemperature} from './crude-selection.js';
+import {requireBoundInstrumentSides,renderInstrumentSides,type InstrumentSideGroup} from './instrument-sides.js';
 type Api=<T>(path:string,body?:unknown)=>Promise<T>;
 type Row=Record<string,string|number|null>;
 export type CrudeTerms={assignmentCode:string;direction:string;considerationDirection:string;quantity:string;fixedPrice:string;handlingFee:string|null;handlingFeeDirection:string|null;handlingFeePaymentAt:string|null;paymentAt:string;deliveryFrom:string;deliveryTo:string;profile:string;tolerance:string};
 const direction=(value:string)=>value==='receive'?'Receive':value==='deliver'?'Deliver':value==='pay'?'Pay':value;
 // Retained contractual facts remain inspectable when delivery has started and PV is unavailable.
 export async function readCrudeView(api:Api,context:Record<string,unknown>,h:Holding):Promise<DetailRead>{
- const detail=await api<{head:{revision:number;instrument_id:string;request:CrudeTerms};physical:Row;profileName:string}>('trading/crude',{context:{...context,convention:'trading_workspace_v1'},tradeId:h.tradeId,bindingId:h.bindingId,revision:Number(h.revision),instrumentType:'physical_crude'});
+ const detail=await api<{head:{revision:number;instrument_id:string;request:CrudeTerms};physical:Row;profileName:string;sideGroups:InstrumentSideGroup[]}>('trading/crude',{context:{...context,convention:'trading_workspace_v1'},tradeId:h.tradeId,bindingId:h.bindingId,revision:Number(h.revision),instrumentType:'physical_crude'});
  if(String(detail.head.revision)!==h.revision||detail.head.instrument_id!==h.bindingId)throw Error('The crude position changed. Refresh the Blotter.');
+ const composition=requireBoundInstrumentSides(detail.sideGroups,h.bindingId);
  return{amend:{allowed:false,reason:'Crude amendments and custody measurement conversion are not supported. Accepted certified receipts and invoice cash are separate operational facts.'},view:zone=>{
   const terms:TermSection[]=[{title:'Physical crude trade',rows:[['Trade',h.tradeReference],['Instrument',h.instrumentReference],['Book',h.book],['Value measure','Contractual PV']]},
    ...crudeInstrumentSections(detail,zone)];
-  return{termsLabel:'Physical overview',terms,history:[{title:`Revision ${h.revision}`,rows:[['Booked',displayExactInstant(h.executedAt,zone)],['Booker',h.trader??''],['Trade date',h.booking.tradeDate??'Unavailable']]}]};
+  return{termsLabel:'Physical overview',terms,termsContent:(host:HTMLElement)=>renderInstrumentSides(host,composition,{zone,retained:true}),history:[{title:`Revision ${h.revision}`,rows:[['Booked',displayExactInstant(h.executedAt,zone)],['Booker',h.trader??''],['Trade date',h.booking.tradeDate??'Unavailable']]}]};
  }};
 }
 

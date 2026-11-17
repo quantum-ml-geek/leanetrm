@@ -1,10 +1,30 @@
 # Architecture and domain contracts
 
+D417 requires every non-exchange Instrument to expose independent reusable Sides
+through explicit memberships. Futures and futures options are the only exceptions.
+The Side owns its schedule, inputs and valuation; the Instrument owns composition.
+Booking, review and saved-trade views must show those same memberships and their
+roles and terms. Cash, gas holdings, retained programs and service rights have
+managed Side implementations. Explicit operating assembly admits one to eight
+independently signed delivery/payment Sides, with separate quantity sources,
+prices and payment rules. The combined implementation passes bounded local
+managed, native, populated-upgrade, retained-worker and actual-browser
+qualification. The complete CI matrix is a merge gate; see [the decision](decisions.md#d417--explicit-sides-for-every-non-exchange-instrument).
+
+D418 adds [ordinary direct point market-value publication](point-trader-marks.md)
+with exact source/temporal selection, final observations and independent reviewed
+trade adoption. First publication needs no successful evaluation or input frame.
+The combined facility, certificate and financial Transport baseline passes native,
+managed, populated-upgrade and actual browser qualification. Combined Side
+alignment has local qualification; release and production activation remain
+separate gates.
+
 D416 implements the selected first [financial Transport rights and fixed-fee
 contract](gas-transport-financial.md). Direct signed whole-package values,
 independent ordinary cash and explicit expiry retain separate owners. Native, managed and actual browser consumers have local qualification, including
-explicit expiry recovery and independent cash. First-value market publication,
-integrated upstream qualification and release remain separate gates.
+explicit expiry recovery and independent cash. D418 supplies first-value market
+publication, and the combined Side baseline has local qualification. Release and
+production activation remain separate gates.
 
 D413 adds locally qualified [retained chosen routes](gas-transport-routes.md)
 over exact native capacity claims and exclusive logical source-plan memberships.
@@ -871,9 +891,12 @@ Portfolio
 
 Instrument
   FuturesContract: exact immutable futures-series reference; typed LotSize
-  SidedInstrument: explicit side memberships where composition is contractual
+  FuturesOptionInstrument: exact exchange option contract and model binding
+  SidedInstrument: every other instrument has explicit independent side memberships
     Side reference, signed coefficient, role and order
-    Side definition: index/curve, observation/averaging and payment conventions
+    Concrete Side: immutable terms, declared inputs, schedule and PV implementation
+      Shared fixed/floating economics; asset-specific behavior where required
+      Exact retained program execution belongs to a Side
     Separate resolved pricing bindings and generated dated schedules
 ```
 
@@ -914,8 +937,10 @@ These are distinct concepts:
   size. See [unit instruments and trade bindings](instrument-contracts.md) for
   identity, reuse, storage compatibility and the persisted-forward boundary.
 - `SidedInstrument` retains one or more independent sides through explicit
-  memberships where the product actually requires composition, including the
-  current fixed/floating financial swap. A simple contract needs no artificial side.
+  memberships for every non-exchange instrument, including an instrument with
+  one cash, holding or rights-value Side. Futures and futures options are the
+  only side-less instruments (D417). A Side owns real schedule and valuation
+  behavior; a wrapper that calls back to Instrument PV does not satisfy this rule.
 - Coefficients and ordering belong to instrument memberships. They do not make a
   new side definition merely because another instrument uses different weights.
 - Signed booked quantities belong to the trade's instrument bindings, with an
@@ -1399,8 +1424,9 @@ valuation contract without knowing the side's internal algorithm.
 
 Persist versioned definitions and type identifiers through explicit schemas,
 rather than serializing arbitrary runtime objects. Deriving a class does not
-permit loading tenant-provided executable code. Cache resolved schedules where
-their complete inputs agree instead of regenerating them for every `PV()` call.
+permit loading tenant-provided executable code. Booked Sides load their exact
+retained schedules; they do not regenerate contractual geometry on read. Cache
+execution results only where their complete inputs and context agree.
 
 ### 3.4 Instrument-owned connections between sides
 

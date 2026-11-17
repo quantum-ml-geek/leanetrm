@@ -58,6 +58,13 @@ internal static class OperatingPortfolio
         }
         return result.ToImmutable();
     }
+    internal static Task<CustomCurves.PreparedMarket> PrepareMarket(NpgsqlConnection connection,PreviewDatabase database,
+        OperatingPortfolioInput group,ScheduleContext context,CancellationToken ct)
+    {
+        var dependencies=group.Portfolio.Declare(group.Snapshot).SelectMany(c=>c.Dependencies).Distinct().ToImmutableArray();
+        return CustomCurves.PrepareMarket(connection,database,group.Data,group.Frame,group.Snapshot,context,
+            group.Portfolio.Instruments,dependencies,CustomCurves.MarketPreparation.ValuationDependencies,ct,activePrices:[]);
+    }
     internal static async Task<ImmutableDictionary<Guid,ExactMoney>> Values(NpgsqlConnection connection,PreviewDatabase database,
         InputFrame frame,ImmutableArray<OperatingPosition> positions,CancellationToken ct)
     {
@@ -66,9 +73,7 @@ internal static class OperatingPortfolio
         var context=PinnedContext.Exact((await new KnowledgeStore(database.Manifest.CatalogId).Read(connection,frame.ContextId!.Value,ct)).Context);
         foreach(var group in groups)
         {
-            var dependencies=group.Portfolio.Declare(group.Snapshot).SelectMany(c=>c.Dependencies).Distinct().ToImmutableArray();
-            var market=await CustomCurves.PrepareMarket(connection,database,group.Data,group.Frame,group.Snapshot,context,
-                group.Portfolio.Instruments,dependencies,CustomCurves.MarketPreparation.ValuationDependencies,ct);
+            var market=await PrepareMarket(connection,database,group,context,ct);
             var prepared=RiskEngine.PrepareConnected(market.Valuation,market.Bindings,[group.Portfolio],market.Authority,ct);
             var run=RiskEngine.CalculateExact(prepared,[],RiskEngine.ExactNumericalPolicy,ct,RiskDetail.Holdings);
             foreach(var value in run.Groups.Single().BasePositions)values.Add(value.BindingId,value.Value);

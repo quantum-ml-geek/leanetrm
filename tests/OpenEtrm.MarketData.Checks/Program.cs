@@ -3,9 +3,14 @@ using System.Numerics;
 using OpenEtrm.MarketData;
 using OpenEtrm.Security;
 
+if(args is ["--instrument-sides"]){InstrumentSideAlignmentChecks.Run();return;}
+if(args is ["--cash-sides"]){CashSideAlignmentChecks.Run();return;}
+if(args is ["--gas-holding-side"]){GasHoldingSideChecks.Run();return;}
+if(args is ["--gas-rights-side"]){GasRightsSideChecks.Run();return;}
 if(args is ["--calendar-policy"]){CalendarPolicyChecks.Run();RetainedPowerQuantityChecks.Run();ClockCompletionChecks.Run();PublishedTouCalendarChecks.Run();IntervalCalendarAdmissionChecks.Run();return;}
 if(args is ["--interval-calendar-admission"]){IntervalCalendarAdmissionChecks.Run();return;}
 if(args is ["--payment-date-policy"]){PaymentDatePolicyChecks.Run();return;}
+if(args is ["--side-composition"]){SideCompositionChecks.Run();return;}
 
 if(args is ["--physical-option"]){PhysicalOptionChecks.Run();return;}
 if(args is ["--cash-option-model"]){CashOptionModelChecks.Run();return;}
@@ -634,6 +639,7 @@ passed += PaymentRuleChecks.Run();
 passed += CalendarPolicyChecks.Run();
 passed += PaymentDatePolicyChecks.Run();
 passed += IndependentSideChecks.Run();
+passed += SideCompositionChecks.Run();
 passed += RiskChecks.Run();
 passed += NestedScenarioChecks.Run();
 passed += RiskPropagationChecks.Run();
@@ -677,6 +683,10 @@ GasParkLoanBalanceFeeChecks.Run();passed++;
 GasParkCustodyChecks.Run();passed++;
 GasTransportCapacityChecks.Run();passed++;
 GasTransportRouteChecks.Run();passed++;
+InstrumentSideAlignmentChecks.Run();passed++;
+CashSideAlignmentChecks.Run();passed++;
+GasHoldingSideChecks.Run();passed++;
+GasRightsSideChecks.Run();passed++;
 GasTransportDirectRightsChecks.Run();passed++;
 GasTransportDirectRightsInstrumentChecks.Run();passed++;
 GasQuantityProjectionChecks.Run();passed++;

@@ -47,7 +47,7 @@ internal sealed partial class GasParkCustodyTicketStore(PreviewDatabase database
             var known=(await new KnowledgeStore(database.Manifest.CatalogId).Read(connection,f.ContextId.Value,ct)).Context;
             var snapshot=d.Snapshot(f).WithKnowledge(f.ContextId.Value,SchedulePreview.ParseAt(known.KnownAt));
             var draft=Draft(body,f,snapshot);var value=await Value(connection,d,f,snapshot,draft,true,ct);
-            return View(draft,f,known,request.Draft,value,null);
+            return View(database.Manifest.CatalogId,draft,f,known,request.Draft,value,null,true);
         },ct);
 
     internal async Task<JsonElement> Book(string profile,InputFrame frame,TicketBookRequest request,CancellationToken ct)
@@ -89,7 +89,7 @@ internal sealed partial class GasParkCustodyTicketStore(PreviewDatabase database
         try{value=await Value(connection,data,frame,snapshot,row,false,ct);}
         catch(MarketDataException error)when(ValuationStatus.PositionSpecific(error)||error.Code is "gas_custody_reconciliation" or "gas_custody_acceptance_window" or "discount_curve")
         {unavailable=error.Message;}
-        return View(row,frame,known,GasParkCustodyTicket.Reopen(row),value,unavailable);
+        return View(database.Manifest.CatalogId,row,frame,known,GasParkCustodyTicket.Reopen(row),value,unavailable);
     }
 
     internal async Task<string> Value(NpgsqlConnection connection,PreviewData data,InputFrame frame,MarketSnapshot snapshot,JsonElement agreement,bool draft,CancellationToken ct)
@@ -109,8 +109,9 @@ internal sealed partial class GasParkCustodyTicketStore(PreviewDatabase database
         return total.ToExactString();
     }
 
-    static object View(JsonElement agreement,InputFrame frame,object known,TicketDraft draft,string? value,string? unavailable)
+    static object View(Guid catalog,JsonElement agreement,InputFrame frame,object known,TicketDraft draft,string? value,string? unavailable,bool preview=false)
     {
+        var composition=GasServiceSidePresentation.Custody(catalog,agreement,preview);
         var terms=agreement.GetProperty("terms");
         var cells=new Dictionary<string,ScheduleViewCell>{["trade.custody"]=new(agreement.Text("quantity"),["contract"]),["trade.present_value"]=new(value,["modeled"])}.ToImmutableDictionary();
         var schedule=new ScheduleView(["term"],[new("custody",null,"term",terms.Instant("parkAt"),terms.Instant("returnAt"),null,cells,false)],cells,null,null,0,1,frame.At);
@@ -120,6 +121,7 @@ internal sealed partial class GasParkCustodyTicketStore(PreviewDatabase database
             actions=new{amend=new{allowed=false,reason="Custody amendments require a qualified continuity profile."},closeOut=new{allowed=false,reason="Return custody and settle its independent cash through their supported operations."},record=new{allowed=false,reason="Use the reviewed custody evidence, acceptance and return operations."}},
             overviewSections=Overview(agreement),
             measure=GasParkCustodyTicket.Measure,measureLabel=MeasureLabel,ownershipNote=OwnershipNote,unavailableReason=unavailable,
+            sideGroups=composition.Groups,sideGroupsReason=composition.Reason,
             lifecycleTarget=new LifecycleTarget("gas_park_custody",agreement.Id("tradeId"),agreement.Id("instrumentId"))};
     }
 

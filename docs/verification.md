@@ -5017,7 +5017,7 @@ continuation is implied.
 
 ## Integrated financial Transport qualification (D416)
 
-The combined current-master and service-stack artifact passes 745 managed core
+The earlier combined master and service-stack artifact passes 745 managed core
 checks, the full API schedule suite, 2,044 frontend and 157 Python checks, with
 zero API build warnings/errors. Native qualification passes 32 actual managed
 source/command/value checkpoints, shared current-closed expiry acknowledgement
@@ -5035,3 +5035,150 @@ Options identifier; all original metadata/ACL guards and drift refusals remain.
 Disposable synthetic resources were cleaned. First-value market publication,
 aggregate CI and release remain separate gates; no production activation or
 complete economic continuation is implied.
+
+
+## Side alignment integration baseline (D417)
+
+The integration baseline adds the subsequently merged operating-facility and
+certificate workflows to financial Transport. The API build and default
+checks pass before the Side refactor. Financial migration 0354 passes
+its populated upgrade, preserving the predecessor route witnesses and raw facts,
+then executing genuine mixed-reference booking and market-value adoption.
+
+Its protected prompt-helper fingerprint changes only for the five approved
+operating-facility/certificate page identifiers; independently removing those
+identifiers reproduces the earlier helper fingerprint. All original helper
+metadata, owner and privilege guards remain, and altered-helper refusals pass.
+This baseline does not qualify the subsequent instrument/Side and UI changes:
+complete managed, native, price-scenario and actual browser gates remain open.
+
+
+## Ordinary point market-value publication (D418)
+
+The local point publisher passes native source/receipt/concurrency/authority
+controls, populated upgrade and 21 actual HTTP/browser checks on the same API,
+SQL and served web artifacts. Preview rollback, first 20, correction 21, a genuine
+new 20, equal-predecessor acknowledgement and lost-response recovery preserve
+immutable observation lineage. Eight independent native identity vectors retain
+exact UTF-8 and microsecond semantics. Missing optional session frames do not
+prevent business publication or readonly status recovery.
+
+Selected currency, quantity-unit and multiplier labels come from the target's
+immutable quote foreign keys in entry, review and status. Explicit edited-input
+application retains independent rate/reference/frozen uses and does not select
+itself. Native postconditions prove no automatic financial adoption or trading
+publication; a separate Transport adoption and ordinary valuation produce exact
+7.50 from a signed 20 rights value and independent −12.50 fee.
+
+Real scope/publication waits refuse expired or absent original authority despite
+active successor grants and unchanged security epoch. A late same-transaction
+source correction refuses final admission; unrelated points and authentic old
+acknowledgements remain valid. Populated upgrade retains existing facts and
+valued sources and preserves an independently owned helper with a similar name.
+Desktop and phone quote disclosure were inspected. Checks used stock PostgreSQL
+16.14, .NET 10.0.402, Node 24.22.0 and an owned Chrome preview on macOS arm64;
+all disposable resources were cleaned. Integrated-stack, CI and release gates
+remain separate, with no production activation or performance claim.
+
+The combined operating-facility, certificate and financial Transport baseline
+also passes the API default/schedule suites, 779 managed core, 2,108 frontend and
+160 Python checks. The publisher native, populated-upgrade and 21 actual browser
+checks pass on that same combined API, SQL and web artifact. Migration 0355 is
+byte-identical to the locally qualified publisher migration; only its filename
+and the two qualifier hooks change. All predecessor migrations remain unchanged.
+Upgrade checks preserve unrelated helper metadata and still refuse protected
+helper drift. This baseline contains no subsequent Side implementation, and it
+does not qualify that later increment or authorize production activation.
+
+
+## Instrument and Side alignment qualification (D417)
+
+The managed inventory covers 27 concrete production Instrument types and the two
+exact exchange exceptions. Independent checks cover Side-owned cash, holding,
+rights, physical-exchange and retained-program PV; source/scenario/held-state
+fences; exact whole-position and fixed-unit admission; and separate fee ownership.
+Five retained-family compatibility oracles preserve v1 ordered member bytes,
+program digests, captured calendar policies and native occurrence IDs. Altered or
+reordered copies refuse before identity reuse.
+
+Native gas source evidence retains exact definitions through
+`timed_cash_source_definition_v1` and `gas_holding_source_definition_v1`. Complete
+enclosing ownership, chronology, quantity and paid-state evidence remains
+independent of the executable model graph. Backend entry, review and saved-term
+membership contracts cover eleven product/profile families. Draft bindings remain
+explicitly absent; saved slots, Side IDs, coefficients and ratios remain exact.
+Unpriced structural Sides and zero-fee financial absence are distinct states.
+Selected operating reads retain their certified source, original authority and
+touched-program visibility through publication.
+
+The combined managed checkpoint passes 785 core checks, 88 rates, API default
+(98), schedules (491), gas-ticket (118) and focused Side/structured/reuse groups.
+API and Worker builds have zero warnings/errors. The full frontend checkpoint
+passes 2,164 checks with zero skipped; 163 repository Python checks pass. Later
+SQL and qualification-helper changes through the scoped-presence checkpoint
+preserve every compiled source and all 389 built output files byte for byte.
+That checkpoint uses the completed combined outputs without a rebuild. The later
+physical-obligation admission checkpoint below uses rebuilt API/checks/Worker
+outputs and retains its separate artifact identity.
+
+Earlier reviewed application checkpoints include standard/futures (327), dedicated
+swaps (189), assistant workspace (43) and point publication (21). An earlier
+universal-Side packet passed fixed-fee Park/Loan (90), balance-fee Park/Loan (214),
+custody (126), financial Transport (43) and structured operating/REC (31) actual
+browser assertions. These remain evidence for their reviewed packets; they are
+not represented as one later all-product application run.
+
+The combined local scoped-presence checkpoint, including migrations 0355 point
+publication, 0356 operating assembly and 0357 scoped financial presence, passes:
+
+- 64 native operating PASS records, including 39 operating assertions and exact
+  predecessor definition/owner/ACL/settings refusal. Migration 0356 retains its
+  original bytes after renumbering.
+- Populated operating upgrade preservation of 30 complete native history,
+  identity, program and relationship sets. Original battery/thermal/solar values
+  remain exactly `610`/`760`/`500`; original commands reopen and replay unchanged.
+- Five independent Sides at `550.7` and a sixth repeated-source Side at `532.6`,
+  with exact retained member identities, independent payment rules, delivery
+  rows, source-cut/hidden-book controls, both original ReadPhysical timers and
+  native semantic-receipt expiry refusal.
+- 16 operating and 19 saved-trading/REC actual browser assertions, including
+  visible genuine Side cards and terms on phones.
+- 116 physical actual browser assertions: gas/deal-ticket 46, crude 50 and LNG
+  20. Strong phone visibility, hit-test and width checks pass after waiting for
+  the responsive layout to settle before scrolling. The assertion and timeout
+  contracts are unchanged.
+- 81 financial Transport native PASS records. Scoped-presence qualification adds
+  seven control groups, 27 predecessor drift mutations, a search-path control,
+  exact excluded/pre-birth scopes, strict live/closed rights, source-known future
+  births and a real original-authority wait with an active successor grant.
+  Populated upgrade retains native table digests, original booking/mark outcomes,
+  all helper metadata and the independent scope/projection helper bodies.
+- In-term gas and paid-state/PRICE replay, operator physical and ordinary-use/zero
+  native PV with real historical and 32-path Monte Carlo workers, and the real
+  financial Transport PRICE worker. Exact source/scope/actor authority,
+  cancellation/ownership, complete ordinary-report equality and unchanged native
+  financial publications remain enforced.
+
+The subsequent physical-obligation admission checkpoint accepts independently
+reconstructed genuine Sides only under the same native Instrument ID, complete
+economic/pricing/schedule definitions and ordered Side types, IDs and bindings.
+It rejects changed native IDs, contractual cash timing and accepted finals. Both
+quantity mapping and source composition share this exact comparison; owner,
+account, quantity, source and historical admission remain unchanged. Focused
+regressions and actual physical-known, active projection and independent-market
+projection consumers pass, including their real retained economic workers.
+Immutable-source assertions use the production retained-evidence serializer and
+its complete cash/holding definition contracts. API/checks and Worker builds have
+zero warnings/errors, with byte-identical embedded API assemblies across all
+three output trees. The earlier 151 browser assertions retain their original
+scoped-presence packet identity.
+
+Both combined qualification checkpoints verify unchanged source and artifact
+hashes before and after execution and remove their owned disposable resources.
+Independent adversarial reviews cover numerical, temporal, authorization, occurrence-state, scenario-reuse
+and migration/release boundaries. The complete CI matrix remains a merge gate.
+
+Local fixtures use synthetic owned resources, stock PostgreSQL 16.14, .NET
+10.0.402, Node 24.22.0, Python 3.13 and Chrome on macOS arm64. Production activation,
+performance/capacity qualification and commercial Storage valuation remain
+separate work.

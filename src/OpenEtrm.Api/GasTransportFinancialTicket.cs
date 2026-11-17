@@ -13,7 +13,7 @@ public static class GasTransportFinancialTicket
     public const string Measure="transport_remaining_rights_and_fee_present_value_v1";
     static TicketField Field(string id,string label,string meaning,string type="choice",string? choices=null,params string[] depends)=>
         new(id,label,meaning,type,null,"editable",true,null,type=="choice"?choices??id:null,[..depends],null,null,null);
-    public static TicketDescription Description{get;}=TicketDescriptions.Validate(new(Product,1,"flow",
+    public static TicketDescription Description{get;}=ServiceTicketFieldGroups.Transport(new(Product,1,"flow",
     [
         Field("profile","Contract profile","Select the supported whole-rights contract explicitly."),
         Field("business_key","Agreement reference","Your stable business reference for this agreement.","text"),

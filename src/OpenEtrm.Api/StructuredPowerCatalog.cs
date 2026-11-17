@@ -9,6 +9,10 @@ public sealed record StructuredPowerChoice(string Code,string Label);
 public sealed record StructuredPowerKindChoice(string Code,string Label,ImmutableArray<int> IntervalMinutes);
 public sealed record StructuredPowerQuantityChoice(string Code,string Label,string CommodityCode,string UnitCode,string DimensionCode);
 public sealed record StructuredPowerQuoteChoice(string Code,string Label,string QuantityCode,string CurrencyCode,string Multiplier);
+public sealed record StructuredPowerSideChoice(string Kind,string Code,string Label,string QuantityKind)
+{
+    public ImmutableArray<string> AllowedKinds=>Code=="horizon_right"?["payment"]:["payment","delivery"];
+}
 public sealed record StructuredPowerCatalogResult(StructuredPowerPins Pins,ImmutableArray<StructuredPowerChoice> Locations,
     ImmutableArray<StructuredPowerChoice> Clocks,ImmutableArray<StructuredPowerKindChoice> Kinds,
     ImmutableArray<StructuredPowerQuantityChoice> PowerQuantities,ImmutableArray<StructuredPowerQuantityChoice> EnergyQuantities,
@@ -17,10 +21,21 @@ public sealed record StructuredPowerCatalogResult(StructuredPowerPins Pins,Immut
 {
     public ImmutableArray<StructuredPowerPriceContract> PriceContracts { get; init; }=[];
     public ImmutableArray<string> OperatingBookingClockCodes { get; init; }=[];
+    public ImmutableDictionary<string,EntryFieldLayout> ValuationFieldGroups{get;init;}=ImmutableDictionary<string,EntryFieldLayout>.Empty;
+    public string CompositionImplementation=>StructuredPowerPreview.CompositionImplementation;
+    public ImmutableArray<StructuredPowerSideChoice> SideChoices=>StructuredPowerPreview.SideChoices;
+    public int MaximumSides=>StructuredPowerPreview.MaximumOperatingSides;
 }
 
 public static partial class StructuredPowerPreview
 {
+    internal static readonly ImmutableArray<StructuredPowerSideChoice> SideChoices=[
+        new("thermal","energy_output","Generated output energy","energy"),new("thermal","guaranteed_fuel","Contract guaranteed fuel","fuel"),new("thermal","consumption_fuel","Modeled fuel consumption","fuel"),
+        new("battery","discharging_energy","Grid discharging energy","energy"),new("battery","charging_energy","Grid charging energy","energy"),new("battery","grid_throughput","Grid charging plus discharging energy","energy"),
+        new("solar","energy_output","Entitled physical production","energy"),new("solar","payment_energy","Contract payment energy","energy"),
+        new("thermal","horizon_right","Complete right once; first operating month billing","right"),new("battery","horizon_right","Complete right once; first operating month billing","right"),new("solar","horizon_right","Complete right once; first operating month billing","right")];
+    private static string SourcePort(string source)=>source switch
+    {"energy_output" or "discharging_energy"=>"energy","charging_energy"=>"charge","grid_throughput"=>"variable","payment_energy"=>"payment",_=>source};
     public static StructuredPowerCatalogResult Catalog(PreviewData data,bool canSave,bool canPreview)
     {
         static string Label(JsonElement row)=>Text(row,"name")??Text(row,"symbol")??row.Text("code");
@@ -33,6 +48,7 @@ public static partial class StructuredPowerPreview
             [..quantities.Where(x=>x.UnitCode=="megawatt"&&x.DimensionCode=="power")],[..quantities.Where(x=>x.UnitCode=="megawatt_hour"&&x.DimensionCode=="energy")],
             [..quantities.Where(x=>x.DimensionCode=="energy")],[..quantities.Where(x=>x.UnitCode=="resource_right"&&CompleteRightDimension(data,x.DimensionCode))],
             Choices("currencies"),[..data.Quotes.Where(x=>x.Kind==QuoteKind.Outright).Select(x=>new StructuredPowerQuoteChoice(x.Key.Code,$"{x.Key.Code} · {x.Currency.Code} per {x.Quantity.Code} × {x.Multiplier}",x.Quantity.Code,x.Currency.Code,x.Multiplier.ToString()))],OpenEtrm.MarketData.Trading.PaymentRule.Implementation,canSave,canPreview)
-        {OperatingBookingClockCodes=[..data.References["clock_rules"].Where(r=>r.Text("kind")=="fixed_offset"&&r.Number("fixed_offset_seconds")==default).Select(r=>r.Text("code"))]};
+        {OperatingBookingClockCodes=[..data.References["clock_rules"].Where(r=>r.Text("kind")=="fixed_offset"&&r.Number("fixed_offset_seconds")==default).Select(r=>r.Text("code"))],
+            ValuationFieldGroups=EntrySideFieldGroups.Operating()};
     }
 }

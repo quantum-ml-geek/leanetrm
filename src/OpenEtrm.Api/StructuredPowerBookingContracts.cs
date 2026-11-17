@@ -21,4 +21,5 @@ public sealed record StructuredPowerBookingReceipt(Guid OperationId,Guid TradeId
 public sealed record StructuredPowerBookedSide(int Slot,Guid SideId,Guid ScheduleId,string Name,string Coefficient,string Manifest);
 public sealed record StructuredPowerBookedTrade(Guid TradeId,int Revision,Guid InstrumentId,Guid BindingId,Guid BookId,
     Guid FacilityId,int FacilityVersion,string EffectiveAt,string TradeReference,string ResourceKind,string FacilityCode,string FacilityName,
-    string Book,StructuredPowerBookRequest Terms,ImmutableArray<StructuredPowerBookedSide> Sides);
+    string Book,StructuredPowerBookRequest Terms,ImmutableArray<StructuredPowerBookedSide> Sides)
+{public ImmutableArray<InstrumentSideGroup> SideGroups{get;init;}=[];public RetainedSideSource? RetainedSource{get;init;}}
