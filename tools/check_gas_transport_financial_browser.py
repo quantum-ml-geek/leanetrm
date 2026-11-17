@@ -100,7 +100,7 @@ def main():
             valuationAt=state.valuation_at, through='2020-12-21T00:00:00Z', feeDueAt='2020-12-23T16:00:00Z')
         artifacts = ['transport-financial-entry.png', 'transport-financial-review.png', 'transport-financial-risk.png',
                      'transport-financial-payment.png', 'transport-financial-closed.png', 'transport-financial-reader.png', 'transport-financial-mobile.png',
-                     'transport-financial-market-source.png']
+                     'transport-financial-market-source.png', 'transport-financial-sides-mobile.png']
         images = Path(tempfile.mkdtemp(prefix='openetrm-financial-browser-artifacts-'))
         images.chmod(0o700)
         root = Path(query('SHOW unix_socket_directories;')).resolve()

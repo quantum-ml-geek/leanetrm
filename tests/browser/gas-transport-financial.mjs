@@ -1,6 +1,7 @@
 import {withOwnedBrowser} from './owned-browser.mjs';
 import {startNewTrade} from './new-trade.mjs';
 import {gasTicket} from './gas-ticket.mjs';
+import {sideCards,serviceFieldGroups,sidePhone} from './instrument-side-qualification.mjs';
 
 const q=JSON.stringify,product='physical_gas_transport',handler='gas_transport_financial',panel='[data-lifecycle=panel]';
 const stable=value=>JSON.stringify(value,(_key,item)=>item&&typeof item==='object'&&!Array.isArray(item)?Object.fromEntries(Object.entries(item).sort(([a],[b])=>a<b?-1:a>b?1:0)):item);
@@ -118,7 +119,11 @@ async function run(driver){
    valuation_definition:f.valuationDefinition,valuation_reference_bundle:f.valuationBundle,package_quantity:f.packageQuantity,currency:f.currency,rights_valuation_policy:f.rightsPolicy,fee_profile:f.feeProfile,fee_direction:input.feeDirection,expiry_policy:f.expiryPolicy}))await ticket.choose(null,field,value);
   await set(ticket.control(null,'business_key'),input.businessKey);await set(ticket.control(null,'evidence'),'Synthetic explicit Transport agreement');await set(ticket.control(null,'fixed_fee_amount'),input.fixedFeeAmount);
   if(input.fixedFeeAmount==='0')await click(ticket.field(null,'fee_due_at')+' [data-role=not-applicable]');else await ticket.setInstant(null,'fee_due_at',f.feeDueAt);
-  await ticket.until(ticket.current());if(index===0){await click('#blotter-dock [data-maximize=details]');await evaluate("document.querySelector('#transport-ticket').scrollIntoView({block:'start'})");await shot('transport-financial-entry');await click('#blotter-dock [data-maximize=details]');await evaluate('window.loseBooking=true');}
+  await ticket.until(ticket.current());
+  const roles=['Commercial entitlement rights',...(input.fixedFeeAmount==='0'?[]:['Ordinary cash payment'])];
+  await serviceFieldGroups(driver,ticket.ticket,['agreement','rights','fee'],'Transport edits distinguish whole-rights Side terms from independent fee terms');
+  await sideCards(driver,ticket.ticket,await evaluate("calls.findLast(call=>call.path==='/api/tickets/preview'&&call.status===200).result"),{label:'Transport review exposes one whole-rights Side and only the explicitly selected fee Instrument',roles});
+  if(index===0){await click('#blotter-dock [data-maximize=details]');await evaluate("document.querySelector('#transport-ticket').scrollIntoView({block:'start'})");await shot('transport-financial-entry');await click('#blotter-dock [data-maximize=details]');await evaluate('window.loseBooking=true');}
   await click(ticket.ticket+' .ticket-book',60000);
   if(index===0){const recover="[...document.querySelectorAll('#transport-ticket .ticket-booking button')].find(button=>button.textContent==='Check booking status'&&!button.disabled)";await wait(`!!(${recover})&&${idle}`,60000);await evaluate(`(${recover}).click()`);}
   await wait(`document.querySelector('#position-details').dataset.mode==='position'&&!!document.querySelector('#position-details .deal-ticket[data-mode=booked]')&&${idle}`,60000);
@@ -126,6 +131,8 @@ async function run(driver){
   if(!booked||booked.body.draft.product!==product||booked.body.draft.trade.valuation_reference_bundle!==f.valuationBundle||booked.body.draft.trade.capacity_version!==input.capacityVersionId||Object.hasOwn(booked.body.draft.trade,'quantity'))throw Error('Booking changed the whole-package or independent source pins.');
   const c={...input,...booked.result,stateId:booked.result.financialStateId};cases.push(c);await evaluate(`financialCases.push(${q(c)})`);
   const reopened=await read(c);if(reopened.presentValue!==null||reopened.unavailableReason!=='rights_mark_required'||reopened.draft.trade.valuation_definition!==f.valuationDefinition)throw Error('An unadopted rights package claimed a complete value.');
+  await sideCards(driver,'#position-details',reopened,{label:'unpriced saved Transport retains its true state-owned rights Side and independent native cash binding',retained:true,roles});
+  if(index===0)await sidePhone(driver,'#position-details','transport-financial-sides-mobile');
   await check('retained Transport uses its backend labels without a gas price or Side schedule action',"!document.querySelector('#position-details .ticket-add-kind')&&[...document.querySelectorAll('#position-details button')].filter(button=>button.textContent==='Open curve').every(button=>button.hidden)");
  }
  let originalMark;

@@ -155,4 +155,29 @@ public sealed record StructuredPowerPreviewRequest(
     [property:JsonRequired]StructuredThermalDispatchInput[] ThermalDispatch,
     [property:JsonRequired]StructuredSolarRightInput? SolarRight,
     [property:JsonRequired]StructuredSolarDispatchInput[] SolarDispatch,
-    [property:JsonRequired]StructuredPowerValuationInput? Valuation);
+    [property:JsonRequired]StructuredPowerValuationInput? Valuation)
+{
+    // Omitted for retained v1 commands so their canonical bytes remain stable.
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)]
+    public StructuredPowerCompositionInput? Composition { get; init; }
+}
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record StructuredPowerCompositionInput(
+    [property:JsonRequired]string Implementation,
+    [property:JsonRequired]string Perspective,
+    [property:JsonRequired]string Measure,
+    [property:JsonRequired]string CurrencyCode,
+    [property:JsonRequired]string RightQuantityCode,
+    [property:JsonRequired]bool Discounting,
+    [property:JsonRequired]StructuredPowerOperatingSideInput[] Sides);
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record StructuredPowerOperatingSideInput(
+    [property:JsonRequired]string Key,
+    [property:JsonRequired]string Name,
+    [property:JsonRequired]string QuantitySource,
+    [property:JsonRequired]string Coefficient,
+    [property:JsonRequired]string Kind,
+    [property:JsonRequired]StructuredPowerPriceInput Price,
+    [property:JsonRequired]PpaPaymentInput? PaymentRule);

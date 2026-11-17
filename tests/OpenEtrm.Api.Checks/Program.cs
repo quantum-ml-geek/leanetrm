@@ -3,8 +3,14 @@ using System.Collections.Immutable;
 using System.Globalization;
 using OpenEtrm.Api;
 using OpenEtrm.MarketData;
+if(args is ["--gas-source-instrument-evidence"]){GasSourceInstrumentEvidenceChecks.Run();return;}
+if(args is ["--point-trader-mark-identity"]){PointTraderMarkIdentityChecks.Run();return;}
+if(args is ["--point-trader-mark-inputs"]){PointTraderMarkInputSelectionChecks.Run();return;}
+if(args is ["--point-trader-mark-commands"]){PointTraderMarkCommandChecks.Run();return;}
+if(args is ["--point-trader-mark-receipts"]){PointTraderMarkReceiptChecks.Run();return;}
 if(args is ["--gas-transport-financial-commands"]){GasTransportFinancialCommandChecks.Run();return;}
 if(args is ["--gas-transport-financial-source"]){GasTransportFinancialSourceChecks.Run();return;}
+if(args is ["--instrument-side-presentation"]){InstrumentSidePresentationChecks.Run();return;}
 if(args is ["--gas-transport-financial-ticket"]){GasTransportFinancialTicketChecks.Run();return;}
 if(args is ["--gas-transport-financial-native",var financialTransportFixture]){await GasTransportFinancialNativeChecks.Run(financialTransportFixture);return;}
 if(args is ["--gas-transport-financial-positions"]){GasTransportFinancialPositionChecks.Run();return;}
@@ -246,6 +252,7 @@ if(args is ["--blotter-stream"]){await BlotterStreamChecks.Run();return;}
 
 if (args is ["--schedules"])
 {
+    GasSourceInstrumentEvidenceChecks.Run();
     StorageFacilityAdapterChecks.Run();
     GasTransportCapacityAdapterChecks.Run();
     OperationalBusinessContextChecks.Run();
@@ -325,6 +332,7 @@ if (args is ["--schedules"])
     ContractObservationAuthoringChecks.Run();
     SchedulePreviewChecks.Run();
     TicketDescriptionChecks.Run();
+    InstrumentSidePresentationChecks.Run();
     GasTicketChecks.Run();
     GasParkLoanTicketChecks.Run();
     GasParkLoanBalanceFeeAdapterChecks.Run();
@@ -340,6 +348,10 @@ if (args is ["--schedules"])
     GasParkCustodySetupChecks.Run();
     GasParkCustodyOverviewChecks.Run();
     TicketStatusRoutingChecks.Run();
+    PointTraderMarkIdentityChecks.Run();
+    PointTraderMarkInputSelectionChecks.Run();
+    PointTraderMarkCommandChecks.Run();
+    PointTraderMarkReceiptChecks.Run();
     CashPaymentStatusChecks.Run();
     GasInstantIngressChecks.Run();
     LifecycleContextIngressChecks.Run();

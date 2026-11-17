@@ -133,14 +133,14 @@ internal static class CapturedDiscountSourceChecks
             try{_=combined.HasSameCalculation(key,native,key,cancelled.Token);throw new Exception("A cached source proof ignored cancellation.");}catch(OperationCanceledException){}
         }
     }
-    private sealed record BoundDelivery(GasUnfixedPhysicalDeliveryInstrument Inner,MarketSnapshot? DiscountSource,CapturedPriceSource? PriceSource=null):Instrument(Inner.Id)
+    private sealed record BoundDelivery(GasUnfixedPhysicalDeliveryInstrument Inner,MarketSnapshot? DiscountSource,CapturedPriceSource? PriceSource=null):SyntheticSidedInstrument(Inner.Id,Inner.Sides)
     {
         public override ReferenceKey Currency=>Inner.Currency;public override Quantity UnitQuantity=>Inner.UnitQuantity;
         public override bool SupportsQuantityScaling=>true;
         public override UnitPricingContract Declare(UnitValuationContext context)
         {var d=Inner.Declare(context);return d with{DiscountInputs=[..d.DiscountInputs.Select(i=>i with{Source=DiscountSource})]};}
         public override UnitValuation PV(UnitValuationContext context)
-        {if(PriceSource is not null)context.Inputs.RequireSource(PriceSource);return Inner.PV(context);}
+        {if(PriceSource is not null)context.Inputs.RequireSource(PriceSource);return base.PV(context);}
     }
     private sealed class Factors(GasPhysicalDeliveryTerms terms,MarketSnapshot retained):ISideDiscounting
     {

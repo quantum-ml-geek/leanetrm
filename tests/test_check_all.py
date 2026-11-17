@@ -41,12 +41,58 @@ STORAGE_FACILITY={f'tools/{name}.py' for name in ('check_storage_facility','chec
 TRANSPORT_CAPACITY={f'tools/{name}.py' for name in ('check_gas_transport_capacity','check_gas_transport_capacity_upgrade','check_gas_transport_capacity_browser')}
 TRANSPORT_ROUTE={f'tools/{name}.py' for name in ('check_gas_transport_route','check_gas_transport_route_upgrade','check_gas_transport_route_browser')}
 OPERATING_FACILITIES={'tools/check_operating_facilities.py','tools/check_operating_schedule_storage.py','tools/check_operating_trades.py','tools/check_rec_inventory.py','tools/check_rec_forward_storage.py'}
+POINT_TRADER_MARKS={f'tools/check_point_trader_marks{suffix}.py' for suffix in ('', '_upgrade', '_browser')}
 
 
 class CheckAllTests(unittest.TestCase):
+    def test_point_trader_mark_native_upgrade_and_browser_are_required_once_with_selected_tools(self):
+        helpers = POINT_TRADER_MARKS
+        api = 'tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj'
+        for group in ('all', *ALL_GROUPS):
+            commands = []
+            def run(command, **options):
+                commands.append(command)
+                found = helpers.intersection(command)
+                if not found:
+                    return
+                helper = found.pop()
+                self.assertTrue((ROOT / helper).is_file())
+                self.assertEqual(command[:2], [sys.executable, helper])
+                self.assertEqual(command[command.index('--pg-bin') + 1], '/stock pg')
+                self.assertEqual(options['env']['DOTNET'], '/selected sdk')
+                self.assertIn(['/selected sdk', 'restore', api, '--locked-mode'], commands)
+                if group == 'gas':
+                    self.assertIn(['/selected sdk', 'build', api, '--no-restore'], commands)
+                if helper.endswith('_browser.py'):
+                    self.assertEqual(command[command.index('--dotnet') + 1], '/selected sdk')
+                    self.assertEqual(command[command.index('--browser') + 1], '/selected browser')
+                    self.assertIn('--no-build', command)
+            with patch.dict(os.environ, {'DOTNET': '/unrelated sdk'}), redirect_stdout(io.StringIO()):
+                run_checks(Path('/stock pg'), Path('/selected sdk'), Path('/selected browser'), group=group, run=run)
+            selected = [part for command in commands for part in command if part in helpers]
+            self.assertEqual(set(selected), helpers if group in ('all', 'gas') else set())
+            self.assertEqual(len(selected), len(helpers) if group in ('all', 'gas') else 0)
+
+    def test_point_trader_mark_managed_contracts_are_required_once_in_managed(self):
+        flags = {'--point-trader-mark-' + name for name in ('identity', 'inputs', 'commands', 'receipts')}
+        api = 'tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj'
+        for group in ('all', *ALL_GROUPS):
+            selected = []
+            def run(command, **options):
+                found = flags.intersection(command)
+                if found:
+                    flag = found.pop()
+                    self.assertEqual(command, ['/selected sdk', 'run', '--no-restore', '--project', api, '--', flag])
+                    self.assertEqual(options['env']['DOTNET'], '/selected sdk')
+                    selected.append(flag)
+            with redirect_stdout(io.StringIO()):
+                run_checks(Path('/pg'), Path('/selected sdk'), Path('/browser'), group=group, run=run)
+            self.assertEqual(set(selected), flags if group in ('all', 'managed') else set())
+            self.assertEqual(len(selected), len(flags) if group in ('all', 'managed') else 0)
+
     def test_financial_transport_requires_native_upgrade_worker_and_actual_browser(self):
         helpers = {f'tools/check_gas_transport_financial{suffix}.py'
-                   for suffix in ('', '_upgrade', '_worker', '_browser')}
+                   for suffix in ('', '_upgrade', '_worker', '_browser', '_presence', '_presence_upgrade')}
         api = 'tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj'
         for group in ALL_GROUPS:
             commands = []
@@ -552,6 +598,7 @@ class CheckAllTests(unittest.TestCase):
                            '--gas-transport-financial-commands','--gas-transport-financial-source',
                            '--gas-transport-financial-ticket','--gas-transport-financial-positions',
                            '--gas-transport-financial-adapters','--gas-transport-financial-labels','--gas-transport-financial-setup',
+                           '--point-trader-mark-identity','--point-trader-mark-inputs','--point-trader-mark-commands','--point-trader-mark-receipts',
                            '--lifecycle-actions','--economic-risk-contract','--lifecycle-schedule-contract','--gas-owned-setup',
                           '--shared-native-markets','--derivative-methods','--gas-accepted-order','--lifecycle-residual-currencies','--gas-operator-contract')])
         self.assertTrue(any('--historical-risk-check' in c and '--browser-check' in c for c in commands))
@@ -654,7 +701,7 @@ class CheckAllTests(unittest.TestCase):
                 self.assertFalse(any('unittest' in c or 'test' in c or 'run' in c and '--project' in c for c in selected))
         margin={f'tools/check_futures_margin_{part}.py' for part in ('sources','adoption','projection_sources')}|{'tools/check_trading_business_date.py'}
         def shared(command):
-            return 'tools/run_preview.py' not in command and not (margin|LIFECYCLE_NATIVE|GAS_AMENDMENTS|LIFECYCLE_PORTFOLIO|OPTION_VALUE_APPS|AGENT_SETTINGS_BROWSER|STORAGE_FACILITY|TRANSPORT_CAPACITY|TRANSPORT_ROUTE|OPERATING_FACILITIES).intersection(command)
+            return 'tools/run_preview.py' not in command and not (margin|LIFECYCLE_NATIVE|GAS_AMENDMENTS|LIFECYCLE_PORTFOLIO|OPTION_VALUE_APPS|AGENT_SETTINGS_BROWSER|STORAGE_FACILITY|TRANSPORT_CAPACITY|TRANSPORT_ROUTE|OPERATING_FACILITIES|POINT_TRADER_MARKS).intersection(command)
         previews = {name: [c for c in value if 'tools/run_preview.py' in c]
                     for name, value in groups.items()}
         owned = {name: [c for c in value if not shared(c)] for name, value in groups.items()}

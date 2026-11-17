@@ -118,14 +118,14 @@ internal static class CloseRiskPreflightChecks
         Equal(RiskEngine.IntervalWork(mixed).RowScenarios,13); // 2*(base/up/down) +7 frozen base rows.
         Console.WriteLine("PASS early risk refusal lower bound: native DST grids, reached factors, exact coverage reuse, zero MW and overdue/unproven scopes");
     }
-    private sealed record WorkInstrument(CurveRequest Request,PriceUnit Unit,long Rows):Instrument(Guid.NewGuid())
+    private sealed record WorkInstrument(CurveRequest Request,PriceUnit Unit,long Rows):ApiSidedProbe(Guid.NewGuid(),Unit.Currency,Unit.Quantity,[Request],
+        _=>throw new Exception("Work admission must not value a Side."),"declared_work_check_v1")
     {
         public override ReferenceKey Currency=>Unit.Currency;
         public override Quantity UnitQuantity=>new(ExactDecimal.Parse("1"),Unit.Quantity);
         public override bool SupportsQuantityScaling=>true;
         public override UnitPricingContract Declare(UnitValuationContext context)=>new(Id,"declared_work_check_v1",[Request],Unit.Quantity,Unit.Currency) { Time = ValuationTimeDependency.Independent };
         public override long WorkRows(UnitValuationContext context)=>Rows;
-        public override ExactMoney Value(UnitValuationContext context)=>throw new Exception("Work admission must not value an instrument.");
     }
     private sealed class Bindings:ICurveBindingResolver
     {

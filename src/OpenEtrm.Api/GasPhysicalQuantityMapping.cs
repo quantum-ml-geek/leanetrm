@@ -44,7 +44,7 @@ internal static class GasPhysicalQuantityMapping
                 var active=opening?.Positions.SingleOrDefault(p=>p.Position==native.DeliveryOwner);
                 if(active is not null)
                 {
-                    if(active.Kind!="delivery_obligation"||active.AccountId!=position.AccountId||!active.Instrument.Equals(instrument))throw Error();
+                    if(active.Kind!="delivery_obligation"||active.AccountId!=position.AccountId||!SameObligation(active.Instrument,instrument))throw Error();
                     holdings.Add(Obligation(active.Quantity));
                 }
                 else if(native.Performances.Any(p=>!p.Retracted&&p.PerformedAt>known.Source.ValuationAt)||
@@ -118,6 +118,14 @@ internal static class GasPhysicalQuantityMapping
             if(publication<1||!publications.TryAdd(transition.Id,publication))throw Error();events.Add(transition);
         }
     }
+    // Reopening an exact obligation constructs new immutable Side collections.
+    // Compare its admitted definitions and native identities, not record storage.
+    internal static bool SameObligation(Instrument? actual,Instrument? expected)=>
+        actual is GasPhysicalDeliveryObligationInstrument left&&expected is GasPhysicalDeliveryObligationInstrument right&&
+        left.Id==right.Id&&left.EconomicIdentity==right.EconomicIdentity&&left.PricingBindingIdentity==right.PricingBindingIdentity&&
+        left.RetainedScheduleIdentity==right.RetainedScheduleIdentity&&left.Sides.Length==right.Sides.Length&&
+        left.Sides.Zip(right.Sides).All(pair=>pair.First.Side.GetType()==pair.Second.Side.GetType()&&
+            pair.First.Side.Id==pair.Second.Side.Id&&pair.First.Side.PricingBindingIdentity==pair.Second.Side.PricingBindingIdentity);
     private static ExactDecimal Abs(ExactDecimal value)=>value.CompareTo(default)<0?-value:value;
     private static MarketDataException Error()=>new("gas_projection_source",
         "Map complete native physical owners, accepted title and exact supply revisions from their captured sources before composing economic risk.");

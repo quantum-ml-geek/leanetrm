@@ -23,7 +23,7 @@ public sealed partial class RecForwardStore
    if(member.Id("sideId")!=s.SideId)throw Invalid();
    return new RecForwardBookedSide(s.Slot,s.SideId,s.ScheduleId,s.Slot==0?"physical_delivery":"consideration",member.Text("coefficient"),s.Program.Document.ScheduleManifest);
   }).ToImmutableArray();
-  return new(p.Trade,revision,p.Binding,p.Book.Id("id"),TradingReference.Trade(p.Head),p.Terms(),sides);
+  return new(p.Trade,revision,p.Binding,p.Book.Id("id"),TradingReference.Trade(p.Head),p.Terms(),sides){SideGroups=[RetainedInstrumentSidePresentation.Rec(p,programs)]};
  }
  public async Task<RecForwardPreviewResult> Value(NpgsqlConnection c,InputFrame frame,Guid trade,int revision,CancellationToken ct)
  {
@@ -44,13 +44,15 @@ public sealed partial class RecForwardStore
   var chosen=selectedSlot is {} selection?programs.Where(p=>p.Slot==selection).ToArray():programs.ToArray();
   if(chosen.Length!=(selectedSlot is null?2:1))throw Invalid();
   var dependencies=chosen.SelectMany(s=>s.Program.Document.Instructions).SelectMany(i=>i.Bindings).Where(b=>b.Kind=="contract_price").Select(b=>b.Market!.Value).Distinct().ToImmutableArray();
-  var market=data.Model.Build(snapshot,dependencies,ct);var sources=ScheduleMarketSources.ForOperating(market);var discounting=new ExplicitDiscounting(ExactDecimal.Parse("1"),DiscountFactorSource.Undiscounted);
+  var market=data.Model.Build(snapshot,dependencies,ct);var discounting=new ExplicitDiscounting(ExactDecimal.Parse("1"),DiscountFactorSource.Undiscounted);
+  var sideContext=SideValuationContext.ForRetainedPrograms(market,market,discounting,ct);
   var members=p.Head.GetProperty("members").EnumerateArray().ToArray();var sides=ImmutableArray.CreateBuilder<StructuredPowerSideResult>();var total=ExactMoney.FromMoney(new(default,p.Currency));
   foreach(var program in chosen.OrderBy(s=>s.Slot))
   {
    var member=members.Single(m=>int.Parse(m.Text("slot"),CultureInfo.InvariantCulture)==program.Slot);if(member.Id("sideId")!=program.SideId)throw Invalid();
    var name=program.Slot==0?"physical_delivery":"consideration";var sign=ExactDecimal.Parse(member.Text("coefficient"));
-   var value=sources.Evaluate(program.Program,program.SideId,market,discounting,ct);
+   var concrete=RetainedProgramSide.ForOperating(program.SideId,program.Program,new(ExactDecimal.Parse("1"),p.Quantity),p.Currency);
+   var value=concrete.PV(sideContext).Execution;
    inspect?.Invoke(program.Slot,new(name,value,program.Program,p.TotalQuantity,new(sign.Power(1).Numerator,sign.Power(1).Denominator),[]));
    var rows=ImmutableArray.CreateBuilder<StructuredPowerSideRow>();ReferenceKey? quote=null;
    foreach(var guard in program.Program.Document.Instructions.Where(i=>i.Output.Operation=="output_guard"))

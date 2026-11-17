@@ -50,6 +50,8 @@ public static partial class StructuredPowerPreview
             saved.Id==Guid.Empty||request.FacilityVersion!=saved.Version||saved.Version<1||!Utc(knownAt)||!Utc(frame.At))
             throw Error("structured_power_context","Retain the selected snapshot, saved facility version and authorized knowledge cutoff.");
         var from=Instant(saved.EffectiveFrom);var to=Instant(saved.EffectiveTo);var resolved=ResolveTerms(data,saved.Terms,from,to);
+        if(request.Composition is not null&&request.Valuation is not null)throw Error("operating_composition","Select exactly one versioned Side composition; legacy and composed terms cannot coexist.");
+        if(request.Composition is {} composition)ValidateComposition(composition,saved.Terms.Kind);
         if(request.BatteryDispatch is null||request.ThermalDispatch is null||request.SolarDispatch is null)throw PreviewUnion();
         var count=saved.Terms.Kind switch{"battery"=>request.BatteryDispatch.Length,"thermal"=>request.ThermalDispatch.Length,"solar"=>request.SolarDispatch.Length,_=>0};
         var grid=Grid(resolved,request.Grid,count);if(grid[0].Start<from||grid[^1].End>to)throw Error("structured_power_time","Every interval must belong to the saved facility version's effective period.");
@@ -87,7 +89,12 @@ public static partial class StructuredPowerPreview
                 Port("energy",OperatingOutputKind.EnergyOutput,resolved.Energy,evaluation.Rows.Select(x=>x.Energy));
                 var fuelBasis=request.Valuation?.FuelQuantityBasis;
                 if(request.Valuation is not null&&fuelBasis is not("guaranteed" or "consumption"))throw Error("structured_power_policy","Select the guaranteed or consumption fuel quantity basis explicitly.");
-                Port("fuel",OperatingOutputKind.FuelInput,resolved.Fuel!,evaluation.Rows.Select(x=>fuelBasis=="guaranteed"?x.GuaranteedFuel:x.ConsumptionFuel));
+                if(request.Composition is not null)
+                {
+                    Port("guaranteed_fuel",OperatingOutputKind.GuaranteedFuelInput,resolved.Fuel!,evaluation.Rows.Select(x=>x.GuaranteedFuel));
+                    Port("consumption_fuel",OperatingOutputKind.ConsumptionFuelInput,resolved.Fuel!,evaluation.Rows.Select(x=>x.ConsumptionFuel));
+                }
+                else Port("fuel",OperatingOutputKind.FuelInput,resolved.Fuel!,evaluation.Rows.Select(x=>fuelBasis=="guaranteed"?x.GuaranteedFuel:x.ConsumptionFuel));
                 foreach(var row in evaluation.Rows)result.Add(new(row.Interval,[new("energy_output",row.Energy),new("guaranteed_fuel",row.GuaranteedFuel),new("consumption_fuel",row.ConsumptionFuel)]));
                 closing=new(evaluation.FinalState.At.ToString("O"),evaluation.FinalState.Commitment==ThermalCommitment.Online?"online":"offline",checked((int)(evaluation.FinalState.ElapsedInState.Ticks/TimeSpan.TicksPerMinute)),evaluation.FinalState.StartsUsed,[new("previous_output",ExactQuantity.FromQuantity(evaluation.FinalState.PreviousOutput))]);break;
             }
@@ -95,7 +102,7 @@ public static partial class StructuredPowerPreview
             {
                 if(request.SolarRight is not {} right||request.BatteryState is not null||request.ThermalState is not null||request.BatteryDispatch.Length!=0||request.ThermalDispatch.Length!=0||request.SolarDispatch.Any(x=>x is null))throw PreviewUnion();
                 var delivery=right.DeliveryBasis switch{"as_produced"=>SolarDeliveryBasis.AsProduced,"fixed_profile"=>SolarDeliveryBasis.FixedProfile,_=>throw Error("structured_power_policy","Select an implemented solar delivery basis.")};
-                if(delivery==SolarDeliveryBasis.FixedProfile&&request.Valuation is not null)throw Error("structured_power_unavailable","Fixed-profile quantities and replacement exposure are available; full valuation requires explicit replacement and surplus price sides.");
+                if(delivery==SolarDeliveryBasis.FixedProfile&&(request.Valuation is not null||request.Composition is not null))throw Error("structured_power_unavailable","Fixed-profile quantities and replacement exposure are available; full valuation requires explicit replacement and surplus price sides.");
                 var payment=right.PaymentBasis switch{"produced_only"=>SolarPaymentBasis.ProducedOnly,"delivery_obligation"=>SolarPaymentBasis.DeliveryObligation,_=>throw Error("structured_power_policy","This supplied forecast preview supports produced-only or delivery-obligation payments; metered/deemed evidence requires an admitted source.")};
                 var terms=new SolarOutputTerms(new(data.DefinitionRevision,id),resolved.Resource.Asset,resolved.Clock,saved.Terms.IntervalMinutes,resolved.Energy,resolved.SolarStage!.Value,
                     Ratio(right.EntitlementNumerator,right.EntitlementDenominator),delivery,payment,SolarOutputRights.Implementation);
@@ -106,7 +113,8 @@ public static partial class StructuredPowerPreview
                 foreach(var row in evaluation.Rows)result.Add(new(row.Input.Interval,[new("physical_energy",row.PhysicalEnergy),new("payment_energy",row.PaymentEnergy),new("delivery_obligation",row.DeliveryObligation),new("replacement_energy",row.ReplacementEnergy),new("surplus_energy",row.SurplusEnergy),new("eligible_actual_energy",row.EligibleActualEnergy)]));break;
             }
         }
-        var valued=request.Valuation is null?null:Value(data,frame,knownAt,id,resolved,grid,ports,cells.ToImmutable(),request.Valuation);
+        var valued=request.Composition is {} composed?ValueComposition(data,frame,knownAt,id,resolved,grid,ports,cells.ToImmutable(),composed):
+            request.Valuation is {} legacy?Value(data,frame,knownAt,id,resolved,grid,ports,cells.ToImmutable(),legacy):null;
         var snapshot=data.Snapshot(frame);if(frame.ContextId is {} contextId)snapshot=snapshot.WithKnowledge(contextId,knownAt);
         var quantities=OperatingQuantityInputs.Scenario(snapshot,cells.ToImmutable(),OperatingQuantityInputs.ScenarioImplementation);
         var preview=new StructuredPowerPreviewResult(id,frame.Id,frame.ContextId,saved.Id,saved.Version,saved.Terms.Kind,PreviewImplementation,resolved.OperatingClock.Fingerprint,knownAt,result.MoveToImmutable(),closing,valued?.Value,

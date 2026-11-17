@@ -1,6 +1,7 @@
 import {withOwnedBrowser} from './owned-browser.mjs';
 import {startNewTrade} from './new-trade.mjs';
 import {gasTicket} from './gas-ticket.mjs';
+import {sideCards,serviceFieldGroups,sidePhone} from './instrument-side-qualification.mjs';
 
 const q=JSON.stringify,panel='[data-lifecycle=panel]',family='physical_gas_park_loan',native='physical_gas_park_custody';
 
@@ -34,6 +35,17 @@ async function run(driver){
   await set(control(null,'custody_quantity'),'720');await set(control(null,'fixed_fee_amount'),'12.5');
   for(const [id,value]of [['park_at',f.parkAt],['return_at',f.returnAt],['fee_due_at',f.feeDueAt]])await setInstant(null,id,value);
   await until(current());
+  await serviceFieldGroups(driver,ticket,['agreement','custody','fee'],'custody edits distinguish retained-title performance from independent financial fee terms');
+  if(input===f.cases[0]){
+   await set(control(null,'fixed_fee_amount'),'0');
+   await evaluate(`(()=>{const n=document.querySelector(${q(ticket+' [data-field=fee_due_at] [data-role=not-applicable]')});n.checked=true;n.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+   await until(current());
+   await sideCards(driver,ticket,await evaluate("calls.findLast(c=>c.path==='/api/tickets/preview'&&c.status===200).result"),{label:'explicit zero-fee custody reports no financial Instrument and creates no gas Side',roles:[]});
+   await set(control(null,'fixed_fee_amount'),'12.5');
+   await evaluate(`(()=>{const n=document.querySelector(${q(ticket+' [data-field=fee_due_at] [data-role=not-applicable]')});n.checked=false;n.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+   await setInstant(null,'fee_due_at',f.feeDueAt);await until(current());
+  }
+  await sideCards(driver,ticket,await evaluate("calls.findLast(c=>c.path==='/api/tickets/preview'&&c.status===200).result"),{label:'conditional custody fee review contains one actual cash Side without invented principal/title Sides',roles:['Ordinary cash payment']});
   await check('the custody profile exposes no title-transfer principal mark, claim account or elapsed fee fields',`['mark_curve','claim_account','principal_quantity','fee_rate_amount'].every(id=>document.querySelector(${q(ticket)}+' [data-field="'+id+'"]')===null)`);
   if(input.perspective==='provider')await check('provider explicitly selects foreign custody without any inventory account',`document.querySelector(${q(control(null,'owned_account'))}).value==='none'&&document.querySelectorAll(${q(control(null,'owned_account')+' option')}).length===2`);
   await click('#blotter-dock [data-maximize=details]');await evaluate("document.querySelector('#park-loan-ticket .deal-ticket').scrollIntoView({block:'start'})");await shot(f.artifactPrefix+'-entry');await click('#blotter-dock [data-maximize=details]');
@@ -46,7 +58,9 @@ async function run(driver){
   if(status.body.product!==family||status.body.profile!==f.profile||status.body.operationId!==booked.body.operationId)throw Error('Booking recovery selected a different native family or profile.');
   await wait("!!document.querySelector('#position-details .deal-ticket[data-mode=booked]')&&"+idle,60000);
   await check('retained custody inspection has no commodity price navigation',"[...document.querySelectorAll('#position-details button')].filter(b=>b.textContent==='Open curve').every(b=>b.hidden)&&!document.querySelector('#position-details .ticket-add-kind')");
-  await source(c,'booked conditional plan',c.signedFee,'before');
+  const retained=await source(c,'booked conditional plan',c.signedFee,'before');
+  await sideCards(driver,'#position-details',retained,{label:'saved custody retains only its exact independent cash Side and binding',retained:true,roles:['Ordinary cash payment']});
+  if(input===f.cases[0])await sidePhone(driver,'#position-details',f.artifactPrefix+'-sides-mobile');
  }
  const cases=await evaluate('custodyCases');await at('flow');
  async function openAction(c,kind){

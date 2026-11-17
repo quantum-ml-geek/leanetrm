@@ -71,6 +71,11 @@ public sealed record PhysicalLifecycleValue(ExactMoney Unrealized,ExactMoney Rea
 // A member's evaluation and the map from its unscaled amounts to signed held amounts.
 public sealed record LifecycleMember(BookedSideProgram Program,BookedSideEvaluation Evaluation,bool Physical,Func<ExactMoney,ExactMoney> Held);
 
+// Instrument-owned connections carry only exact physical day states and
+// quantities. They contain no price, cash value, Side or Instrument callback.
+internal sealed record PhysicalLifecycleGeometry(ImmutableDictionary<DateOnly,DeliveryState> Days,
+    ImmutableDictionary<DateOnly,ExactQuantity> Quantities);
+
 // Started delivery, whole gas days: ended days leave the unrealized measure; their cash accrues on contract quantity
 // and stays realized unsettled until paid, discounted to its payment date until due.
 public static class PhysicalLifecycle
@@ -132,17 +137,19 @@ public static class PhysicalLifecycle
 
     public static PhysicalLifecycleValue Evaluate(ImmutableArray<LifecycleMember> members,PhysicalCashState state,MarketSnapshot snapshot,ReferenceKey currency)
     {
-        if(snapshot.Knowledge is null)throw new MarketDataException(ContextRefusal,"Payment visibility requires an explicit resolved knowledge cutoff.");
-        var at=snapshot.ValuationAt;var zero=ExactMoney.Parse("0",currency);
+        var geometry=PrepareGeometry(members.Where(m=>m.Physical).Select(m=>m.Program),snapshot);
+        return EvaluateConnected(members,state,snapshot,currency,geometry,0);
+    }
+    internal static PhysicalLifecycleGeometry PrepareGeometry(IEnumerable<BookedSideProgram> programs,MarketSnapshot snapshot)
+    {
+        var at=snapshot.ValuationAt;
         DeliveryState Delivery(DateTimeOffset start,DateTimeOffset end)=>end<=at?DeliveryState.Ended:start<=at?DeliveryState.InProgress:DeliveryState.NotStarted;
-        // Each operating day's state across the physical members. Members on different gas-day clocks may deliver the
-        // same operating day; a cash day covering it is defined only while every member agrees on that day's state.
         var days=new Dictionary<DateOnly,DeliveryState>();
         var quantities=new Dictionary<DateOnly,ExactQuantity>();
-        foreach(var member in members.Where(m=>m.Physical))
+        foreach(var program in programs)
         {
             var seen=new HashSet<DateOnly>();
-            foreach(var day in PhysicalDeliverySchedule.ReadLiteralQuantities(member.Program,ExactRatio.One))
+            foreach(var day in PhysicalDeliverySchedule.ReadLiteralQuantities(program,ExactRatio.One))
             {
                 var delivered=Delivery(day.Start,day.End);
                 if(days.TryGetValue(day.OperatingDate,out var known)&&known!=delivered||!seen.Add(day.OperatingDate))
@@ -151,6 +158,26 @@ public static class PhysicalLifecycle
                 quantities[day.OperatingDate]=quantities.TryGetValue(day.OperatingDate,out var sum)?sum.Add(day.Quantity):day.Quantity;
             }
         }
+        return new(days.ToImmutableDictionary(),quantities.ToImmutableDictionary());
+    }
+    internal static PhysicalLifecycleValue EvaluateSide(BookedSideProgram program,BookedSideEvaluation evaluation,bool physical,int slot,
+        SignedRatio heldFactor,PhysicalLifecycleGeometry geometry,PhysicalCashState state,MarketSnapshot snapshot,ReferenceKey currency)
+    {
+        if(heldFactor.Numerator.IsZero)throw new MarketDataException(ContextRefusal,"A held Side requires nonzero exact quantity normalization.");
+        var held=EvaluateConnected([new(program,evaluation,physical,value=>value.Scale(heldFactor))],state,snapshot,currency,geometry,slot);
+        return Scale(held,new SignedRatio(heldFactor.Numerator.Sign*heldFactor.Denominator,System.Numerics.BigInteger.Abs(heldFactor.Numerator)));
+    }
+    internal static PhysicalLifecycleValue Scale(PhysicalLifecycleValue value,SignedRatio factor)=>new(
+        value.Unrealized.Scale(factor),value.RealizedUnsettled.Scale(factor),value.Total.Scale(factor),
+        [..value.Rows.Select(row=>row with{Accrued=row.Accrued.Scale(factor),Paid=row.Paid.Scale(factor),Outstanding=row.Outstanding.Scale(factor),
+            Unrealized=row.Unrealized.Scale(factor),RealizedUnsettled=row.RealizedUnsettled.Scale(factor),Expected=row.Expected?.Scale(factor)})]);
+    private static PhysicalLifecycleValue EvaluateConnected(ImmutableArray<LifecycleMember> members,PhysicalCashState state,MarketSnapshot snapshot,
+        ReferenceKey currency,PhysicalLifecycleGeometry geometry,int firstSlot)
+    {
+        if(snapshot.Knowledge is null)throw new MarketDataException(ContextRefusal,"Payment visibility requires an explicit resolved knowledge cutoff.");
+        var at=snapshot.ValuationAt;var zero=ExactMoney.Parse("0",currency);
+        var days=geometry.Days;var quantities=geometry.Quantities;
+        DeliveryState Delivery(DateTimeOffset start,DateTimeOffset end)=>end<=at?DeliveryState.Ended:start<=at?DeliveryState.InProgress:DeliveryState.NotStarted;
         ExactMoney Held(LifecycleMember member,ScheduleValueColumn column)=>column.Presence[0]==ScheduleCellPresence.Resolved?
             member.Held(ExactMoney.FromFraction(column.Values[0].Numerator,column.Values[0].Denominator,currency)):
             throw Unsupported("A lifecycle amount requires its resolved evaluated value.");
@@ -160,9 +187,9 @@ public static class PhysicalLifecycle
                 throw Unsupported("An ended day or due payment must already be outside the evaluated measure.");
         }
         var rows=ImmutableArray.CreateBuilder<PhysicalLifecycleRow>();
-        for(var slot=0;slot<members.Length;slot++)
+        for(var index=0;index<members.Length;index++)
         {
-            var member=members[slot];var document=member.Program.Document;
+            var slot=index+firstSlot;var member=members[index];var document=member.Program.Document;
             foreach(var contribution in member.Evaluation.Contributions)
             {
                 var row=document.Instructions[contribution.Instruction].Output;

@@ -31,11 +31,11 @@ public sealed record RetainedOperatingInstrument:RetainedProgramInstrument<Retai
     [IdentityField]public override ReferenceKey Currency {get;}
     public override bool SupportsQuantityScaling=>false;
     public override bool SupportsFixedUnitBinding=>true;
-    public RetainedOperatingInstrument(Guid id,AssetKey resource,Quantity unit,ReferenceKey currency,ImmutableArray<RetainedOperatingMember> members):base(id)
+    public RetainedOperatingInstrument(Guid id,AssetKey resource,Quantity unit,ReferenceKey currency,ImmutableArray<RetainedOperatingMember> members):base(id,members,unit,currency)
     {
         if(resource is null||resource.Revision.CatalogId==Guid.Empty||resource.Revision.RevisionId==Guid.Empty||string.IsNullOrWhiteSpace(resource.Code)||unit is null||unit.Amount!=ExactDecimal.Parse("1")||members.IsDefaultOrEmpty||members.Length>16||members.Any(m=>m is null)||
-            unit.Specification.Revision!=currency.Revision||members.Select(m=>m.SideId).Distinct().Count()!=members.Length||members.Any(m=>m.Program.Document.Instructions.Any(i=>i.Output.Currency is {} c&&c!=currency)))
-            throw new MarketDataException("operating_instrument","Retain one exact complete right, resource version, currency and distinct independently owned programs.");
+            unit.Specification.Revision!=currency.Revision||members.Any(m=>m.Program.Document.Instructions.Any(i=>i.Output.Currency is {} c&&c!=currency)))
+            throw new MarketDataException("operating_instrument","Retain one exact complete right, resource version, currency and explicit independently signed program memberships.");
         Money.RequireKey(unit.Specification);Money.RequireKey(currency);
         Resource=resource;UnitQuantity=unit;Currency=currency;Members=members;
     }
@@ -46,12 +46,18 @@ public sealed record RetainedOperatingInstrument:RetainedProgramInstrument<Retai
     }
     public override ExactMoney Value(UnitValuationContext context)
     {
-        if(Members.SelectMany(m=>m.Program.Document.Instructions).Where(i=>i.Output.Operation=="output_guard").Any(i=>i.Output.Interval!.Start<=context.Snapshot.ValuationAt))
-            throw new MarketDataException("operating_delivery_lifecycle","A started operating plan requires a separately qualified operational lifecycle.");
+        RequireUnstarted(context.Snapshot);
         return base.Value(context);
     }
-    public override UnitPricingContract Declare(UnitValuationContext context)=>new(Id,"retained_supplied_operating_right_v1",
+    public override InstrumentValuation PV(SideValuationContext context)
+    {RequireUnstarted(context.Snapshot);return base.PV(context);}
+    private void RequireUnstarted(MarketSnapshot snapshot)
+    {
+        if(Members.SelectMany(m=>m.Program.Document.Instructions).Where(i=>i.Output.Operation=="output_guard").Any(i=>i.Output.Interval!.Start<=snapshot.ValuationAt))
+            throw new MarketDataException("operating_delivery_lifecycle","A started operating plan requires a separately qualified operational lifecycle.");
+    }
+    public override UnitPricingContract Declare(UnitValuationContext context)=>RetainedDeclaration(new(Id,"retained_supplied_operating_right_side_v2",
         [..Members.SelectMany(m=>m.Program.Document.Instructions).SelectMany(i=>i.Bindings).Where(b=>b.Kind=="contract_price").Select(b=>b.Market!.Value).Distinct()],
-        UnitQuantity.Specification,Currency){Time=ValuationTimeDependency.Pinned,ScheduleIdentity=RetainedScheduleIdentity};
+        UnitQuantity.Specification,Currency){Time=ValuationTimeDependency.Pinned,ScheduleIdentity=RetainedScheduleIdentity});
     protected override ScheduleMarketSources Sources(CurveBuild basis)=>ScheduleMarketSources.ForOperating(basis);
 }

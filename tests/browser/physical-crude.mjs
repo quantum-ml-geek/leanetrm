@@ -2,9 +2,11 @@ import {chooseCalendars} from './side-calendars.mjs';
 import {openPhysicalTrade,selectDeliveryFrame} from './physical-operations-grid.mjs';
 import {run as inventorySales} from './crude-inventory-sales.mjs';
 import {newTrade,closeNewTrade} from './new-trade.mjs';
+import {captureSideTerms,retainedSideTerms,sideCards,sidePhone} from './instrument-side-qualification.mjs';
 // Native API scenario against the owned synthetic crude fixture.
 export async function run(actions){
  const {command,evaluate,wait,click,set,submit,persona,check,shot,idle,fitsWidth,url}=actions;
+ await captureSideTerms(actions);
  const operationsVisible="document.querySelector('#crude-operations').getClientRects().length>0&&document.querySelector('#crude-operation-kind').getClientRects().length>0";
  await command('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false});
  await command('Page.navigate',{url:url+'/'});await wait("document.querySelectorAll('.curve-button').length>0&&"+idle);await persona('trader');
@@ -33,6 +35,9 @@ export async function run(actions){
  await evaluate("[...document.querySelectorAll('#product-trade-pending button')].find(b=>b.textContent==='Reconcile physical crude request').click()");await wait("!document.querySelector('#crude-pending').hidden&&"+idle);
  await click('#crude-check');await wait("document.querySelector('#position-details').textContent.includes('Physical crude trade')&&"+idle);
  await check('status recovery opens exact retained crude details in common positions',"document.querySelector('#crude-pending').hidden&&document.querySelector('#position-details').textContent.includes('Physical crude trade')&&document.querySelector('#position-details').textContent.includes('Custody point')&&document.querySelector('#position-details').textContent.includes('Handling fee direction')", "({error:document.querySelector('#error').textContent,details:document.querySelector('#position-details').textContent})");
+ const sideTerms=await retainedSideTerms(actions,'crude');
+ await sideCards(actions,'#position-details',sideTerms,{label:'saved native crude Terms retain physical, consideration and optional fee Side occurrences',retained:true,bindings:[sideTerms.head.instrument_id],slots:[3]});
+ await sidePhone(actions,'#position-details','physical-crude-sides-mobile');
  await check('the common crude position states contractual PV without unsupported settlement actions',"document.querySelector('#position-details').textContent.includes('Contractual PV')&&!document.querySelector('#position-details').querySelector('[data-action=settle]')");
  await check('crude bookings fit the viewport',fitsWidth);await shot('physical-crude-booking');
  // Contractual PV is unavailable in January; the authorized booked-facts path still opens operations.

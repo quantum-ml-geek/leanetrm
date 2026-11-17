@@ -27,6 +27,7 @@ internal static class RecForwardChecks
   if(risk.Base.Amount!=ExactDecimal.Parse("1000")||risk.Up.Amount!=ExactDecimal.Parse("1100")||risk.Down.Amount!=ExactDecimal.Parse("900"))throw new Exception("One hundred certificates must scale independent 50-minus-40 sides once and shock the selected market consistently.");
   var retained=new RetainedRecForwardInstrument(Guid.NewGuid(),instrument.Product,instrument.VintageFrom,instrument.VintageTo,unit,quote.Currency,
    [..instrument.Sides.Select(s=>new RetainedOperatingMember(s.Side.Id,s.Coefficient,BookedSideProgram.Compile(ScheduleDefinitionCompiler.Generate(s.Side))))]);
+  RetainedInstrumentContractChecks.Sides(retained,[..retained.Members.Select(m=>(m.SideId,m.Program,m.Coefficient,(OpenEtrm.Shared.Numerics.ExactRatio?)null))]);
   void Refuse(Side physicalSide,Side cashSide)
   {
    try{_=new RetainedRecForwardInstrument(Guid.NewGuid(),instrument.Product,instrument.VintageFrom,instrument.VintageTo,unit,quote.Currency,
@@ -43,11 +44,18 @@ internal static class RecForwardChecks
   var execution=ScheduleMarketSources.ForOperating(market).Evaluate(physicalProgram,physical.Id,market,new ExplicitDiscounting(one,DiscountFactorSource.Undiscounted));
   var inspection=SideScheduleSnapshot.FromProgram(physical.Id,snapshot.Id,new("physical_delivery",execution,physicalProgram,ExactDecimal.Parse("100"),new(-1,1),[]),d=>new(d.ToDateTime(TimeOnly.MinValue),TimeSpan.Zero));
   var detail=inspection.Read(0,8).Rows.Single();
+  if(detail.Kind!="Delivery"||detail.PaymentAt is not null||detail.PaymentTiming is not null||detail.Lifecycle.Cash is not null)
+   throw new Exception("A retained certificate delivery remains a physical Side contribution without a cash payment or settlement law.");
   if(detail.Quantity!="-100"||detail.Amount!="-5000"||detail.PresentValue!="-5000"||detail.Start!=interval.Start||detail.End!=interval.End)
    throw new Exception("Native Side inspection must show exactly one hundred signed certificates and their five-thousand gross mark.");
   var retainedTrade=new Trade(Guid.NewGuid(),trade.BookId,[new(Guid.NewGuid(),retained,new(ExactDecimal.Parse("100"),q.Key))]);
   var reopened=RiskEngine.Calculate(model,snapshot,ValuationPortfolio.FromTrades([retainedTrade],setup),[bump],RiskEngine.NumericalPolicy).Factors.Single().Totals.Single();
   if(reopened.Base!=risk.Base||reopened.Up!=risk.Up||reopened.Down!=risk.Down)throw new Exception("Retained certificate schedules must preserve native unit scaling and factor scenarios.");
+  if(retained.Sides[0].Side.GenerateSchedule().Rows.Single().Key.Timing!=ValueTimingKind.Instant)
+   throw new Exception("A retained physical output must keep the saved instant carrying key; its scalar row is not a UTC cash-payment day.");
+  RetainedInstrumentContractChecks.Rec(retained);
+  try{retained.PV(new SideValuationContext(snapshot with{ValuationAt=interval.Start},setup.Discounting!));throw new Exception("A started REC instrument must reject direct Side-context PV.");}
+  catch(MarketDataException error)when(error.Code=="rec_delivery_lifecycle"){}
   if(physical.GenerateSchedule().Rows.Single().Key.Timing!=ValueTimingKind.Instant)throw new Exception("Certificate delivery is a physical mark with an instant boundary.");
   Console.WriteLine("PASS REC forward: exact product/vintage, independently retained physical/cash sides and one-time native count scaling");return 1;
  }

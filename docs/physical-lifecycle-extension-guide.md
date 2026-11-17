@@ -16,6 +16,14 @@ object names do not justify a parallel persistence or event framework.
 
 ## Start with the contract and current consumers
 
+The [mandatory instrument contract](instrument-contracts.md#mandatory-composition-boundary-d417)
+applies before selecting a lifecycle extension. Futures and exchange-traded
+options are the only financial products without Sides. Retained programs, cash
+claims and physical claims must execute through concrete Side implementations.
+Fixed/floating economics are shared mechanisms; each concrete Side retains its
+own supported behavior, schedule and PV. A common quantity/feasibility model is
+not a Side container or a second valuation engine.
+
 1. Read `AGENTS.md`, architecture sections 3, 5 and 7, the lifecycle design, and
    the current product's implemented contract. Identify what is agreed versus
    proposed, the actual caller and an executable baseline. Do not select a missing
@@ -25,7 +33,9 @@ object names do not justify a parallel persistence or event framework.
    Inspect crude and swap mechanisms before writing another cash/invoice ledger.
 3. Draw the participating objects and their invariants. Keep booked quantity on
    the Trade binding, unit economics on Instrument/Side and peer connections on
-   Instrument. A booked physical membership has a DeliverySchedule over retained
+   Instrument. Every non-exchange Instrument requires genuine Sides owning its
+   schedules and PV; only futures and futures options are exempt (D417). Independent
+   fees remain separate cash Instruments with their own Sides. A booked physical membership has a DeliverySchedule over retained
    geometry with distinct operational quantity tracks. Direct entries can own their
    evidence; shared/imported records retain their source identity/authority and
    explicit allocations. An independent movement schedule is needed only for a

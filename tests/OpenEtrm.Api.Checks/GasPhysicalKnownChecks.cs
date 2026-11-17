@@ -59,6 +59,20 @@ internal static class GasPhysicalKnownChecks
                     future.Any(p=>mapped.OriginalPublications[LifecycleProjectionEvent.ScopedId(p.Parent.DeliveryOwner,p.Performance.Id)]!=p.Performance.OriginalPublicationOrder))
                     throw new Exception("The native mapping lost an active obligation, future physical performance, or its original event identity/publication.");
                 _=mapped.RequireSource(whole,actual,markets.ToImmutable());
+                var active=actual.Positions.First(p=>p.Kind=="delivery_obligation");
+                var original=(GasPhysicalDeliveryObligationInstrument)active.Instrument;
+                foreach(var changed in new[]{new GasPhysicalDeliveryObligationInstrument(Guid.NewGuid(),original.Terms,original.FinalPrice),
+                    new GasPhysicalDeliveryObligationInstrument(original.Id,original.Terms,
+                        ExactUnitPrice.Parse("7.03",original.FinalPrice.Unit))})
+                {
+                    var changedOpening=actual with{Positions=actual.Positions.Replace(active,active with{Instrument=changed})};
+                    try{_=GasPhysicalQuantityMapping.Build(read.Attachments,whole,changedOpening,ImmutableDictionary<AccountingPositionKey,KnownFuturesPhysicalFinal>.Empty,markets.ToImmutable());
+                        throw new Exception("Physical mapping admitted a changed native obligation identity or accepted final.");}
+                    catch(MarketDataException error)when(error.Code=="gas_projection_source"){}
+                    try{_=mapped.RequireSource(whole,changedOpening,markets.ToImmutable());
+                        throw new Exception("Physical source composition admitted a changed native obligation identity or accepted final.");}
+                    catch(MarketDataException error)when(error.Code=="gas_projection_source"){}
+                }
                 var futureReceipt=read.Attachments.SelectMany(a=>a.Performances).First(p=>!p.Retracted&&p.PerformedAt>at&&p.ReceiptStockOwner is not null).ReceiptStockOwner!.Value;
                 var altered=read.Attachments.Select(a=>a with{Stocks=[..a.Stocks.Select(s=>s.Owner==futureReceipt?s with{Lot=s.Lot with{AvailableAt=s.Lot.AvailableAt.AddHours(1)}}:s)]}).ToImmutableArray();
                 try
@@ -98,8 +112,10 @@ internal static class GasPhysicalKnownChecks
                 throw new Exception("The physical source accepted a forged coherent snapshot identity.");
             }
             catch(MarketDataException error)when(error.Code=="gas_physical_known_source"){}
-            var json=JsonSerializer.SerializeToElement(read.Attachments,LifecycleNative.Json).GetRawText();
+            var json=JsonSerializer.SerializeToElement(read.Attachments,RiskJobs.Json).GetRawText();
             if(json.Contains("authorityUntil",StringComparison.Ordinal))throw new Exception("Physical source authority entered immutable projected facts.");
+            if(!json.Contains("timed_cash_source_definition_v1",StringComparison.Ordinal)||!json.Contains("gas_holding_source_definition_v1",StringComparison.Ordinal))
+                throw new Exception("Physical source evidence lost its exact retained cash or stock definition.");
             return true;
         },default);
         Console.WriteLine("PASS typed physical source: exact owner keys, complete future descendants, exact-parent closure, payment revisions and forged-source refusal");

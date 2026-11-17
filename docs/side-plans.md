@@ -1,5 +1,16 @@
 # Side schedule evaluation
 
+D417 makes the Side boundary mandatory for every financial instrument except
+futures and exchange-traded options. Concrete Side subclasses own schedule and
+PV behavior, including exact retained-program execution. Shared fixed/floating
+economics are reusable mechanisms; they do not exhaust the supported Side types.
+Instrument PV combines explicit signed memberships, and Trade scales once.
+Coupled operating plans supply typed quantity/state inputs without containing
+Sides or calling another Instrument PV. The power/REC implementation and its
+required common adapters are locally qualified under the bounded operating
+assembly contract; broader capability and release gates remain in
+[the plan](plan.md#mandatory-side-composition-d417).
+
 Status: design accepted for the local implementation trial (2026-10-28), amended
 to retain executable schedules at booking (2026-10-29). This
 record specifies the contract, not completion evidence. Current executable scope
@@ -27,6 +38,22 @@ Independent source reads run concurrently in bounded batches under the same
 temporal and authorization contract. D257 decides the price node the rows read.
 This supersedes the earlier compile-per-calculation proposal. Implementation and
 qualification of direct execution remain work.
+
+## Instrument membership requirement
+
+D417 requires genuine Side composition for every non-exchange Instrument,
+including cash, owned-gas claims, whole service-rights values and retained-program
+projections. Only futures and futures options are exempt. Sides own their
+schedules, PV and inspection; Instruments own signs, quantity ratios and typed
+connections. A scalar current value is a noncash holding row, without an invented
+payment or delivery interval. Separately owned fees remain independent cash
+Instruments with their own Sides; a zero fee does not create a fictitious Side.
+
+Retained-program Sides execute the stored program directly. Their schedule
+wrappers expose original addresses lazily, and their calendar policies are
+reconstructed exactly from saved canonical terms. The checked derived membership
+view preserves published program and Instrument identity contracts. It never
+recompiles a schedule or refreshes a calendar from the current catalog.
 
 ## Baseline before the trial
 

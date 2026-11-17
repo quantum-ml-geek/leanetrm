@@ -109,6 +109,8 @@ public sealed class PhysicalGasStore(PreviewDatabase database)
   deliveryPoint=path.Text("point_code"),deliveryPointName=path.Text("point_name"),product=path.Text("product_code"),productName=path.Text("product_name")};
  internal async Task<object> PhysicalReferences(NpgsqlConnection c,PreviewData data,CancellationToken ct)=>
   new{physicalReferences=(await ReferencePaths(c,data,ct)).Select(ReferencePath).ToArray()};
+ internal Task<ImmutableArray<JsonElement>> Books(NpgsqlConnection c,CancellationToken ct)=>
+  PreviewDatabase.Rows(c,"SELECT row_to_json(b)::text FROM trading.books b WHERE catalog_id=$1 ORDER BY name",[Catalog],ct);
  public async Task<object> CatalogRead(NpgsqlConnection c,PreviewData data,InputFrame frame,CancellationToken ct)
  {
   var (setup,publication)=await CurrentSetup(c,data,ct);
@@ -131,7 +133,7 @@ public sealed class PhysicalGasStore(PreviewDatabase database)
     deliveryPoint=path.Text("point_code"),deliveryPointName=path.Text("point_name"),clock=path.Text("clock_code"),dayStartMinute=int.Parse(path.Text("day_start_minute"),CultureInfo.InvariantCulture),product=path.Text("product_code"),productName=path.Text("product_name"),
     valuation=matched.Length==1?ValuationDetails(data,matched[0]):null};
   }).ToArray();
-  var books=await PreviewDatabase.Rows(c,"SELECT row_to_json(b)::text FROM trading.books b WHERE catalog_id=$1 ORDER BY name",[Catalog],ct);
+  var books=await Books(c,ct);
   return new{sideCalendars=await SideCalendarPolicies.Catalog(c,ct),gasSetupId=setup,gasSetupPublication=publication,physicalReferences=referencePaths.Select(ReferencePath).ToArray(),locations,tariffs=(await Tariffs(c,data,setup,ct)).Select(t=>new{code=t.Text("code"),name=t.OptionalText("logical_code")??t.Text("code"),pipeline=t.Text("pipeline_code"),product=t.Text("product_code"),quote=t.Text("quote_code"),rate=t.Text("rate"),validFrom=t.Text("valid_from"),validTo=t.Text("valid_to"),basis="contractual_delivery_quantity"}),books,legalEntities=await TradeParties.Catalog(c,Catalog,true,ct),counterparties=await TradeParties.Catalog(c,Catalog,false,ct),
    scope="Future physical gas delivery with fixed contractual quantities, separate fixed consideration and optional usage fee. This profile admits up to 1200 operating days with exact monthly index coverage, fixed-offset gas days and no discounting. Actuals and settlement remain unavailable."};
  }

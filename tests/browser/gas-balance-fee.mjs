@@ -1,6 +1,7 @@
 import {withOwnedBrowser} from './owned-browser.mjs';
 import {startNewTrade} from './new-trade.mjs';
 import {gasTicket} from './gas-ticket.mjs';
+import {sideCards,serviceFieldGroups,sidePhone} from './instrument-side-qualification.mjs';
 
 const q=JSON.stringify,panel='[data-lifecycle=panel]',product='physical_gas_park_loan';
 // Compare independent literal oracles with the report's exact transport; this
@@ -143,6 +144,8 @@ async function run(driver){
   for(const[field,member]of Object.entries({fee_basis:'basis',fee_time_basis:'timeBasis',fee_start_policy:'startPolicy',fee_end_policy:'endPolicy',fee_overdue_policy:'overduePolicy',fee_projection_policy:'projectionPolicy',fee_unadvanced_policy:'unadvancedPolicy',fee_determination_policy:'determinationPolicy',fee_rounding_tie_rule:'roundingTieRule',fee_rounding_stage:'roundingStage'}))await choose(null,field,f.balanceFee[member]);
   await set(control(null,'principal_quantity'),'720');await set(control(null,'fee_rate_amount'),'0');await set(control(null,'fee_rounding_increment'),f.balanceFee.roundingIncrement);
   await setInstant(null,'advance_at',advanceAt);await setInstant(null,'return_at',returnAt);await setInstant(null,'fee_accrual_through_at',cutoffAt);await setInstant(null,'fee_due_at',feeDueAt);await until(current());
+  await serviceFieldGroups(driver,ticket,['agreement','principal','fee'],'balance-fee edit distinguishes agreement, principal Sides and the independent selected fee law');
+  await sideCards(driver,ticket,await evaluate("calls.findLast(call=>call.path==='/api/tickets/preview'&&call.status===200).result"),{label:'zero balance-time rate retains genuine principal Sides without inventing cash',roles:['Gas principal claim','Gas principal claim']});
   await check('a zero rate still retains the explicit due time and selected laws',"(()=>{const call=calls.filter(call=>call.path==='/api/tickets/preview'&&call.status===200).at(-1);return call.body.draft.trade.fee_rate_amount==='0'&&call.body.draft.trade.fee_due_at!=='none'&&!Object.hasOwn(call.body.draft.trade,'fixed_fee_amount');})()");
   await set(control(null,'fee_rate_amount'),f.balanceFee.rateAmount);await until(current());
   await evaluate(`document.querySelector(${q(ticket+' [data-field=fee_rate_amount]')}).scrollIntoView({block:'center'})`);await shot('gas-balance-fee-entry');
@@ -158,6 +161,8 @@ async function run(driver){
   const c={...input,...booking.result};
   await evaluate(`agreements.push(${q(c)})`);await wait(`!!document.querySelector('#position-details .deal-ticket[data-mode=booked] [data-field=fee_rate_amount] .ticket-value')&&${idle}`,60000);
   const reopened=await amount(c,'before',entryContext);
+  await sideCards(driver,'#position-details',reopened,{label:'saved balance-time contract retains exact principal and undetermined fee Side identities',retained:true,roles:['Gas principal claim','Gas principal claim','Ordinary cash payment']});
+  if(input===f.cases[0])await sidePhone(driver,'#position-details','gas-balance-fee-sides-mobile');
   if(reopened.draft.trade.fee_rate_amount!==f.balanceFee.rateAmount||Date.parse(reopened.draft.trade.fee_accrual_through_at)!==Date.parse(cutoffAt)||reopened.draft.trade.fee_direction!==input.feeDirection)throw Error('Reopening changed an exact selected fee term.');
   return c;
  };

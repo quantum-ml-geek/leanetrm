@@ -71,6 +71,14 @@ internal static class SwapLifecycleProjectionChecks
         var rounding=new SwapSettlementRounding(swap.Currency,2,CashTieRule.ToEven,SwapSettlementRounding.Implementation);
         var mixedSetup=setup with{Discounting=null,InstrumentDiscounting=ImmutableDictionary<Guid,ISideDiscounting>.Empty
             .Add(swap.Id,discount).Add(Guid.NewGuid(),new ExplicitDiscounting(ExactDecimal.Parse("0.5"),DiscountFactorSource.Explicit))};
+        var cash=new TimedCashPayment(swap.Currency,f.Payment);
+        var unsupported=new Trade(Guid.NewGuid(),trade.BookId,[new(Guid.NewGuid(),cash,cash.UnitQuantity)]);
+        try
+        {
+            _=new SwapLifecycleProjection(unsupported,unsupported.Instruments[0].Id,actual,setup,new(market,discount),mapping,history,rounding,source);
+            throw new Exception("A newly sided cash Instrument must not enter financial-swap lifecycle projection.");
+        }
+        catch(MarketDataException error)when(error.Code=="projection_swap_state"){}
         var component=new SwapLifecycleProjection(trade,owner.BindingId,actual,mixedSetup,new(market,discount),mapping,history,rounding,source);
         if(component.Opening.Residuals.Single().Setup.InstrumentDiscounting.Keys.Single()!=swap.Id)
             throw new Exception("A swap component retained an unrelated source instrument's discount provider.");

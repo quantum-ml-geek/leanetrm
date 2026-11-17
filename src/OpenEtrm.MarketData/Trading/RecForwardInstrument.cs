@@ -48,7 +48,7 @@ public sealed record RetainedRecForwardInstrument:RetainedProgramInstrument<Reta
  [IdentityField]public override Quantity UnitQuantity {get;}
  [IdentityField]public override ReferenceKey Currency {get;}
  [IdentityField]public override ImmutableArray<RetainedOperatingMember> Members {get;}
- public RetainedRecForwardInstrument(Guid id,ReferenceKey product,DateOnly from,DateOnly to,Quantity unit,ReferenceKey currency,ImmutableArray<RetainedOperatingMember> members):base(id)
+ public RetainedRecForwardInstrument(Guid id,ReferenceKey product,DateOnly from,DateOnly to,Quantity unit,ReferenceKey currency,ImmutableArray<RetainedOperatingMember> members):base(id,members,unit,currency)
  {
   RecForwardRules.Product(product,from,to);Money.RequireKey(currency);
   if(unit is null||unit.Amount!=ExactDecimal.Parse("1")||unit.Specification.Revision!=product.Revision||currency.Revision!=product.Revision||members.IsDefault||members.Length!=2||
@@ -65,13 +65,19 @@ public sealed record RetainedRecForwardInstrument:RetainedProgramInstrument<Reta
  {RecForwardRules.Quantity(quantity,UnitQuantity);base.ValidateBinding(quantity,coverage);}
  public override ExactMoney Value(UnitValuationContext context)
  {
-  if(Members[0].Program.Document.Instructions.Any(i=>i.Output.Operation=="output_guard"&&i.Output.Interval!.Start<=context.Snapshot.ValuationAt))
-   throw new MarketDataException("rec_delivery_lifecycle","A started certificate delivery requires a separately selected fulfillment lifecycle.");
+        RequireUnstarted(context.Snapshot);
   return base.Value(context);
  }
- public override UnitPricingContract Declare(UnitValuationContext context)=>new(Id,"retained_rec_forward_v1",
+    public override InstrumentValuation PV(SideValuationContext context)
+    {RequireUnstarted(context.Snapshot);return base.PV(context);}
+    private void RequireUnstarted(MarketSnapshot snapshot)
+    {
+        if(Members[0].Program.Document.Instructions.Any(i=>i.Output.Operation=="output_guard"&&i.Output.Interval!.Start<=snapshot.ValuationAt))
+            throw new MarketDataException("rec_delivery_lifecycle","A started certificate delivery requires a separately selected fulfillment lifecycle.");
+    }
+ public override UnitPricingContract Declare(UnitValuationContext context)=>RetainedDeclaration(new(Id,"retained_rec_forward_side_v2",
   [..Members.SelectMany(m=>m.Program.Document.Instructions).SelectMany(i=>i.Bindings).Where(b=>b.Kind=="contract_price").Select(b=>b.Market!.Value).Distinct()],
-  UnitQuantity.Specification,Currency){Time=ValuationTimeDependency.Pinned,ScheduleIdentity=RetainedScheduleIdentity};
+  UnitQuantity.Specification,Currency){Time=ValuationTimeDependency.Pinned,ScheduleIdentity=RetainedScheduleIdentity});
  protected override ScheduleMarketSources Sources(CurveBuild basis)=>ScheduleMarketSources.ForOperating(basis);
 }
 internal static class RecForwardRules

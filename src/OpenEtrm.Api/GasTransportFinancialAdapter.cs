@@ -120,10 +120,13 @@ internal static class GasTransportFinancialAdapter
             mark=new(state.Rights,source.Point,new(adopted.Series,InputUse.Variable),adopted.Observation,adopted.Source,adopted.Quote,
                 ObservationRole.TraderMark,provenance);
         }
-        var valuationId=OperationIdentity.For("gas_transport_financial_rights_state_v1",state.Id);
+        var valuationId=ValuationInstrumentId(state.Id);
         return new(valuationId,agreement.Terms.Rights,state.Rights,state.Through,agreement.Terms.ExpiryPolicy,
             agreement.Expiry,source,mark,evaluation);
     }
+
+    internal static Guid ValuationInstrumentId(Guid stateId)=>stateId!=Guid.Empty?
+        OperationIdentity.For("gas_transport_financial_rights_state_v1",stateId):throw Invalid();
 
     static GasTransportFinancialState State(JsonElement row,GasTransportFinancialTerms terms,Guid trade,DateTimeOffset known)
     {

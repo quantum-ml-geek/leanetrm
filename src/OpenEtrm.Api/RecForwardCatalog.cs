@@ -29,7 +29,7 @@ internal static class RecForwardCatalog
         var result=new{ownerId,snapshotId=frame.Id,contextId=frame.ContextId,knownAt,definitionRevisionId=data.DefinitionRevision.RevisionId,
             referenceCatalogId=pins.CatalogId,referenceRevisionId=pins.RevisionId,products,assignments,
             quotes=StructuredPowerPreview.Catalog(data,false,false).Quotes,priceContracts=prices,paymentImplementation=PaymentRule.Implementation,
-            calendarImplementation=SideCalendarPolicy.Implementation,convention=Convention,
+            calendarImplementation=SideCalendarPolicy.Implementation,convention=Convention,fieldLayout=EntrySideFieldGroups.Rec(),
             books=trades?await BookScope.Read(c,database.Manifest.CatalogId,ct):[],
             legalEntities=parties?await TradeParties.Catalog(c,database.Manifest.CatalogId,true,ct):[],
             counterparties=parties?await TradeParties.Catalog(c,database.Manifest.CatalogId,false,ct):[],

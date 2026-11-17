@@ -20,8 +20,9 @@ public sealed record TicketSideKind(string Kind,string Pill,string Colour,int Mi
 // At most Max sides of the named kinds together; each kind keeps its own Min and Max.
 public sealed record TicketSideLimit(ImmutableArray<string> Kinds,int Max);
 public sealed record TicketTab(string Id,string Label,string? Soon=null);
+public sealed record TicketFieldGroup(string Id,string Label,string Kind,ImmutableArray<string> Fields);
 public sealed record TicketDescription(string Product,int Version,string RowShape,ImmutableArray<TicketField> TradeFields,ImmutableArray<TicketSideKind> Sides,ImmutableArray<TicketSideLimit> SideLimits,ImmutableArray<TicketColumn> TradeColumns,ImmutableArray<string> Levels,ImmutableArray<TicketTab> Tabs,ImmutableArray<string> Modes)
-{public ImmutableArray<SideCalendarChoice> SideCalendars{get;init;}=[];[JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)]public ImmutableDictionary<string,string>? Selection{get;init;}}
+{public ImmutableArray<SideCalendarChoice> SideCalendars{get;init;}=[];[JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)]public ImmutableDictionary<string,string>? Selection{get;init;}[JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingDefault)]public bool SideGroupsRequired{get;init;}[JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)]public ImmutableArray<TicketFieldGroup>? FieldGroups{get;init;}}
 // A refusal of one draft value, naming its side (null for a trade field) and field, so the ticket shows the reason on that field.
 public sealed class TicketFieldException(string code,string message,string? side,string field):MarketDataException(code,message)
 {
@@ -48,6 +49,8 @@ public static class TicketDescriptions
   if(levels.Length==0||levels.Contains(-1)||levels.Zip(levels.Skip(1),(a,b)=>a>=b).Any(x=>x))Fail(d,"levels must be a non-empty, ordered subset of term, month, day, hour");
   if(d.Modes.Any(mode=>!ModeNames.Contains(mode)))Fail(d,"modes must be among new, booked, amend and close_out");
   if(d.Sides.GroupBy(s=>s.Kind).FirstOrDefault(g=>g.Count()>1) is {} twice)Fail(d,$"side kind '{twice.Key}' is declared more than once");
+  if(d.FieldGroups is {} groups)
+   RequireFieldGroups([..d.TradeFields.Select(field=>field.Id)],groups,message=>Fail(d,message));
   foreach(var (owner,columns) in d.Sides.Select(s=>($"side kind '{s.Kind}'",s.Columns)).Append(("the trade",d.TradeColumns)))
    if(columns.GroupBy(c=>c.Id).FirstOrDefault(g=>g.Count()>1) is {} column)Fail(d,$"{owner} declares column '{column.Key}' more than once");
   // Every ticket draws its instrument tab, so a declared tab is another one, once.
@@ -92,6 +95,16 @@ public static class TicketDescriptions
    if(limit.Max<Math.Max(1,kinds.Sum(kind=>kind!.Initial)))Fail(d,$"the side limit on {string.Join(", ",limit.Kinds)} is below one or their initial sides");
   }
   return d;
+ }
+ internal static void RequireFieldGroups(ImmutableArray<string> fields,ImmutableArray<TicketFieldGroup> groups,Action<string> fail)
+ {
+  if(groups.IsDefault||groups.Any(group=>group is null||string.IsNullOrWhiteSpace(group.Id)||string.IsNullOrWhiteSpace(group.Label)||
+      group.Kind is not("agreement" or "side_terms" or "independent_instrument_terms")||group.Fields.IsDefaultOrEmpty)||
+      groups.Select(group=>group.Id).Distinct(StringComparer.Ordinal).Count()!=groups.Length)
+   fail("field groups require distinct exact identities, labels, supported presentation kinds and non-empty field lists");
+  var declared=fields.ToHashSet(StringComparer.Ordinal);var grouped=groups.SelectMany(group=>group.Fields).ToArray();
+  if(fields.IsDefault||declared.Count!=fields.Length||grouped.Length!=declared.Count||grouped.Distinct(StringComparer.Ordinal).Count()!=grouped.Length||grouped.Any(field=>!declared.Contains(field)))
+   fail("field groups must partition every declared trade field exactly once");
  }
 
  static void CheckField(TicketDescription d,TicketField field)

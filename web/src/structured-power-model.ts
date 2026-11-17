@@ -40,12 +40,12 @@ export type StructuredPowerVersion={id:string;version:number;effectiveFrom:strin
 export function facilityTerms(pins:StructuredPowerPins,kind:StructuredPowerKind,common:FacilityCommon,parameters:Record<string,unknown>):StructuredPowerTerms {
  return {...pins,...common,kind,battery:kind==='battery'?parameters:null,thermal:kind==='thermal'?parameters:null,solar:kind==='solar'?parameters:null,implementation:'structured_power_facility_v1'};
 }
-export function structuredPreviewRequest(input:{snapshotId:string;facilityId:string;facilityVersion:number;kind:StructuredPowerKind;operatingDate:string;firstInterval:number;state:Record<string,unknown>;plan:string;valuation:unknown}) {
+export function structuredPreviewRequest(input:{snapshotId:string;facilityId:string;facilityVersion:number;kind:StructuredPowerKind;operatingDate:string;firstInterval:number;state:Record<string,unknown>;plan:string;valuation:unknown;composition?:unknown}) {
  const rows=parseSuppliedPlan(input.kind,input.plan);
  return {snapshotId:input.snapshotId,facilityId:input.facilityId,facilityVersion:input.facilityVersion,grid:{operatingDate:input.operatingDate,firstInterval:input.firstInterval},
   batteryState:input.kind==='battery'?input.state:null,batteryDispatch:input.kind==='battery'?rows:[],
   thermalState:input.kind==='thermal'?input.state:null,thermalDispatch:input.kind==='thermal'?rows:[],
-  solarRight:input.kind==='solar'?input.state:null,solarDispatch:input.kind==='solar'?rows:[],valuation:input.valuation};
+  solarRight:input.kind==='solar'?input.state:null,solarDispatch:input.kind==='solar'?rows:[],valuation:input.valuation,...(input.composition===undefined?{}:{composition:input.composition})};
 }
 
 // Local recovery state grants no write authority. Each original profile keeps
