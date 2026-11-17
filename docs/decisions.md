@@ -5566,7 +5566,7 @@ tested merge result, include both sides of renames, and retain complete Git
 history without a changed-file API limit.
 
 Separate repository, frontend, managed and database behavior checks from the
-fourteen existing integration groups. Run shared suites once across the matrix.
+integration groups. Run shared suites once across the matrix.
 Each integration checkout retains locked builds of the API checks, MarketData
 checks and worker, plus frontend assets and owned disposable resources. Preserve
 all existing native/browser consumers and the pinned dependency acquisition
@@ -5579,6 +5579,13 @@ controls. The pull operator requires an exact latest-head release; documentation
 pushes retain that path so they cannot strand earlier runtime changes. See
 [CI impact selection](ci-impact.md) for the executable boundaries and remaining
 qualification. No application, schema or financial contract changes are included.
+
+The 2026-11-17 amendment splits the gas queue into `gas-native`, `gas-browser`
+and `gas` preview jobs after its complete sequential workload reached the
+90-minute job limit. Each retains its own locked preparation and disposable
+resources. The full gate keeps every existing command in order, and its matrix
+requires every behavior command exactly once. The job limit and stable aggregate
+failure rules remain unchanged; hosted qualification covers the new partitioning.
 
 ## D406 · Bookable Park and Loan with independent native owners
 

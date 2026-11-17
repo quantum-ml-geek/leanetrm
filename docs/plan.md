@@ -847,6 +847,8 @@ conservative path consumers for pull requests. All existing full-gate commands
 and same-commit master publication remain required. Managed runtime feature
 selection and coverage-derived dependency analysis remain future work. See
 [CI impact selection](ci-impact.md) for implemented boundaries and qualification.
+Gas native, browser and preview consumers run as three independently prepared
+jobs to keep the existing complete workload within each job's time budget.
 
 The default public page and hosted gateway route contract are available
 separately from the authenticated workspace (D163). An owned nginx check exercises
