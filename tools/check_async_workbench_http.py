@@ -1,6 +1,7 @@
 """Shared asynchronous workbench reads in the launcher-owned synthetic database."""
 import http.client
 import json
+import threading
 import time
 from urllib.parse import urlsplit
 from uuid import uuid4
@@ -228,4 +229,29 @@ def run_checks(url, query, psql, environment, manifest):
         stream.close()
         for grant in saved:
             query(f"UPDATE security.role_grants SET granted_to='{grant['until']}'::timestamptz WHERE id='{grant['id']}';")
+    # A read of working data captures current knowledge under the publication gate. It must not keep that gate while
+    # it values: every other read of working data, in any session, would wait behind it and fail at its command timeout.
+    other=PreviewClient(url);other.bootstrap();other.call('profile',{'profile':'risk'})
+    other_frame=initial_frame(other.call('workspace/catalog'),'2020-12-18')
+    def working(selected):
+        return {'context':{'snapshotId':selected['id'],'convention':'trading_workspace_v1','knowledgeMode':'current'},'bookIds':[],'portfolioIds':[]}
+    gate_waiters="SELECT count(*) FROM pg_locks WHERE locktype='advisory' AND objid=730849102 AND NOT granted;"
+    def reading(client,body):
+        result={}
+        def work():
+            try:result['value']=client.call('portfolio/risk/catalog',body)
+            except Exception as error:result['error']=repr(error)[:200]
+        thread=threading.Thread(target=work);thread.start()
+        return thread,result
+    def valuing_together():
+        first=reading(c,working(frame));waiting(1)
+        second=reading(other,working(other_frame))
+        deadline=time.monotonic()+4
+        while int(query("SELECT count(DISTINCT pid) FROM pg_locks WHERE relation='market_data.observations'::regclass AND NOT granted AND mode='AccessShareLock';"))!=2:
+            assert time.monotonic()<deadline,f'the second read of working data waits for the publication gate ({query(gate_waiters)} waiting) and answered {second[1]}'
+            time.sleep(.025)
+        return first,second
+    first,second=holding(psql,environment,'LOCK market_data.observations IN ACCESS EXCLUSIVE MODE',valuing_together)
+    for thread,_ in (first,second):thread.join(timeout=20)
+    check('a read of working data does not hold the publication gate while it values',all('value' in result for _,result in (first,second)))
     print(f'{passed} asynchronous workbench HTTP checks passed.',flush=True)
