@@ -298,6 +298,12 @@ public static class GasTicket
  internal static ImmutableArray<TicketChoice> PartyChoices(IEnumerable<TradeParties.Choice> rows)=>
   [..rows.Select(p=>PartyChoice(p.Id,p.Revision,p.Name))];
  static TicketChoice PartyChoice(Guid id,int revision,string name)=>new($"{id}@{revision.ToString(CultureInfo.InvariantCulture)}",name);
+ internal static ImmutableArray<TicketChoice> SetupChoices(Guid? setup,int? publication)
+ {
+  if(setup is null&&publication is null)return [];
+  if(setup is not {} id||id==Guid.Empty||publication is not >0)throw On(null,"gas_setup","The published gas setup needs its exact identity and publication order.");
+  return [new(id.ToString(),$"Published setup {publication.Value.ToString(CultureInfo.InvariantCulture)}")];
+ }
 
  public static ImmutableArray<TicketChoice> Choices(TicketDraft draft,string? side,string field,JsonElement catalog)
  {
@@ -311,7 +317,8 @@ public static class GasTicket
   return[..f.Choices switch{
    "books"=>BookChoices(catalog.GetProperty("books").EnumerateArray()),
    "legal_entities"=>Parties("legalEntities"),"counterparties"=>Parties("counterparties"),
-   "gas_setups"=>catalog.OptionalText("gasSetupId") is {} setup?[new TicketChoice(setup,$"Published setup {catalog.Text("gasSetupPublication")}")]:[],
+   "gas_setups"=>SetupChoices(catalog.OptionalText("gasSetupId") is {} setup?Guid.Parse(setup):null,
+    catalog.OptionalText("gasSetupPublication") is {} publication?int.Parse(publication,CultureInfo.InvariantCulture):null),
    "pricing_indices"=>IndexChoices(draft,target!,catalog),
    "pipelines"=>Distinct(paths,"pipeline","pipelineName"),
    "zones"=>Distinct(paths.Where(p=>p.Text("pipeline")==Term(target!,"pipeline",Bad)),"zone","zoneName"),

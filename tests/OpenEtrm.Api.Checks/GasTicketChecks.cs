@@ -40,6 +40,27 @@ internal static class GasTicketChecks
         }
         void Equal(object? expected, object? actual, string what) { if (!Equals(expected, actual)) throw new Exception($"{what}: expected '{expected}', got '{actual}'."); }
         var full = Draft(Receipt, Linked, Cash, Fee);
+        Check("published setup choices preserve the exact source tuple and reject incomplete metadata",()=>
+        {
+            Equal(new TicketChoice(Setup.ToString(),"Published setup 3"),GasTicket.SetupChoices(Setup,3).SingleOrDefault(),"selected published setup");
+            Equal(0,GasTicket.SetupChoices(null,null).Length,"no visible setup");
+            foreach(var pair in new[]{((Guid?)Setup,(int?)null),((Guid?)null,(int?)3),((Guid?)Guid.Empty,(int?)3),((Guid?)Setup,(int?)0)})
+            {
+                try{GasTicket.SetupChoices(pair.Item1,pair.Item2);}catch(MarketDataException error)when(error.Code=="ticket_input"){continue;}
+                throw new Exception("Incomplete source metadata cannot invent a setup choice.");
+            }
+        });
+        Check("already entered dates and native quantity retain their exact values without a pricing catalog",()=>
+        {
+            TicketFieldRequest Read(TicketDraft draft,string side,string field)=>new(new(Snapshot,PhysicalGasStore.Convention,"current"),draft,side,field);
+            Equal(new TicketLookup("2027-01-01",new("suggestion","Retained entry")),GasTicketStartingValues.Retained(Read(full,"RCT","delivery_from")),"entered start");
+            Equal(new TicketLookup("2027-02-01",new("suggestion","Retained entry")),GasTicketStartingValues.Retained(Read(full,"RCT","delivery_to")),"entered end");
+            Equal(new TicketLookup("10000",new("suggestion","Suggested native quantity")),GasTicketStartingValues.Retained(Read(full,"RCT","quantity")),"entered quantity");
+            Equal(null,GasTicketStartingValues.Retained(Read(Draft(Receipt with{Values=Receipt.Values.Remove("quantity")}),"RCT","quantity")),"blank quantity remains a sourced lookup");
+            Equal(null,GasTicketStartingValues.Retained(Read(Draft(Receipt with{Values=Receipt.Values.SetItem("delivery_from","")}),"RCT","delivery_from")),"blank date remains a sourced lookup");
+            try{GasTicketStartingValues.Retained(Read(full,"DLV","quantity"));}catch(MarketDataException error)when(error.Code=="ticket_lookup"){return;}
+            throw new Exception("Linked quantity must still refuse an independent entry suggestion.");
+        });
         Check("fixed and draft-owned choice lists need no pricing catalog",()=>
         {
             Equal("receive,deliver",string.Join(",",GasTicket.LocalChoices(full,"RCT","direction")?.Select(c=>c.Value)??[]),"physical directions");

@@ -68,11 +68,17 @@ public sealed class GasTicketStore(PreviewDatabase database)
   }
   ImmutableArray<TicketChoice>? independent=GasTicket.LocalChoices(body.Draft,body.Side,body.Field);
   if(independent is null&&body.Side is null)
-   independent=body.Field switch{
+  {
+   if(body.Field=="gas_setup")
+   {
+    var setup=await gas.CurrentSetup(c,data,ct);independent=GasTicket.SetupChoices(setup.Id,setup.Publication);
+   }
+   else independent=body.Field switch{
     "book"=>GasTicket.BookChoices(await gas.Books(c,ct)),
     "legal_entity"=>GasTicket.PartyChoices(await TradeParties.Catalog(c,database.Manifest.CatalogId,true,ct)),
     "counterparty"=>GasTicket.PartyChoices(await TradeParties.Catalog(c,database.Manifest.CatalogId,false,ct)),
     _=>null};
+  }
   if(independent is {} localChoices)return GasTicket.ChoiceSet(body.Draft,body.Side,body.Field,localChoices);
   return GasTicket.ChoiceSet(body.Draft,body.Side,body.Field,GasTicket.Choices(body.Draft,body.Side,body.Field,
    GasTicket.PhysicalReferenceField(body.Draft,body.Side,body.Field)?JsonSerializer.SerializeToElement(await gas.PhysicalReferences(c,data,ct),Json):await Catalog(c,data,frame,ct)));
@@ -80,6 +86,7 @@ public sealed class GasTicketStore(PreviewDatabase database)
 
  public async Task<object> Lookup(NpgsqlConnection c,PreviewData data,InputFrame frame,TicketFieldRequest body,CancellationToken ct)
  {
+  if(GasTicketStartingValues.Retained(body) is {} retained)return retained;
   var catalog=await Catalog(c,data,frame,ct);
   var lookup=GasTicket.LookupOf(body.Draft,body.Side,body.Field);
   if(lookup is not null&&lookup.StartsWith("entry_",StringComparison.Ordinal))
