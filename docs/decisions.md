@@ -6153,3 +6153,39 @@ parts, rates, roots and frozen pins; clear old close/knowledge claims. Install
 only after commit, compare repeated selection identities by full input content,
 and recheck actor/header identity before UI selection. Optional-view failure does
 not turn accepted publication into business failure. See the [contract](point-trader-marks.md).
+
+## D420 · Reuse typed delivery behavior and native operating workbench contracts
+
+**Requirement.** Connect existing gas transport plans to booked delivery
+obligations while sharing proven behavior and presentation with the existing
+crude receipt/dispatch consumer. Future commodities and movement methods must be
+extendible without inferring their physical or financial laws.
+
+**Decision.** Use a shallow pure `DeliveryBehavior<TInputs>` contract with
+immutable resolved inputs and exact common assessment output. Gas interval and
+crude transfer implementations call their existing native domain kernels.
+Commodity, transport method, units, measurement, title, custody and cash remain
+independent. Backend descriptors drive shared UI fields, activities, constraints,
+reviews and recovery. Authorization and immutable/idempotent persistence remain
+outside overridable calculation hooks.
+
+Add exact chosen-route allocations to native booked gas occurrences under
+`exact_terminal_native_interval_v1`. Retain complete source and target ownership,
+conservation, current-authority and historical-source checks. These links neither
+reserve capacity again nor create physical performance, title or cash. Manual
+nomination batches consume one complete accepted allocation plan through existing
+native nomination commands and retain their grouped outcome atomically. External
+responses and explicit schedule adoption remain separate operations.
+
+**Compatibility and limits.** Preserve existing economic identity, source facts,
+accepted commands and native gas/crude restrictions. New relationships are
+additive; there is no generic object store, event framework or runtime script.
+The workbench reads an explicit operating context; native nomination batches
+check source applicability at the selected allocation's effective business date
+under current knowledge, and retain their separate explicit input-frame context
+for native nomination reviews. Each native read binds its own scope once.
+Future LNG, truck, blending
+and other delivery capabilities require their own executable consumers and
+independent qualification. See [the contract](delivery-workbench.md) for APIs,
+extension steps and actual verification boundaries. Deployment and independent
+review remain separate gates.

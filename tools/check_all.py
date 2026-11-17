@@ -195,6 +195,9 @@ def run_checks(pg_bin, dotnet, browser, *, group='all', run=subprocess.run):
     for flag in ('--gas-transport-route-adapters','--gas-transport-route-source','--gas-transport-route-metadata'):
         check('managed chosen Transport route '+flag,[str(dotnet),'run','--no-restore','--project',
             'tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj','--',flag],suite='managed')
+    for flag in ('--delivery-workbench','--delivery-nomination-batch'):
+        check('managed delivery workbench '+flag,[str(dotnet),'run','--no-restore','--project',
+            'tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj','--',flag],suite='managed')
     for name in ('commands','source','ticket','positions','adapters','labels','setup'):
         flag='--gas-transport-financial-'+name
         check('managed financial Transport '+flag,[str(dotnet),'run','--no-restore','--project',
@@ -217,6 +220,11 @@ def run_checks(pg_bin, dotnet, browser, *, group='all', run=subprocess.run):
         check(helper,[sys.executable,f'tools/{helper}.py','--pg-bin',str(pg_bin)],suite='physical')
     check('retained chosen Transport routes in the application',
         [sys.executable,'tools/check_gas_transport_route_browser.py','--pg-bin',str(pg_bin),'--dotnet',str(dotnet),
+         '--browser',str(browser),'--no-build'],suite='physical')
+    check('native delivery fulfillment relationships',
+        [sys.executable,'tools/check_delivery_workbench.py','--pg-bin',str(pg_bin)],suite='physical')
+    check('shared gas and crude delivery workbench in the application',
+        [sys.executable,'tools/check_delivery_workbench_http.py','--pg-bin',str(pg_bin),'--dotnet',str(dotnet),
          '--browser',str(browser),'--no-build'],suite='physical')
     for kind in ('physical','cash'):
         check('native '+kind+' option models in the application',[sys.executable,'tools/check_lifecycle_valuation_browser.py',

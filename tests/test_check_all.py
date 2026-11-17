@@ -90,6 +90,24 @@ class CheckAllTests(unittest.TestCase):
             self.assertEqual(set(selected), flags if group in ('all', 'managed') else set())
             self.assertEqual(len(selected), len(flags) if group in ('all', 'managed') else 0)
 
+    def test_delivery_workbench_requires_native_and_actual_application_qualification(self):
+        helpers={'tools/check_delivery_workbench.py','tools/check_delivery_workbench_http.py'}
+        flags={'--delivery-workbench','--delivery-nomination-batch'}
+        for group in ALL_GROUPS:
+            commands=[]
+            def run(command,**options):
+                commands.append(command)
+                if 'tools/check_delivery_workbench_http.py' in command:
+                    self.assertEqual(command[command.index('--dotnet')+1],'/selected sdk')
+                    self.assertEqual(command[command.index('--browser')+1],'/selected browser')
+                    self.assertIn('--no-build',command)
+            with redirect_stdout(io.StringIO()):
+                run_checks(Path('/stock pg'),Path('/selected sdk'),Path('/selected browser'),group=group,run=run)
+            selected={part for command in commands for part in command if part in helpers}
+            self.assertEqual(selected,helpers if group=='physical' else set())
+            selected_flags={part for command in commands for part in command if part in flags}
+            self.assertEqual(selected_flags,flags if group=='managed' else set())
+
     def test_financial_transport_requires_native_upgrade_worker_and_actual_browser(self):
         helpers = {f'tools/check_gas_transport_financial{suffix}.py'
                    for suffix in ('', '_upgrade', '_worker', '_browser', '_presence', '_presence_upgrade')}
@@ -595,6 +613,7 @@ class CheckAllTests(unittest.TestCase):
                            '--gas-transport-capacity-adapters','--gas-transport-capacity-source',
                            '--gas-transport-capacity-metadata','--operational-business-context',
                            '--gas-transport-route-adapters','--gas-transport-route-source','--gas-transport-route-metadata',
+                           '--delivery-workbench','--delivery-nomination-batch',
                            '--gas-transport-financial-commands','--gas-transport-financial-source',
                            '--gas-transport-financial-ticket','--gas-transport-financial-positions',
                            '--gas-transport-financial-adapters','--gas-transport-financial-labels','--gas-transport-financial-setup',
