@@ -155,6 +155,8 @@ def run_checks(pg_bin, dotnet, browser, *, group='all', run=subprocess.run):
         ('check_gas_park_custody_worker','retained custody PRICE workers preserve exact source, scope and original authority'),
         ('check_gas_transport_financial','booked Transport rights, independent fee cash and explicit lifecycle execution'),
         ('check_gas_transport_financial_upgrade','populated financial Transport upgrade preserves operating sources and rejects boundary drift'),
+        ('check_gas_transport_financial_presence','scoped Transport absence preserves independent clocks and original read authority'),
+        ('check_gas_transport_financial_presence_upgrade','populated Transport presence upgrade preserves native facts and helper contracts'),
         ('check_gas_transport_financial_worker','retained Transport PRICE workers preserve exact state, sources and original authority'),
         ('check_point_trader_marks','ordinary direct point publication, exact source authority and explicit financial adoption'),
         ('check_point_trader_marks_upgrade','populated point publisher upgrade preserves existing facts and unrelated helper privileges'),

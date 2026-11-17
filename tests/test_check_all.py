@@ -92,7 +92,7 @@ class CheckAllTests(unittest.TestCase):
 
     def test_financial_transport_requires_native_upgrade_worker_and_actual_browser(self):
         helpers = {f'tools/check_gas_transport_financial{suffix}.py'
-                   for suffix in ('', '_upgrade', '_worker', '_browser')}
+                   for suffix in ('', '_upgrade', '_worker', '_browser', '_presence', '_presence_upgrade')}
         api = 'tests/OpenEtrm.Api.Checks/OpenEtrm.Api.Checks.csproj'
         for group in ALL_GROUPS:
             commands = []
