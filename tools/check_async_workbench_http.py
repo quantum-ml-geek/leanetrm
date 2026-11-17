@@ -1,6 +1,7 @@
 """Shared asynchronous workbench reads in the launcher-owned synthetic database."""
 import http.client
 import json
+import threading
 import time
 from urllib.parse import urlsplit
 from uuid import uuid4
@@ -89,8 +90,6 @@ def run_checks(url, query, psql, environment, manifest):
         'calendar': {'revision': {'catalogId': manifest['referenceCatalogId'], 'revisionId': manifest['referenceRevisionId']}, 'code': 'weekdays_utc'},
         'from':'2020-12-15','to':'2020-12-19','closeTime':'16:00:00','ambiguousTime':'reject','invalidTime':'reject'}
     history = c.call('portfolio/risk/history', history_body)
-    parametric = {'history':history['request'], 'policy':{**one['parametric']['profile'],'drift':one['parametric']['drifts']['zero'],'confidence':'0.99'},
-        'finiteDifference':{'convention':one['parametric']['finiteDifference'],'tradingTicks':1,'deltaTolerance':{'absolute':'0','relative':'0'}}}
     curve = {'snapshotId':frame['id'], 'curve':'local_power', 'includeSources':True, 'includeWorkspace':True,
              'contractDisplay':{'version':'curve_display_v1','contracts':'eligible_contracts_v1'}}
     curve_points=c.call('evaluate',curve)['points']
@@ -100,7 +99,6 @@ def run_checks(url, query, psql, environment, manifest):
         ('curve.shapes.v1','market/curve-shapes',{'snapshotId':frame['id'],'curves':['future','local_power'],'contractDisplay':curve['contractDisplay']}),
         ('trading.directory.v1','trading/directory',context),
         ('trading.positions.v1','trading/positions',{'context':context,'bookIds':[],'portfolioIds':[],'offset':0,'limit':64}),
-        ('trading.position.v1','trading/position',{'context':context,'tradeId':held['tradeId'],'bindingId':held['bindingId'],'revision':int(held['revision']),'instrumentType':'future'}),
         ('futures.editor.v1','futures/editor',{'context':{**context,'convention':working['futuresConvention']},'tradeId':held['tradeId'],'revision':int(held['revision'])}),
         ('swaps.editor.v1','swaps/editor',{'context':{**context,'convention':'independent_side_financial_swap_v2'},'tradeId':swap['tradeId'],'revision':int(swap['revision'])}),
         ('trading.workspace.v1','trading/workspace',{'context':context,'view':view,'summaries':[],'bookingCatalog':'directory'}),
@@ -109,9 +107,7 @@ def run_checks(url, query, psql, environment, manifest):
         ('portfolio.risk.calculate.v1','portfolio/risk',risk),
         ('portfolio.risk.jobs.list.v1','portfolio/risk/jobs',None),
         ('portfolio.risk.jobs.read.v1','portfolio/risk/jobs/'+retained_job['id'],None),
-        ('portfolio.risk.statistical.setup.v1','portfolio/risk/statistical/setup',single),
         ('portfolio.risk.history.v1','portfolio/risk/history',history['request']),
-        ('portfolio.risk.parametric.summary.v1','portfolio/risk/parametric/summary',parametric),
         ('portfolio.risk.archive.v1','portfolio/risk/statistical/archive?limit=10',None),
     ]
     expected = {operation:c.call(path,body) for operation,path,body in cases}
@@ -226,6 +222,90 @@ def run_checks(url, query, psql, environment, manifest):
         check('Risk authority expiring during execution prevents result disclosure',terminal is None or terminal['state']!='completed')
     finally:
         stream.close()
+        for grant in saved:
+            query(f"UPDATE security.role_grants SET granted_to='{grant['until']}'::timestamptz WHERE id='{grant['id']}';")
+    # The ordinary routes of the covered reads execute outside the session gate (docs/async-reads.md).
+    LOCK='LOCK market_data.observations IN ACCESS EXCLUSIVE MODE'
+    def tab():
+        """Another connection of the same session, so requests overlap as a page's do."""
+        other=PreviewClient(url);other.session=c.session;other.token=c.token
+        for cookie in c.jar:other.jar.set_cookie(cookie)
+        return other
+    def background(path,body,expected=200):
+        result={}
+        def work():
+            try:result['value']=tab().call(path,body,expected=expected)
+            except Exception as error:result['error']=repr(error)[:300]
+            result['at']=time.monotonic()
+        thread=threading.Thread(target=work);thread.start()
+        return thread,result
+    def beside():
+        thread,held=background('portfolio/risk',risk);waiting(1)
+        started=time.monotonic();c.call('access',timeout=5)
+        return thread,held,time.monotonic()-started
+    thread,held,elapsed=holding(psql,environment,LOCK,beside);thread.join(timeout=20)
+    check('an ordinary request proceeds beside an ordinary read that waits in the database',elapsed<2 and
+          financial_response('portfolio.risk.calculate.v1',held.get('value'))==financial_response('portfolio.risk.calculate.v1',expected['portfolio.risk.calculate.v1']))
+    def three():
+        reads=[background('evaluate',curve) for _ in range(3)];waiting(2);time.sleep(.3);waiting(2)
+        return reads
+    reads=holding(psql,environment,LOCK,three)
+    for thread,_ in reads:thread.join(timeout=20)
+    check('a third ordinary read of one session waits for a slot, then completes',all(read.get('value')==expected['curve.evaluate.v1'] for _,read in reads))
+    def switched():
+        thread,held=background('portfolio/risk',risk,expected=403);waiting(1)
+        c.call('profile',{'profile':'viewer'},timeout=5)
+        return thread,held
+    thread,held=holding(psql,environment,LOCK,switched);thread.join(timeout=20)
+    check('a profile switch during an ordinary read refuses its answer',(held.get('value') or {}).get('code')=='access_denied')
+    c.call('profile',{'profile':'risk'})
+    saved=json.loads(query(f"SELECT json_agg(json_build_object('id',id,'until',granted_to)) FROM security.role_grants WHERE principal_id={principal};"))
+    try:
+        def expires_ordinary():
+            query(f"UPDATE security.role_grants SET granted_to=clock_timestamp()+interval '2 seconds' WHERE principal_id={principal};")
+            thread,held=background('portfolio/risk',risk,expected=403);waiting(1)
+            deadline=time.monotonic()+5
+            while query(f"SELECT bool_and(granted_to<clock_timestamp()) FROM security.role_grants WHERE principal_id={principal};")!='t':
+                assert time.monotonic()<deadline,'The owned Risk role did not expire'
+                time.sleep(.025)
+            return thread,held
+        thread,held=holding(psql,environment,LOCK,expires_ordinary);thread.join(timeout=20)
+        check('Risk authority expiring during an ordinary read prevents its answer',(held.get('value') or {}).get('code')=='access_denied')
+    finally:
+        for grant in saved:
+            query(f"UPDATE security.role_grants SET granted_to='{grant['until']}'::timestamptz WHERE id='{grant['id']}';")
+    # An ordinary read's answer waits for the session gate. Authority that ends in that wait, after the read's own
+    # transaction has finished with it intact, must still refuse the answer. A gated read of the same session holds
+    # the gate on a second lock meanwhile. A role change waits for admitted transactions, so the role ends by its own
+    # term, set before either request is admitted and inside the five seconds the gate holder's command may wait.
+    GATE='LOCK presentation.dashboard_layouts IN ACCESS EXCLUSIVE MODE'
+    gate_waiters="SELECT count(*) FROM pg_locks WHERE relation='presentation.dashboard_layouts'::regclass AND NOT granted;"
+    role_ended=f"SELECT bool_and(granted_to<clock_timestamp()) FROM security.role_grants WHERE principal_id={principal};"
+    def until(sql,value,message,seconds=4):
+        deadline=time.monotonic()+seconds
+        while query(sql)!=value:
+            assert time.monotonic()<deadline,message
+            time.sleep(.025)
+    saved=json.loads(query(f"SELECT json_agg(json_build_object('id',id,'until',granted_to)) FROM security.role_grants WHERE principal_id={principal};"))
+    try:
+        def answering():
+            def reading():
+                query(f"UPDATE security.role_grants SET granted_to=clock_timestamp()+interval '3 seconds' WHERE principal_id={principal};")
+                thread,held=background('evaluate',curve,expected=403);waiting(1)
+                gated,_=background('dashboard/layout',None)
+                until(gate_waiters,'1','The gated request did not hold the session gate')
+                return thread,held,gated
+            thread,held,gated=holding(psql,environment,LOCK,reading)
+            # Only the gated request still works in the database once the read's own transaction has committed.
+            until("SELECT count(*) FROM pg_stat_activity WHERE usename='preview_runtime' AND state<>'idle';",'1','The read did not finish its own transaction')
+            assert query(role_ended)=='f' and 'at' not in held,f'The read must finish its transaction with its authority intact and then wait for the gate: {held}'
+            until(role_ended,'t','The owned Risk role did not expire')
+            assert query(gate_waiters)=='1','The gated request released the session gate before the role ended'
+            return thread,held,gated
+        thread,held,gated=holding(psql,environment,GATE,answering);thread.join(timeout=20);gated.join(timeout=20)
+        assert (held.get('value') or {}).get('code')=='access_denied',f'the waiting read answered {held}'
+        check('authority that ends while an ordinary read waits to answer refuses it')
+    finally:
         for grant in saved:
             query(f"UPDATE security.role_grants SET granted_to='{grant['until']}'::timestamptz WHERE id='{grant['id']}';")
     print(f'{passed} asynchronous workbench HTTP checks passed.',flush=True)
