@@ -5948,3 +5948,32 @@ is unavailable even with a zero fee. Current-clock price qualification does not
 qualify generated closes, cross-clock P&L or complete economic horizon risk;
 source-known zero, future-effective, completed and cash-only states require
 the same explicit continuation fence. See the [contract](gas-park-custody.md).
+
+## D420 · A working trading read captures current knowledge in a transaction of its own
+
+Amends how D134's publication gate applies to reads. `security.capture_date_context`
+certifies committed publications and returns a context under the catalog's
+publication gate, a transaction-scoped lock. A working trading read captured
+inside its read transaction, so it held the gate until it had valued. Every other
+working read and every publication, in any session, waited behind it, and a
+wait longer than the command timeout failed the waiting read.
+
+The shared trading executor and the Blotter row stream now capture current
+knowledge in an identity transaction that does nothing else, then read at that
+context in a second identity transaction. The gate is held while the capture
+certifies and no longer. The read remains a working view: its context is current
+knowledge captured for that read.
+
+- **A publication may commit between the capture and the read.** The read is of
+  the captured context and does not see it, as a retained re-read does not. A
+  working read compares the trade's current head, read in the second
+  transaction, with the revision its context shows; an amendment that commits
+  between the two makes that read report an earlier revision until it is read
+  again. Commands still validate their expected revision under the gate.
+- **Cost.** One more identity transaction for each working trading read.
+- **Unchanged.** Commands capture inside their write transaction under the gate.
+  The live-context stream reads its head under the gate. Party views, lifecycle
+  operations and the readers that capture for themselves (market dates, interval
+  data, PPA, facility and REC reads) still hold the gate for their transaction.
+  A function that needs the gate takes it itself.
+- **Evidence.** [Verification](verification.md#working-reads-and-the-publication-gate-d420).
