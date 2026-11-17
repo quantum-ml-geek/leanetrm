@@ -121,6 +121,8 @@ internal sealed class TradePositionFacts(PreviewDatabase database)
             facts.Add((agreement.Agreement.GetProperty("tradeReference").GetInt32(),agreement.Fact()));
         foreach(var custody in await GasParkCustodyPositions.Read(connection,database,view.CalculationFrame,bookIds,portfolioIds,ct))
             facts.Add((custody.Agreement.GetProperty("tradeReference").GetInt32(),custody.Fact()));
+        foreach(var transport in await GasTransportFinancialPositions.Read(connection,database,view.CalculationFrame,bookIds,portfolioIds,ct))
+            facts.Add((transport.Agreement.GetProperty("tradeReference").GetInt32(),transport.Fact()));
         foreach(var option in await FuturesOptionPositions.Read(connection,manifest,bookIds,portfolioIds,ct))
             facts.AddRange(option.Facts().Select(fact=>(Integer(option.Head,"trade_reference"),fact)));
         await RequireHeads(connection,scopeBooks,[..facts.Where(f=>f.Position.InstrumentType is OperatingPositions.Type or RecPositions.Type).Select(f=>f.Position.TradeId).Distinct()],ct);
@@ -160,7 +162,8 @@ internal sealed class TradePositionFacts(PreviewDatabase database)
              AND NOT EXISTS(SELECT 1 FROM trading.crude_trade_revisions r WHERE(r.catalog_id,r.trade_id)=(t.catalog_id,t.id))
              AND NOT EXISTS(SELECT 1 FROM trading.futures_option_trade_revisions r WHERE(r.catalog_id,r.trade_id)=(t.catalog_id,t.id))
              AND NOT security.gas_park_loan_trade_head(t.catalog_id,t.id)
-             AND NOT security.gas_park_custody_trade_head(t.catalog_id,t.id))
+             AND NOT security.gas_park_custody_trade_head(t.catalog_id,t.id)
+             AND NOT security.gas_transport_financial_trade_head(t.catalog_id,t.id))
             """,manifest.CatalogId,books,nativeTrades);
         if(Equals(await query.ExecuteScalarAsync(ct),true))throw Missing();
     }

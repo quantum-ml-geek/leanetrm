@@ -2807,7 +2807,7 @@ header>div:first-child{flex:1 1 160px}
 .lifecycle-panel>h2{overflow-wrap:anywhere}
 .lifecycle-form{display:grid;gap:1rem}
 .lifecycle-form fieldset{border:1px solid var(--border);border-radius:.4rem;padding:1rem}
-.lifecycle-form button{justify-self:start}
+.lifecycle-form button{justify-self:start;max-width:100%;white-space:normal}
 .lifecycle-review{margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--border)}
 .lifecycle-review-table{max-width:100%;overflow:auto}
 .gas-lifecycle-policy,.gas-lifecycle-fields{grid-column:1/-1;min-width:0}

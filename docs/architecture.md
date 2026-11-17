@@ -1,5 +1,24 @@
 # Architecture and domain contracts
 
+D416 implements the selected first [financial Transport rights and fixed-fee
+contract](gas-transport-financial.md). Direct signed whole-package values,
+independent ordinary cash and explicit expiry retain separate owners. Native, managed and actual browser consumers have local qualification, including
+explicit expiry recovery and independent cash. First-value market publication,
+integrated upstream qualification and release remain separate gates.
+
+D413 adds locally qualified [retained chosen routes](gas-transport-routes.md)
+over exact native capacity claims and exclusive logical source-plan memberships.
+Managed/native, populated-upgrade and actual browser checks qualify persisted
+route adoption and release. Integrated release, physical performance and financial
+value remain separate.
+
+D415 adds [commercial Transport capacity operations](gas-transport-capacity-operations.md)
+over independent exact entitlement, capacity-version and chosen-plan identities.
+Shared gross limits, explicit empty release and retained source/authority
+admission have local managed/native, upgrade and actual browser qualification.
+Integrated release remains separate. Physical transport, title, cash and financial
+Transport value retain separate contracts.
+
 D406 adds locally qualified [Park and Loan commercial booking](gas-park-loan.md)
 over independent native ownership and cash. The bounded title-transfer profile
 uses shared entry, lifecycle and current-clock interactive/retained price risk.

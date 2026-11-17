@@ -4963,3 +4963,75 @@ sign-out, expiry, cross-account refusal and browser checks remain enforced.
 
 The repository verification group also passes. The complete 190-command runner
 was not executed locally; aggregate CI and release checks remain required.
+
+
+## Commercial Transport capacity integration (D415)
+
+The integrated capacity artifact passes 742 managed core checks, the full API
+schedule suite, 2,009 frontend and 148 Python checks. Native source, concurrency,
+receipt and authority checks, populated upgrade, 64 Transport and 30 existing
+Storage browser checks pass against the same API, SQL and served web artifacts.
+The protected page helper recognizes the approved Options identifier; all
+original metadata guards and definition/privilege drift refusals remain enforced.
+Independent merge review verifies both parents' source and verification
+registrations are retained. Disposable synthetic resources were cleaned. These
+results do not qualify physical performance, financial Transport, complete
+economic continuation or production activation.
+
+
+## Retained Transport route integration (D413)
+
+The integrated route artifact passes 743 managed core checks, the full API
+schedule suite, 2,020 frontend and 154 Python checks. Nine actual managed route
+source/witness checkpoints, native membership/source/authority/concurrency
+controls and populated upgrade pass. The same API, SQL and served web artifacts
+pass 55 route, 64 capacity and 30 existing Storage browser checks, including
+native postconditions and cleanup. Only the exact protected page-helper
+fingerprint changes for the approved Options identifier; capacity verifier
+extraction, owner/ACL/settings checks and drift refusals remain enforced.
+Independent merge review preserves both parents' source and verification
+registrations. These disposable synthetic checks do not qualify financial
+Transport, physical performance, complete economic continuation or production
+activation.
+
+
+## Direct Transport rights and independent cash (D416)
+
+The local financial Transport artifact passes 744 managed core checks, the full
+API schedule suite, 2,020 frontend and 155 Python checks, with zero API build
+warnings/errors. Thirty-two actual managed source/command/value checkpoints,
+shared lifecycle execution/recovery, populated upgrade and two retained PRICE
+jobs pass on the same API and SQL. The 26 full-application browser checks also
+verify native postconditions, exact empty-portfolio source/context binding,
+accepted actor identity, both signed perspectives, capacity amendment, payment
+recovery, independent cash and expiry. Desktop and phone views were inspected.
+
+Adversarial controls cover strict selected-instant source expiry, deferred typed
+source/receipt seals, original permission capture across scope/publication waits,
+current-closed semantic expiry acknowledgement and retained report stability
+after market correction. Disposable synthetic resources were cleaned. First-value
+market publication, integration with the current upstream stack and release
+remain separate gates; no production activation or complete economic horizon
+continuation is implied.
+
+
+## Integrated financial Transport qualification (D416)
+
+The combined current-master and service-stack artifact passes 745 managed core
+checks, the full API schedule suite, 2,044 frontend and 157 Python checks, with
+zero API build warnings/errors. Native qualification passes 32 actual managed
+source/command/value checkpoints, shared current-closed expiry acknowledgement
+and original-authority/source/deferred controls. Populated upgrade preserves
+operating routes and supports mixed-reference financial booking/adoption. Two
+retained PRICE jobs and 26 actual application browser checks pass on the same
+API and SQL, including independent fee cash, exact source/actor identity, expiry
+and native postconditions. The retained-window regression preserves business
+date independently of the UTC valuation date.
+
+Independent source and merge review preserves both parents' contracts and
+verification registrations. The only native change beyond migration 0354
+renumbering is the exact protected prompt-helper fingerprint for the approved
+Options identifier; all original metadata/ACL guards and drift refusals remain.
+Disposable synthetic resources were cleaned. First-value market publication,
+aggregate CI and release remain separate gates; no production activation or
+complete economic continuation is implied.

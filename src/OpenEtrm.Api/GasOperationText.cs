@@ -4,9 +4,9 @@ using OpenEtrm.MarketData;
 
 namespace OpenEtrm.Api;
 
-// PostgreSQL length counts Unicode scalars. Custody business references are
+// PostgreSQL length counts Unicode scalars. Gas operation business references are
 // opaque identities: trim ASCII spaces only, never general Unicode whitespace.
-internal static class GasParkCustodyText
+internal static class GasOperationText
 {
     internal static string Key(string? value,string code)
     {
@@ -33,5 +33,5 @@ internal static class GasParkCustodyText
         return count;
     }
 
-    static MarketDataException Invalid(string code)=>new(code,"Supply canonical custody business references within 128 characters and evidence within 2000 characters. Business references cannot contain control characters; evidence cannot contain NUL.");
+    static MarketDataException Invalid(string code)=>new(code,"Supply canonical business references within 128 characters and evidence within 2000 characters. Business references cannot contain control characters; evidence cannot contain NUL.");
 }
